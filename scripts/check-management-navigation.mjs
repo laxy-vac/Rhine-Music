@@ -81,6 +81,7 @@ export function createManagementNavigationBootstrap(source) {
     let settingsCategory = "audio";
     const settingsScrollPositions = new Map();
     let cleanupStylePreview;
+    let cleanupQualityDetection;
     let caseEditor;
     let settingsSelectControls;
     let eqControls;

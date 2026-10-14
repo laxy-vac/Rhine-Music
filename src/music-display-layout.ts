@@ -8,7 +8,7 @@ export const MUSIC_ARRAY_VIEW = {
   aim: { x: -1.091, y: -0.045, z: 0.481 },
 } as const;
 
-/** The legacy shelf adapter consumes this projection contract until phase three. */
+/** Shared finite shelf contract; the same entries and spacing serve both themes. */
 export const MUSIC_SHELF_VIEW = {
   slots: 20, rowSpacing: 1, columnSpacing: 4.7, originX: 0.37, bottomInset: 87,
 } as const;

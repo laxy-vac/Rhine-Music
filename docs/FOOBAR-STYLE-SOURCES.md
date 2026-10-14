@@ -30,13 +30,21 @@
 - 本仓库 `art/rhine-archive.blend` 与 `art/archive-assembly.blend` 来自 `art/build_archive.py` / `art/build_assembly.py`，生成的是 Rhine Lab cassette shell/optics GLB；它们不是 RhinE Audio Archive 的十款盒型模型，也不是低视角贴图的来源。
 - 该主题用 Hi-Res 标记的入口见 `js/lib/nowplaying.js:106-107`，为当前配色 accent 芯片；参考代码中没有 DSD 徽标或独立金色盒边 shader。移植器沿用播放器自身的 Hi-Res/DSD 识别，并以主播放器的金边绘制要求呈现 Hi-Res。
 
-## 当前独立foobar主题的坐标约定
+## 迁移前：独立foobar货架投影（历史）
 
-用户已否定此前混合/低视角方案。当前只使用原foobar array axes、原array/inspect图、原rail与floor资源；低视角Blender模型/素材保留在历史目录，当前renderer不再导入或运行相应分支。上方有关player低档的段落仅记录资源历史。
+以下坐标与绘制顺序描述迁移前Canvas2D货架路径，不代表当前公共场景。低视角Blender模型/素材属于被否定方案的历史留存；旧`archive-case-renderer.ts`保留但当前不再调用，待第四阶段验收后清退。
 
 foobar独立构建20槽货架，按原buildShelves把当前曲库分组依序填满，末架仍保留20槽。它不读取普通Three Scene的循环cell、相机或选中屏幕位置；点击以原record索引映射回播放器。源轴向、槽距1、层距4.7、sprite比例0.54、`clamp(min(arrayWidth/936,height/731),1,1.6)`及 `[round(arrayWidth*.37),height-87]` 原点保留。arrayWidth适配本播放器的信息栏边界，未声称整个宿主窗口与foobar2000像素一致。每架按实际Spring位置淡入/淡化、后架到前架绘制，架内按源y/z深度交错盒体与托架；原地面与托架分别绘制。
 
 原inspect PNG已裁切并下采样：例如glass/inspect-00实际254×319，而meta.crop为虚拟900px画布的[190,123,520,654]。必须把整张PNG绘到crop目的矩形，不能再次用crop裁切PNG。转向沿用0…59帧，最终位置为arrayWidth*.49、height*.5，大小依原inspectK的2倍与fit限制。原封面先以模糊图垫底，再合成clear/frost，未选中的盒子保留自己的封面。盒顶标题仍按源轴/纸条/字体映射；Hi-Res/DSD沿用本播放器实际格式识别。
+
+## 第三阶段：公共场景资源与估算边界
+
+当前两主题货架、阵列与网格详情由同一`ArchiveScene`/Three.js renderer、实例池、封面图集和后期覆盖绘制，不再调用上述Canvas2D适配器。`music-spatial-layout`使用稳定entry身份及有限20槽分页；列沿负X、槽沿负Z，camera yaw -38°、elevation 35°，货架间距依据变换后的盒体bounds拓展。Punk场景仍裁切到右侧信息栏边界。
+
+`src/music-shelf.ts`与`src/music-scene-resources.ts`以程序几何建立按主题着色的托盘、货架边框、前牌`ROW 001`和局部地面细节；`MusicCaseTitles`使用纸面图集绘制Punk顶边标题。plain采用浅刻线/定位标，deck采用金属拼缝/刻度，real使用程序生成木纹且不含烘焙阴影。现有`src/assets/style/rail/`与`floor/`中的PNG和JSON是旧预渲染投影资产，不作为新实时地板的直接贴图。
+
+已核实上游1.4.0资源没有原始货架/地面3D网格或建模脚本。当前程序几何按现有资料估算，不是原作者网格或像素复刻；本阶段未改GLB/PNG。复制来的Audio Archive主题代码/资源许可见下文原MIT及`public/licenses/audio-archive-style-mit.txt`。
 
 ## 2026-10-13：可调Punk三维重建的来源与限度
 

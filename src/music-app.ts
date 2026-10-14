@@ -74,6 +74,7 @@ import { dsdBadgeMarkup, hiResBadgeMarkup, isDsdAlbum, isDsdTrack, isHiResAlbum,
 import { SurfaceTransition, PageScanTransition } from "./ui-transitions";
 import { qualityMarkup, syncQualityUI } from "./quality-settings";
 import { ArchiveScene } from "./scene";
+import { mountQualityDetection } from "./quality-detection";
 import {
   records,
   setMusicAlbums,
@@ -425,6 +426,7 @@ let foobarShell: ReturnType<typeof setupFoobarShell> | undefined;
 let catalogGrid: ReturnType<typeof setupMusicCatalogGrid> | undefined;
 let stopFoobarIntro: (() => void) | undefined;
 let cleanupStylePreview: (() => void) | undefined;
+let cleanupQualityDetection: (() => void) | undefined;
 let caseEditor: ReturnType<typeof setupCaseEditor> | undefined;
 let audioSettingsSection: AudioSettingsSection = "source";
 const settingsScrollPositions = new Map<SettingsCategory, number>();
@@ -1641,6 +1643,8 @@ function closeManagementPage(restoreFocus = true) {
   if (page === "theme") themePageScrollTop = $("#theme-page-content").scrollTop;
   cleanupStylePreview?.();
   cleanupStylePreview = undefined;
+  cleanupQualityDetection?.();
+  cleanupQualityDetection = undefined;
   caseEditor?.destroy();
   caseEditor = undefined;
   settingsSelectControls?.close();
@@ -1839,11 +1843,19 @@ function renderThemePage() {
   const focusDesign = focused?.dataset.styleDesign;
   settingsSelectControls?.destroy();
   cleanupStylePreview?.();
+  cleanupQualityDetection?.();
   caseEditor?.destroy();
   caseEditor = undefined;
   content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme);
   content.querySelector(".music-style-heading")?.insertAdjacentHTML("afterend", windowAspectMarkup(preferences.windowAspect));
   content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design));
+  cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#theme-quality-slot")!, {
+    getStyle: () => preferences.style,
+    getTheme: () => preferences.theme === "night" ? "night" : "day",
+    getCaseSettings: () => caseProfiles[preferences.style.design],
+    getSize: () => { const rect = stage.getBoundingClientRect(); return { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }; },
+    apply: quality => { renderQuality = normalizeQuality(quality); updateQuality(); },
+  });
   content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforebegin", musicViewControlsMarkup(musicApplication.view, musicApplication.query));
   const editorHost = document.createElement("section");
   editorHost.id = "theme-case-editor";

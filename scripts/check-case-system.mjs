@@ -13,6 +13,8 @@ const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isPunkView = process.argv.includes("--punk-view");
+const isUnifiedRender = process.argv.includes("--unified-render");
+const unifiedOutput = path.join(project, ".tools", "unified-architecture-stage3");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -166,6 +168,9 @@ import { records, setMusicAlbums } from "./src/data.ts";
 import { configureFoobarCatalog, getFoobarCatalogOptions, getFoobarDisplayEntries, setFoobarFocus, normalizeFoobarCatalogOptions } from "./src/foobar-catalog.ts";
 import { archiveMusicStyle, defaultMusicStyle, musicStyleMarkup, stylePalette } from "./src/music-style.ts";
 import { punkFutureEntry } from "./src/punk-future-catalog.ts";
+import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries } from "./src/music-catalog.ts";
+import { getMusicCatalogShelves } from "./src/music-catalog-shelves.ts";
+import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
 import { fileAtCell } from "./src/archive-loop.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
 import { normalizeCaseUserPresets } from "./src/case-user-presets.ts";
@@ -1219,6 +1224,237 @@ async function checkFutureAdapterHidden() {
   };
   host.remove();
   return result;
+}
+
+const unifiedClicks = [], unifiedOpens = [];
+let unifiedTrack;
+let unifiedStyle;
+function unifiedSnapshot() {
+  const scene = archiveScene;
+  const matrix = new THREE.Matrix4();
+  const projectCell = cell => {
+    const point = scene.cellPosition(cell).add(new THREE.Vector3(-scene.columnCamera.value, 0, scene.rail.value)).project(scene.camera);
+    return { x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2 };
+  };
+  const valid = scene.cells.flatMap((cell, index) => {
+    const entry = musicSpatialEntry(cell, scene.shelfView);
+    if (!entry) return [];
+    scene.caseHitProxy.getMatrixAt(index, matrix);
+    return [{ index, key: entry.key, recordIndex: entry.recordIndex, lane: cell.lane, row: cell.row,
+      drawn: matrix.elements[0] !== 0 || matrix.elements[5] !== 0 || matrix.elements[10] !== 0 }];
+  });
+  scene.scene.updateMatrixWorld(true);
+  const resources = scene.sceneResources?.group;
+  const tray = resources?.getObjectByName("Record shelf tray");
+  const corners = [];
+  for (const x of [scene.caseLayout.bounds.min[0], scene.caseLayout.bounds.max[0]])
+    for (const y of [scene.caseLayout.bounds.min[1], scene.caseLayout.bounds.max[1]])
+      for (const z of [scene.caseLayout.bounds.min[2], scene.caseLayout.bounds.max[2]]) {
+        const point = new THREE.Vector3(x, y, z).applyMatrix4(scene.model.matrixWorld).project(scene.camera);
+        corners.push({ x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2 });
+      }
+  const support = [];
+  if (tray) {
+    tray.geometry.computeBoundingBox(); scene.caseHitProxy.geometry.computeBoundingBox();
+    for (const item of valid.filter(item => item.drawn)) {
+      scene.caseHitProxy.getMatrixAt(item.index, matrix);
+      const caseBox = scene.caseHitProxy.geometry.boundingBox.clone().applyMatrix4(matrix);
+      tray.getMatrixAt(item.index, matrix);
+      const trayBox = tray.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(tray.matrixWorld);
+      const caseCenter = caseBox.getCenter(new THREE.Vector3()), trayCenter = trayBox.getCenter(new THREE.Vector3());
+      support.push({ key: item.key, caseBottom: caseBox.min.y, trayTop: trayBox.max.y, clearance: caseBox.min.y - trayBox.max.y,
+        centerGapX: caseCenter.x - trayCenter.x, centerGapZ: caseCenter.z - trayCenter.z });
+    }
+  }
+  return { stats: scene.getStats(), opacity: scene.renderer.domElement.style.opacity,
+    clipPath: scene.renderer.domElement.style.clipPath, legacyRenderer: !!scene.foobarArchive,
+    hostCanvasCount: archiveHost.querySelectorAll("canvas").length,
+    labelNumber: scene.rhineInfo?.selectedLabel.userData.numberText,
+    valid, modelVisible: scene.model.visible, coversVisible: scene.covers.array.visible,
+    instancesVisible: scene.instances.some(instance => instance.visible),
+    spacing: { ...scene.spatialSpacing }, caseLayout: structuredClone(scene.caseLayout),
+    topTitles: { array: !!scene.caseTitles?.array.visible, selected: !!scene.caseTitles?.selected.visible,
+      selectedText: scene.caseTitles?.selectedKey ?? "", count: scene.caseTitles?.array.count ?? 0 },
+    projection: { origin: projectCell({ lane: 0, row: 12 }), lane: projectCell({ lane: 1, row: 12 }),
+      row: projectCell({ lane: 0, row: 13 }) },
+    resourceCapacity: scene.sceneResources?.capacity ?? 0, support,
+    selectedScreenBounds: { minX: Math.min(...corners.map(point => point.x)), maxX: Math.max(...corners.map(point => point.x)),
+      minY: Math.min(...corners.map(point => point.y)), maxY: Math.max(...corners.map(point => point.y)),
+      availableWidth: scene.musicStyle.design === "archive" ? scene.displayViewportWidth : archiveHost.clientWidth },
+    physicalTraysVisible: !!tray?.parent.visible,
+    styleError: archiveStyleError };
+}
+function unifiedPointerTarget(selected = false) {
+  if (selected) {
+    for (let frame = 0; frame < 90 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
+    expect(archiveScene.musicArchiveReady, "The real selection animation must settle before accepting album-open input.");
+  }
+  archiveScene.scene.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(), point = new THREE.Vector3(), matrix = new THREE.Matrix4();
+  if (selected) {
+    point.copy(archiveScene.caseLayout.center).applyMatrix4(archiveScene.model.matrixWorld).project(archiveScene.camera);
+    ray.setFromCamera(new THREE.Vector2(point.x, point.y), archiveScene.camera);
+    const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
+    expect(hit && hit.instanceId === undefined, "The selected shelf case must remain a raycast target for double click.");
+    return { x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2,
+      index: unifiedClicks.at(-1)?.index ?? 0, key: archiveScene.selectedCell.foobarEntryKey };
+  }
+  for (let index = 0; index < archiveScene.cells.length; index++) {
+    const entry = musicSpatialEntry(archiveScene.cells[index], true);
+    if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey) continue;
+    archiveScene.caseHitProxy.getMatrixAt(index, matrix);
+    if (matrix.elements[0] === 0 && matrix.elements[5] === 0 && matrix.elements[10] === 0) continue;
+    point.copy(archiveScene.caseLayout.center).applyMatrix4(matrix).project(archiveScene.camera);
+    const x = (point.x + 1) * archiveHost.clientWidth / 2, y = (1 - point.y) * archiveHost.clientHeight / 2;
+    if (x < 35 || x > archiveScene.displayViewportWidth - 35 || y < 35 || y > archiveHost.clientHeight - 35) continue;
+    ray.setFromCamera(new THREE.Vector2(point.x, point.y), archiveScene.camera);
+    const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
+    if (hit?.instanceId !== index) continue;
+    return { x, y, index: entry.recordIndex, key: entry.key };
+  }
+  throw new Error("No unselected finite shelf case has a visible production raycast target.");
+}
+async function unifiedRenderVariant(design, mode, scheme = "archive") {
+  unifiedStyle = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: design === "archive", floor: "deck",
+    ...(design === "archive" ? { scheme } : {}) };
+  archiveHost.dataset.design = design;
+  archiveHost.dataset.foobarLayout = "array";
+  archiveHost.style.background = design === "archive" ? stylePalette(unifiedStyle, mode).bg : mode === "night" ? "#07111f" : "#eae5e1";
+  configureMusicCatalog({ layout: "shelf" });
+  archiveScene.setMusicStyle(unifiedStyle);
+  archiveScene.setTheme(mode);
+  const value = sceneCaseSettings(design === "archive" ? "punk" : "rhine");
+  if (design === "archive") value.appearances.punk = casePreset("glass", "punk");
+  await archiveScene.setCaseSettings(value);
+  await archiveScene.rhineInfo?.ready;
+  focusMusicEntry(unifiedTrack.key);
+  archiveScene.select(unifiedTrack.recordIndex);
+  stepArchiveScene(6);
+  const result = unifiedSnapshot();
+  expect(result.stats.displayLayout.effective === "shelf" && result.stats.displayLayout.canvas === "shelf",
+    "Both themes must implement the requested physical shelf.");
+  expect(result.opacity === "1" && !result.legacyRenderer && result.hostCanvasCount === 1,
+    "A shelf must render through the sole ArchiveScene WebGL canvas without a legacy overlay.");
+  expect(result.labelNumber === "NO.001", "A non-first TRACKS box keeps its canonical parent number.");
+  expect(new Set(result.valid.map(item => item.key)).size === result.valid.length,
+    "Finite shelf instances must not repeat display entries.");
+  expect(result.valid.length === 29, "All twenty plus nine synthetic track entries have one finite cell.");
+  expect(result.projection.lane.x < result.projection.origin.x && result.projection.lane.y < result.projection.origin.y &&
+    result.projection.row.x > result.projection.origin.x && result.projection.row.y < result.projection.origin.y,
+    "The native shelf axes keep the next lane left/up and the next slot right/up on screen.");
+  expect(!result.styleError, "The unified scene must not report a style resource error.");
+  expect(result.resourceCapacity >= archiveScene.positions.length && result.support.length > 0,
+    "Physical shelf trays must cover the already allocated scene instance pool.");
+  expect(result.physicalTraysVisible, "Future's default shelf:false appearance still provides its requested physical shelf layout.");
+  expect(result.selectedScreenBounds.minX >= 10 && result.selectedScreenBounds.maxX <= result.selectedScreenBounds.availableWidth - 10,
+    "The entire selected shelf case must remain inside its real visible width with a ten-pixel margin: " + JSON.stringify(result.selectedScreenBounds));
+  expect(result.support.every(item => item.clearance >= -0.001),
+    "Every actual case bound must clear its physical tray: " + JSON.stringify(result.support.filter(item => item.clearance < -0.001)));
+  expect(result.topTitles.array === unifiedStyle.topTitles && result.topTitles.selected === unifiedStyle.topTitles,
+    "The shelf title-strip visibility must follow the user's theme appearance setting.");
+  if (unifiedStyle.topTitles) expect(result.topTitles.selectedText === unifiedTrack.record.title,
+    "A shelf title strip uses the selected track title rather than its parent's album title.");
+  return result;
+}
+async function exerciseUnifiedRender() {
+  await setupArchiveScene();
+  window.caseCheck.editor.destroy();
+  document.body.replaceChildren(archiveHost);
+  document.body.style.cssText = "margin:0;padding:0;overflow:hidden";
+  archiveHost.style.margin = "0";
+  archiveHost.dataset.mode = "archive";
+  const pane = document.createElement("aside");
+  pane.className = "album-callout";
+  pane.style.cssText = "position:absolute;right:24px;top:24px;width:456px;height:300px;pointer-events:auto";
+  archiveHost.append(pane);
+  const artwork = createSyntheticTestCover(512).toDataURL("image/png");
+  const albums = records.slice(0, 2).map((record, index) => ({ ...record.album, coverUrl: artwork,
+    tracks: Array.from({ length: index ? 5 : 24 }, (_, slot) => ({
+      id: record.id + "-track-" + (slot + 1), albumId: record.id, title: "Synthetic Track " + (slot + 1),
+      trackNumber: slot + 1, artist: record.album.artist, format: "FLAC", codec: "FLAC",
+      sampleRate: 96000, bitsPerSample: 24, lossless: true, browserPlayable: true,
+      audioUrl: "", relativePath: "", duration: 120,
+    })) }));
+  setMusicAlbums(albums, [{ id: "fixture-a", name: "Fixture A" }, { id: "fixture-b", name: "Fixture B" }], "genre");
+  configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
+  unifiedTrack = getMusicDisplayEntries().filter(entry => entry.recordIndex === 0)[1];
+  expect(!!unifiedTrack, "The synthetic catalog must expose a non-first track.");
+  focusMusicEntry(unifiedTrack.key);
+  archiveScene.setReduced(true);
+  await archiveScene.refreshLibrary(0);
+  archiveScene.showMusicArchiveImmediately(archiveTime);
+  const atlas = archiveScene.covers, positions = archiveScene.positions;
+  const audit = { pages: getMusicCatalogShelves().map(shelf => shelf.entryKeys.length), variants: {}, details: [] };
+  expect(JSON.stringify(audit.pages) === "[20,9]", "Twenty-nine tracks must form two finite shelf pages.");
+  for (const design of ["rhine", "archive"]) {
+    audit.variants[design] = await unifiedRenderVariant(design, "day", "front");
+    configureMusicCatalog({}, "no-synthetic-track-can-match-this"); stepArchiveScene(6);
+    const empty = unifiedSnapshot();
+    expect(!empty.modelVisible && !empty.coversVisible && !empty.instancesVisible && empty.valid.length === 0,
+      "An empty public query hides all shelf cases and covers.");
+    configureMusicCatalog({}, ""); stepArchiveScene(6);
+    expect(archiveScene.model.visible && archiveScene.covers.array.visible && archiveScene.selectedCell.foobarEntryKey === unifiedTrack.key,
+      "Clearing a query restores the same non-first track.");
+    archiveScene.setMode("detail"); stepArchiveScene(8);
+    for (const layout of ["array", "grid", "shelf"]) {
+      configureMusicCatalog({ layout }); archiveScene.setMusicStyle(unifiedStyle); stepArchiveScene(8);
+      const stats = archiveScene.getStats();
+      expect(stats.selectedCell.foobarEntryKey === unifiedTrack.key && stats.musicPresentationPhase === "presented",
+        "A layout switch must retain the non-first track and open presentation.");
+      expect(archiveScene.covers === atlas && archiveScene.positions === positions, "Layout switches reuse atlas and instance allocation.");
+      if (layout !== "shelf") expect(!archiveScene.caseTitles.array.visible && !archiveScene.caseTitles.selected.visible,
+        "Array/grid inspection must not acquire shelf title-strip overlays.");
+      audit.details.push({ design, layout, entryKey: stats.selectedCell.foobarEntryKey, phase: stats.musicPresentationPhase });
+    }
+    archiveScene.setMode("archive"); stepArchiveScene(8);
+  }
+  // Exercise the production transformed bounds before checking support/spacing.
+  const beforeTransform = unifiedSnapshot();
+  const transformed = sceneCaseSettings("punk");
+  transformed.appearances.punk = casePreset("glass", "punk");
+  transformed.appearances.punk.transforms = { frame: { visible: true, offset: [.8, -.1, .65], rotation: [0, 0, 0], scale: [1.15, 1.1, 1.2] } };
+  await archiveScene.setCaseSettings(transformed); stepArchiveScene(6);
+  audit.transformed = unifiedSnapshot();
+  expect(Math.abs(audit.transformed.spacing.column) >= audit.transformed.caseLayout.width + .3 &&
+    Math.abs(audit.transformed.spacing.row) >= audit.transformed.caseLayout.depth + .15,
+    "Shelf spacing must clear the actually transformed user case bounds.");
+  expect(audit.transformed.support.length > 0 && audit.transformed.support.every(item => item.clearance >= -0.001),
+    "User part transforms must not sink actual case bounds through physical trays.");
+  expect(Math.abs(audit.transformed.caseLayout.center.x - beforeTransform.caseLayout.center.x) > .15 &&
+    Math.abs(audit.transformed.caseLayout.center.z - beforeTransform.caseLayout.center.z) > .15,
+    "The asymmetric fixture must move both actual bounds-center axes enough to detect an origin-centered tray.");
+  expect(audit.transformed.support.every(item => Math.abs(item.centerGapX) < .001 && Math.abs(item.centerGapZ) < .04),
+    "Physical trays must follow asymmetric case bounds centers, allowing only the existing slight wave tilt: " +
+      JSON.stringify(audit.transformed.support.filter(item => Math.abs(item.centerGapX) >= .001 || Math.abs(item.centerGapZ) >= .04)));
+  const bounds = audit.transformed.selectedScreenBounds;
+  expect(bounds.minX >= 10 && bounds.maxX <= bounds.availableWidth - 10 && bounds.minY >= 10 && bounds.maxY <= archiveHost.clientHeight - 10,
+    "The full asymmetric selected case must remain inside the camera's visible stage: " + JSON.stringify(bounds));
+  expect(audit.transformed.stats.selectedCell.foobarEntryKey === beforeTransform.stats.selectedCell.foobarEntryKey &&
+    audit.transformed.stats.selectedAlbumId === beforeTransform.stats.selectedAlbumId,
+    "Moving physical bounds centers cannot change the public entry or canonical parent identity.");
+  const transformedCanvas = document.createElement("canvas");
+  transformedCanvas.width = archiveScene.renderer.domElement.width; transformedCanvas.height = archiveScene.renderer.domElement.height;
+  transformedCanvas.getContext("2d").drawImage(archiveScene.renderer.domElement, 0, 0);
+  const transformedImage = transformedCanvas.toDataURL("image/png");
+  archiveScene.setMode("detail"); stepArchiveScene(8);
+  for (let frame = 0; frame < 90 && !archiveScene.musicPresentationReady; frame++) stepArchiveScene(1);
+  audit.transformedDetail = unifiedSnapshot();
+  const detailBounds = audit.transformedDetail.selectedScreenBounds;
+  expect(audit.transformedDetail.stats.musicPresentationPhase === "presented" &&
+    audit.transformedDetail.stats.selectedCell.foobarEntryKey === beforeTransform.stats.selectedCell.foobarEntryKey,
+    "Opening the asymmetric case must preserve its track identity and reach the common presented state.");
+  expect(detailBounds.minX >= 10 && detailBounds.maxX <= detailBounds.availableWidth - 10 &&
+    detailBounds.minY >= 10 && detailBounds.maxY <= archiveHost.clientHeight - 10,
+    "The full asymmetric case must remain visible after the common detail camera move: " + JSON.stringify(detailBounds));
+  archiveScene.setMode("archive"); stepArchiveScene(8);
+  await unifiedRenderVariant("archive", "day", "front");
+  archiveScene.onSelect = (index, cell) => {
+    unifiedClicks.push({ index, cell });
+    if (cell?.foobarEntryKey) focusMusicEntry(cell.foobarEntryKey);
+    archiveScene.select(index, cell ? { cell } : undefined); stepArchiveScene(6);
+  };
+  archiveScene.onOpenAlbum = index => { unifiedOpens.push({ index, key: archiveScene.selectedCell.foobarEntryKey }); };
+  return { audit, transformedImage, pointerTarget: unifiedPointerTarget() };
 }
 
 const punkViewClicks = [];
@@ -2610,6 +2846,10 @@ window.caseCheck = {
   captureRhineAlbumInfo,
   capturePunkAlbumInfo,
   exercisePunkFutureView,
+  exerciseUnifiedRender,
+  unifiedRenderVariant,
+  unifiedPointerTarget,
+  unifiedRenderResult() { return { clicks: unifiedClicks, opens: unifiedOpens, snapshot: unifiedSnapshot() }; },
   punkFutureClickResult() { return { clicks: punkViewClicks, stats: archiveScene.getStats() }; },
   exerciseCardLifecycle,
   async run() {
@@ -5815,7 +6055,7 @@ function receive(event) {
 function send(method, params = {}, sessionId) {
   return new Promise((resolve, reject) => {
     const id = ++sequence;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, isPunkView ? 60000 : 20000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, isPunkView || isUnifiedRender ? 60000 : 20000);
     pending.set(id, { resolve, reject, timer });
     socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
   });
@@ -6147,6 +6387,55 @@ async function main() {
     return;
   }
 
+  if (isUnifiedRender) {
+    await mkdir(unifiedOutput, { recursive: true });
+    await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
+    await writeFile(path.join(unifiedOutput, "unified-archive-asymmetric-bounds.png"), pngBuffer(result.transformedImage, "Asymmetric bounds scene"));
+    delete result.transformedImage;
+    const target = result.pointerTarget;
+    const click = async (point, count) => {
+      await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
+      await command("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: count });
+      await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: count });
+    };
+    await click(target, 1);
+    const selected = await evaluate("window.caseCheck.unifiedRenderResult()");
+    assert.equal(selected.clicks.at(-1)?.cell?.foobarEntryKey, target.key, "Shelf raycasting selects the actual visible entry key.");
+    assert.equal(selected.clicks.at(-1)?.index, target.index);
+    const selectedTarget = await evaluate("window.caseCheck.unifiedPointerTarget(true)");
+    await click(selectedTarget, 1); await click(selectedTarget, 2);
+    const opened = await evaluate("window.caseCheck.unifiedRenderResult()");
+    await writeFile(path.join(unifiedOutput, "unified-pointer-diagnostic.json"), JSON.stringify({ target, selectedTarget, selected, opened }, null, 2));
+    assert.equal(opened.opens.at(-1)?.index, target.index, "A real double click invokes the shelf album-open callback: " +
+      JSON.stringify({ selectedTarget, clicks: opened.clicks, opens: opened.opens, phase: opened.snapshot.stats.musicPresentationPhase }));
+    assert.equal(opened.opens.at(-1)?.key, target.key);
+    const screenshots = [];
+    for (const [design, mode, scheme] of [["rhine", "day", "rhine"], ["rhine", "night", "rhine"],
+      ["archive", "day", "front"], ["archive", "night", "hazard"]]) {
+      const snapshot = await evaluate("window.caseCheck.unifiedRenderVariant(" + [design, mode, scheme].map(JSON.stringify).join(",") + ")");
+      const name = "unified-" + design + "-" + mode + "-" + scheme + ".png";
+      const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+      await writeFile(path.join(unifiedOutput, name), Buffer.from(screen.data, "base64"));
+      screenshots.push({ name, snapshot });
+      if (design === "archive") {
+        assert.match(snapshot.clipPath, /^inset\(0(?:px)? [1-9]/, "Punk shelves keep the right information region clipped.");
+        const pixel = await evaluate("(async()=>{const i=new Image();i.src=" + JSON.stringify("data:image/png;base64," + screen.data) +
+          ";await i.decode();const c=document.createElement('canvas');c.width=1450;c.height=840;const x=c.getContext('2d');x.drawImage(i,0,0);return Array.from(x.getImageData(1430,820,1,1).data);})()");
+        const bg = await evaluate("getComputedStyle(document.getElementById('scene-host')).backgroundColor");
+        const rgb = bg.match(/\d+/g).slice(0, 3).map(Number);
+        assert.deepEqual(pixel, [...rgb, 255], "Punk's clipped right region preserves its theme background.");
+      }
+    }
+    assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
+    await writeFile(path.join(unifiedOutput, "unified-render-audit.json"), JSON.stringify({ ok: true,
+      scope: "Production ArchiveScene/WebGL, local GLBs and browser pointer input; synthetic tracks only, no player or audio ports.",
+      ...result, pointerResult: opened, screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+    console.log(JSON.stringify({ ok: true, checks: ["Both physical shelves", "sole WebGL canvas", "finite TRACKS identity/paging",
+      "query recovery", "detail/layout continuity", "transformed spacing", "real raycast and double click", "Punk clipping"],
+      report: ".tools/unified-architecture-stage3/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+    return;
+  }
   if (isPunkView) {
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
     const result = await evaluate("window.caseCheck.exercisePunkFutureView()");
@@ -7256,7 +7545,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  const failureDirectory = isReference ? referenceOutput : output;
+  const failureDirectory = isReference ? referenceOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

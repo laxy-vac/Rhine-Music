@@ -87,7 +87,6 @@ export function qualityMarkup(quality: RenderQuality, design?: "rhine" | "archiv
       trUi("调整高分辨率屏幕的画面精细度，降低可提高流畅度"),
       [1, 1.5, 2, 3].map((v) => [v, `${v}×`]),
     )}
-    ${design === "archive" ? `<p class="quality-effect-note">${trUi("盒体细节与灯光选项适用于可调的 3D 盒体；Punk 旧版预渲染盒体保留固定光影与虚化。")}</p>` : ""}
     ${select(quality, "antialias", trUi("抗锯齿"), trUi("让专辑卡片和场景边缘更平滑"), [
       ["off", trUi("原始")],
       ["smaa", "SMAA"],

@@ -37,9 +37,9 @@ node scripts/build-source-preview.mjs --interface-only
 .启动源码验证.cmd
 ```
 
-界面源码验证构建通过（2341模块）。统一架构第一阶段已获用户验收；第二阶段共用目录、阵列镜头/坐标与导航，并在两主题STYLE加入“视图与浏览”和公共网格。Future选货架暂回退阵列但保留偏好，完整货架/地面资源和Punk原生图像货架迁移属于第三阶段。已有HEX、个人预设、精细款光学与徽标保持，Punk不加格式徽标；GLB/PNG未改。2026-10-15用户已确认第二阶段通过；按其要求暂不推进第三阶段。启动源码验证.cmd及原验收步骤继续用于后续回归参考。
+阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。第三阶段实现及必要自动验证已完成，等待用户验收。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。界面构建通过（1652模块），输出仍为`.tools/source-preview-interface`，没有重打朋友安装包或覆盖上游dist。
 
-第二阶段已于2026-10-15获用户验收通过，用户要求本轮先只记录、暂不推进第三阶段。此前视觉补验步骤保留作回归参考：Future浏览页左上角显示/分组/排序、无整块玻璃底的原资料区、小号ACCESS ALBUM和分段揭示；再看STYLE同步与Punk保持，不需要重扫曲库、重置偏好或换模型。此次通过不扩展到性能、硬件或独立模型专项。
+公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。它不等于个人播放器、Electron整窗或60FPS硬件验收。日志在`.tools/unified-architecture-stage3`，完整人工步骤见[统一架构](UNIFIED-ARCHITECTURE.md)。
 
 ## 模型更新与缓存
 
@@ -109,6 +109,10 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 | 入口 | 范围 |
 | --- | --- |
+| `scripts/check-music-spatial.mjs` | 第三阶段有限20槽映射、TRACKS稳定身份、越界/空过滤及阵列委托；纯合成 |
+| `scripts/check-quality-detection.mjs` | 完整四档/双场景、样本门槛、最高稳定推荐及低帧档回退；纯计算 |
+| `scripts/check-case-system.mjs --unified-render` | 真实Scene/GLB、两主题货架、分页/命中/开盒/裁切/非对称变换支撑与详情可见；隔离图形 |
+| `scripts/check-quality-benchmark.mjs` | 先构建源码预览；生产检测UI+编译iframe，固定960×540/DPR1、Future简单款合成曲库、四档结果/取消/采用/键盘/独立存储和父状态；独立Chrome profile，不是Electron或设备FPS保证 |
 | `scripts/check-case-system.mjs` | 隔离盒体/迁移/插页/生命周期/缓存合成 |
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
 | `scripts/check-music-display.mjs` | 第二阶段真实公共catalog/shelves/array模块，合成专辑/曲目身份、分组/筛选/排序、缓存、导航循环/边界和布局能力回退；纯Node，不启动浏览器或个人播放器 |
