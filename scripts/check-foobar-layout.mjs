@@ -119,7 +119,7 @@ const modules = (await Promise.all([
   moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle"]),
   moduleFunctions("music-view-controls", ["musicViewControlsMarkup", "musicBrowseControlsMarkup", "syncMusicViewControls"]),
   moduleFunctions("music-catalog-grid", ["setupMusicCatalogGrid"]),
-  moduleFunctions("foobar-catalog", ["foobarCatalogMarkup", "foobarGridMarkup"]),
+  moduleFunctions("music-catalog-markup", ["musicCatalogToolsMarkup", "musicGridMarkup"]),
   moduleFunctions("album-panel", ["setupAlbumPanel"]),
   moduleFunctions("ui-transitions", ["SurfaceTransition", "PageScanTransition"]),
   moduleFunctions("music-presentation", ["MusicPresentation"]),
@@ -175,11 +175,6 @@ const initialize = `(async () => {
   const getMusicCatalogShelves=()=>Array.from({length:3},(_,shelf)=>({entryKeys:Array.from({length:20},(_,slot)=>'mock-'+shelf+'-'+slot)}));
   const navigationCalls=[];
   const navigateMusicEntry=(index,axis,direction)=>{navigationCalls.push([index,axis,direction]);return entryByKey(index===0?'track|fixture-album-2|fixture-track-3':'track|fixture-album|fixture-flac');};
-  const getFoobarCatalogOptions = () => legacyCatalogOptions(musicApplication.view);
-  const getFoobarFocusedEntry = () => getMusicFocusedEntry(musicApplication.selectedIndex);
-  const getFoobarCatalogRecords = () => getMusicCatalogRecords();
-  const getFoobarLocation = getMusicRecordLocation;
-  const getFoobarShelves = getMusicCatalogShelves;
   const boot=undefined, viewer=undefined;
   const isLibrarySettings=()=>false;
   const openPanel=()=>{};
@@ -202,9 +197,9 @@ const initialize = `(async () => {
     if(musicApplication.catalogFocus?.albumId!==musicApplication.selectedAlbumId)musicApplication.selectedTrackId=undefined;
   };
   const updateSelection=()=>syncMusicCatalogView();
-  // DOM fixture boundary: exercise the real compatibility toolbar markup while
-  // supplying a small explicit mock catalog entry; public catalog behavior is
-  // covered by check-music-display.mjs with synthetic records.
+  // DOM fixture boundary: exercise the production shared catalog markup with
+  // explicit public-entry-shaped fixture records; public grouping behavior is
+  // covered by check-music-display.mjs against the real catalog module.
   const {c:createRollingNumber,d:createRollingText}=await import(${JSON.stringify(rollingURL)});
   const normalizeProcessing = () => structuredClone(${JSON.stringify(normalizeProcessing(undefined))});
   ${modules}
@@ -237,7 +232,7 @@ const initialize = `(async () => {
   const profile=document.querySelector('#selection-profile');profile.hidden=false;
   let sharedPanel,albumPanel,activationBefore,glassBaseline,openAlbumButton,glassCssSnapshot,fixtureReducedMotion=false;
   let playerState;
-  const preferences={style:{scheme:'flare',caseStyle:'white',get design(){return stage.dataset.design;}},theme:'day',reduced:false,view:musicApplication.view,foobarArchive:getFoobarCatalogOptions(),output:{}};
+  const preferences={style:{scheme:'flare',caseStyle:'white',get design(){return stage.dataset.design;}},theme:'day',reduced:false,view:musicApplication.view,foobarArchive:legacyCatalogOptions(musicApplication.view),output:{}};
   const scene={
     get musicDisplayLayout(){return {effective:musicApplication.view.layout};},
     setMusicStyle(){},
@@ -523,7 +518,7 @@ try {
           rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height},
           infoRect:{x:i.x,y:i.y,right:i.right,bottom:i.bottom,width:i.width,height:i.height},
           cardCount:cards.length,selected:host.querySelector('.foobar-grid-card[aria-pressed="true"]')?.dataset.foobarEntry,
-          legacyLayoutHidden:getComputedStyle(document.querySelector('.foobar-catalog-control[aria-label="LAYOUT"]')).display==='none',
+          layoutControlRemoved:!document.querySelector('.foobar-catalog-control[aria-label="LAYOUT"]'),
           hostParent:host.parentElement?.className||host.parentElement?.id||host.parentElement?.tagName};
       })()`);
       assert.equal(geometry.visible,true,`${design}: grid must be visible in archive browsing mode.`);
@@ -531,7 +526,7 @@ try {
       assert.ok(geometry.rect.x>=0&&geometry.rect.right<=1920&&geometry.rect.y>=0&&geometry.rect.bottom<=1080,
         `${design}: grid bounds must stay inside the 1920×1080 viewport.`);
       assert.equal(geometry.cardCount,3);assert.equal(geometry.selected,'track|fixture-album|fixture-flac');
-      if(design==='archive')assert.equal(geometry.legacyLayoutHidden,true,'Punk layout selection belongs to STYLE only.');
+      assert.equal(geometry.layoutControlRemoved,true,'Catalog layout selection belongs to STYLE only.');
       const {data}=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
       const screenshot=`display-${design}-grid.png`;
       await writeFile(path.join(output,screenshot),Buffer.from(data,'base64'));

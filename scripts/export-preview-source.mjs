@@ -39,6 +39,8 @@ const rootFileAllowlist = new Set([
   'readme.md',
   'readme.original.md',
   'index.html',
+  'quality-benchmark.html',
+  'vite.config.ts',
   'package-lock.json',
   'package.json',
   'tsconfig.json',

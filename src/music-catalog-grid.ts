@@ -1,4 +1,4 @@
-import { foobarGridMarkup } from "./foobar-catalog";
+import { musicGridMarkup } from "./music-catalog-markup";
 import { getMusicCatalogRecords, getMusicCatalogVersion, getMusicFocusedEntry } from "./music-catalog";
 import type { MusicLayout } from "./music-view-settings";
 
@@ -62,7 +62,7 @@ export function setupMusicCatalogGrid(root: HTMLElement, host: HTMLElement) {
       const scroll = visible() ? host.scrollTop : rememberedScroll;
       const focused = host.contains(document.activeElement)
         ? (document.activeElement as HTMLElement).dataset.foobarEntry : undefined;
-      host.innerHTML = foobarGridMarkup(index, entry?.key);
+      host.innerHTML = musicGridMarkup(index, entry?.key);
       syncBrand();
       host.scrollTop = scroll;
       if (focused) Array.from(host.querySelectorAll<HTMLElement>("[data-foobar-entry]"))

@@ -1,7 +1,9 @@
 import type { MusicPlayerState } from "./music-player";
 import { playbackTime } from "./music-playback";
-import { foobarCatalogMarkup, getFoobarCatalogOptions, getFoobarCatalogRecords } from "./foobar-catalog";
+import { musicCatalogToolsMarkup } from "./music-catalog-markup";
+import { getMusicCatalogOptions, getMusicCatalogRecords } from "./music-catalog";
 import { musicApplication } from "./music-application-state";
+import { legacyCatalogOptions } from "./music-view-settings";
 
 type Callbacks = {
   search: (query: string) => void;
@@ -135,10 +137,10 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
   new MutationObserver(updatePage).observe(stage, { attributes: true, attributeFilter: ["data-page", "data-mode"] });
   const refreshCatalog = () => {
     if (!active) return;
-    q(".foobar-catalog-tools").innerHTML = foobarCatalogMarkup();
-    const options = getFoobarCatalogOptions();
+    q(".foobar-catalog-tools").innerHTML = musicCatalogToolsMarkup();
+    const options = legacyCatalogOptions(getMusicCatalogOptions());
     if (document.activeElement !== search) search.value = musicApplication.query;
-    stage.dataset.foobarEmpty = String(!getFoobarCatalogRecords().length);
+    stage.dataset.foobarEmpty = String(!getMusicCatalogRecords().length);
     stage.dataset.foobarLayout = options.layout;
   };
   return {

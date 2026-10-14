@@ -22,7 +22,6 @@ import "./music-style-page.css";
 import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
 import { getMusicCatalogShelves, getMusicRecordLocation, navigateMusicEntry } from "./music-catalog-shelves";
 import { configureMusicCatalog, getMusicCatalogOptions, getMusicCatalogRecords, getMusicCatalogGroups, getMusicEntry, getMusicEntryByKey, getMusicFocusedEntry, focusMusicEntry } from "./music-catalog";
-import { normalizeFoobarCatalogOptions, type FoobarCatalogOptions } from "./foobar-catalog";
 import { musicViewControlsMarkup, musicBrowseControlsMarkup, syncMusicViewControls } from "./music-view-controls";
 import { setupMusicCatalogGrid } from "./music-catalog-grid";
 import "./music-view-controls.css";
@@ -109,7 +108,7 @@ import { setupMusicRuler } from "./music-ruler";
 import { MusicPresentation, type AlbumSelection } from "./music-presentation";
 import { MusicTrackFocus } from "./music-track-focus";
 import { musicApplication } from "./music-application-state";
-import { legacyCatalogOptions, migrateMusicViewSettings, musicViewFromLegacy, type MusicViewSettings } from "./music-view-settings";
+import { legacyCatalogOptions, migrateMusicViewSettings, type LegacyCatalogOptions, type MusicViewSettings } from "./music-view-settings";
 import { MusicBoot } from "./music-boot";
 import { viewportLayout } from "./viewport-layout";
 import { applyWindowAspect, windowAspectMarkup } from "./window-aspect";
@@ -262,7 +261,7 @@ const preferences = {
     archivePunkPresets: [] as CaseUserPreset[],
     themeLayoutVersion: 0,
     view: undefined as MusicViewSettings | undefined,
-    foobarArchive: undefined as FoobarCatalogOptions | undefined,
+    foobarArchive: undefined as LegacyCatalogOptions | undefined,
     sortMode: "genre" as MusicSortMode,
     quality: "original" as QualityPreset,
     reduced: false,
@@ -290,7 +289,7 @@ const preferences = {
       archivePunkPresets: CaseUserPreset[];
       themeLayoutVersion: number;
       view: MusicViewSettings;
-      foobarArchive: FoobarCatalogOptions;
+      foobarArchive: LegacyCatalogOptions;
       sortMode: MusicSortMode;
       quality: QualityPreset;
       reduced: boolean;
@@ -3660,21 +3659,13 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (target.dataset.action === "dismiss-panel" && e.target !== target) return;
-  const browseField = target.dataset.musicBrowseField;
+  const browseField = target.dataset.musicBrowseField ?? target.dataset.foobarCatalog;
   if (browseField === "show" || browseField === "group" || browseField === "sort") {
     applyMusicView({ [browseField]: target.dataset.value } as Partial<MusicViewSettings>);
     return;
   }
   if (target.dataset.musicLayout === "shelf" || target.dataset.musicLayout === "array" || target.dataset.musicLayout === "grid") {
     applyMusicView({ layout: target.dataset.musicLayout });
-    return;
-  }
-  if (target.dataset.foobarCatalog) {
-    const previous = legacyCatalogOptions(getMusicCatalogOptions());
-    const options = normalizeFoobarCatalogOptions({ ...previous, [target.dataset.foobarCatalog]: target.dataset.value });
-    const field = target.dataset.foobarCatalog;
-    if (field === "layout") applyMusicView({ layout: musicViewFromLegacy(options).layout });
-    else if (field === "show" || field === "group" || field === "sort") applyMusicView({ [field]: options[field] });
     return;
   }
   if (target.dataset.action === "foobar-select" || target.dataset.action === "foobar-track") {

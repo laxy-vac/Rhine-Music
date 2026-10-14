@@ -301,12 +301,6 @@ export class CoverAtlas {
     return image;
   }
 
-  /** The sprite port shares decoded artwork with the native array. No second fetch. */
-  spriteCover(record: ArchiveRecord): CanvasImageSource | undefined {
-    const url = record.album?.coverUrl;
-    return url ? this.decodedImages.get(url)?.source : undefined;
-  }
-
   private loadImage(url?: string) {
     if (!url) return Promise.resolve(undefined);
     if (this.decodedImages.has(url)) return Promise.resolve(this.cachedImage(url));

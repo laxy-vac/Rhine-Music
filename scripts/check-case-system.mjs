@@ -1,4 +1,4 @@
-// Offline browser acceptance for editable case models, archive sprites, and the editor.
+// Offline browser acceptance for editable case models, shared ArchiveScene rendering and the editor.
 // The fixture serves only the four local GLBs explicitly used by this system.
 import assert from "node:assert/strict";
 import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -12,9 +12,9 @@ import ts from "typescript";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
-const isPunkView = process.argv.includes("--punk-view");
-const isUnifiedRender = process.argv.includes("--unified-render");
-const unifiedOutput = path.join(project, ".tools", "unified-architecture-stage3");
+// Retain the old command as an explicit alias of the current common renderer audit.
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view");
+const unifiedOutput = path.join(project, ".tools", "unified-architecture-stage4");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -148,11 +148,8 @@ function stubImportMetaGlobCalls(source, fileName, replacements = []) {
 
 const fixtureEntry = `
 import * as THREE from "three";
-import caseMeta from "./src/assets/style/case/white/case.json";
 import { createCaseModel, applyCaseAppearance, disposeCaseModel } from "./src/case-model.ts";
-import { createEditableCaseSprites } from "./src/case-sprites.ts";
 import { setupCaseEditor } from "./src/case-editor.ts";
-import { ArchiveCaseRenderer } from "./src/archive-case-renderer.ts";
 import {
   caseAppearancePresets,
   casePartsForStructure,
@@ -165,13 +162,10 @@ import { qualityPresets } from "./src/render-quality.ts";
 import { getCaseLayout } from "./src/case-layout.ts";
 import { ArchiveScene } from "./src/scene.ts";
 import { records, setMusicAlbums } from "./src/data.ts";
-import { configureFoobarCatalog, getFoobarCatalogOptions, getFoobarDisplayEntries, setFoobarFocus, normalizeFoobarCatalogOptions } from "./src/foobar-catalog.ts";
 import { archiveMusicStyle, defaultMusicStyle, musicStyleMarkup, stylePalette } from "./src/music-style.ts";
-import { punkFutureEntry } from "./src/punk-future-catalog.ts";
 import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries } from "./src/music-catalog.ts";
 import { getMusicCatalogShelves } from "./src/music-catalog-shelves.ts";
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
-import { fileAtCell } from "./src/archive-loop.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
 import { normalizeCaseUserPresets } from "./src/case-user-presets.ts";
 import { createAlbumInsert } from "./src/album-insert.ts";
@@ -204,8 +198,6 @@ let retainedPositions;
 let archiveStyleError = "";
 let archiveSceneCapture;
 let archiveSceneCaptureStats;
-let paperCompositeCapture;
-let punkSpriteOcclusionOn = null;
 const changes = [];
 const observations = [];
 const rendererCalls = [];
@@ -333,14 +325,6 @@ const editor = setupCaseEditor(editorHost, {
 
 function expect(condition, message) { if (!condition) throw new Error(message); }
 function serializeSettings(value) { return JSON.parse(JSON.stringify(value)); }
-function polygonArea(points) {
-  let area = 0;
-  for (let i = 0; i < points.length; i++) {
-    const a = points[i], b = points[(i + 1) % points.length];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  return Math.abs(area) / 2;
-}
 function createSyntheticTestCover(size = 584) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -372,294 +356,6 @@ function createSyntheticTestCover(size = 584) {
   context.font = "700 " + Math.round(size * 0.045) + "px sans-serif";
   context.fillText("LOCAL AUDIO", size * 0.1, size * 0.85);
   return canvas;
-}
-function canvasPixel(canvas, x, y) {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("Canvas 2D is unavailable for sprite pixel checks.");
-  const px = Math.max(0, Math.min(canvas.width - 1, Math.round(x)));
-  const py = Math.max(0, Math.min(canvas.height - 1, Math.round(y)));
-  return [...context.getImageData(px, py, 1, 1).data];
-}
-function paperFieldStats(canvas, center) {
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("Canvas 2D is unavailable for the paper light-field check.");
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  let visible = 0;
-  let brightness = 0;
-  for (let index = 0; index < pixels.length; index += 4) {
-    if (pixels[index + 3] < 8) continue;
-    visible++;
-    brightness += pixels[index] * 0.2126 + pixels[index + 1] * 0.7152 + pixels[index + 2] * 0.0722;
-  }
-  return {
-    width: canvas.width,
-    height: canvas.height,
-    visiblePixels: visible,
-    meanVisibleLuminance: visible ? Number((brightness / visible).toFixed(2)) : 0,
-    centerPixel: canvasPixel(canvas, center[0], center[1]),
-    outsidePixel: canvasPixel(canvas, 0, 0),
-  };
-}
-function drawCanvasToQuad(context, source, quad) {
-  const [topLeft, topRight, bottomRight, bottomLeft] = quad;
-  context.save();
-  context.beginPath();
-  context.moveTo(topLeft[0], topLeft[1]);
-  context.lineTo(topRight[0], topRight[1]);
-  context.lineTo(bottomRight[0], bottomRight[1]);
-  context.lineTo(bottomLeft[0], bottomLeft[1]);
-  context.closePath();
-  context.clip();
-  context.setTransform(
-    (topRight[0] - topLeft[0]) / source.width,
-    (topRight[1] - topLeft[1]) / source.width,
-    (bottomLeft[0] - topLeft[0]) / source.height,
-    (bottomLeft[1] - topLeft[1]) / source.height,
-    topLeft[0],
-    topLeft[1],
-  );
-  context.drawImage(source, 0, 0);
-  context.restore();
-}
-function composeSpriteWithPaper(sprites, artwork) {
-  if (!sprites.arrayPaper) throw new Error("Punk sprite has no rendered arrayPaper light field.");
-  const canvas = document.createElement("canvas");
-  canvas.width = sprites.arrayClear.width;
-  canvas.height = sprites.arrayClear.height;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("Canvas 2D is unavailable for the Punk paper composite.");
-  context.fillStyle = "#101923";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#d9d8d3";
-  context.beginPath();
-  context.moveTo(...sprites.array.cover[0]);
-  for (let index = 1; index < sprites.array.cover.length; index++) context.lineTo(...sprites.array.cover[index]);
-  context.closePath(); context.fill();
-  drawCanvasToQuad(context, artwork, sprites.array.cover);
-  context.save();
-  context.beginPath();
-  context.moveTo(...sprites.array.cover[0]);
-  for (let index = 1; index < sprites.array.cover.length; index++) context.lineTo(...sprites.array.cover[index]);
-  context.closePath(); context.clip();
-  context.globalCompositeOperation = "multiply";
-  context.drawImage(sprites.arrayPaper, 0, 0);
-  context.restore();
-  // The WebGL case sprite is the final glass-and-frame foreground, matching the
-  // array renderer's album -> paper light field -> front case composition.
-  context.drawImage(sprites.arrayClear, 0, 0);
-  return canvas;
-}
-function spriteInnerGutterProbe(quad, edgeVertices, physicalEdgeLength, offsetUnits = 0.035) {
-  const [firstIndex, secondIndex] = edgeVertices;
-  const first = quad[firstIndex], second = quad[secondIndex];
-  const midpoint = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
-  const center = quad.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
-  const dx = second[0] - first[0], dy = second[1] - first[1];
-  const edgePixels = Math.hypot(dx, dy);
-  const nx = midpoint[0] - center[0], ny = midpoint[1] - center[1];
-  const normalLength = Math.max(1e-6, Math.hypot(nx, ny));
-  const pixelsPerUnit = edgePixels / physicalEdgeLength;
-  return [midpoint[0] + nx / normalLength * pixelsPerUnit * offsetUnits,
-    midpoint[1] + ny / normalLength * pixelsPerUnit * offsetUnits];
-}
-function spriteRoi(canvas, center, size = 23) {
-  const left = Math.max(0, Math.min(canvas.width - size, Math.round(center[0] - size / 2)));
-  const top = Math.max(0, Math.min(canvas.height - size, Math.round(center[1] - size / 2)));
-  const data = canvas.getContext("2d", { willReadFrequently: true }).getImageData(left, top, size, size).data;
-  const rgb = [0, 0, 0];
-  let luminance = 0, count = 0, opaque = 0;
-  for (let index = 0; index < data.length; index += 4) {
-    if (data[index + 3] === 0) continue;
-    opaque++;
-    for (let channel = 0; channel < 3; channel++) rgb[channel] += data[index + channel];
-    luminance += data[index] * 0.2126 + data[index + 1] * 0.7152 + data[index + 2] * 0.0722;
-    count++;
-  }
-  return {
-    rect: { x: left, y: top, width: size, height: size },
-    pixels: count,
-    opaqueFraction: Number((opaque / (size * size)).toFixed(4)),
-    meanSrgb8: rgb.map(value => Number((value / Math.max(1, count)).toFixed(2))),
-    meanLuminance: Number((luminance / Math.max(1, count)).toFixed(3)),
-  };
-}
-function compareAlphaCoveredCanvasPixels(onCanvas, offCanvas) {
-  if (onCanvas.width !== offCanvas.width || onCanvas.height !== offCanvas.height)
-    throw new Error("A/B sprite canvases must have identical pixel dimensions for a full-resolution comparison.");
-  const width = onCanvas.width, height = onCanvas.height;
-  const onPixels = onCanvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, width, height).data;
-  const offPixels = offCanvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, width, height).data;
-  const bounds = () => ({ minX: width, minY: height, maxX: -1, maxY: -1, count: 0 });
-  const include = (box, x, y) => {
-    box.minX = Math.min(box.minX, x); box.minY = Math.min(box.minY, y);
-    box.maxX = Math.max(box.maxX, x); box.maxY = Math.max(box.maxY, y);
-    box.count++;
-  };
-  const finishBox = box => box.count ? {
-    x: box.minX,
-    y: box.minY,
-    width: box.maxX - box.minX + 1,
-    height: box.maxY - box.minY + 1,
-    pixels: box.count,
-  } : null;
-  let alphaCoveredPixels = 0, changedPixels = 0, alphaChangedPixels = 0;
-  let positiveDarkeningPixels = 0, negativeDarkeningPixels = 0;
-  let positiveLuminanceSum = 0, maxPositiveLuminance = 0, maxNegativeLuminance = 0;
-  const changedBounds = bounds(), positiveBounds = bounds();
-  for (let pixel = 0; pixel < width * height; pixel++) {
-    const offset = pixel * 4;
-    if (onPixels[offset + 3] < 8 || offPixels[offset + 3] < 8) continue;
-    alphaCoveredPixels++;
-    const x = pixel % width, y = Math.floor(pixel / width);
-    let changed = false;
-    for (let channel = 0; channel < 3; channel++)
-      if (onPixels[offset + channel] !== offPixels[offset + channel]) changed = true;
-    if (onPixels[offset + 3] !== offPixels[offset + 3]) alphaChangedPixels++;
-    if (changed) {
-      changedPixels++;
-      include(changedBounds, x, y);
-    }
-    const onLuminance = onPixels[offset] * 0.2126 + onPixels[offset + 1] * 0.7152 + onPixels[offset + 2] * 0.0722;
-    const offLuminance = offPixels[offset] * 0.2126 + offPixels[offset + 1] * 0.7152 + offPixels[offset + 2] * 0.0722;
-    const darkening = offLuminance - onLuminance;
-    if (darkening > 0) {
-      positiveDarkeningPixels++;
-      positiveLuminanceSum += darkening;
-      maxPositiveLuminance = Math.max(maxPositiveLuminance, darkening);
-      include(positiveBounds, x, y);
-    } else if (darkening < 0) {
-      negativeDarkeningPixels++;
-      maxNegativeLuminance = Math.max(maxNegativeLuminance, -darkening);
-    }
-  }
-  return {
-    source: "original, unscaled arrayClear canvases",
-    pixelSize: { width, height },
-    alphaCoverageRule: "count only pixels where both A/B alpha are >= 8",
-    alphaCoveredPixels,
-    changedPixels,
-    changedPixelFraction: Number((changedPixels / Math.max(1, alphaCoveredPixels)).toFixed(6)),
-    alphaChangedPixels,
-    changedPixelBbox: finishBox(changedBounds),
-    positiveDarkeningPixels,
-    positiveDarkeningFraction: Number((positiveDarkeningPixels / Math.max(1, alphaCoveredPixels)).toFixed(6)),
-    meanPositiveLuminanceDarkening: Number((positiveLuminanceSum / Math.max(1, positiveDarkeningPixels)).toFixed(4)),
-    maxPositiveLuminanceDarkening: Number(maxPositiveLuminance.toFixed(4)),
-    positiveDarkeningBbox: finishBox(positiveBounds),
-    negativeDarkeningPixels,
-    maxOppositeLuminanceChange: Number(maxNegativeLuminance.toFixed(4)),
-    interpretationBoundary: "A positive global sprite response confirms the on/off render differs on visible pixels; without a raycast receiver identity it does not prove those pixels belong to the back plate.",
-  };
-}
-function cropSpriteRoi(source, roi) {
-  const canvas = document.createElement("canvas");
-  canvas.width = roi.rect.width;
-  canvas.height = roi.rect.height;
-  canvas.getContext("2d").drawImage(source, roi.rect.x, roi.rect.y, roi.rect.width, roi.rect.height, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-function spriteOcclusionComparison(onSprites, offSprites) {
-  if (!onSprites || !offSprites) throw new Error("Real on/off editable Punk sprites are required for the AO comparison.");
-  if (onSprites.inspect.length !== offSprites.inspect.length) throw new Error("Occlusion-on and test-off sprite generations must return the same inspect frame count.");
-  const coverRect = onSprites.coverRect;
-  if (!coverRect || !(coverRect.width > 0 && coverRect.height > 0)) throw new Error("Actual Punk cover dimensions are required for model-space gutter sampling.");
-  const offsetUnits = 0.035;
-  const arrayLeftProbe = spriteInnerGutterProbe(onSprites.array.cover, [3, 0], coverRect.height, offsetUnits);
-  const arrayBottomProbe = spriteInnerGutterProbe(onSprites.array.cover, [2, 3], coverRect.width, offsetUnits);
-  const offArrayLeftProbe = spriteInnerGutterProbe(offSprites.array.cover, [3, 0], coverRect.height, offsetUnits);
-  const offArrayBottomProbe = spriteInnerGutterProbe(offSprites.array.cover, [2, 3], coverRect.width, offsetUnits);
-  const onArrayLeftRoi = spriteRoi(onSprites.arrayClear, arrayLeftProbe);
-  const offArrayLeftRoi = spriteRoi(offSprites.arrayClear, offArrayLeftProbe);
-  const onArrayBottomRoi = spriteRoi(onSprites.arrayClear, arrayBottomProbe);
-  const offArrayBottomRoi = spriteRoi(offSprites.arrayClear, offArrayBottomProbe);
-  const arrayCanvasAblation = compareAlphaCoveredCanvasPixels(onSprites.arrayClear, offSprites.arrayClear);
-  const inspectIndex = onSprites.inspect.length - 1;
-  const inspectLeftProbe = spriteInnerGutterProbe(onSprites.inspectFrames[inspectIndex].cover, [3, 0], coverRect.height, offsetUnits);
-  const inspectBottomProbe = spriteInnerGutterProbe(onSprites.inspectFrames[inspectIndex].cover, [2, 3], coverRect.width, offsetUnits);
-  const offInspectLeftProbe = spriteInnerGutterProbe(offSprites.inspectFrames[inspectIndex].cover, [3, 0], coverRect.height, offsetUnits);
-  const offInspectBottomProbe = spriteInnerGutterProbe(offSprites.inspectFrames[inspectIndex].cover, [2, 3], coverRect.width, offsetUnits);
-  const onInspectLeftRoi = spriteRoi(onSprites.inspect[inspectIndex], inspectLeftProbe);
-  const offInspectLeftRoi = spriteRoi(offSprites.inspect[inspectIndex], offInspectLeftProbe);
-  const onInspectBottomRoi = spriteRoi(onSprites.inspect[inspectIndex], inspectBottomProbe);
-  const offInspectBottomRoi = spriteRoi(offSprites.inspect[inspectIndex], offInspectBottomProbe);
-  const arrayLeftDarkening = Number((offArrayLeftRoi.meanLuminance - onArrayLeftRoi.meanLuminance).toFixed(3));
-  const arrayBottomDarkening = Number((offArrayBottomRoi.meanLuminance - onArrayBottomRoi.meanLuminance).toFixed(3));
-  const inspectLeftDarkening = Number((offInspectLeftRoi.meanLuminance - onInspectLeftRoi.meanLuminance).toFixed(3));
-  const inspectBottomDarkening = Number((offInspectBottomRoi.meanLuminance - onInspectBottomRoi.meanLuminance).toFixed(3));
-  const cellSize = 460, labelHeight = 28;
-  const sheet = document.createElement("canvas");
-  sheet.width = cellSize * 2;
-  sheet.height = (cellSize + labelHeight) * 2;
-  const context = sheet.getContext("2d");
-  context.fillStyle = "#242932";
-  context.fillRect(0, 0, sheet.width, sheet.height);
-  const panels = [
-    { image: onSprites.arrayClear, x: 0, y: 0, label: "ARRAY CLEAR · OCCLUSION ON", roi: onArrayLeftRoi, probe: arrayLeftProbe },
-    { image: offSprites.arrayClear, x: cellSize, y: 0, label: "ARRAY CLEAR · TEST API OFF", roi: offArrayLeftRoi, probe: offArrayLeftProbe },
-    { image: onSprites.inspect[inspectIndex], x: 0, y: cellSize + labelHeight, label: "INSPECT " + String(inspectIndex).padStart(2, "0") + " · ON", roi: onInspectLeftRoi, probe: inspectLeftProbe },
-    { image: offSprites.inspect[inspectIndex], x: cellSize, y: cellSize + labelHeight, label: "INSPECT " + String(inspectIndex).padStart(2, "0") + " · TEST API OFF", roi: offInspectLeftRoi, probe: offInspectLeftProbe },
-  ];
-  for (const panel of panels) {
-    context.fillStyle = "#242932";
-    context.fillRect(panel.x, panel.y, cellSize, labelHeight);
-    context.fillStyle = "#fff";
-    context.font = "600 12px sans-serif";
-    context.fillText(panel.label, panel.x + 8, panel.y + 18, cellSize - 16);
-    context.drawImage(panel.image, panel.x + 8, panel.y + labelHeight, cellSize - 16, cellSize - 16);
-    context.strokeStyle = "#f4435b";
-    context.lineWidth = 2;
-    const probe = panel.probe;
-    const original = panel.image;
-    context.strokeRect(panel.x + 8 + probe[0] / original.width * (cellSize - 16) - 6,
-      panel.y + labelHeight + probe[1] / original.height * (cellSize - 16) - 6, 12, 12);
-  }
-  const cropSheet = document.createElement("canvas");
-  cropSheet.width = 4 * 210;
-  cropSheet.height = 2 * 230;
-  const cropContext = cropSheet.getContext("2d");
-  const crops = [
-    { image: cropSpriteRoi(onSprites.arrayClear, onArrayLeftRoi), label: "ARRAY LEFT · ON" },
-    { image: cropSpriteRoi(offSprites.arrayClear, offArrayLeftRoi), label: "ARRAY LEFT · API OFF" },
-    { image: cropSpriteRoi(onSprites.arrayClear, onArrayBottomRoi), label: "ARRAY BOTTOM · ON" },
-    { image: cropSpriteRoi(offSprites.arrayClear, offArrayBottomRoi), label: "ARRAY BOTTOM · API OFF" },
-    { image: cropSpriteRoi(onSprites.inspect[inspectIndex], onInspectLeftRoi), label: "INSPECT LEFT · ON" },
-    { image: cropSpriteRoi(offSprites.inspect[inspectIndex], offInspectLeftRoi), label: "INSPECT LEFT · API OFF" },
-    { image: cropSpriteRoi(onSprites.inspect[inspectIndex], onInspectBottomRoi), label: "INSPECT BOTTOM · ON" },
-    { image: cropSpriteRoi(offSprites.inspect[inspectIndex], offInspectBottomRoi), label: "INSPECT BOTTOM · API OFF" },
-  ];
-  cropContext.fillStyle = "#242932";
-  cropContext.fillRect(0, 0, cropSheet.width, cropSheet.height);
-  crops.forEach((crop, index) => {
-    const x = index % 4 * 210;
-    const y = Math.floor(index / 4) * 230;
-    cropContext.fillStyle = "#fff";
-    cropContext.font = "600 12px sans-serif";
-    cropContext.fillText(crop.label, x + 6, y + 18);
-    cropContext.imageSmoothingEnabled = false;
-    cropContext.drawImage(crop.image, x + 8, y + 28, 194, 194);
-  });
-  return {
-    insertGeometryRetainedInBoth: onSprites.arrayPaper instanceof HTMLCanvasElement && offSprites.arrayPaper instanceof HTMLCanvasElement,
-    actualInsertPresent: onSprites.arrayPaper instanceof HTMLCanvasElement,
-    samePresetAndQuality: onSprites.settingsKey === offSprites.testSettingsKey && onSprites.qualityKey === offSprites.testQualityKey,
-    productionOnProviderAudit: onSprites.testProviderAudit ?? null,
-    testOffProviderCardVisible: offSprites.testProviderAudit?.paperObjectVisible === true,
-    testOffProviderApiFlags: offSprites.testProviderAudit?.apiFlags ?? [],
-    comparison: { offsetOutsideCoverModelUnits: offsetUnits, physicalCoverRect: coverRect },
-    arrayClear: {
-      fullCanvasAblation: arrayCanvasAblation,
-      leftGutter: { onRoi: onArrayLeftRoi, testOffRoi: offArrayLeftRoi, meanDarkening: arrayLeftDarkening, probe: arrayLeftProbe },
-      bottomGutter: { onRoi: onArrayBottomRoi, testOffRoi: offArrayBottomRoi, meanDarkening: arrayBottomDarkening, probe: arrayBottomProbe },
-    },
-    inspectFront: {
-      index: inspectIndex,
-      leftGutter: { onRoi: onInspectLeftRoi, testOffRoi: offInspectLeftRoi, meanDarkening: inspectLeftDarkening, probe: inspectLeftProbe },
-      bottomGutter: { onRoi: onInspectBottomRoi, testOffRoi: offInspectBottomRoi, meanDarkening: inspectBottomDarkening, probe: inspectBottomProbe },
-    },
-    arrayPaperLuminosityRecordedButNotRequiredToDarken: paperFieldStats(onSprites.arrayPaper, arrayLeftProbe),
-    contactSheet: sheet.toDataURL("image/png"),
-    innerGutterCropSheet: cropSheet.toDataURL("image/png"),
-  };
 }
 function materialSnapshot(root) {
   const values = [];
@@ -1088,7 +784,7 @@ function exerciseArchiveSelection() {
   const returningTarget = archiveScene.outgoing[0];
   const targetSlot = returningTarget?.slot ?? -1;
   const targetCell = returningTarget ? { ...returningTarget.cell } : null;
-  const targetIndex = targetCell ? fileAtCell(targetCell) : -1;
+  const targetIndex = targetCell ? musicSpatialEntry(targetCell, archiveScene.shelfView)?.recordIndex ?? -1 : -1;
   const beforeCount = archiveScene.outgoing.length;
   if (targetIndex >= 0 && targetCell) archiveScene.select(targetIndex, { cell: targetCell });
   stepArchiveScene(2);
@@ -1189,41 +885,75 @@ async function raceArchiveStructures() {
   return archiveSceneSummary();
 }
 
-async function checkFutureAdapterHidden() {
-  const host = document.createElement("div");
-  host.className = "music-app";
-  host.dataset.design = "rhine";
-  host.dataset.page = "music";
-  host.dataset.layout = "desktop";
-  host.style.cssText = "position:relative;width:640px;height:360px";
-  document.body.append(host);
-  const adapter = new ArchiveCaseRenderer(host, () => undefined, () => undefined);
-  const palette = { bg: "#eae5e1", accent: "#d09a39", fg: "#222222", muted: "#666666" };
-  adapter.setStyle({ ...defaultMusicStyle, design: "rhine", caseStyle: "rhine" }, "day", palette);
-  const initiallyHidden = adapter.canvas.hidden;
-  adapter.setCaseSettings({ ...defaultCaseSettings("archive"), enabled: true });
-  await new Promise(resolve => setTimeout(resolve, 140));
-  const hiddenAfterSettings = adapter.canvas.hidden;
-  adapter.setQuality({
-    ...qualityPresets.original,
-    wave: "full",
-    modelDetail: "low",
-    lighting: "basic",
-    scale: 80,
-    pixelRatio: 1,
-    aoSamples: 0,
-    depthOfField: 0,
-  });
-  await new Promise(resolve => setTimeout(resolve, 30));
-  const result = {
-    initiallyHidden,
-    hiddenAfterSettings,
-    hiddenAfterQuality: adapter.canvas.hidden,
-    assetsAbsent: adapter.assets === null,
-    status: adapter.status,
+/** Test the live paper/print and shell shaders, without the retired sprite provider. */
+async function captureScenePaperProtection() {
+  const saved = structuredClone(archiveScene.caseSettings);
+  const record = records.find(item => item.album?.id === archiveScene.getStats().selectedAlbumId);
+  expect(!!record, "Paper protection requires the selected canonical synthetic album.");
+  const artwork = createSyntheticTestCover(512).toDataURL("image/png");
+  await archiveScene.covers.select({ ...record, album: { ...record.album, coverUrl: artwork } });
+  archiveScene.setReduced(true);
+  archiveScene.setMode("detail");
+  for (let frame = 0; frame < 120 && !archiveScene.musicPresentationReady; frame++) stepArchiveScene(1);
+  expect(archiveScene.musicPresentationReady, "Paper protection must capture a settled real detail pose.");
+  const capture = () => {
+    stepArchiveScene(2);
+    const canvas = document.createElement("canvas"), source = archiveScene.renderer.domElement;
+    canvas.width = source.width; canvas.height = source.height;
+    canvas.getContext("2d").drawImage(source, 0, 0);
+    return canvas;
   };
-  host.remove();
-  return result;
+  const sample = canvas => {
+    const cover = archiveScene.caseLayout.cover;
+    const point = archiveScene.model.localToWorld(new THREE.Vector3(cover.x, cover.y, cover.z)).project(archiveScene.camera);
+    return Array.from(canvas.getContext("2d").getImageData(Math.round((point.x + 1) * canvas.width / 2),
+      Math.round((1 - point.y) * canvas.height / 2), 1, 1).data);
+  };
+  const flags = () => {
+    const values = [];
+    archiveScene.model.traverse(child => { if (child.userData.caseAlbumWindow) values.push(child.userData.caseAlbumPresent === true); });
+    return [...new Set(values)];
+  };
+  try {
+    const withBack = color => {
+      const value = structuredClone(saved);
+      const appearance = value.appearances.punk;
+      appearance.preset = "custom";
+      appearance.surfaces.back = { ...appearance.surfaces.back, finish: "paint", color, secondaryColor: color,
+        pattern: "none", transmission: 0, metalness: 0, emission: 0, preserveSource: false };
+      return value;
+    };
+    await archiveScene.setCaseSettings(withBack("#ff0000"));
+    const red = capture(), redPixel = sample(red);
+    const presentFlags = flags();
+    await archiveScene.setCaseSettings(withBack("#00ff00"));
+    const green = capture(), greenPixel = sample(green);
+    const coverDelta = Math.hypot(...redPixel.slice(0, 3).map((value, channel) => value - greenPixel[channel]));
+    expect(coverDelta <= 8, "The real opaque paper/print must prevent saturated backing colors leaking into artwork: " + coverDelta);
+    setCaseAlbumOcclusion(archiveScene.model, false);
+    const offFlags = flags(), off = capture();
+    const a = green.getContext("2d").getImageData(0, 0, green.width, green.height).data;
+    const b = off.getContext("2d").getImageData(0, 0, off.width, off.height).data;
+    let changedPixels = 0, darkenedPixels = 0;
+    for (let index = 0; index < a.length; index += 4) {
+      const delta = Math.abs(a[index] - b[index]) + Math.abs(a[index + 1] - b[index + 1]) + Math.abs(a[index + 2] - b[index + 2]);
+      if (delta > 3) changedPixels++;
+      if (b[index] + b[index + 1] + b[index + 2] - a[index] - a[index + 1] - a[index + 2] > 3) darkenedPixels++;
+    }
+    expect(presentFlags.length === 1 && presentFlags[0] && offFlags.length === 1 && !offFlags[0] &&
+      archiveScene.covers.selectedInsert.visible && archiveScene.covers.selected.visible,
+      "The API-only occlusion A/B must retain the actual physical paper and textured print in both captures.");
+    expect(changedPixels > 0 && darkenedPixels > 0, "Real shell pixels must respond to the production album-occlusion API.");
+    const contact = document.createElement("canvas"); contact.width = red.width * 3; contact.height = red.height;
+    const context = contact.getContext("2d"); context.drawImage(red, 0, 0); context.drawImage(green, red.width, 0); context.drawImage(off, red.width * 2, 0);
+    return { renderer: "ArchiveScene WebGL", coverDelta, redPixel, greenPixel, presentFlags, offFlags,
+      changedPixels, darkenedPixels, realPaperRetained: true, image: contact.toDataURL("image/png") };
+  } finally {
+    await archiveScene.setCaseSettings(saved);
+    await archiveScene.covers.select(record);
+    archiveScene.setMode("archive");
+    for (let frame = 0; frame < 120 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
+  }
 }
 
 const unifiedClicks = [], unifiedOpens = [];
@@ -1324,7 +1054,7 @@ async function unifiedRenderVariant(design, mode, scheme = "archive") {
   archiveScene.setMusicStyle(unifiedStyle);
   archiveScene.setTheme(mode);
   const value = sceneCaseSettings(design === "archive" ? "punk" : "rhine");
-  if (design === "archive") value.appearances.punk = casePreset("glass", "punk");
+  if (design === "archive") { value.enabled = false; value.appearances.punk = casePreset("glass", "punk"); }
   await archiveScene.setCaseSettings(value);
   await archiveScene.rhineInfo?.ready;
   focusMusicEntry(unifiedTrack.key);
@@ -1354,6 +1084,9 @@ async function unifiedRenderVariant(design, mode, scheme = "archive") {
     "The shelf title-strip visibility must follow the user's theme appearance setting.");
   if (unifiedStyle.topTitles) expect(result.topTitles.selectedText === unifiedTrack.record.title,
     "A shelf title strip uses the selected track title rather than its parent's album title.");
+  if (design === "archive") expect(archiveScene.caseSettings.enabled && archiveScene.caseSettings.structure === "punk" &&
+    !archiveScene.rhineInfo.selectedBadge.visible && !archiveScene.rhineInfo.arrayBadge.visible,
+    "Legacy disabled Punk settings remain enabled with full parent labels and no format badge overlays.");
   return result;
 }
 async function exerciseUnifiedRender() {
@@ -1448,200 +1181,14 @@ async function exerciseUnifiedRender() {
     "The full asymmetric case must remain visible after the common detail camera move: " + JSON.stringify(detailBounds));
   archiveScene.setMode("archive"); stepArchiveScene(8);
   await unifiedRenderVariant("archive", "day", "front");
+  const paperProtection = await captureScenePaperProtection();
   archiveScene.onSelect = (index, cell) => {
     unifiedClicks.push({ index, cell });
     if (cell?.foobarEntryKey) focusMusicEntry(cell.foobarEntryKey);
     archiveScene.select(index, cell ? { cell } : undefined); stepArchiveScene(6);
   };
   archiveScene.onOpenAlbum = index => { unifiedOpens.push({ index, key: archiveScene.selectedCell.foobarEntryKey }); };
-  return { audit, transformedImage, pointerTarget: unifiedPointerTarget() };
-}
-
-const punkViewClicks = [];
-async function exercisePunkFutureView() {
-  await setupArchiveScene();
-  window.caseCheck.editor.destroy();
-  document.body.replaceChildren(archiveHost);
-  document.body.style.margin = "0";
-  document.body.style.padding = "0";
-  archiveHost.style.margin = "0";
-  archiveHost.dataset.design = "archive";
-  archiveHost.dataset.mode = "archive";
-  const artwork = createSyntheticTestCover(512).toDataURL("image/png");
-  for (const record of records) {
-    record.album.coverUrl = artwork;
-    record.album.tracks = [1, 2].map(number => ({
-      id: record.id + "-track-" + number, albumId: record.id,
-      title: "Synthetic Track " + number, trackNumber: number, artist: record.album.artist,
-      format: "FLAC", codec: "FLAC", sampleRate: 96000, bitsPerSample: 24,
-      lossless: true, browserPlayable: true, audioUrl: "", relativePath: "", duration: 120,
-    }));
-  }
-  const style = { ...archiveMusicStyle, scheme: "front" };
-  archiveHost.style.background = stylePalette(style, "day").bg;
-  const pane = document.createElement("aside");
-  pane.className = "album-callout";
-  pane.style.cssText = "position:absolute;right:24px;top:24px;width:456px;height:300px;pointer-events:auto";
-  archiveHost.append(pane);
-  const settings = defaultCaseSettings("archive");
-  settings.appearances.punk = casePreset("glass", "punk");
-  configureFoobarCatalog({ layout: "array", show: "albums", group: "genre", sort: "artist" }, "");
-  archiveScene.setReduced(true);
-  await archiveScene.refreshLibrary(0);
-  const coverAtlas = archiveScene.covers;
-  const images = {};
-  const audit = {};
-  const capture = name => {
-    stepArchiveScene(6);
-    const source = archiveScene.getStats().archiveView === "shelf"
-      ? archiveScene.foobarArchive.canvas : archiveScene.renderer.domElement;
-    const canvas = document.createElement("canvas");
-    canvas.width = source.width; canvas.height = source.height;
-    canvas.getContext("2d").drawImage(source, 0, 0);
-    images[name] = canvas.toDataURL("image/png");
-    return archiveScene.getStats();
-  };
-  const setLayout = async layout => {
-    configureFoobarCatalog({ layout });
-    archiveHost.dataset.foobarLayout = layout;
-    archiveScene.setMusicStyle(style);
-    if (layout === "future" && !archiveScene.caseGeometryKey.startsWith("punk:"))
-      expect(archiveScene.renderer.domElement.style.opacity === "0" && archiveScene.renderer.domElement.style.pointerEvents === "none",
-        "A pending Punk view must not flash or accept hits on a different theme's case.");
-    await archiveScene.setCaseSettings(settings);
-    if (layout === "array") {
-      for (let attempt = 0; attempt < 200 && !archiveScene.foobarArchive.assets; attempt++)
-        await new Promise(resolve => setTimeout(resolve, 30));
-      expect(!!archiveScene.foobarArchive.assets, "The original Punk shelf must remain available after a view switch.");
-    } else await archiveScene.rhineInfo.ready;
-    stepArchiveScene(6);
-  };
-  await setLayout("array");
-  archiveScene.showMusicArchiveImmediately(archiveTime);
-  audit.native = capture("punk-native-before");
-  const albumId = audit.native.selectedAlbumId;
-  await setLayout("future");
-  archiveScene.showMusicArchiveImmediately(archiveTime);
-  audit.future = capture("punk-future-albums");
-  expect(audit.future.archiveView === "future" && audit.future.design === "archive" && audit.future.caseStructure === "punk",
-    "Punk's Future view must use the actual Punk model and retain Archive theme identity.");
-  expect(audit.future.selectedAlbumId === albumId && archiveScene.covers === coverAtlas,
-    "Changing the view must retain the canonical selected album and cover atlas.");
-  expect(archiveScene.renderer.domElement.style.opacity === "1" && archiveScene.foobarArchive.canvas.hidden &&
-    !archiveScene.rhineInfo.selectedBadge.visible && !archiveScene.rhineInfo.arrayBadge.visible,
-    "Only the 3D Punk view and its full nameplate are visible, without format badges.");
-  audit.palette = { expected: stylePalette(style, "day").bg, actual: "#" + archiveScene.scene.background.getHexString() };
-  expect(audit.palette.expected.toLowerCase() === audit.palette.actual, "The 3D stage must use the selected Punk palette.");
-  audit.savedLayout = normalizeFoobarCatalogOptions(JSON.parse(JSON.stringify(getFoobarCatalogOptions()))).layout;
-  expect(audit.savedLayout === "future" && normalizeFoobarCatalogOptions({ layout: "invalid" }).layout === "array",
-    "The Future layout must survive preference JSON normalization while old/invalid values keep ARRAY.");
-
-  configureFoobarCatalog({ show: "tracks" });
-  const tracks = getFoobarDisplayEntries().filter(entry => entry.recordIndex === 0);
-  expect(tracks.length === 2, "The synthetic parent album must expose two distinct track boxes.");
-  setFoobarFocus(tracks[0].key); archiveScene.select(0); stepArchiveScene(6);
-  const firstTrack = archiveScene.getStats();
-  setFoobarFocus(tracks[1].key); archiveScene.select(0); stepArchiveScene(6);
-  audit.tracks = capture("punk-future-tracks");
-  expect(firstTrack.selectedCell.foobarEntryKey === tracks[0].key && audit.tracks.selectedCell.foobarEntryKey === tracks[1].key &&
-    firstTrack.selectedAlbumId === audit.tracks.selectedAlbumId && firstTrack.selectedCell.row !== audit.tracks.selectedCell.row,
-    "Two tracks from the same album must keep separate selected boxes and the same canonical parent.");
-  expect(archiveScene.rhineInfo.selectedLabel.userData.numberText === "NO.001", "TRACKS plaques retain the parent album number.");
-  configureFoobarCatalog({}, "no-fixture-record-can-match-this"); stepArchiveScene(6);
-  audit.empty = { modelHidden: !archiveScene.model.visible, coversHidden: !archiveScene.covers.array.visible,
-    instancesHidden: archiveScene.instances.every(instance => !instance.visible) };
-  expect(Object.values(audit.empty).every(Boolean), "A filtered-empty Future view must not leave ghost cases or covers.");
-  configureFoobarCatalog({ show: "albums" }, "");
-  setFoobarFocus(records[0].id); archiveScene.select(0); stepArchiveScene(6);
-  expect(archiveScene.model.visible && archiveScene.covers.array.visible, "Restoring the filter must restore the selected 3D view.");
-  archiveScene.setMode("detail"); stepArchiveScene(8);
-  await setLayout("array"); await setLayout("future");
-  audit.detailAfterSwitch = archiveScene.getStats().musicPresentationPhase;
-  expect(audit.detailAfterSwitch === "presented", "A layout change must retain the open album presentation phase.");
-  await setLayout("grid");stepArchiveScene(8);
-  audit.punkGridDetail = archiveScene.getStats();
-  expect(audit.punkGridDetail.displayLayout.grid && audit.punkGridDetail.displayLayout.canvas === "array" &&
-    audit.punkGridDetail.musicPresentationPhase === "presented" && archiveScene.foobarArchive.canvas.hidden,
-    "Punk grid inspection must use the shared array camera and retain the open detail state.");
-  archiveScene.setMode("archive"); stepArchiveScene(8);
-  await setLayout("array");
-  audit.nativeReturn = capture("punk-native-return");
-  expect(archiveScene.renderer.domElement.style.opacity === "0" && !archiveScene.foobarArchive.canvas.hidden &&
-    !archiveScene.rhineInfo.selectedLabel.visible, "Returning to the original Punk shelf hides the 3D overlay.");
-
-  archiveScene.setMusicStyle(defaultMusicStyle);
-  await archiveScene.setCaseSettings(defaultCaseSettings("rhine"));
-  archiveScene.showMusicArchiveImmediately(archiveTime);
-  audit.futureBaseline = capture("future-baseline");
-  // Stage two: the real Future scene now consumes the same track catalog and array coordinates.
-  configureFoobarCatalog({ layout: "future", show: "tracks", group: "genre", sort: "title" }, "");
-  archiveScene.setMusicStyle(defaultMusicStyle);
-  const fineSettings = defaultCaseSettings("rhine");
-  fineSettings.structure = "rhine";
-  await archiveScene.setCaseSettings(fineSettings);
-  await archiveScene.rhineInfo.ready;
-  const futureTracks = getFoobarDisplayEntries().filter(entry => entry.recordIndex === 0);
-  setFoobarFocus(futureTracks[0].key); archiveScene.select(0); stepArchiveScene(6);
-  const firstFutureTrack = archiveScene.getStats();
-  setFoobarFocus(futureTracks[1].key); archiveScene.select(0); stepArchiveScene(6);
-  audit.futureTracks = capture("future-shared-tracks");
-  expect(audit.futureTracks.design === "rhine" && audit.futureTracks.caseStructure === "rhine" &&
-    firstFutureTrack.selectedCell.foobarEntryKey === futureTracks[0].key &&
-    audit.futureTracks.selectedCell.foobarEntryKey === futureTracks[1].key &&
-    firstFutureTrack.selectedCell.row !== audit.futureTracks.selectedCell.row,
-    "Future's actual fine cases must use separate cells for sibling track entries in the shared catalog.");
-  expect(archiveScene.rhineInfo.selectedLabel.visible && archiveScene.rhineInfo.selectedLabel.userData.numberText === "NO.001",
-    "Future's fine case keeps its complete parent-album label in the shared array.");
-  configureFoobarCatalog({ layout: "grid" });archiveScene.setMusicStyle(defaultMusicStyle);
-  archiveScene.setMode("detail");stepArchiveScene(8);
-  audit.futureGridDetail = archiveScene.getStats();
-  expect(audit.futureGridDetail.displayLayout.grid && audit.futureGridDetail.displayLayout.canvas === "array" &&
-    audit.futureGridDetail.musicPresentationPhase === "presented" && archiveScene.model.visible,
-    "Future grid inspection must use the same shared array camera with its own fine case.");
-  archiveScene.setMode("archive");stepArchiveScene(8);
-  configureFoobarCatalog({}, "no-fixture-record-can-match-this");stepArchiveScene(6);
-  expect(!archiveScene.model.visible && !archiveScene.covers.array.visible && !archiveScene.rhineInfo.selectedLabel.visible,
-    "The shared Future filter must hide cases, covers and labels when empty.");
-  configureFoobarCatalog({ layout: "future", show: "albums", group: "genre", sort: "artist" }, "");
-  setFoobarFocus(records[0].id);
-  await archiveScene.setCaseSettings(defaultCaseSettings("rhine"));
-  archiveScene.setMusicStyle(defaultMusicStyle);archiveScene.select(0);stepArchiveScene(6);
-  audit.futureBaseline = capture("future-baseline");
-  await setLayout("future");
-  archiveScene.showMusicArchiveImmediately(archiveTime);
-  audit.finalFuture = capture("punk-future-final");
-  expect(JSON.stringify(audit.futureBaseline.cameraPosition) === JSON.stringify(audit.finalFuture.cameraPosition) &&
-    JSON.stringify(audit.futureBaseline.cameraAim) === JSON.stringify(audit.finalFuture.cameraAim) &&
-    Math.abs(audit.futureBaseline.fieldOfView - audit.finalFuture.fieldOfView) < 1e-8,
-    "The new Punk view must use the same camera composition as the Future selection scene.");
-  expect(audit.futureBaseline.caseStructure === "minimal" && audit.finalFuture.caseStructure === "punk",
-    "Sharing camera composition must not replace either theme's selected case structure.");
-  archiveScene.onSelect = (index, cell) => {
-    punkViewClicks.push({ index, cell });
-    if (cell?.foobarEntryKey) setFoobarFocus(cell.foobarEntryKey);
-    archiveScene.select(index, cell ? { cell } : undefined);
-    stepArchiveScene(6);
-  };
-  archiveScene.scene.updateMatrixWorld(true);
-  const ray = new THREE.Raycaster(), point = new THREE.Vector3(), matrix = new THREE.Matrix4();
-  let pointerTarget;
-  for (let slot = 0; slot < archiveScene.cells.length && !pointerTarget; slot++) {
-    archiveScene.caseHitProxy.getMatrixAt(slot, matrix);
-    point.copy(archiveScene.caseLayout.center).applyMatrix4(matrix).project(archiveScene.camera);
-    const x = (point.x + 1) * archiveHost.clientWidth / 2, y = (1 - point.y) * archiveHost.clientHeight / 2;
-    if (x < 30 || x > archiveHost.clientWidth * .64 || y < 30 || y > archiveHost.clientHeight - 30) continue;
-    ray.setFromCamera(new THREE.Vector2(point.x, point.y), archiveScene.camera);
-    const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
-    if (hit?.instanceId === undefined) continue;
-    const cell = archiveScene.cells[hit.instanceId], entry = punkFutureEntry(cell);
-    if (entry && entry.recordIndex !== 0) {
-      const rect = archiveScene.renderer.domElement.getBoundingClientRect();
-      pointerTarget = { x: rect.left + x * rect.width / archiveHost.clientWidth,
-        y: rect.top + y * rect.height / archiveHost.clientHeight, index: entry.recordIndex, key: entry.key };
-    }
-  }
-  expect(!!pointerTarget, "An unselected real Punk case must have a visible production raycast target.");
-  return { audit, images, pointerTarget };
+  return { audit, transformedImage, paperProtection, pointerTarget: unifiedPointerTarget() };
 }
 
 async function captureRhineInsetAlbum() {
@@ -2478,323 +2025,6 @@ async function capturePunkAlbumInfo() {
   }
 }
 
-function finalCanvasGutterCrop(canvas, logicalQuad, logicalWidth, logicalHeight, worldEdgeLength, edgeName, edgeVertices, offsetUnits = 0.035) {
-  const pixelRatioX = canvas.width / logicalWidth;
-  const pixelRatioY = canvas.height / logicalHeight;
-  const quad = logicalQuad.map(([x, y]) => [x * pixelRatioX, y * pixelRatioY]);
-  const [firstIndex, secondIndex] = edgeVertices;
-  const first = quad[firstIndex], second = quad[secondIndex];
-  const midpoint = [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2];
-  const center = quad.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
-  const edgeDx = second[0] - first[0], edgeDy = second[1] - first[1];
-  const edgePixels = Math.hypot(edgeDx, edgeDy);
-  const unitNormal = [midpoint[0] - center[0], midpoint[1] - center[1]];
-  const normalLength = Math.max(1e-6, Math.hypot(unitNormal[0], unitNormal[1]));
-  const pixelsPerWorldUnit = edgePixels / worldEdgeLength;
-  const point = [
-    midpoint[0] + unitNormal[0] / normalLength * pixelsPerWorldUnit * offsetUnits,
-    midpoint[1] + unitNormal[1] / normalLength * pixelsPerWorldUnit * offsetUnits,
-  ];
-  const cropSize = 52;
-  const left = Math.max(0, Math.min(canvas.width - cropSize, Math.round(point[0] - cropSize / 2)));
-  const top = Math.max(0, Math.min(canvas.height - cropSize, Math.round(point[1] - cropSize / 2)));
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("The real ArchiveCaseRenderer Canvas is not readable for its inner-gutter crop.");
-  const imageData = context.getImageData(left, top, cropSize, cropSize).data;
-  const channels = [0, 0, 0];
-  let count = 0;
-  const colors = new Set();
-  for (let index = 0; index < imageData.length; index += 4) {
-    if (imageData[index + 3] < 8) continue;
-    for (let channel = 0; channel < 3; channel++) channels[channel] += imageData[index + channel];
-    colors.add((imageData[index] >> 3) + "," + (imageData[index + 1] >> 3) + "," + (imageData[index + 2] >> 3));
-    count++;
-  }
-  const crop = document.createElement("canvas");
-  crop.width = cropSize;
-  crop.height = cropSize;
-  const cropContext = crop.getContext("2d");
-  if (!cropContext) throw new Error("Canvas 2D is unavailable for the ArchiveCaseRenderer gutter crop.");
-  cropContext.drawImage(canvas, left, top, cropSize, cropSize, 0, 0, cropSize, cropSize);
-  cropContext.strokeStyle = "#ff344f";
-  cropContext.lineWidth = 1;
-  const markX = point[0] - left, markY = point[1] - top;
-  cropContext.beginPath();
-  cropContext.moveTo(markX - 5, markY); cropContext.lineTo(markX + 5, markY);
-  cropContext.moveTo(markX, markY - 5); cropContext.lineTo(markX, markY + 5);
-  cropContext.stroke();
-  return {
-    edge: edgeName,
-    source: "ArchiveCaseRenderer.finalCanvas",
-    coverOffsetOutsideModelUnits: offsetUnits,
-    probeCanvasPixel: point.map(value => Number(value.toFixed(2))),
-    cropRect: { x: left, y: top, width: cropSize, height: cropSize },
-    cropPixels: count,
-    meanSrgb8: channels.map(value => Number((value / Math.max(1, count)).toFixed(2))),
-    quantizedColors: colors.size,
-    cropPng: crop.toDataURL("image/png"),
-    cropElement: crop,
-  };
-}
-
-async function captureArchiveRendererFinalCanvas() {
-  const host = document.createElement("div");
-  host.id = "archive-renderer-final-canvas-host";
-  host.style.cssText = "position:relative;width:1450px;height:840px;background:#101923;margin-top:24px;overflow:hidden";
-  document.body.append(host);
-  const artwork = createSyntheticTestCover();
-  const errorMessages = [];
-  const renderer = new ArchiveCaseRenderer(host, record => record.id.startsWith("offline-case-") ? artwork : undefined,
-    message => errorMessages.push(message));
-  const internals = renderer;
-  const settings = sceneCaseSettings("punk");
-  const palette = { bg: "#101923", accent: "#f36c45", fg: "#e8edf2", muted: "#97a4b1" };
-  const style = {
-    ...defaultMusicStyle,
-    design: "archive",
-    camera: "foobar",
-    caseStyle: "white",
-    shelf: true,
-    floor: "plain",
-    arrayScale: 1,
-    inspectScale: 1,
-    topTitles: false,
-  };
-  const renderQuality = {
-    ...qualityPresets.original,
-    wave: "full",
-    modelDetail: "medium",
-    lighting: "high",
-    scale: 80,
-    pixelRatio: 1,
-    aoSamples: 0,
-    depthOfField: 0,
-  };
-  renderer.setQuality(renderQuality);
-  renderer.setStyle(style, "day", palette);
-  const frame = detail => ({
-    width: 1450,
-    height: 840,
-    cells: [],
-    focus: { lane: 0, row: 0 },
-    detail,
-    time: performance.now() / 1000 + detail,
-    reduced: true,
-    selectedRecord: records.find(record => record.id === "offline-case-0") ?? records[0],
-    selectedScreen: { x: 0, y: 0 },
-    selectedPixelHeight: 0,
-  });
-  const waitForAssets = async expectedSkin => {
-    for (let attempt = 0; attempt < 180; attempt++) {
-      renderer.render(frame(0));
-      if (internals.assets?.skin === expectedSkin && internals.status === "" &&
-          internals.hitTargets?.some(target => target.selected)) return true;
-      if (internals.status === "error") break;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    return false;
-  };
-  const modelLayout = archiveScene?.model?.userData?.caseLayout;
-  const coverRect = modelLayout?.cover;
-  if (!coverRect || !(coverRect.width > 0 && coverRect.height > 0)) {
-    host.remove();
-    throw new Error("The active Scene did not expose the Punk model's physical album-cover rectangle for final-Canvas ROI mapping.");
-  }
-  const canonicalIndex = records.findIndex(record => record.id === "offline-case-0");
-  if (canonicalIndex < 0) {
-    host.remove();
-    throw new Error("The synthetic album needed for the ArchiveCaseRenderer label audit is missing from the canonical records list.");
-  }
-  const labelCaptures = {};
-  const captureLabelPair = mode => {
-    for (const [view, detail] of [["array", 0], ["inspect", 1]]) {
-      const currentFrame = frame(detail);
-      try {
-        renderer.render(currentFrame);
-      } catch (error) {
-        throw new Error("Archive label render failed for mode=" + mode + ", view=" + view + ", detail=" + detail +
-          ", skin=" + internals.assets?.skin + ", frameCount=" + (internals.assets?.meta?.inspect?.length ?? -1) +
-          ", imageCount=" + (internals.assets?.inspect?.length ?? -1) + ": " + String(error));
-      }
-      const selected = internals.hitTargets.find(target => target.selected);
-      if (!selected?.quad || selected.quad.length !== 4) {
-        throw new Error("ArchiveCaseRenderer did not publish the selected synthetic cover quad for " + mode + "/" + view + " label capture.");
-      }
-      const cache = detail === 0 ? internals.arrayLabelCanvases : internals.inspectLabelCanvases;
-      const labelCanvas = cache.get(canonicalIndex);
-      if (!labelCanvas) {
-        throw new Error("ArchiveCaseRenderer did not cache the selected canonical album label for " + mode + "/" + view + ".");
-      }
-      const labelContext = labelCanvas.getContext("2d", { willReadFrequently: true });
-      const pixels = labelContext.getImageData(0, 0, labelCanvas.width, labelCanvas.height).data;
-      let opaquePixels = 0, darkInkPixels = 0;
-      for (let offset = 0; offset < pixels.length; offset += 4) {
-        if (pixels[offset + 3] > 240) opaquePixels++;
-        if (pixels[offset + 3] > 240 && Math.max(pixels[offset], pixels[offset + 1], pixels[offset + 2]) < 100) darkInkPixels++;
-      }
-      const targetEntry = selected.entryKey
-        ? getFoobarDisplayEntries().find(entry => entry.key === selected.entryKey)
-        : undefined;
-      const punkBadgePresent = Boolean(selected.badge || internals.view?.badge ||
-        internals.assets?.meta?.array?.badge || internals.assets?.meta?.inspect?.some(meta => meta.badge));
-      const trackTargets = internals.hitTargets.filter(target => target.trackId).map(target => ({
-        trackId: target.trackId,
-        entryKey: target.entryKey,
-        canonicalIndex: target.recordIndex,
-      }));
-      labelCaptures[\`\${mode}-\${view}\`] = {
-        image: internals.canvas.toDataURL("image/png"),
-        labelCanvas: labelCanvas.toDataURL("image/png"),
-        labelCanvasSize: [labelCanvas.width, labelCanvas.height],
-        punkBadgePresent,
-        canonicalAlbumIndex: selected.recordIndex,
-        canonicalAlbumNumber: \`NO.\${String(selected.recordIndex + 1).padStart(3, "0")}\`,
-        selectedEntryKey: selected.entryKey ?? null,
-        selectedTrackId: selected.trackId ?? null,
-        selectedEntryRecordIndex: targetEntry?.recordIndex ?? null,
-        cacheIndices: [...cache.keys()].sort((left, right) => left - right),
-        opaquePixels,
-        darkInkPixels,
-        trackTargets,
-      };
-    }
-  };
-  const syntheticAlbum = records[canonicalIndex].album;
-  if (!syntheticAlbum) throw new Error("The canonical fixture record has no synthetic album metadata for the TRACKS label check.");
-  const previousTracks = syntheticAlbum.tracks;
-  const previousCatalogOptions = getFoobarCatalogOptions();
-  const hiResTrack = { id: "offline-label-track-1", albumId: syntheticAlbum.id, title: "Offline Fixture Track One", trackNumber: 1, artist: syntheticAlbum.artist, format: "FLAC", codec: "FLAC", sampleRate: 96_000, bitsPerSample: 24, lossless: true, browserPlayable: true, audioUrl: "", relativePath: "", duration: 120 };
-  const dsdTrack = { id: "offline-label-track-2", albumId: syntheticAlbum.id, title: "Offline Fixture Track Two", trackNumber: 2, artist: syntheticAlbum.artist, format: "DSF", codec: "DSD", sampleRate: 2_822_400, bitsPerSample: 1, lossless: true, browserPlayable: true, audioUrl: "", relativePath: "", duration: 180 };
-  let loaded = false;
-  let disabledArchiveConfigForced = false;
-  try {
-    syntheticAlbum.tracks = [hiResTrack];
-    configureFoobarCatalog({ ...previousCatalogOptions, show: "albums" }, "");
-    renderer.setCaseSettings({ ...settings, enabled: false });
-    loaded = await waitForAssets("editable-punk");
-    disabledArchiveConfigForced = internals.caseSettings?.enabled === true && internals.assets?.skin === "editable-punk";
-    if (!loaded || !disabledArchiveConfigForced)
-      throw new Error("A legacy Archive enabled:false preference must still load the editable Punk case, never a native PNG skin.");
-    captureLabelPair("disabled-config");
-    renderer.setCaseSettings(settings);
-    loaded = await waitForAssets("editable-punk");
-    if (!loaded) throw new Error("The editable Punk renderer became unavailable before its label capture.");
-    captureLabelPair("editable");
-
-    syntheticAlbum.tracks = [dsdTrack];
-    renderer.render(frame(0));
-    captureLabelPair("editable-dsd");
-
-    syntheticAlbum.tracks = [hiResTrack, dsdTrack];
-    configureFoobarCatalog({ ...previousCatalogOptions, show: "tracks", group: "none", sort: "title" }, "");
-    const fixtureTrack = getFoobarDisplayEntries().find(entry => entry.track?.id === dsdTrack.id);
-    if (!fixtureTrack || fixtureTrack.recordIndex !== canonicalIndex)
-      throw new Error("The TRACKS catalog did not retain the synthetic track's canonical parent album index.");
-    setFoobarFocus(fixtureTrack.key);
-    internals.arrayLabelCanvases.clear();
-    internals.inspectLabelCanvases.clear();
-    renderer.render(frame(0));
-    const selectedTrackTarget = internals.hitTargets.find(target => target.selected);
-    if (selectedTrackTarget?.trackId !== dsdTrack.id)
-      throw new Error("ArchiveCaseRenderer did not focus the requested synthetic TRACKS entry.");
-    captureLabelPair("editable-tracks");
-
-  } finally {
-    syntheticAlbum.tracks = previousTracks;
-    configureFoobarCatalog(previousCatalogOptions, "");
-    setFoobarFocus(records[canonicalIndex].id);
-    renderer.render(frame(0));
-  }
-
-  const snapshots = {};
-  for (const [name, detail] of [["array", 0], ["inspect", 1]]) {
-    const currentFrame = frame(detail);
-    renderer.render(currentFrame);
-    const selected = internals.hitTargets.find(target => target.selected);
-    if (!selected?.quad || selected.quad.length !== 4) {
-      host.remove();
-      throw new Error("ArchiveCaseRenderer did not publish the selected synthetic cover quad for " + name + " capture.");
-    }
-    const canvas = internals.canvas;
-    const left = finalCanvasGutterCrop(canvas, selected.quad, currentFrame.width, currentFrame.height,
-      coverRect.height, "left", [3, 0]);
-    const bottom = finalCanvasGutterCrop(canvas, selected.quad, currentFrame.width, currentFrame.height,
-      coverRect.width, "bottom", [2, 3]);
-    snapshots[name] = {
-      detail,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-      selectedQuad: selected.quad,
-      coverRect: { x: coverRect.x, y: coverRect.y, z: coverRect.z, width: coverRect.width, height: coverRect.height },
-      selectedSyntheticArtwork: artwork instanceof HTMLCanvasElement,
-      actualArrayPaperLayerPresent: internals.assets.arrayPaper instanceof HTMLCanvasElement,
-      actualInspectPaperFrameCount: internals.assets.inspectPaper?.length ?? 0,
-      productionLayerOrder: name === "array"
-        ? ["synthetic album artwork", "actual generated arrayPaper multiply field", "actual generated arrayClear foreground"]
-        : ["synthetic album artwork", "actual generated inspectPaper multiply field", "actual generated inspect foreground"],
-      leftGutter: left,
-      bottomGutter: bottom,
-      image: canvas.toDataURL("image/png"),
-    };
-  }
-  const contact = document.createElement("canvas");
-  contact.width = 4 * 270;
-  contact.height = 316;
-  const context = contact.getContext("2d");
-  if (!context) {
-    host.remove();
-    throw new Error("Canvas 2D is unavailable for the final ArchiveCaseRenderer gutter contact sheet.");
-  }
-  context.fillStyle = "#202833";
-  context.fillRect(0, 0, contact.width, contact.height);
-  const cropPanels = [
-    [snapshots.array.leftGutter, "ARRAY · LEFT GUTTER"],
-    [snapshots.array.bottomGutter, "ARRAY · BOTTOM GUTTER"],
-    [snapshots.inspect.leftGutter, "INSPECT · LEFT GUTTER"],
-    [snapshots.inspect.bottomGutter, "INSPECT · BOTTOM GUTTER"],
-  ];
-  cropPanels.forEach(([crop, label], index) => {
-    const x = index * 270;
-    context.fillStyle = "#fff";
-    context.font = "600 13px sans-serif";
-    context.fillText(label, x + 8, 20);
-    context.imageSmoothingEnabled = false;
-    context.drawImage(crop.cropElement, x + 21, 35, 228, 228);
-    context.fillStyle = "#ccd3da";
-    context.font = "12px sans-serif";
-    context.fillText("offset " + crop.coverOffsetOutsideModelUnits + " model units", x + 8, 292);
-  });
-  const result = {
-    loaded,
-    disabledArchiveConfigForced,
-    effectiveCaseEnabled: internals.caseSettings?.enabled ?? false,
-    renderer: "production ArchiveCaseRenderer.setCaseSettings -> loadEditableAssetSet -> createEditableCaseSprites -> render",
-    status: internals.status,
-    errors: errorMessages,
-    canonicalAlbumIndex: canonicalIndex,
-    labelCaptures,
-    settings: { structure: settings.structure, enabled: settings.enabled, preset: settings.appearances.punk.preset },
-    sameSyntheticCoverAcrossViews: snapshots.array.selectedSyntheticArtwork && snapshots.inspect.selectedSyntheticArtwork,
-    snapshots,
-    gutterContactSheet: contact.toDataURL("image/png"),
-  };
-  for (const snapshot of Object.values(snapshots)) {
-    delete snapshot.leftGutter.cropElement;
-    delete snapshot.bottomGutter.cropElement;
-  }
-  host.remove();
-  return result;
-}
-
-const spriteTemplate = {
-  axes: caseMeta.axes,
-  array: { origin: caseMeta.array.origin },
-  array_res: caseMeta.array_res,
-  array_ppu: caseMeta.array_ppu,
-  inspect_res: caseMeta.inspect_res,
-  inspect_ppu: caseMeta.inspect_ppu,
-};
-
 window.caseCheck = {
   editor,
   get settings() { return serializeSettings(settings); },
@@ -2802,14 +2032,6 @@ window.caseCheck = {
   get observations() { return serializeSettings(observations); },
   get rendererCalls() { return serializeSettings(rendererCalls); },
   get editorInsertObservations() { return serializeSettings(editorInsertObservations); },
-  get caseAlbumOcclusionBuilderStates() { return serializeSettings(window.__caseAlbumOcclusionCaptureStates ?? []); },
-  async captureSpriteOcclusionOff() {
-    const module = await import("/case-sprite-occlusion-off.js");
-    return await module.capture();
-  },
-  compareSpriteOcclusionOff() {
-    return spriteOcclusionComparison(punkSpriteOcclusionOn, window.__caseAlbumOcclusionOffSprites);
-  },
   get editorRendererCreations() { return editorRendererCreations; },
   setEditorLighting(value) { quality.lighting = value; },
   setCover(url) { cover = { url, title: "Updated local fixture" }; },
@@ -2836,21 +2058,17 @@ window.caseCheck = {
   changeArchiveStructure,
   exerciseArchiveSelection,
   raceArchiveStructures,
+  captureScenePaperProtection,
   get archiveSceneSummary() { return archiveSceneSummary(); },
   get archiveSceneCaptureStats() { return archiveSceneCaptureStats; },
   get archiveSceneScreenshot() { return archiveSceneCapture?.toDataURL("image/png") ?? ""; },
-  get paperCompositeScreenshot() { return paperCompositeCapture?.toDataURL("image/png") ?? ""; },
-  captureArchiveRendererFinalCanvas,
-  checkFutureAdapterHidden,
   captureRhineInsetAlbum,
   captureRhineAlbumInfo,
   capturePunkAlbumInfo,
-  exercisePunkFutureView,
   exerciseUnifiedRender,
   unifiedRenderVariant,
   unifiedPointerTarget,
   unifiedRenderResult() { return { clicks: unifiedClicks, opens: unifiedOpens, snapshot: unifiedSnapshot() }; },
-  punkFutureClickResult() { return { clicks: punkViewClicks, stats: archiveScene.getStats() }; },
   exerciseCardLifecycle,
   async run() {
     const archiveStyleMarkup = musicStyleMarkup({ ...defaultMusicStyle, design: "archive" }, "day");
@@ -3529,144 +2747,6 @@ window.caseCheck = {
     expect(coverageFailures.length === 0,
       "Structure-specific case part coverage failed: " + JSON.stringify({ coverageFailures, rhineLowTriangles, rhineHighTriangles, rhineNativeRestore, nativeOpticalEvidence, transformChecks }));
 
-    const spriteQuality = { ...quality };
-    const sprites = {};
-    let spritePaperAudit = null;
-    const strip = document.querySelector("#case-strip");
-    const stripContext = strip.getContext("2d");
-    stripContext.fillStyle = "#101923";
-    stripContext.fillRect(0, 0, strip.width, strip.height);
-    for (const [index, structure] of ["minimal", "rhine", "punk"].entries()) {
-      const spriteSettings = defaultCaseSettings("rhine");
-      spriteSettings.enabled = true;
-      spriteSettings.structure = structure;
-      const generated = await createEditableCaseSprites(spriteSettings, spriteQuality, spriteTemplate, "day", "offline-fixture");
-      expect(generated.arrayClear.width === caseMeta.array_res[0] && generated.arrayClear.height === caseMeta.array_res[1], structure + ": array sprite dimensions");
-      expect(generated.arrayFrost.width > 0 && generated.inspect.length === generated.inspectFrames.length && generated.inspect.length >= 2, structure + ": frost and inspect sprites");
-      expect(generated.array.cover.length === 4 && generated.array.label.length === 4 && polygonArea(generated.array.cover) > 1000, structure + ": projected cover/label metadata");
-      expect(generated.array.cover.flat().every(Number.isFinite) && generated.array.label.flat().every(Number.isFinite), structure + ": finite projected corners");
-      const [coverTopLeft, coverTopRight, coverBottomRight, coverBottomLeft] = generated.array.cover;
-      const signedArea = generated.array.cover.reduce((area, point, pointIndex, points) => {
-        const next = points[(pointIndex + 1) % points.length];
-        return area + point[0] * next[1] - next[0] * point[1];
-      }, 0);
-      expect(coverTopRight[0] > coverTopLeft[0] && coverBottomLeft[1] > coverTopLeft[1] && signedArea > 0,
-        structure + ": cover corners must retain top-left/top-right/bottom-right/bottom-left order");
-      expect(Math.abs(coverBottomLeft[0] - coverTopLeft[0]) / Math.max(1, coverBottomLeft[1] - coverTopLeft[1]) < 0.2,
-        structure + ": left cover edge must remain nearly vertical in the legacy array camera");
-      const pixels = generated.arrayClear.getContext("2d").getImageData(0, 0, generated.arrayClear.width, generated.arrayClear.height).data;
-      let visiblePixels = 0;
-      for (let alphaIndex = 3; alphaIndex < pixels.length; alphaIndex += 4) if (pixels[alphaIndex] > 8) visiblePixels++;
-      expect(visiblePixels > 500, structure + ": generated array sprite must contain visible model pixels");
-      const front = generated.inspectFrames.at(-1);
-      const edgeA = Math.hypot(front.cover[1][0] - front.cover[0][0], front.cover[1][1] - front.cover[0][1]);
-      const edgeB = Math.hypot(front.cover[3][0] - front.cover[0][0], front.cover[3][1] - front.cover[0][1]);
-      expect(edgeA > 300 && edgeB > 300 && Math.abs(edgeA / edgeB - 1) < 0.08, structure + ": front camera cover stays square");
-      const x = 40 + index * 470;
-      stripContext.drawImage(generated.arrayClear, x, 32, 420, 420);
-      stripContext.fillStyle = "#eff2f5";
-      stripContext.font = "600 20px sans-serif";
-      stripContext.fillText(structure.toUpperCase(), x + 12, 480);
-      sprites[structure] = {
-        array: [generated.arrayClear.width, generated.arrayClear.height],
-        inspectCount: generated.inspect.length,
-        visiblePixels,
-        cover: generated.array.cover,
-        label: generated.array.label,
-        frontCover: front.cover,
-        badgePresent: Boolean(generated.array.badge || generated.inspectFrames.some(frame => frame.badge)),
-      };
-      if (structure === "punk") {
-        expect(!sprites[structure].badgePresent,
-          "Punk sprite metadata must contain only the physical nameplate and never a source-format badge overlay.");
-        punkSpriteOcclusionOn = {
-          arrayClear: generated.arrayClear,
-          arrayPaper: generated.arrayPaper,
-          inspect: generated.inspect,
-          inspectPaper: generated.inspectPaper,
-          array: generated.array,
-          inspectFrames: generated.inspectFrames,
-          coverRect: punkCoverRect,
-          settingsKey: JSON.stringify(spriteSettings.appearances.punk),
-          qualityKey: JSON.stringify(spriteQuality),
-        };
-        expect(generated.arrayPaper instanceof HTMLCanvasElement && generated.inspectPaper?.length === generated.inspectFrames.length,
-          "Punk sprites must expose an array paper light field and a matching inspect-paper field for every camera frame.");
-        const coverCenter = [
-          generated.array.cover.reduce((sum, point) => sum + point[0], 0) / 4,
-          generated.array.cover[0][1] + (generated.array.cover[3][1] - generated.array.cover[0][1]) * 0.46,
-        ];
-        const basePaperStats = paperFieldStats(generated.arrayPaper, coverCenter);
-        const inspectPaperStats = generated.inspectPaper.map((image, paperIndex) =>
-          paperFieldStats(image, [
-            generated.inspectFrames[paperIndex].cover.reduce((sum, point) => sum + point[0], 0) / 4,
-            generated.inspectFrames[paperIndex].cover[0][1] +
-              (generated.inspectFrames[paperIndex].cover[3][1] - generated.inspectFrames[paperIndex].cover[0][1]) * 0.46,
-          ]));
-        expect(basePaperStats.visiblePixels > 500 && basePaperStats.meanVisibleLuminance > 35 && basePaperStats.centerPixel[3] > 8,
-          "Punk arrayPaper must contain an alpha-backed, visibly lit paper region over the album insert: " + JSON.stringify(basePaperStats));
-        expect(basePaperStats.outsidePixel[3] < 8 && inspectPaperStats.every(stats => stats.visiblePixels > 100 && stats.meanVisibleLuminance > 25),
-          "Paper light fields must stay confined to the insert and remain lit across every inspect angle.");
-
-        const variantWithBackColor = color => {
-          const variant = defaultCaseSettings("rhine");
-          variant.enabled = true;
-          variant.structure = "punk";
-          const appearance = casePreset("aurora", "punk");
-          appearance.preset = "custom";
-          appearance.surfaces.back = {
-            ...appearance.surfaces.back,
-            finish: "paint", color, roughness: 0.64, transmission: 0, ior: 1.46,
-            emission: 0, metalness: 0, pattern: "none", secondaryColor: color, preserveSource: false,
-          };
-          variant.appearances.punk = appearance;
-          return variant;
-        };
-        const artwork = createSyntheticTestCover();
-        const redBackSprites = await createEditableCaseSprites(
-          variantWithBackColor("#ff0000"), spriteQuality, spriteTemplate, "day", "paper-back-red",
-        );
-        const greenBackSprites = await createEditableCaseSprites(
-          variantWithBackColor("#00ff00"), spriteQuality, spriteTemplate, "day", "paper-back-green",
-        );
-        const redComposite = composeSpriteWithPaper(redBackSprites, artwork);
-        const greenComposite = composeSpriteWithPaper(greenBackSprites, artwork);
-        const redCenter = canvasPixel(redComposite, coverCenter[0], coverCenter[1]);
-        const greenCenter = canvasPixel(greenComposite, coverCenter[0], coverCenter[1]);
-        const centerColorDelta = Math.hypot(...redCenter.slice(0, 3).map((value, channel) => value - greenCenter[channel]));
-        const visibleArtLuminance = redCenter[0] * 0.2126 + redCenter[1] * 0.7152 + redCenter[2] * 0.0722;
-        const compare = document.createElement("canvas");
-        compare.width = redComposite.width * 2;
-        compare.height = redComposite.height;
-        const compareContext = compare.getContext("2d");
-        if (!compareContext) throw new Error("Canvas 2D is unavailable for the Punk paper comparison capture.");
-        compareContext.drawImage(redComposite, 0, 0);
-        compareContext.drawImage(greenComposite, redComposite.width, 0);
-        compareContext.fillStyle = "rgba(16,25,35,.85)";
-        compareContext.fillRect(8, 8, 170, 28);
-        compareContext.fillRect(redComposite.width + 8, 8, 190, 28);
-        compareContext.fillStyle = "#fff";
-        compareContext.font = "600 15px sans-serif";
-        compareContext.fillText("RED BACK / PAPER COVER", 16, 27);
-        compareContext.fillText("GREEN BACK / SAME PAPER COVER", redComposite.width + 16, 27);
-        paperCompositeCapture = compare;
-        spritePaperAudit = {
-          arrayPaper: basePaperStats,
-          inspectPaper: inspectPaperStats,
-          redBack: "#ff0000",
-          greenBack: "#00ff00",
-          compositeCenterRed: redCenter,
-          compositeCenterGreen: greenCenter,
-          compositeCenterDelta: Number(centerColorDelta.toFixed(3)),
-          syntheticCoverCenterLuminance: Number(visibleArtLuminance.toFixed(2)),
-          compositionOrder: ["synthetic album cover", "multiply lit paper field", "rendered case foreground"],
-        };
-        expect(centerColorDelta <= 8,
-          "Opaque Punk paper plus its front depth mask must prevent a saturated backing color from leaking into the real Canvas album composite: " + JSON.stringify(spritePaperAudit));
-        expect(visibleArtLuminance < 110,
-          "The final Punk Canvas composition must retain the synthetic dark cover beneath the front case sprite: " + JSON.stringify(spritePaperAudit));
-      }
-    }
     let initialEditorReady = observations.some(item => item.structure === settings.structure && item.coverMesh === "IndependentAlbumCover");
     for (let attempt = 0; !initialEditorReady && attempt < 100; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 30));
@@ -3688,49 +2768,9 @@ window.caseCheck = {
     expect(editorStatus.shadowEnabledOnRenderedEditor && editorStatus.pcfShadowMapOnRenderedEditor &&
       editorStatus.forwardShadowKeyOnRenderedEditor,
     "The live editor WebGL renderer must use PCF shadows and a positive-Z front key light.");
-    return { models, sprites, spritePaperAudit, punkPresetIds, structureParts, settingsAudit, archiveEnabledMigration, rhineLowTriangles, rhineHighTriangles, nativeOpticalEvidence, rhineNativeRestore, transformChecks, blueTangentChecks, punkGeometryAudit, coverageFailures, punkLowVertices, punkHighVertices, initialEditorReady, editorStatus, musicStyleAudit };
+    return { models, punkPresetIds, structureParts, settingsAudit, archiveEnabledMigration, rhineLowTriangles, rhineHighTriangles, nativeOpticalEvidence, rhineNativeRestore, transformChecks, blueTangentChecks, punkGeometryAudit, coverageFailures, punkLowVertices, punkHighVertices, initialEditorReady, editorStatus, musicStyleAudit };
   },
 };
-`;
-
-const spriteOcclusionOffEntry = `
-import { createEditableCaseSprites } from "./src/case-sprites.ts";
-import { defaultCaseSettings } from "./src/case-settings.ts";
-import { qualityPresets } from "./src/render-quality.ts";
-import caseMeta from "./src/assets/style/case/white/case.json";
-
-export async function capture() {
-  const settings = defaultCaseSettings("rhine");
-  settings.enabled = true;
-  settings.structure = "punk";
-  const quality = { ...qualityPresets.high, scale: 100, pixelRatio: 1, antialias: "off", shadows: 2048, aoSamples: 0, depthOfField: 0 };
-  const template = {
-    axes: caseMeta.axes,
-    array: { origin: caseMeta.array.origin },
-    array_res: caseMeta.array_res,
-    array_ppu: caseMeta.array_ppu,
-    inspect_res: caseMeta.inspect_res,
-    inspect_ppu: caseMeta.inspect_ppu,
-  };
-  const sprites = await createEditableCaseSprites(settings, quality, template, "day", "offline-fixture");
-  const providerAudit = window.__caseAlbumOcclusionOffStates?.at(-1) ?? null;
-  Object.assign(sprites, {
-    testProviderAudit: providerAudit,
-    testSettingsKey: JSON.stringify(settings.appearances.punk),
-    testQualityKey: JSON.stringify(quality),
-  });
-  window.__caseAlbumOcclusionOffSprites = sprites;
-  return {
-    testOnlyProvider: "case-sprites.ts compiled with setCaseAlbumOcclusion(root,false); no product flag or source file changed",
-    sameSettingsKey: JSON.stringify(settings.appearances.punk),
-    sameQualityKey: JSON.stringify(quality),
-    arraySize: [sprites.arrayClear.width, sprites.arrayClear.height],
-    inspectCount: sprites.inspect.length,
-    hasRealArrayPaper: sprites.arrayPaper instanceof HTMLCanvasElement,
-    hasRealInspectPaper: sprites.inspectPaper?.length === sprites.inspect.length,
-    cardVisibleAndApiStates: providerAudit,
-  };
-}
 `;
 
 const referenceEntry = `
@@ -5770,8 +4810,8 @@ window.caseReferenceReady = true;
 `;
 
 const fixtureHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/case-editor.css"><style>
-html,body{margin:0;background:#101923;color:#e8edf2;font:14px sans-serif}body{padding:24px}#case-strip{display:block;width:1450px;height:510px;margin:0 0 28px;background:#101923}#editor-host{width:1450px;min-height:900px}.case-editor__workspace{grid-template-columns:minmax(360px,1fr) minmax(500px,1.15fr)}.case-editor__preview-stage{height:560px;min-height:560px}.case-editor__canvas,.case-editor__canvas canvas{width:100%;height:100%}.case-editor__canvas canvas{display:block}
-</style></head><body><canvas id="case-strip" width="1450" height="510" aria-label="Three editable case structures at the same camera angle"></canvas><div id="editor-host"></div><script type="module" src="/case-check.js"></script></body></html>`;
+html,body{margin:0;background:#101923;color:#e8edf2;font:14px sans-serif}body{padding:24px}#editor-host{width:1450px;min-height:900px}.case-editor__workspace{grid-template-columns:minmax(360px,1fr) minmax(500px,1.15fr)}.case-editor__preview-stage{height:560px;min-height:560px}.case-editor__canvas,.case-editor__canvas canvas{width:100%;height:100%}.case-editor__canvas canvas{display:block}
+</style></head><body><div id="editor-host"></div><script type="module" src="/case-check.js"></script></body></html>`;
 
 const referenceHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=1000,initial-scale=1"><style>html,body{margin:0;width:1000px;height:1000px;overflow:hidden;background:#dedbd7}#reference-stage,#reference-stage canvas{display:block;width:1000px;height:1000px}</style></head><body><div id="reference-stage"></div><script type="module" src="/case-check.js"></script></body></html>`;
 
@@ -5829,11 +4869,6 @@ const server = http.createServer((request, response) => {
     response.end(bundleJs);
     return;
   }
-  if (route === "/case-sprite-occlusion-off.js" && request.method === "GET" && spriteOcclusionOffBundle) {
-    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-    response.end(spriteOcclusionOffBundle);
-    return;
-  }
   if (route === "/case-editor.css" && request.method === "GET") {
     response.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-store" });
     response.end(bundleCss);
@@ -5860,7 +4895,6 @@ const server = http.createServer((request, response) => {
 
 let bundleJs = "";
 let bundleCss = "";
-let spriteOcclusionOffBundle = "";
 const blockedRoutes = [];
 await new Promise((resolve, reject) => {
   server.once("error", reject);
@@ -5876,7 +4910,6 @@ try {
     format: "esm",
     platform: "browser",
     target: "es2022",
-    external: isReference ? [] : ["/case-sprite-occlusion-off.js"],
     outdir: ".tools/case-system-check/bundle",
     define: { "import.meta.env.BASE_URL": JSON.stringify(baseUrl) },
     plugins: [{
@@ -5889,55 +4922,6 @@ try {
           ),
           loader: "ts",
         }));
-        buildApi.onLoad({ filter: /[\\/]case-sprites\.ts$/ }, async args => {
-          let contents = await readFile(args.path, "utf8");
-          const call = "setCaseAlbumOcclusion(root, Boolean(paper));";
-          const callCount = contents.split(call).length - 1;
-          if (callCount !== 1) throw new Error("The production sprite audit expects exactly one setCaseAlbumOcclusion(root, Boolean(paper)) call; found " + callCount + ".");
-          const audit = `window.__caseAlbumOcclusionCaptureStates ??= [];\n{
-            const __flags = [];
-            root.traverse(object => { if (object.userData.caseAlbumWindow) __flags.push(object.userData.caseAlbumPresent === true); });
-            window.__caseAlbumOcclusionCaptureStates.push({
-              paperObjectVisible: paper?.visible === true,
-              apiRequested: Boolean(paper),
-              shellMeshCount: __flags.length,
-              apiFlags: [...new Set(__flags)],
-            });
-          }`;
-          contents = contents.replace(call, call + "\n" + audit);
-          return { contents, loader: "ts" };
-        });
-        buildApi.onLoad({ filter: /[\\/]archive-case-renderer\.ts$/ }, async args => {
-          const source = await readFile(args.path, "utf8");
-          const whiteMeta = JSON.parse(await readFile(path.join(project, "src/assets/style/case/white/case.json"), "utf8"));
-          // The editable renderer replaces source-angle PNGs with generated WebGL
-          // frames. Reuse one local source image for two identical metadata
-          // frames so the legacy inspect interpolation path remains executable
-          // without bundling sixty unused reference photographs.
-          whiteMeta.inspect = [whiteMeta.inspect[0], whiteMeta.inspect[0]];
-          const railMeta = JSON.parse(await readFile(path.join(project, "src/assets/style/rail/rail.json"), "utf8"));
-          const caseImageFiles = ["array-clear.png", "array-frost.png", "inspect-00.png"];
-          const railImageFiles = ["rail-front.png", "rail-mid.png", "rail-back.png"];
-          const caseImages = Object.fromEntries(caseImageFiles.map(file => [
-            "./assets/style/case/white/" + file, baseUrl + "assets/style/case/white/" + file,
-          ]));
-          caseImages["./assets/style/case/white/inspect-01.png"] = baseUrl + "assets/style/case/white/inspect-00.png";
-          const railImages = Object.fromEntries(railImageFiles.map(file => [
-            "./assets/style/rail/" + file, baseUrl + "assets/style/rail/" + file,
-          ]));
-          const replacements = [
-            JSON.stringify({ "./assets/style/case/white/case.json": whiteMeta }),
-            JSON.stringify(caseImages),
-            "{}",
-            "{}",
-            JSON.stringify({ "./assets/style/rail/rail.json": railMeta }),
-            JSON.stringify(railImages),
-          ];
-          const transformed = stubImportMetaGlobCalls(source, args.path, replacements);
-          if (source.match(/import\.meta\.glob/g)?.length !== replacements.length)
-            throw new Error("The offline ArchiveCaseRenderer glob adapter must account for every case/rail resource map.");
-          return { contents: transformed, loader: "ts" };
-        });
         buildApi.onLoad({ filter: /[\\/]music-style\.ts$/ }, async args => ({
           contents: stubImportMetaGlobCalls(await readFile(args.path, "utf8"), args.path),
           loader: "ts",
@@ -5950,47 +4934,6 @@ try {
   bundleCss = built.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
   assert.ok(bundleJs, "esbuild must bundle the local offline fixture in memory.");
   if (!isReference) assert.ok(bundleCss, "esbuild must bundle the real case-editor.css stylesheet.");
-  if (!isReference) {
-    const offBuilt = await build({
-      stdin: { contents: spriteOcclusionOffEntry, resolveDir: project, sourcefile: "case-sprite-occlusion-off-entry.ts", loader: "ts" },
-      bundle: true,
-      write: false,
-      format: "esm",
-      platform: "browser",
-      target: "es2022",
-      outdir: ".tools/case-system-check/bundle-off",
-      define: { "import.meta.env.BASE_URL": JSON.stringify(baseUrl) },
-      plugins: [{
-        name: "test-only-disable-punk-album-occlusion-provider",
-        setup(buildApi) {
-          buildApi.onLoad({ filter: /[\\/]case-sprites\.ts$/ }, async args => {
-            let contents = await readFile(args.path, "utf8");
-            const call = "setCaseAlbumOcclusion(root, Boolean(paper));";
-            const callCount = contents.split(call).length - 1;
-            if (callCount !== 1) throw new Error("Test-only occlusion-off transform must replace exactly one production API call; found " + callCount + ".");
-            const replacement = `setCaseAlbumOcclusion(root, false);
-window.__caseAlbumOcclusionOffStates ??= [];
-{
-  const __flags = [];
-  root.traverse(object => { if (object.userData.caseAlbumWindow) __flags.push(object.userData.caseAlbumPresent === true); });
-  window.__caseAlbumOcclusionOffStates.push({
-    paperObjectExists: paper !== undefined,
-    paperObjectVisible: paper?.visible === true,
-    apiRequested: false,
-    shellMeshCount: __flags.length,
-    apiFlags: [...new Set(__flags)],
-  });
-}`;
-            contents = contents.replace(call, replacement);
-            return { contents, loader: "ts" };
-          });
-        },
-      }],
-      logLevel: "silent",
-    });
-    spriteOcclusionOffBundle = offBuilt.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "";
-    assert.ok(spriteOcclusionOffBundle, "The isolated test-only occlusion-off sprite provider must bundle in memory.");
-  }
 } catch (error) {
   await new Promise(resolve => server.close(resolve));
   throw error;
@@ -6055,7 +4998,7 @@ function receive(event) {
 function send(method, params = {}, sessionId) {
   return new Promise((resolve, reject) => {
     const id = ++sequence;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, isPunkView || isUnifiedRender ? 60000 : 20000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, isUnifiedRender ? 60000 : 20000);
     pending.set(id, { resolve, reject, timer });
     socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
   });
@@ -6391,6 +5334,8 @@ async function main() {
     await mkdir(unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
     const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
+    await writeFile(path.join(unifiedOutput, "unified-production-paper-occlusion.png"), pngBuffer(result.paperProtection.image, "Production paper protection"));
+    delete result.paperProtection.image;
     await writeFile(path.join(unifiedOutput, "unified-archive-asymmetric-bounds.png"), pngBuffer(result.transformedImage, "Asymmetric bounds scene"));
     delete result.transformedImage;
     const target = result.pointerTarget;
@@ -6433,39 +5378,7 @@ async function main() {
       ...result, pointerResult: opened, screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     console.log(JSON.stringify({ ok: true, checks: ["Both physical shelves", "sole WebGL canvas", "finite TRACKS identity/paging",
       "query recovery", "detail/layout continuity", "transformed spacing", "real raycast and double click", "Punk clipping"],
-      report: ".tools/unified-architecture-stage3/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
-    return;
-  }
-  if (isPunkView) {
-    await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
-    const result = await evaluate("window.caseCheck.exercisePunkFutureView()");
-    for (const [name, png] of Object.entries(result.images))
-      await writeFile(path.join(output, "punk-view-" + name + ".png"), pngBuffer(png, name));
-    const target = result.pointerTarget;
-    await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: target.x, y: target.y });
-    await command("Input.dispatchMouseEvent", { type: "mousePressed", x: target.x, y: target.y, button: "left", clickCount: 1 });
-    await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: target.x, y: target.y, button: "left", clickCount: 1 });
-    const click = await evaluate("window.caseCheck.punkFutureClickResult()");
-    await writeFile(path.join(output, "punk-view-pointer-diagnostic.json"), JSON.stringify({ target, click }, null, 2));
-    assert.equal(click.clicks.at(-1)?.index, target.index, "A real 3D mouse hit must select its canonical Punk album.");
-    assert.equal(click.clicks.at(-1)?.cell?.foobarEntryKey, target.key, "A 3D mouse hit must carry the visible catalog entry key.");
-    assert.equal(click.stats.selectedCell.foobarEntryKey, target.key, "The selected 3D cell must retain the actual clicked entry.");
-    const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
-    await writeFile(path.join(output, "punk-view-layout-mask.png"), Buffer.from(screen.data, "base64"));
-    const rightPixel = await evaluate("(async()=>{const img=new Image();img.src=" + JSON.stringify("data:image/png;base64," + screen.data) +
-      ";await img.decode();const c=document.createElement('canvas');c.width=1450;c.height=840;const x=c.getContext('2d');x.drawImage(img,0,0);return Array.from(x.getImageData(1430,820,1,1).data);})()");
-    const bg = result.audit.palette.expected.slice(1);
-    assert.deepEqual(rightPixel, [parseInt(bg.slice(0, 2), 16), parseInt(bg.slice(2, 4), 16), parseInt(bg.slice(4, 6), 16), 255],
-      "The 3D array must leave the information region's Punk background clear.");
-    assert.deepEqual(runtimeErrors, []);
-    assert.deepEqual(shaderErrors, []);
-    assert.deepEqual(blockedRoutes, []);
-    const report = { ok: true, scope: "Real ArchiveScene, Punk/Future GLBs, production catalog and browser pointer input; synthetic albums only.",
-      audit: result.audit, pointerTarget: target, pointerResult: click, runtimeErrors, shaderErrors, blockedRoutes };
-    await writeFile(path.join(output, "punk-future-view-audit.json"), JSON.stringify(report, null, 2));
-    console.log(JSON.stringify({ ok: true, scene: "Punk Future view", pointerEntry: target.key,
-      checks: ["Punk model/palette", "Future camera match", "view return", "TRACKS parent identity", "filter recovery", "detail retained", "preference roundtrip", "real pointer hit"],
-      report: ".tools/case-system-check/punk-future-view-audit.json" }, null, 2));
+      report: ".tools/unified-architecture-stage4/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
     return;
   }
   const fixture = await evaluate("window.caseCheck.run()");
@@ -6484,53 +5397,6 @@ async function main() {
     futureIndependent: true,
   }, "Legacy Archive profiles must force editable Punk without changing their saved appearance or Future profile.");
   assert.ok(fixture.initialEditorReady, "The editor's independent-cover preview must render before interaction tests: " + JSON.stringify(fixture.editorStatus));
-  assert.ok(fixture.spritePaperAudit && fixture.spritePaperAudit.arrayPaper.visiblePixels > 500 &&
-    fixture.spritePaperAudit.arrayPaper.meanVisibleLuminance > 35 && fixture.spritePaperAudit.compositeCenterDelta <= 8,
-  "Punk sprite must retain its real lit paper field without saturated backing-color leakage: " + JSON.stringify(fixture.spritePaperAudit));
-  const paperComposite = await evaluate("window.caseCheck.paperCompositeScreenshot");
-  assert.ok(paperComposite.startsWith("data:image/png;base64,"), "Punk paper light-field validation must produce a final Canvas composition.");
-  await writeFile(path.join(output, "punk-array-paper-composite.png"), Buffer.from(paperComposite.slice("data:image/png;base64,".length), "base64"));
-  const spriteOcclusionOffProvider = await evaluate("window.caseCheck.captureSpriteOcclusionOff()");
-  const spriteAlbumIndirectOcclusion = await evaluate("window.caseCheck.compareSpriteOcclusionOff()");
-  await writeFile(path.join(output, "punk-sprite-album-occlusion-ab.png"), pngBuffer(spriteAlbumIndirectOcclusion.contactSheet,
-    "real editable sprite album-occlusion on/off contact sheet"));
-  await writeFile(path.join(output, "punk-sprite-inner-gutter-crops.png"), pngBuffer(spriteAlbumIndirectOcclusion.innerGutterCropSheet,
-    "left and bottom array/inspect sprite inner-gutter crops"));
-  const spriteAlbumIndirectOcclusionAudit = structuredClone(spriteAlbumIndirectOcclusion);
-  delete spriteAlbumIndirectOcclusionAudit.contactSheet;
-  delete spriteAlbumIndirectOcclusionAudit.innerGutterCropSheet;
-  await writeFile(path.join(output, "punk-sprite-album-occlusion-ab.json"), JSON.stringify(spriteAlbumIndirectOcclusionAudit, null, 2));
-  const spriteOnProviderStates = await evaluate("window.caseCheck.caseAlbumOcclusionBuilderStates");
-  assert.ok(spriteOnProviderStates.some(state => state.paperObjectVisible && state.apiRequested &&
-    state.shellMeshCount > 0 && state.apiFlags.length > 0 && state.apiFlags.every(flag => flag === true)),
-  "The production editable sprite provider must place a visible physical insert and mark its live shell metadata/uniforms present: " + JSON.stringify(spriteOnProviderStates));
-  assert.equal(spriteOcclusionOffProvider.hasRealArrayPaper, true, "The isolated test-off provider must still generate its actual array paper layer.");
-  assert.equal(spriteOcclusionOffProvider.hasRealInspectPaper, true, "The isolated test-off provider must still generate actual inspect paper layers.");
-  assert.ok(spriteOcclusionOffProvider.cardVisibleAndApiStates?.paperObjectExists &&
-    spriteOcclusionOffProvider.cardVisibleAndApiStates.paperObjectVisible &&
-    spriteOcclusionOffProvider.cardVisibleAndApiStates.shellMeshCount > 0 &&
-    spriteOcclusionOffProvider.cardVisibleAndApiStates.apiRequested === false &&
-    spriteOcclusionOffProvider.cardVisibleAndApiStates.apiFlags.length > 0 &&
-    spriteOcclusionOffProvider.cardVisibleAndApiStates.apiFlags.every(flag => flag === false),
-  "The test-only API-off bundle must keep the real physical card visible while forcing only its occlusion metadata/uniforms false: " + JSON.stringify(spriteOcclusionOffProvider));
-  assert.ok(spriteAlbumIndirectOcclusion.insertGeometryRetainedInBoth && spriteAlbumIndirectOcclusion.actualInsertPresent &&
-    spriteAlbumIndirectOcclusion.samePresetAndQuality &&
-    spriteAlbumIndirectOcclusion.testOffProviderCardVisible && spriteAlbumIndirectOcclusion.testOffProviderApiFlags.length > 0 &&
-    spriteAlbumIndirectOcclusion.testOffProviderApiFlags.every(flag => flag === false),
-  "The real arrayPaper/inspectPaper layers and physical card must remain present across the isolated occlusion A/B.");
-  const measuredSpriteGutterDarkening = [
-    spriteAlbumIndirectOcclusion.arrayClear.leftGutter.meanDarkening,
-    spriteAlbumIndirectOcclusion.arrayClear.bottomGutter.meanDarkening,
-    spriteAlbumIndirectOcclusion.inspectFront.leftGutter.meanDarkening,
-    spriteAlbumIndirectOcclusion.inspectFront.bottomGutter.meanDarkening,
-  ];
-  assert.ok(measuredSpriteGutterDarkening.some(value => value > 1),
-    "The actual generated arrayClear/inspect shell sprites must show a measurable inner-gutter response to album-occlusion on/off with unchanged cover dimensions: " + JSON.stringify({ measuredSpriteGutterDarkening, spriteAlbumIndirectOcclusion }));
-  const arrayCanvasAblation = spriteAlbumIndirectOcclusion.arrayClear.fullCanvasAblation;
-  assert.ok(arrayCanvasAblation && arrayCanvasAblation.alphaCoveredPixels > 0 &&
-    arrayCanvasAblation.changedPixels > 0 && arrayCanvasAblation.positiveDarkeningPixels > 0 &&
-    arrayCanvasAblation.meanPositiveLuminanceDarkening > 0 && arrayCanvasAblation.positiveDarkeningBbox,
-  "The original unscaled arrayClear sprite must contain an actual alpha-covered pixel response, including positive darkening, when only album-occlusion is toggled: " + JSON.stringify(arrayCanvasAblation));
   assert.equal(fixture.models.length, 7);
   assert.ok(fixture.models.every(model => model.layoutAspectPreserved), "Every structure/detail pair must preserve its own model layout width/height/depth ratios.");
   assert.ok(fixture.punkHighVertices > fixture.punkLowVertices, "Punk detail levels must change the actual geometry.");
@@ -6719,20 +5585,6 @@ async function main() {
     fixture.blueTangentChecks.restoredAnisotropy.every(value => Math.abs(value - 0.12) < 1e-6) &&
     fixture.blueTangentChecks.repeatedApplyGeometryDelta < 1e-6 && fixture.blueTangentChecks.resetGeometryDelta < 1e-6,
   "Blue frame anisotropy must remain enabled and tangent/normal/position transforms must be idempotent and reversible.");
-  assert.deepEqual(Object.keys(fixture.sprites).sort(), ["minimal", "punk", "rhine"]);
-  assert.equal(fixture.sprites.punk.inspectCount, 5);
-  for (const structure of ["minimal", "rhine", "punk"]) {
-    const sprite = fixture.sprites[structure];
-    assert.deepEqual(sprite.array, [600, 600], `${structure}: generated array dimensions`);
-    assert.equal(sprite.inspectCount, 5, `${structure}: generated inspect frames`);
-    assert.equal(sprite.cover.length, 4);
-    assert.equal(sprite.label.length, 4);
-    if (structure === "punk") assert.equal(sprite.badgePresent, false, "Punk has no source-format badge overlay in generated sprite metadata.");
-  }
-  const stripRect = await evaluate("(() => { const r=document.querySelector('#case-strip').getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })()");
-  const stripShot = await command("Page.captureScreenshot", { format: "png", clip: { ...stripRect, scale: 1 } });
-  await writeFile(path.join(output, "three-structures-same-angle.png"), Buffer.from(stripShot.data, "base64"));
-
   const interactions = await evaluate(`(async () => {
     const host=document.querySelector('#editor-host');
     const root=host.querySelector('.case-editor');
@@ -7182,7 +6034,6 @@ async function main() {
 
   await command("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
   const archiveScreenshotReady = await evaluate(`(async () => {
-    document.querySelector('#case-strip').style.display = 'none';
     const host = document.querySelector('#editor-host'); host.style.width = 'calc(100vw - 48px)';
     const root = document.querySelector('#editor-host .case-editor');
     window.caseCheck.setEditorDesign('archive');
@@ -7238,7 +6089,7 @@ async function main() {
   await new Promise(resolve => setTimeout(resolve, 150));
   const archiveEditorPersonalShot = await command("Page.captureScreenshot", { format: "png" });
   await writeFile(path.join(output, "archive-punk-editor-1920-personal.png"), Buffer.from(archiveEditorPersonalShot.data, "base64"));
-  await evaluate("window.scrollTo(0,0);document.querySelector('#editor-host').style.width='';document.querySelector('#case-strip').style.display='';window.caseCheck.setEditorDesign('rhine')");
+  await evaluate("window.scrollTo(0,0);document.querySelector('#editor-host').style.width='';window.caseCheck.setEditorDesign('rhine')");
   await command("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1500, deviceScaleFactor: 1, mobile: false });
 
   const themeRestriction = await evaluate(`(() => {
@@ -7371,98 +6222,10 @@ async function main() {
   assert.ok(sceneRace.modelOcclusionFlags.length > 0 && sceneRace.modelOcclusionMatchesSelectedInsert &&
     sceneRace.allInstanceOcclusionMatchesArrayInsert,
   "After the real structure-request race, selected and instanced Punk shells must still agree with the live album-card atlas.");
-  const archiveRendererFinalCanvas = await evaluate("window.caseCheck.captureArchiveRendererFinalCanvas()");
-  if (archiveRendererFinalCanvas?.labelCaptures) {
-    for (const [name, capture] of Object.entries(archiveRendererFinalCanvas.labelCaptures)) {
-      if (capture.image?.startsWith("data:image/png;base64,"))
-        await writeFile(path.join(output, `archive-punk-label-${name}.png`), pngBuffer(capture.image,
-          "production ArchiveCaseRenderer " + name + " complete Punk nameplate"));
-      if (capture.labelCanvas?.startsWith("data:image/png;base64,"))
-        await writeFile(path.join(output, `archive-punk-label-${name}-source.png`), pngBuffer(capture.labelCanvas,
-          "production ArchiveCaseRenderer " + name + " original label Canvas"));
-      delete capture.image;
-      delete capture.labelCanvas;
-    }
-  }
-  if (archiveRendererFinalCanvas?.snapshots) {
-    for (const view of ["array", "inspect"]) {
-      const snapshot = archiveRendererFinalCanvas.snapshots[view];
-      if (!snapshot) continue;
-      if (snapshot.image?.startsWith("data:image/png;base64,"))
-        await writeFile(path.join(output, `archive-renderer-final-${view}.png`), pngBuffer(snapshot.image,
-          "production ArchiveCaseRenderer final " + view + " Canvas"));
-      for (const [edge, gutter] of [["left", snapshot.leftGutter], ["bottom", snapshot.bottomGutter]]) {
-        if (gutter?.cropPng?.startsWith("data:image/png;base64,"))
-          await writeFile(path.join(output, `archive-renderer-final-${view}-${edge}-gutter.png`), pngBuffer(gutter.cropPng,
-            "production ArchiveCaseRenderer final " + view + " " + edge + " inner-gutter crop"));
-        if (gutter) delete gutter.cropPng;
-      }
-      delete snapshot.image;
-    }
-    if (archiveRendererFinalCanvas.gutterContactSheet?.startsWith("data:image/png;base64,"))
-      await writeFile(path.join(output, "archive-renderer-final-inner-gutter-contact.png"),
-        pngBuffer(archiveRendererFinalCanvas.gutterContactSheet, "four-view production ArchiveCaseRenderer inner-gutter contact sheet"));
-    delete archiveRendererFinalCanvas.gutterContactSheet;
-    await writeFile(path.join(output, "archive-renderer-final-canvas-audit.json"), JSON.stringify(archiveRendererFinalCanvas, null, 2));
-  }
-  assert.equal(archiveRendererFinalCanvas.loaded, true,
-    "Final Canvas audit must render through the production ArchiveCaseRenderer and editable sprite loader: " + JSON.stringify(archiveRendererFinalCanvas.errors));
-  assert.deepEqual(archiveRendererFinalCanvas.errors, [], "The production ArchiveCaseRenderer final-Canvas capture must not report resource or render errors.");
-  assert.equal(archiveRendererFinalCanvas.sameSyntheticCoverAcrossViews, true,
-    "The real ArchiveCaseRenderer array and inspect outputs must composite the same synthetic album art.");
-  assert.equal(archiveRendererFinalCanvas.disabledArchiveConfigForced, true,
-    "Archive must ignore a legacy enabled:false value and stay on the generated Punk renderer.");
-  assert.equal(archiveRendererFinalCanvas.effectiveCaseEnabled, true);
-  const expectedLabelNumber = `NO.${String(archiveRendererFinalCanvas.canonicalAlbumIndex + 1).padStart(3, "0")}`;
-  for (const [name, capture] of Object.entries(archiveRendererFinalCanvas.labelCaptures ?? {})) {
-    const view = name.endsWith("inspect") ? "inspect" : "array";
-    assert.deepEqual(capture.labelCanvasSize, view === "inspect" ? [1024, 614] : [256, 154],
-      "The production " + name + " label cache must use its bounded high-resolution or array texture size.");
-    assert.equal(capture.canonicalAlbumIndex, archiveRendererFinalCanvas.canonicalAlbumIndex,
-      "The production " + name + " selected target must retain its canonical album index.");
-    assert.equal(capture.canonicalAlbumNumber, expectedLabelNumber,
-      "The production " + name + " canvas must use the complete canonical album number.");
-    assert.ok(capture.cacheIndices.includes(archiveRendererFinalCanvas.canonicalAlbumIndex),
-      "The production " + name + " cache must be keyed by the canonical album index.");
-    assert.ok(capture.opaquePixels > 100 && capture.darkInkPixels > 20,
-      "The production " + name + " label Canvas must contain the complete paper and visible ink.");
-    assert.equal(capture.punkBadgePresent, false,
-      "The production Punk renderer must show its nameplate without adding Hi-Res/DSD badge overlays.");
-    if (name.startsWith("editable-dsd-")) {
-      assert.equal(capture.canonicalAlbumIndex, archiveRendererFinalCanvas.canonicalAlbumIndex,
-        "A DSD fixture album must continue using its canonical parent record number.");
-    }
-    if (name.startsWith("editable-tracks-")) {
-      assert.equal(capture.selectedTrackId, "offline-label-track-2",
-        "The TRACKS view must keep focus on the selected synthetic child track.");
-      assert.equal(capture.selectedEntryRecordIndex, archiveRendererFinalCanvas.canonicalAlbumIndex,
-        "A TRACKS entry's label must continue to use its canonical parent album index.");
-      assert.deepEqual(capture.cacheIndices, [archiveRendererFinalCanvas.canonicalAlbumIndex],
-        "All synthetic TRACKS entries from one parent album must share its one canonical label cache key.");
-      assert.ok(capture.trackTargets.length >= 1 && capture.trackTargets.every(target => target.canonicalIndex === archiveRendererFinalCanvas.canonicalAlbumIndex),
-        "Every visible TRACKS hit target must identify the canonical parent album.");
-    }
-  }
-  assert.deepEqual(Object.keys(archiveRendererFinalCanvas.labelCaptures ?? {}).sort(), [
-    "disabled-config-array", "disabled-config-inspect", "editable-array", "editable-inspect", "editable-dsd-array", "editable-dsd-inspect",
-    "editable-tracks-array", "editable-tracks-inspect",
-  ].sort(), "The production audit must prove forced-editable Punk nameplates and parent numbering in album/TRACKS array/inspect paths.");
-  for (const view of ["array", "inspect"]) {
-    const snapshot = archiveRendererFinalCanvas.snapshots[view];
-    assert.ok(snapshot.selectedSyntheticArtwork && snapshot.actualArrayPaperLayerPresent &&
-      snapshot.actualInspectPaperFrameCount === fixture.sprites.punk.inspectCount,
-    "The final " + view + " Canvas must use the real generated paper foreground/background layers: " + JSON.stringify(snapshot));
-    for (const gutter of [snapshot.leftGutter, snapshot.bottomGutter])
-      assert.ok(gutter.cropPixels > 0 && gutter.quantizedColors > 1 &&
-        gutter.coverOffsetOutsideModelUnits >= 0.02 && gutter.coverOffsetOutsideModelUnits <= 0.05,
-      "The final " + view + " Canvas must save an actual left/bottom back-plate gutter crop outside the exact cover rectangle: " + JSON.stringify(gutter));
-  }
-  const futureAdapter = await evaluate("window.caseCheck.checkFutureAdapterHidden()");
-  assert.equal(futureAdapter.initiallyHidden, true, "The Rhine/Future adapter canvas starts hidden.");
-  assert.equal(futureAdapter.hiddenAfterSettings, true, "Enabling case settings in Future must leave the Punk adapter hidden.");
-  assert.equal(futureAdapter.hiddenAfterQuality, true, "A quality update must not reveal the adapter canvas in Future.");
-  assert.equal(futureAdapter.assetsAbsent, true, "The Future adapter check must not load archive PNG assets.");
-  sceneAcceptance = { initial: sceneInitial, structures: sceneStructures, cardLifecycle: sceneCardLifecycle, selection, race: sceneRace, futureAdapter };
+  const paperProtection = await evaluate("window.caseCheck.captureScenePaperProtection()");
+  await writeFile(path.join(output, "production-scene-paper-occlusion.png"), pngBuffer(paperProtection.image, "Production Scene paper protection"));
+  delete paperProtection.image;
+  sceneAcceptance = { initial: sceneInitial, structures: sceneStructures, cardLifecycle: sceneCardLifecycle, selection, race: sceneRace, paperProtection };
 
   await new Promise(resolve => setTimeout(resolve, 150));
   assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
@@ -7482,13 +6245,6 @@ async function main() {
     },
     modelChecks: fixture.models,
     punkGeometryAudit: fixture.punkGeometryAudit,
-    spritePaperAudit: fixture.spritePaperAudit,
-    spriteAlbumIndirectOcclusion: spriteAlbumIndirectOcclusionAudit,
-    spriteOcclusionProviderAudit: {
-      productionOnStates: spriteOnProviderStates,
-      testOnlyOffProvider: spriteOcclusionOffProvider,
-    },
-    archiveRendererFinalCanvasOcclusionCrop: archiveRendererFinalCanvas,
     editorBasicPaperCard: editorBasicCard.item,
     editorAlbumOcclusionLifecycle: {
       initiallyHiddenAfterPaperCapture: editorHiddenAfterPaper,
@@ -7502,7 +6258,6 @@ async function main() {
     transformChecks: fixture.transformChecks,
     blueTangentChecks: fixture.blueTangentChecks,
     rhineSourceTriangles: fixture.rhineHighTriangles,
-    spriteStructures: Object.keys(fixture.sprites),
     interactions,
     personalUi,
     archivePunkEditorCapture: {
@@ -7520,15 +6275,7 @@ async function main() {
     runtimeErrors,
     blockedRoutes,
     screenshots: [
-      "three-structures-same-angle.png", "punk-array-paper-composite.png", "punk-sprite-album-occlusion-ab.png",
-      "punk-sprite-inner-gutter-crops.png", "archive-renderer-final-array.png", "archive-renderer-final-inspect.png",
-      "archive-renderer-final-array-left-gutter.png", "archive-renderer-final-array-bottom-gutter.png",
-      "archive-renderer-final-inspect-left-gutter.png", "archive-renderer-final-inspect-bottom-gutter.png",
-      "archive-renderer-final-inner-gutter-contact.png", "case-editor-final.png", "punk-editor-basic-paper-card.png",
-      "archive-punk-label-disabled-config-array.png", "archive-punk-label-disabled-config-inspect.png",
-      "archive-punk-label-editable-array.png", "archive-punk-label-editable-inspect.png",
-      "archive-punk-label-editable-dsd-array.png", "archive-punk-label-editable-dsd-inspect.png",
-      "archive-punk-label-editable-tracks-array.png", "archive-punk-label-editable-tracks-inspect.png",
+      "case-editor-final.png", "punk-editor-basic-paper-card.png", "production-scene-paper-occlusion.png",
       "archive-punk-editor-1920-top.png", "archive-punk-editor-1920-personal.png",
       "punk-front-cover-hidden.png", "punk-oblique-cover-hidden.png", "rhine-oblique-cover-hidden.png", "archive-scene-rhine.png",
       "rhine-album-info-hi-res.png", "rhine-album-info-dsd.png",
@@ -7538,7 +6285,7 @@ async function main() {
     ],
   };
   await writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2));
-  console.log("Editable case system and ArchiveScene integration passed: actual GLB/shader rendering, generated sprites, editor persistence, eight synthetic albums, structure swaps, outgoing material isolation, request revisions, and Future adapter hide state.");
+  console.log("Editable case system and ArchiveScene integration passed: actual GLB/shader rendering, editor persistence, eight synthetic albums, structure swaps, outgoing material isolation, request revisions, and common renderer state.");
   console.log(`Screenshots and report: ${output}`);
 }
 

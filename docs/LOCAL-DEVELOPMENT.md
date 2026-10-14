@@ -4,11 +4,11 @@
 
 ## 工作目录与入口
 
-唯一活动Git仓库是 `Rhine-Music-Demo-AudioEnhanced`；它同时用于本地开发和用户自行发布到GitHub。所有命令都在该仓库根目录执行，先检查Git状态并保留用户改动。日常开发不导出或同步第二份源码。
+唯一活动Git仓库是 `Rhine-Music-Demo-AudioEnhanced`；它同时用于本地开发和用户自行发布到GitHub。所有命令都在该仓库根目录执行，先检查Git状态并保留用户改动。日常开发不导出或同步第二份源码；第三阶段独立版本是用户明确要求的冻结交付快照，不是第二个活动源码仓库。
 
 main从干净基线提交 `167d140` 建立，基线包含4062个源码文件。本机 `node_modules/`、`.tools/`、`dist/`、`release/` 和运行数据留在原位并由Git忽略；新克隆需在用户批准后自行准备依赖与桌面工具。旧主线在本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development` 停在 `052bf9a`，原有标签保留为本地历史。用户自行设置远程并只推送 `main`；不推历史分支或标签，不使用 `--all`、`--mirror` 或强推。
 
-当前入口 **启动源码验证.cmd** 或 `npm run desktop` 直接打开“Rhine Music · 源码验证”Electron桌面窗口。朋友品尝版采用独立NSIS安装包；旧 `release/Rhine Music.exe` 是历史自解压产物，不用它验收当前源码。
+当前main入口 **启动源码验证.cmd** 或 `npm run desktop` 打开“Rhine Music · 源码验证”Electron窗口，运行当前第四阶段源码。Stage3独立App与测试顺序见[阶段版本](STAGE-VERSIONS.md)；朋友品尝版采用独立NSIS安装包，旧 `release/Rhine Music.exe` 是历史自解压产物。
 
 - 启动器不自动构建、安装、下载或扫描曲库。
 - desktop/服务来自源码，界面优先 `.tools/source-preview-interface`；来源清单不一致会拒绝启动。
@@ -37,9 +37,9 @@ node scripts/build-source-preview.mjs --interface-only
 .启动源码验证.cmd
 ```
 
-阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。第三阶段实现及必要自动验证已完成，等待用户验收。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。界面构建通过（1652模块），输出仍为`.tools/source-preview-interface`，没有重打朋友安装包或覆盖上游dist。
+阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。第三阶段实现及必要自动验证已完成、用户验收待进行；冻结版本和Stage3→Stage4顺序见[阶段版本](STAGE-VERSIONS.md)。用户明确允许先保存第三阶段再实施第四阶段，所以当前源码窗口运行第四阶段，不代表第三阶段已获人工通过。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变，Stage3 App/源码ZIP单独保存。
 
-公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。它不等于个人播放器、Electron整窗或60FPS硬件验收。日志在`.tools/unified-architecture-stage3`，完整人工步骤见[统一架构](UNIFIED-ARCHITECTURE.md)。
+第三阶段公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。staged Stage3 App的隐藏mock GUI检查12项通过、全量文件哈希核验通过；这些结果不等于个人播放器、Electron整窗、60FPS硬件验收或用户阶段通过。历史/独立快照报告分别位于`.tools/unified-architecture-stage3`和`.tools/unified-architecture-stage4/stage3-independent-*`；第四阶段目标与验收见[统一架构](UNIFIED-ARCHITECTURE.md)。
 
 ## 模型更新与缓存
 
@@ -91,6 +91,8 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | 验证索引/封面/音频缓存 | 仓库旁 `music-data-source-preview/music-data`，不自动扫描/迁移/删除 |
 | 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接 |
 
+Stage3与Stage4独立App分别使用各自`App/data`与`App/presets`，首次启动前为空；原Stage4源码预览仍使用源码验证profile。两版不自动复制或迁移偏好、曲库、主题/EQ预设；新版本库为空时由用户自行选择音乐目录并扫描。完整位置及顺序测试见[阶段版本](STAGE-VERSIONS.md)。
+
 音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词换缓存目录不自动迁移旧内容。标签写回需用户主动选择。
 
 品尝版安装后使用 `<安装目录>/data` 和 `<安装目录>/presets`，不使用源码profile、不自动迁移现有个人文件。源码预览兼容读取旧preferences内嵌主题预设，以及新EQ文件缺失时的旧profile/audio-processing-presets.json；下一次用户保存才写入新预设目录，旧文件保留。两主题预设与EQ分开持久化，坏文件或启动后的外部编辑会拒绝覆盖并报告。
@@ -101,7 +103,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 打包不会自动执行 npm ci 或下载缺项。NSIS 3.13经用户批准，仅解压在 `.tools/installer-tools/nsis/3.13/nsis-3.13`，ZIP来自官方SourceForge，SHA-256为 `ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8`；不改系统PATH、注册表或权限。构建产物位于 `.tools/preview-release/<版本>-<时间>/`，交付副本放外层packaging目录。安装器实际运行才会在HKCU登记应用和生成卸载器，不能把编译通过当作安装/卸载通过。
 
-`npm run export:source` 是可选交付步骤，输出源码ZIP到 `.tools/preview-release/source`，含文件清单和校验值；不包含Git历史、依赖、工具、产物、个人数据或机器验证JSON。它不是GitHub同步流程；本地开发与用户自行上传都在当前仓库的 `main` 完成。此次main以干净首提交 `167d140` 建立，旧主线改名为本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development`、原有标签保留。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细目录、边界和交付验收结果见[品尝版说明](PREVIEW-RELEASE.md)。
+`npm run export:source` 是可选交付步骤，输出当前main的源码ZIP到 `.tools/preview-release/source`；不包含Git历史、安装依赖、构建工具、个人数据或机器验证JSON，也不用于GitHub同步。第三阶段的特例快照见[阶段版本](STAGE-VERSIONS.md)。本地开发与用户自行发布共用当前仓库的 `main`；这不授权自动推送。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细品尝版边界见[品尝版说明](PREVIEW-RELEASE.md)。
 
 ## 检查索引与边界
 
@@ -113,16 +115,16 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-quality-detection.mjs` | 完整四档/双场景、样本门槛、最高稳定推荐及低帧档回退；纯计算 |
 | `scripts/check-case-system.mjs --unified-render` | 真实Scene/GLB、两主题货架、分页/命中/开盒/裁切/非对称变换支撑与详情可见；隔离图形 |
 | `scripts/check-quality-benchmark.mjs` | 先构建源码预览；生产检测UI+编译iframe，固定960×540/DPR1、Future简单款合成曲库、四档结果/取消/采用/键盘/独立存储和父状态；独立Chrome profile，不是Electron或设备FPS保证 |
-| `scripts/check-case-system.mjs` | 隔离盒体/迁移/插页/生命周期/缓存合成 |
+| `scripts/check-case-system.mjs` | 当前模型、真实编辑器、预设、纸卡/铭牌、查看器与退场材质/纹理生命周期；退役sprite专属实现断言已移除，产品保护迁到真实Scene/GLB |
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
 | `scripts/check-music-display.mjs` | 第二阶段真实公共catalog/shelves/array模块，合成专辑/曲目身份、分组/筛选/排序、缓存、导航循环/边界和布局能力回退；纯Node，不启动浏览器或个人播放器 |
-| `scripts/check-foobar-tracks.mjs` | 公共目录和旧UI适配层的TRACKS身份、导航、货架与卡片合成检查 |
+| `scripts/check-foobar-tracks.mjs` | 当前公共catalog/shelves及共享markup，TRACKS身份、分组/过滤/导航、卡片和旧配置迁移；文件名保留兼容命令 |
 | `scripts/check-foobar-layout.mjs --display` | 第二阶段真实STYLE/浏览控件、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查右栏/详情/曲目保持、两主题网格节点迁移、排列别名和Esc，以及Future左上控件与STYLE同步、信息区/ACCESS尺寸、日夜浏览/详情截图与Punk保持；与实际Scene验证分开 |
 | `scripts/check-foobar-layout.mjs --glass` | 真实Future顶栏SVG、歌词组件和terminal-lighting的离线光效回归；日夜×四档、受光对象/留白/内部裁切/窄屏滚动，报告和截图在foobar-layout-check/terminal-glass/current。`--baseline`仅用于修复前留证，`--compare-existing`只分析已有A/B PNG底边像素，不重拍；严格模拟歌词请求，不启动音乐服务或设备 |
 | `scripts/check-foobar-layout.mjs --navigation` | 第一阶段管理页返回专用合成DOM检查；生产打开/ARCHIVE点击、STYLE/主题切换/关闭及全局键盘函数，真实面板与过渡控制器，模拟播放器/Scene；实际CDP鼠标/键盘，报告management-navigation.json。不运行114项宽布局矩阵或个人播放器 |
 | `scripts/check-case-system.mjs --punk-view` | 真实Scene/本地GLB/合成曲库，两主题公共阵列/TRACKS与网格详情、Future精细父编号、空过滤恢复、Punk机位/鼠标命中、右区裁切与JSON布局偏好；不启动播放器 |
 | `scripts/check-case-user-presets.mjs` | 个人预设JSON往返、独立快照、输入校验与桌面偏好白名单；不读取个人配置或设备 |
-| `scripts/check-archive-label.mjs` | 上游Canvas标签编号、缩放/图像就绪及真实源格式分类；不读取个人曲库 |
+| `scripts/check-archive-label.mjs` | 仍有效的公共Canvas标签绘制helper：编号、缩放/图像就绪及真实源格式分类；Scene/GLB中完整铭牌另由真实图形检查覆盖 |
 | `scripts/check-rhine-shell-geometry.mjs` | Rhine原GLB混用材质的完整连通岛筛选、标签/压纹避让、卡片与清晰窗范围；不修改资产 |
 | 上述命令 `--reference` | 实际GLB与源PNG对照，产物.tools/case-system-check/punk-reference |
 | `scripts/check-foobar-layout.mjs`，`--panel`/`--pixels` | 隔离布局、面板、字轮像素 |
@@ -137,4 +139,4 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 明确暂存相关文件，本地提交，不推送，不改全局Git身份。回滚前检查用户改动/运行进程并保留必要备份；审阅后 `git revert <commit>`，按对应版本重建并重新启动。Git不恢复个人配置、曲库或忽略的构建。
 
-仅在明确LSP退役任务中审查 `--retire-lsp-plugin-runtime`，它处理清单/哈希匹配的生成副本；普通整理不执行。历史EXE/上游发行记录见WINDOWS、DESIGN、verification和RELEASE文档，当前最终打包/目录/发布仍待用户决定。
+仅在明确LSP退役任务中审查 `--retire-lsp-plugin-runtime`，它处理清单/哈希匹配的生成副本；普通整理不执行。第三、四阶段独立交付与顺序测试见[阶段版本](STAGE-VERSIONS.md)。本轮只生成无需安装的App目录和源码ZIP，不运行安装器、不改全局环境或个人数据。其余历史EXE/上游发行记录见WINDOWS、DESIGN、verification和RELEASE文档，正式发行或远程发布仍待用户决定。

@@ -85,9 +85,11 @@ function makeScene(design, phase = "archive", resolveHit = (x) => x < 30 ? { cel
     pointer: new Vector2(),
     camera: {},
     instances: [{}],
-    model: {},
+    model: { visible: true },
+    catalogView: true,
+    displayLayout: { effective: "shelf" },
     cells: [{ ...cellA }, { ...cellB }, { ...cellC }],
-    counters: { raycaster: 0, foobar: 0 },
+    counters: { raycaster: 0 },
     selections: [],
     opened: [],
     navigations: 0,
@@ -104,15 +106,11 @@ function makeScene(design, phase = "archive", resolveHit = (x) => x < 30 ? { cel
       if (!result) return [];
       if (result.model) return [{}];
       const instanceId = scene.cells.findIndex((cell) => sameCell(cell, result.cell));
+      if (instanceId >= 0 && result.cell.foobarEntryKey) scene.cells[instanceId] = { ...result.cell };
       return instanceId >= 0 ? [{ instanceId }] : [];
     },
   };
-  scene.foobarArchive = {
-    hitTest(x, y) {
-      scene.counters.foobar++;
-      return scene.resolveHit(x, y)?.cell ?? null;
-    },
-  };
+  scene.recordAtCell = fileAtCell;
   scene.onSelect = (index, cell) => {
     scene.selections.push({ index, cell: { ...cell } });
     scene.selectedSlot = index;
@@ -129,7 +127,9 @@ function makeScene(design, phase = "archive", resolveHit = (x) => x < 30 ? { cel
     fileAtCell,
     fileAtSlot,
     sameCell,
-    getFoobarFocusedEntry:()=>scene.focusedKey?{key:scene.focusedKey}:undefined,
+    getMusicFocusedEntry:()=>scene.focusedKey?{key:scene.focusedKey}:undefined,
+    getMusicCatalogShelves:()=>[{}],
+    musicPointerDragThreshold:()=>12,
     swipeDirection: (dx, dy) => Math.hypot(dx, dy) > 6 ? { axis: "row", direction: 1 } : null,
     performance: { now: () => scene.now ?? 100 },
   };
@@ -167,8 +167,7 @@ for (const design of ["rhine", "archive"]) {
   assert.deepEqual(scene.opened, [1], `${design}: selected double click should open exactly once`);
   canvas.dispatch("dblclick", { clientX: 10, clientY: 50, detail: 2 });
   assert.deepEqual(scene.opened, [1], `${design}: duplicate dblclick must not reopen`);
-  assert.ok(scene.counters[design === "rhine" ? "raycaster" : "foobar"] > 0,
-    `${design}: input must use its expected hit-test path`);
+  assert.ok(scene.counters.raycaster > 0, `${design}: input must use the shared THREE raycast path`);
 
   const selection = makeScene(design);
   click(selection.canvas, 90, 1);
@@ -207,11 +206,13 @@ for (const design of ["rhine", "archive"]) {
 }
 
 const duplicateFutureCell = makeScene("rhine", "archive", (x) =>
-  x < 15 ? { cell: cellA } : x < 30 ? { cell: cellB } : x > 70 ? { cell: cellC } : null,
+  x < 15 ? { cell: { ...cellA, foobarEntryKey: "track-first", foobarTrackId: "first" } }
+    : x < 30 ? { cell: { ...cellB, foobarEntryKey: "track-second", foobarTrackId: "second" } }
+      : x > 70 ? { cell: cellC } : null,
 );
 doubleClick(duplicateFutureCell.canvas, 10, 20);
 assert.equal(duplicateFutureCell.scene.opened.length, 0,
-  "Future: duplicate cells for one record must not count as the same double click");
+  "Future: distinct public entries from one parent record must not count as the same double click");
 
 const touchSwipe = makeScene("rhine");
 click(touchSwipe.canvas, 10, 1, "touch", { upX: 22 });
@@ -230,19 +231,4 @@ const tracks=makeScene('archive','archive',x=>({cell:{...cellA,foobarEntryKey:x<
 tracks.scene.focusedKey='track-a';doubleClick(tracks.canvas,10,20);
 assert.equal(tracks.scene.opened.length,0,'Two different tracks in one album are not the same double-click target');
 
-const rendererFile=path.join(root,'src/archive-case-renderer.ts');
-const rendererSource=readFileSync(rendererFile,'utf8'),rendererTree=ts.createSourceFile(rendererFile,rendererSource,ts.ScriptTarget.Latest,true);
-const rendererClass=rendererTree.statements.find(n=>ts.isClassDeclaration(n)&&n.name?.text==='ArchiveCaseRenderer');
-const hitMethod=rendererClass.members.find(n=>ts.isMethodDeclaration(n)&&n.name?.getText(rendererTree)==='hitTest');
-const geometry=rendererTree.statements.filter(n=>ts.isFunctionDeclaration(n)&&['pointInPolygon','caseHull','nearCasePolygon'].includes(n.name?.text)).map(n=>n.getText(rendererTree)).join('\n');
-const hitSandbox={clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),fileLocation:index=>({lane:0,row:12+index})};
-vm.runInNewContext(ts.transpileModule(`${geometry}\nclass Probe { ${hitMethod.getText(rendererTree)} };globalThis.Probe=Probe;globalThis.hull=caseHull;`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText,hitSandbox);
-const cover=[[0,0],[50,0],[50,80],[0,80]],spine=[[50,0],[65,0],[65,80],[50,80]];
-const probe={archiveWidth:300,hitTargets:[{recordIndex:0,quad:cover,body:hitSandbox.hull([...cover,...spine]),selected:true,entryKey:'track-a',trackId:'a'},{recordIndex:1,quad:[[76,0],[126,0],[126,80],[76,80]],entryKey:'track-b',trackId:'b'}]};
-const hit=(x,y)=>hitSandbox.Probe.prototype.hitTest.call(probe,x,y);
-assert.equal(hit(60,40).foobarEntryKey,'track-a','The case spine is clickable');
-assert.equal(hit(70,40).foobarEntryKey,'track-a','Selected case edges have a bounded tolerance');
-assert.equal(hit(78,40).foobarEntryKey,'track-b','An exact neighboring case wins over edge tolerance');
-assert.equal(hit(200,200),null,'Distant blank space is not clickable');
-
-console.log("Album pointer checks passed. Future used the mocked THREE raycaster; Punk used the mocked Foo hitTest. Geometry is synthetic; this does not verify rendered hit polygons or browser/device behavior.");
+console.log("Album pointer checks passed for both themes through the shared mocked THREE raycaster, including track identity, drag/touch/blank rules and unique open callbacks. Rendered browser hit targets are covered by check-case-system --unified-render.");

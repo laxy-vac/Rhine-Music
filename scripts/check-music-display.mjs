@@ -7,12 +7,13 @@ import ts from "typescript";
 import { createTrackFixture } from "./check-foobar-tracks.mjs";
 
 const {
-  catalog: foobarCatalog,
   musicCatalog,
   musicShelves,
   arrayLayout,
   displayLayout,
   applicationState,
+  viewSettings,
+  catalogMarkup,
   records,
   replaceRecords,
 } = await createTrackFixture();
@@ -108,12 +109,16 @@ const queryEntries = visibleEntries();
 assert.deepEqual(Array.from(queryEntries, entry => entry.track.title), ["Needle"], "Query filters individual track entries.");
 assert.deepEqual(Array.from(musicCatalog.getMusicCatalogRecords()), [0], "Filtered main results still expose canonical album indexes.");
 assert.deepEqual({ ...musicCatalog.getMusicCatalogOptions() }, { ...musicApplication.view });
-assert.deepEqual({ ...foobarCatalog.getFoobarCatalogOptions() }, {
+assert.deepEqual({ ...viewSettings.legacyCatalogOptions(musicCatalog.getMusicCatalogOptions()) }, {
   layout: "array", show: "tracks", group: "none", sort: "added",
-}, "The legacy shim projects public view settings without changing SHOW/GROUP/SORT/query state.");
+}, "The compatibility projection reads public view settings without changing SHOW/GROUP/SORT/query state.");
 
-foobarCatalog.configureFoobarCatalog({ layout: "future", show: "tracks", group: "none", sort: "added" }, "Needle");
-assert.equal(musicCatalog.getMusicCatalogOptions().layout, "array", "Legacy FUTURE projects to the public array layout.");
+assert.deepEqual({ ...viewSettings.musicViewFromLegacy({ layout: "future", show: "tracks", group: "none", sort: "added" }) }, {
+  layout: "array", show: "tracks", group: "none", sort: "added",
+}, "Legacy FUTURE storage migrates to the public array layout.");
+assert.deepEqual({ ...viewSettings.musicViewFromLegacy({ layout: "array", show: "albums", group: "artist", sort: "year" }) }, {
+  layout: "shelf", show: "albums", group: "artist", sort: "year",
+}, "Legacy ARRAY storage migrates to the public shelf layout.");
 assert.equal(musicApplication.query, "Needle");
 assert.equal(musicCatalog.getMusicCatalogGroups()[0].entryKeys.length, 1);
 
@@ -243,7 +248,7 @@ assert.equal(musicCatalog.getMusicFocusedEntry(0).key, records[0].id,
   "Refreshing metadata preserves the focused album identity.");
 assert.equal(musicCatalog.getMusicFocusedEntry(0).album.title, "Refreshed Album");
 assert.notStrictEqual(musicShelves.getMusicCatalogShelves(), priorShelves);
-assert.match(foobarCatalog.foobarGridMarkup(0), /Refreshed Album/,
+assert.match(catalogMarkup.musicGridMarkup(0), /Refreshed Album/,
   "The shared grid markup reflects refreshed metadata without changing selection.");
 
 console.log("Public music catalog, shelf, array identity/navigation, display capability and neutral layout contracts passed with synthetic records.");

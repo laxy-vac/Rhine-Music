@@ -7,13 +7,14 @@
 - 唯一活动仓库同时用于本地开发和用户自行发布到GitHub。main从干净基线提交 `167d140` 建立，基线含4062个源码文件；旧主线保留为本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development` 停在 `052bf9a`，所有标签保留。只发布main，不自动推送历史分支/标签，不使用 `--all`、`--mirror` 或强推。
 - 本机已有 `node_modules/`、`.tools/`、`dist/`、`release/` 与运行数据留在原位并由Git忽略，main不跟踪这些依赖、产物和机器记录；新克隆需由用户批准后自行准备依赖及桌面工具。此前的第二份源码副本已退役，整理记录在忽略目录 `.tools/repo-consolidation/retired-copy-metadata`。
 - 已完成Future分盒体交互、Punk个人预设与Rhine盒内专辑/局部透明窗。缓存修复证据仍见 `19f82f2` / `checkpoint/punk-model-cache-refresh`。
-- 当前开发验证是Electron源码桌面，前端产物 `.tools/source-preview-interface`。第三阶段仅更新源码预览；`0.3.1-preview.1` 朋友品尝版Setup和源码ZIP保留原快照，旧release/Rhine Music.exe仍为历史。品尝版此前通过的构建、安装包完整性、合成GUI、安装及默认卸载保留数据检查不扩展到第三阶段或真实曲库/设备/60FPS，见[品尝版验证](PREVIEW-VALIDATION-2026-10-15.md)。
-- 统一架构第一阶段于2026-10-14验收通过；第二阶段公共展示与交互于2026-10-15获用户明确确认通过。第三阶段实现及必要自动验证已完成，等待用户验收：两主题货架、阵列及网格详情进入同一ArchiveScene/WebGL renderer；Future货架不再回退阵列，程序货架/地面、主题铭牌和主动质量检测已接入。第四阶段尚未开始，见[统一架构](UNIFIED-ARCHITECTURE.md)。
+- 当前开发验证是Electron源码桌面，前端产物 `.tools/source-preview-interface`。第三阶段源码阶段没有改朋友品尝版；`0.3.1-preview.1` Setup和源码ZIP保留原快照，旧release/Rhine Music.exe仍为历史。第三阶段独立交付位于工作区外层`../../packaging/stage-versions/Stage3-c7987ee`。品尝版此前通过的构建、安装包完整性、合成GUI、安装及默认卸载保留数据检查不扩展到第三阶段或真实曲库/设备/60FPS，见[品尝版验证](PREVIEW-VALIDATION-2026-10-15.md)。
+- 统一架构第一阶段于2026-10-14验收通过；第二阶段公共展示与交互于2026-10-15获用户明确确认通过。第三阶段实现与必要自动验证已完成，用户验收待进行：两主题货架、阵列及网格详情进入同一ArchiveScene/WebGL renderer；Future货架不再回退阵列，程序货架/地面、主题铭牌和主动质量检测已接入。按用户明确指示，第三阶段已冻结保存并在等待用户验收期间继续第四阶段；状态与交付顺序见[统一架构](UNIFIED-ARCHITECTURE.md)和[阶段版本](STAGE-VERSIONS.md)。
 - 第三阶段TypeScript/Vite构建（1652模块）、公共目录/状态/转场、控件/管理页返回、实际Scene/GLB/鼠标命中/几何净空和隔离性能检测流程均通过；截图已复核。浏览器检查使用合成数据及专用profile，不读取个人曲库或调用音频设备；不等于Electron整窗、硬件60FPS或用户阶段验收。
+- 第四阶段清退与必要自动验证已完成：公共目录直接生成两主题控件/网格，旧Canvas/sprite和目录适配生产链已移除，保留兼容偏好读取和主题皮肤。TypeScript/Vite、目录/状态/转场/指针、真实两主题Scene、完整模型/编辑器/纸卡/铭牌/生命周期及检测E2E通过；源码ZIP导出已补齐benchmark HTML和Vite配置。第三、四阶段的独立App和源码快照按[阶段版本](STAGE-VERSIONS.md)顺序测试，两个阶段都未标用户人工通过。
 - 用户通过“启动源码验证.cmd → 主题盒体预览”看不到新版。已修复固定GLB地址遇到长期immutable缓存的更新缺口，并重新构建；隔离Chrome跨进程回归通过。
 - **尚未收到用户确认缓存修复后实际窗口已显示新版**，不能标成已完成人工视觉验收。
-- 布局统一在STYLE选择货架/阵列/网格，Punk旧LAYOUT控件隐藏，保留的SHOW/GROUP/SORT与设置中“音乐库排列”是公共view的别名。两主题货架、阵列、网格详情共用ArchiveScene/Three.js renderer、实例池、封面图集与后期覆盖，保留各自盒体、材质、配色和右栏裁切。Punk原生货架与Future货架现由程序几何绘制；旧`ArchiveCaseRenderer`保留至第四阶段验收后清退。
-- Future第二阶段视觉反馈已实现：浏览页左上角显示/分组/排序与STYLE共用view；资料区移除整块圆角玻璃底，以原音乐信息、细线及分段遮罩揭示呈现；ACCESS ALBUM保持小号文字/箭头和中英无障碍名称，Punk皮肤保持。第二阶段已获用户验收；第三阶段统一渲染已实现，等待用户验收。
+- 布局统一在STYLE选择货架/阵列/网格，Punk旧LAYOUT节点在第四阶段清退；SHOW/GROUP/SORT与设置中“音乐库排列”继续共用公共view。两主题货架、阵列、网格详情共用ArchiveScene/Three.js renderer、实例池、封面图集与后期覆盖，保留各自盒体、材质、配色和右栏裁切。旧Canvas/foobar目录渲染链已在第四阶段删除，不作为当前源码回退选项；冻结第三阶段快照保留旧版本。
+- Future第二阶段视觉反馈已实现：浏览页左上角显示/分组/排序与STYLE共用view；资料区移除整块圆角玻璃底，以原音乐信息、细线及分段遮罩揭示呈现；ACCESS ALBUM保持小号文字/箭头和中英无障碍名称，Punk皮肤保持。第二阶段已获用户验收；第三阶段自动验证完成、用户验收待进行；第四阶段清退实现与必要自动验证已完成，用户验收待进行。
 - Future完整终端受光下的顶栏灰白块/平边已修正：闲置透明项不接收卡片阴影，日夜切换由玻璃容器统一受光；滚动顶栏增加透明光效留白但按钮位置不变。歌词主面板外阴影不再被桌面载体裁掉，内部裁切与窄屏滚动保留。极致/高画质预设未降低；修正后的源码界面已重建，已纳入2026-10-15第二阶段用户整体验收；不作硬件帧率结论。
 - 顶栏胶囊保留左右各16px内边距，移除按钮负边距并设置默认10px独立间隔，选中与悬停胶囊不重叠；外侧柔光留白48px继续保留。构建及现有--glass检查通过，截图已复核，1920默认视图测得相邻导航边框盒间距均为10px。
 - Future盒体仅「简单粗糙 / 精细 / Punk拓展」；精细用RhineLabUI外壳，盒内纸卡与局部透明窗在左，完整原标签移到右侧信息区；移除展示内构并避开压边/刻度。Punk主题只允许自己的盒体，旧结构选择归回punk，已保存外观/变换及Future配置保留。以下遗留项不是自动继续开发的指令。
@@ -29,13 +30,13 @@
 
 | 区域 | 当前实现 | 未完成/边界 |
 | --- | --- | --- |
-| 桌面/服务 | Electron独立窗口、loopback服务、原生音频、构建/组件指纹校验 | 本轮无新最终EXE |
+| 桌面/服务 | Electron独立窗口、loopback服务、原生音频、构建/组件指纹校验；阶段独立App复用已有运行时，窗口标题读取载荷版本 | 不是正式发行或新安装器；个人播放器/设备验收仍待用户 |
 | 两主题 | Future/Rhine与Punk/Audio Archive，各自完整外观，共享播放器 | 整体美术与实际手感仍需反馈 |
 | 导航/曲库 | Archive回唱片主页；设置内管理目录/扫描；同窗口EQ/歌词/信号/主题 | 不恢复独立library入口或Playlist |
 | 专辑操作 | 统一右侧基本信息/PROFILE、唯一打开按钮、曲目/介绍展开和点击区域焦点 | 已纳入2026-10-15第二阶段用户整体验收，隔离检查记录保留 |
 | 专辑队列 | 两主题播放条上方浮窗，只列当前播放专辑，点播不强制跳页 | 不是跨专辑总队列 |
 | 公共目录/交互 | 两主题共用专辑/曲目、筛选、流派/歌手/年代/字母/不分组、艺术家/标题/年份/添加顺序；公共entry身份、列/槽导航、阵列镜头与网格详情 | TRACKS每曲一盒、父专辑编号；ADDED无时间戳，用稳定库顺序；第二阶段用户已验收，第三阶段自动回归已通过，用户验收待完成 |
-| 布局/主题适配 | STYLE共享货架/阵列/网格；同一ArchiveScene/WebGL renderer和实例池服务两主题货架、阵列与网格详情；右栏DOM/页签/阅读位置保留 | Future货架不回退阵列；Punk货架/地面由程序几何构成，隔离真实图形检查已通过，用户验收待完成 |
+| 布局/主题适配 | STYLE共享货架/阵列/网格；同一ArchiveScene/WebGL renderer和实例池服务两主题货架、阵列与网格详情；右栏DOM/页签/阅读位置保留 | 第三阶段用户验收待完成；第四阶段已删除旧Canvas/foobar生产链并统一网格/目录DOM入口 |
 | 公共渲染/主题资源 | 共享封面图集、铭牌、后期覆盖；MusicShelf/MusicSceneResources按主题着色，MusicCaseTitles绘制Punk纸面标题；plain/deck/程序木质桌面细节 | 无原货架/地面3D网格；新几何是估算重建，不是原网格或像素复刻；无GLB/PNG修改 |
 | 质量检测 | 固定80张合成专辑（6组、每专辑2曲）使用生产ArchiveScene，预热四档测货架及开合；最高稳定60FPS档建议、用户采用才保存。四档流程/取消重启/键盘隔离/存储/父目录保持与采用守卫的浏览器检查通过 | 本次Chrome流程为960×540/DPR1、Future简单款；不代表完整Electron或用户硬件性能。没有真实曲库、音频API或外站/API/音频请求，个人配置未读写 |
 | 主题/质量 | 画质/比例共用，外观/盒体按主题保存；波动/光照/终端光分调及组合预设 | 编辑页具体美术仍待后续调整；检测不自动切档或换盒型/材质 |
@@ -89,7 +90,9 @@ Punk已完成的结构/光学：
 
 | 阶段/证据 | 已验证 | 未覆盖 |
 | --- | --- | --- |
-| 统一架构第三阶段 | TypeScript/1652模块界面构建；目录/状态/21项转场及STYLE控件/返回回归；实际Scene/本地GLB验证两主题货架、29曲目20/9页、唯一WebGL画布、空过滤恢复、父编号、真实鼠标命中/双击、右栏裁切、非对称变换支撑/净空/完整开盒可见；四张日夜主题截图已复核。生产检测UI和编译iframe在专用Chrome profile跑完整四档/双场景，取消/重启/离开、T/Tab/Esc、消息校验、过期采用拒绝、用户采用一次、空只读存储/父目录与测试哨兵保持通过；音频/API/外站/运行与console错误均0 | Scene图形与检测流程分别验证；未启动个人播放器或读取个人曲库/配置，不等于Electron整窗、硬件60FPS或用户阶段验收。检测流程夹具为960×540/DPR1、Future简单款；原始GLB/PNG、安装包与源码ZIP未更新 |
+| 统一架构第四阶段 | TypeScript/Vite 1652模块；公共catalog/markup、旧配置迁移、有限货架、状态、21项转场和统一pointer纯检查；display/navigation；真实Scene两主题/曲目分页/父编号/禁Punk徽标/旧关闭配置归正/空过滤/跨布局/非对称支撑与开盒可见通过。默认完整case链保留7组模型细节、真实编辑器、预设、铭牌、纸卡/查看器/退场材质纹理与异步最后请求优先；实时纸卡红绿背壳封面采样差0且遮挡API产生实际像素响应。检测E2E在专用Chrome profile跑四档/双场景、两轮结果、取消/重启/离开/键盘/存储/过期采用与父状态保护通过，运行/shader/白名单/音频API/外站请求错误均0 | 检测fixture为960×540/DPR1、Future简单款；图形/组件流程验证不代表用户个人曲库、音频设备、整窗手感或硬件60FPS。源码/阶段交付与验证产物见`.tools/unified-architecture-stage4`和[阶段版本](STAGE-VERSIONS.md) |
+| 统一架构第三阶段 | TypeScript/1652模块界面构建；目录/状态/21项转场及STYLE控件/返回回归；实际Scene/本地GLB验证两主题货架、29曲目20/9页、唯一WebGL画布、空过滤恢复、父编号、真实鼠标命中/双击、右栏裁切、非对称变换支撑/净空/完整开盒可见；四张日夜主题截图已复核。生产检测UI和编译iframe在专用Chrome profile跑完整四档/双场景，取消/重启/离开、T/Tab/Esc、消息校验、过期采用拒绝、用户采用一次、空只读存储/父目录与测试哨兵保持通过；音频/API/外站/运行与console错误均0 | Scene图形与检测流程分别验证；未启动个人播放器或读取个人曲库/配置，不等于Electron整窗、硬件60FPS或用户阶段验收。检测流程夹具为960×540/DPR1、Future简单款；朋友品尝版未更新，Stage3独立App/源码ZIP另存于`packaging/stage-versions/Stage3-c7987ee` |
+| 第三阶段独立快照 | 标签`checkpoint/unified-stage3-complete-2026-10-15`指向`c7987ee51989ebb89f72bf9fc721b5da487f4bc4`；App与staging payload各3402文件均通过manifest全量SHA-256；源码ZIP含Vite/benchmark/旧case renderer，EOCD commit注释与标签一致；staged App隐藏mock GUI 12项通过 | 用户第三阶段验收仍待完成；App实际运行前data/presets为空，隐藏mock GUI不是个人播放器/设备验收；报告在`.tools/unified-architecture-stage4/stage3-independent-*` |
 | Future终端玻璃光效 | TypeScript/2341模块构建；--glass真实顶栏SVG、歌词组件与终端光控制器，离线待机曲目/请求，日夜×off/local/high-full/ultra-full共8组，文字/几何不随画质改变；闲置导航无receiver/实体阴影、主题玻璃只受光一次、已选导航保留动态受光、24px光效留白、900px歌词外层auto滚动通过。修复前后1920按钮rect完全相同；歌词底边外1–20px像素对照，日间近边阴影差9.667降至远处1，确认阴影向外衰减。--panel的114项布局、真实歌词与终端光生命周期/主题清理检查通过；旧信号A/B曾采到空白图，夹具改为等待native图像/布局帧，原像素阈值保留后通过 | 合成DOM/歌词服务与CSS截图，未启动个人播放器、访问个人曲库/设备或做GPU性能验收。高与极致均启用full终端光效，本检查区分的是UI受光，未把3D画质差别冒充DOM光效差别 |
 | 第二阶段Future视觉补验 | TypeScript/2341模块构建、公共目录/状态与21项presentation检查；--display使用真实控件/生产点击，确认左上目录选项与STYLE同步、控件与状态提示/网格/右栏无重叠、ACCESS实际11px/188×42px、无整块玻璃伪元素、原资料/详情节点及Punk标签保持；日夜浏览/详情截图已复核。--panel的114项布局及开合、中断、焦点、阅读遮罩/滚动、主题保持、Future字段mask检查通过 | 合成目录和DOM/动画端口，截图没有启动真实个人播放器/3D场景；未使用个人曲库、音频设备或做硬件性能验收，用户于2026-10-15确认第二阶段整体通过；此处合成检查不作为硬件性能证明 |
 | 统一架构第二阶段 | TypeScript/2341模块界面构建；catalog/shelves/array身份与缓存、曲库刷新版本、导航循环/边界、artist及genre ID分组、能力回退的纯合成检查通过。真实MusicPresentation及生产选择/视图函数验证转场中切布局仍保留目标非首曲目、SHOW改变后失效key回退；21项转场检查通过。--display运行生产STYLE事件、真实页面/控件/网格卡片与显式模拟目录端口，详情/曲目/右栏节点及排列别名通过，两主题控件/网格截图已复核、旧LAYOUT隐藏。--navigation四组返回/Esc路径与--panel的114个离线布局场景通过。--punk-view实际Scene/GLB验证Future精细TRACKS双曲独立单元/父编号、两主题网格详情公共阵列镜头、空过滤恢复及Punk机位/指针命中 | 目录UI夹具和三维场景分开验证；未启动个人播放器、读取个人配置/曲库或调用音频设备。此处自动检查未验证整窗人工手感/硬件帧率；后续用户于2026-10-15确认第二阶段整体通过；完整统一渲染与Future货架/地面尚未实现 |
@@ -106,7 +109,7 @@ Punk已完成的结构/光学：
 | 当前主题盒体修正 | TypeScript/2327模块界面构建；默认隔离盒体检查、Future三选/Punk唯一结构、旧配置迁移、隐藏入口拒绝、主题刷新保留Future配置；cassette与指定上游提交Git blob一致 | 未启动个人播放器/曲库/设备；实际美术仍需用户确认 |
 | `4102feb`盒体阶段 | TypeScript、默认盒体检查、reference实际渲染；15部件/98,080三角形；无shader/runtime错误 | 不是源模型100%一致 |
 | `.tools/case-system-check/report.json` | arrayClear同卡A/B暗化24,566像素；inspect近卡ROI 2.109/13.887；迁移/Editor/Scene生命周期 | 两固定array ROI仍0/0，未射线确认暗化像素是背板 |
-| 最终ArchiveCaseRenderer截图 | 实际合成路径能输出 | 不是所有合成层逐像素A/B认证 |
+| 迁移前ArchiveCaseRenderer截图（历史） | 当时的实际合成路径能输出 | 不代表第四阶段当前渲染路径，也不是所有合成层逐像素A/B认证 |
 | Viewer | ViewerAlbumCover生命周期与完整ModelViewer接入/拆解代码审查 | 未实例化完整ModelViewer运行验收 |
 | `19f82f2`缓存阶段 | 界面构建2327模块；Chrome155隔离持久profile跨两进程，旧URL仍821,720字节，新URL取得2,069,864字节及正确SHA | 未读取用户旧缓存，未启动个人播放器确认 |
 | 早期音频专项 | 各报告限定的离线数值/回调/组件、默认设备PCM静音检查 | 不覆盖当前LSP、全部ASIO/DSD/DoP或全部硬件 |
@@ -139,11 +142,11 @@ Punk已完成的结构/光学：
 
 ## 接续优先事项
 
-1. **第三阶段验收**：第一、二阶段已通过；第三阶段实现及必要自动验证已完成，等待用户在源码窗口确认视觉、交互和实际性能。用户确认后才进入第四阶段清理旧路径。独立的旧盒体缓存人工确认项不因第二阶段整体通过自动关闭。
+1. **第四阶段实施**：按用户明确指示，先保存第三阶段独立版本，再继续删除旧ArchiveCaseRenderer/case-sprites/foobar-shelves/punk-future-catalog/foobar-catalog生产链；有效Grid/SHOW/GROUP/SORT转入公共music-catalog-markup entryKeys，保持DOM类/data钩子与Punk外壳，清除隐藏旧LAYOUT节点，音乐页点击统一走公共view处理器。保留LegacyCatalogOptions及偏好迁移/兼容投影、非音乐ArchiveScene、编辑器/查看器、GLB/PNG与字体许可；将产品身份、指针、光学、纸面和材质生命周期保护迁到当前Scene/GLB检查。自动验证与用户验收待完成。第三阶段用户验收仍未标通过，交付顺序见[阶段版本](STAGE-VERSIONS.md)。
 2. **徽记/边框**：保留已经贴合的主曲线，按新反馈继续局部修正；颜色与光学是估值，不用单点RGB宣称全图一致。
 3. **Future/编辑页**：保留现代终端和主题区别，尽量不改已完成页面；分类工具栏已纳入公共view。固定比例鼠标缩放/全屏恢复仍需实际窗口手感确认。
 4. **LSP/音频设备**：完整窗口、状态恢复、复杂播放路径和硬件边界未全面实测，没有新许可不自动补测。
-5. **品尝版交付**：已准备 `0.3.1-preview.1` 安装包及源码ZIP，作为朋友体验版；这不是项目完成或正式发行。两者是交付产物，不是第二份源码仓库；当前本地开发和GitHub发布共用main。安装版数据集中在安装目录，主题/EQ预设分目录，卸载默认保留。打包与安装/卸载验收分开记录，见[品尝版说明](PREVIEW-RELEASE.md)。RTX 5080掉帧是用户反馈，目前未测定瓶颈；本阶段检测推荐逻辑与整体性能验收待完成，不因打包跳过。
+5. **品尝版交付**：已准备 `0.3.1-preview.1` 安装包及源码ZIP，作为朋友体验版；这不是项目完成或正式发行。两者是交付产物，不是第二份源码仓库；当前本地开发和GitHub发布共用main。安装版数据集中在安装目录，主题/EQ预设分目录，卸载默认保留。打包与安装/卸载验收分开记录，见[品尝版说明](PREVIEW-RELEASE.md)。RTX 5080掉帧是用户反馈，目前未测定瓶颈；检测推荐流程自动检查已通过，实际整体性能仍待用户验收，不因打包跳过。
 
 ## 不再继续的旧方案
 
@@ -154,10 +157,10 @@ LSP内嵌/自动整页/原生主题覆盖/DSP-only自绘进阶；Future整页Pun
 | 区域 | 首选入口 |
 | --- | --- |
 | 路由/偏好/设置 | `src/music-app.ts`；[本地开发](LOCAL-DEVELOPMENT.md) |
-| 两主题/陈列/目录/公共资源 | `src/scene.ts`、`music-spatial-layout.ts`、`music-shelf.ts`、`music-scene-resources.ts`、`music-case-titles.ts`、`future-*.css`、`punk-*.css`、`music-catalog*.ts`；`archive-case-renderer.ts`仅保留作旧路径，当前不调用；[主题](THEME-PAGE.md) |
+| 两主题/陈列/目录/公共资源 | `src/scene.ts`、`music-spatial-layout.ts`、`music-shelf.ts`、`music-scene-resources.ts`、`music-case-titles.ts`、`music-catalog-markup.ts`、`future-*.css`、`punk-*.css`；第四阶段清退旧`archive-case-renderer`/`case-sprites`/foobar目录链；[主题](THEME-PAGE.md) |
 | 质量检测 | `src/quality-detection.ts`、`quality-benchmark.html`、源码验证Vite entry/manifest；synthetic iframe benchmark，隔离实际浏览器流程已通过 |
 | 专辑/队列/焦点 | `src/album-panel.ts`、`album-interaction.ts`、`album-queue.ts`、`scene.ts` |
-| 盒体/编辑/遮挡 | `src/case-settings.ts`、`case-model.ts`、`case-materials.ts`、`case-editor.ts`、`case-sprites.ts`、`case-album-occlusion.ts`；[模型](../art/README.md) |
+| 盒体/编辑/遮挡 | `src/case-settings.ts`、`case-model.ts`、`case-materials.ts`、`case-editor.ts`、`case-album-occlusion.ts`；第四阶段迁移并回归产品身份、指针命中、光学、纸面深度与材质生命周期；[模型](../art/README.md) |
 | EQ/LSP | `src/eq-controls.ts`、`lsp-eq-controls.ts`、`native/lsp-clap-host.h`；[LSP](LSP-ADVANCED-EQ.md) |
 | 歌词/信号/语言 | `src/lyrics-page.ts`、`signal-page.ts`、`i18n.ts`；[歌词](LYRICS.md)、[信号](SIGNAL-PAGE.md)、[语言](UI-LANGUAGE.md) |
 | 服务/音频 | `scripts/music-server.mjs`、`native-output.mjs`、`native/audio-host.cpp`及PCM头文件；[音频](AUDIO-CORE-IMPLEMENTATION.md) |

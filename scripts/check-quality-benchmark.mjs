@@ -10,7 +10,7 @@ import { build } from "esbuild";
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const compiledRoot = path.join(project, ".tools", "source-preview-interface");
-const output = path.join(project, ".tools", "unified-architecture-stage3", "quality-benchmark");
+const output = path.join(project, ".tools", "unified-architecture-stage4", "quality-benchmark");
 const runId = `${Date.now()}-${process.pid}`;
 const profile = path.join(output, `chrome-profile-${runId}`);
 const fixturePort = "/__quality-benchmark-host.js";

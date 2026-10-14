@@ -32,9 +32,10 @@ export async function checkPunkControls({command,evaluate,output}) {
   const fixture=await createTrackFixture();
   fixture.records[0].album.coverUrl='data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200"><rect width="1200" height="1200" fill="#d6b78a"/></svg>').toString('base64');
   fixture.records[1].album.coverUrl=fixture.records[0].album.coverUrl;
-  fixture.catalog.configureFoobarCatalog({show:'tracks',layout:'grid',group:'none',sort:'title'});
-  const html=fixture.catalog.foobarGridMarkup(0);
-  await evaluate(`fixture.stage.dataset.foobarLayout='grid';document.querySelector('.foobar-catalog-tools').innerHTML=${JSON.stringify(fixture.catalog.foobarCatalogMarkup())};document.querySelector('.foobar-grid-host').hidden=false;document.querySelector('.foobar-grid-host').innerHTML=${JSON.stringify(html)};new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
+  fixture.musicCatalog.configureMusicCatalog({show:'tracks',layout:'grid',group:'none',sort:'title'});
+  const html=fixture.catalogMarkup.musicGridMarkup(0);
+  const tools=fixture.catalogMarkup.musicCatalogToolsMarkup();
+  await evaluate(`fixture.stage.dataset.foobarLayout='grid';document.querySelector('.foobar-catalog-tools').innerHTML=${JSON.stringify(tools)};document.querySelector('.foobar-grid-host').hidden=false;document.querySelector('.foobar-grid-host').innerHTML=${JSON.stringify(html)};new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
   const grid=await evaluate(`(()=>{const host=document.querySelector('.foobar-grid-host'),images=[...host.querySelectorAll('.foobar-cover-image')];return{cards:host.querySelectorAll('.foobar-track-card').length,maxImage:Math.max(...images.map(x=>x.getBoundingClientRect().width)),client:host.clientWidth,scroll:host.scrollWidth};})()`);
   assert.equal(grid.cards,29);assert.ok(grid.maxImage<=240,`Track thumbnail grew to ${grid.maxImage}`);assert.ok(grid.scroll<=grid.client+1,'TRACKS grid must not overflow horizontally');
   const shot=await command('Page.captureScreenshot',{format:'png'});await writeFile(path.join(output,'punk-track-grid.png'),Buffer.from(shot.data,'base64'));

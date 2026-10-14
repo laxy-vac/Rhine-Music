@@ -176,19 +176,10 @@ const musicCatalog = runModule(musicCatalogSource, "music-catalog.js", specifier
   if (specifier === "./music-application-state") return stateModule;
   throw new Error(`Unexpected public catalog import: ${specifier}`);
 });
-const catalogSource = await readFile(path.join(project, "src/foobar-catalog.ts"), "utf8");
-const catalog = runModule(catalogSource, "foobar-catalog.js", specifier => {
-  if (specifier === "./music-catalog") return musicCatalog;
-  if (specifier === "./music-application-state") return stateModule;
-  if (specifier === "./music-view-settings") return viewModule;
-  throw new Error(`Unexpected compatibility catalog import: ${specifier}`);
-});
-catalog.setFoobarFocus("track|album-b|needle-track");
+musicCatalog.focusMusicEntry("track|album-b|needle-track");
 assert.equal(application.selectedTrackId, "needle-track", "The production catalog focus adapter updates public track focus.");
-assert.equal(catalog.getFoobarFocusedEntry(application.selectedIndex)?.track?.id, "needle-track",
-  "The compatibility catalog resolves focus through the public catalog and app state.");
 assert.equal(musicCatalog.getMusicFocusedEntry(application.selectedIndex)?.track?.id, "needle-track",
-  "The public catalog resolves focus from the same synthetic records and app state.");
+  "Public catalog focus and lookup share the same synthetic records and app state.");
 
 const musicAppSource = await readFile(path.join(project, "src/music-app.ts"), "utf8");
 const appFunctionNames = ["currentAlbum", "savePrefs", "syncSelectionMotion", "syncDesignIdentity", "setTheme", "switchDesign", "playAlbum"];
@@ -274,8 +265,6 @@ const appScope = {
   fit: () => {},
   catalogGrid: undefined,
   foobarShell: { setActive: () => {} },
-  getFoobarCatalogOptions: catalog.getFoobarCatalogOptions,
-  getFoobarFocusedEntry: catalog.getFoobarFocusedEntry,
   getMusicFocusedEntry: musicCatalog.getMusicFocusedEntry,
   getMusicCatalogOptions: musicCatalog.getMusicCatalogOptions,
   legacyCatalogOptions: viewModule.legacyCatalogOptions,

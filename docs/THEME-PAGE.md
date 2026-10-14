@@ -1,6 +1,6 @@
 # 当前主题与唱片系统
 
-更新：2026-10-15。当前进度/验收见 [状态](PROJECT-STATUS.md)，运行见 [本地开发](LOCAL-DEVELOPMENT.md)，素材见 [来源](FOOBAR-STYLE-SOURCES.md)。本文不再叠加阶段流水账。
+更新：2026-10-15。当前进度/验收见 [状态](PROJECT-STATUS.md)，运行见 [本地开发](LOCAL-DEVELOPMENT.md)，素材见 [来源](FOOBAR-STYLE-SOURCES.md)，Stage3独立版本见[阶段版本](STAGE-VERSIONS.md)。本文记录稳定主题设计，不把迁移前renderer作为当前回退承诺。
 
 ## 两套主题
 
@@ -19,7 +19,7 @@ Future参考《莱茵生命：访问》和现有唱片页，融合现代工业�
 - windowAspect全局：16:9默认、16:10、4:3、3:2、21:9、自由；固定模式等比缩放，最大化/全屏留边。
 - styleProfiles保存各主题陈列/配色；caseProfiles保存各主题结构/材质/部件。
 - 公共布局/目录设置由view保存（shelf/array/grid及show/group/sort），foobarArchive兼容投影；新字段逐项优先，旧ARRAY→shelf、FUTURE→array、GRID→grid。主题外观档不拥有全局视图，播放顺序不再按主题切换。
-- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询和view。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示，旧Canvas货架文件保留但不再调用，清退安排见[统一架构](UNIFIED-ARCHITECTURE.md)。
+- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询和view。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示。第四阶段已清退迁移前Canvas货架文件及重复目录链；Stage3冻结快照保留旧版本，当前源码不提供旧Canvas回退入口，清退范围见[统一架构](UNIFIED-ARCHITECTURE.md)。
 - 切主题不重置质量/比例/音频。质量预设不换盒体或外观；传输渲染分辨率不等于材质透过率。
 - 设计基准1920×1080及以上，保留工作区DIP容纳和既有触控，不另做低分辨率适配。
 
@@ -40,13 +40,13 @@ Archive从EQ/歌词/信号/主题等同窗口页面返回原唱片上下文，�
 | 控件 | 当前选项 |
 | --- | --- |
 | SHOW | ALBUMS / TRACKS |
-| LAYOUT | 公共货架 / 阵列 / 网格，入口在STYLE；旧LAYOUT控件隐藏 |
+| LAYOUT | 公共货架 / 阵列 / 网格，入口在STYLE；旧LAYOUT节点在第四阶段清退 |
 | GROUP | GENRE / ARTIST / DECADE / A-Z / NONE |
 | SORT | ARTIST / TITLE / YEAR / ADDED |
 
 TRACKS是独立曲目entry、每曲一盒，封面/ARC归父专辑；货架20槽跨组分页，网格每曲小卡，分组阵列每组一列。两主题共用目录、空间布局与三维相机，以各自盒体、材质和配色呈现；TRACKS各曲有独立entry key，不改全局专辑records为track数组。货架列沿负X、槽沿负Z；间距按用户变换后的盒体bounds扩展，保留稳定父专辑身份。ADDED无时间戳时沿稳定库顺序，不编日期。
 
-视图选择由公共view保存，foobarArchive.layout仅保留兼容投影；缺失字段按旧配置/默认迁移。切布局保留当前专辑/曲目身份、右侧信息区DOM、位置、内容、活动tab与展开状态。Punk三维画布用现有右栏边界裁切，不借布局切主题。G在网格与最近空间布局之间切换。Future和Punk货架现位于共同Three.js场景；`MusicShelf`与`MusicSceneResources`以程序几何构成托盘、货架和地面细节，`MusicCaseTitles`使用纸面图集呈现Punk顶边标题。Future使用陶瓷/轻玻璃边，Punk使用主题金属材质。已有archive-case-renderer.ts保留但不再调用，待第四阶段验收后清退。波浪设置沿用现有规则，不新增波浪模式。
+视图选择由公共view保存，foobarArchive.layout仅保留兼容投影；缺失字段按旧配置/默认迁移。切布局保留当前专辑/曲目身份、右侧信息区DOM、位置、内容、活动tab与展开状态。Punk三维画布用现有右栏边界裁切，不借布局切主题。G在网格与最近空间布局之间切换。Future和Punk货架现位于共同Three.js场景；`MusicShelf`与`MusicSceneResources`以程序几何构成托盘、货架和地面细节，`MusicCaseTitles`使用纸面图集呈现Punk顶边标题。Future使用陶瓷/轻玻璃边，Punk使用主题金属材质。第四阶段已清退迁移前的ArchiveCaseRenderer/sprite/foobar目录链；本主题页描述公共场景，不承诺在当前源码中切回旧Canvas外观。Punk旧目录DOM保留的类/data钩子迁入公共markup，隐藏LAYOUT节点清除。波浪设置沿用现有规则，不新增波浪模式。
 
 第三阶段没有可直接复用的原始货架/地面3D模型。新几何是按现有坐标、盒体bounds与主题图形估算的程序实现，不是原作者网格或像素复刻；未修改现有GLB/PNG，也不直接把含预烘焙光照的地面投影作为实时材质。Punk货架前牌`ROW 001`按列递增，ALBUM NO.继续显示独立全库编号。
 
@@ -141,9 +141,9 @@ presetRevision4只升级严格匹配的V1/V2/V3，手改/custom和变换保留�
 ## 源码入口
 
 - 路由/偏好：src/music-app.ts、foobar-shell.ts/css、window-aspect-model.mjs。
-- 陈列/目录/共同资源：src/scene.ts、music-spatial-layout.ts、music-shelf.ts、music-scene-resources.ts、foobar-catalog.ts、punk-future-catalog.ts；archive-case-renderer.ts是保留的旧Canvas路径。
+- 陈列/目录/共同资源：src/scene.ts、music-spatial-layout.ts、music-shelf.ts、music-scene-resources.ts、music-case-titles.ts、music-catalog-markup.ts与公共music-catalog模块。foobar-catalog/punk-future-catalog/archive-case-renderer/case-sprites属于第四阶段已清退的迁移前链路，不是当前外观开关。
 - 共同流程：src/album-panel.ts、album-interaction.ts、album-queue.ts。
-- 盒体：src/case-settings.ts、case-model.ts、rhine-case-model.ts、rhine-album-info.ts、archive-label.ts、case-editor.ts、case-materials.ts、case-sprites.ts、case-album-occlusion.ts。
+- 盒体：src/case-settings.ts、case-model.ts、rhine-case-model.ts、rhine-album-info.ts、archive-label.ts、case-editor.ts、case-materials.ts、case-album-occlusion.ts；旧case-sprites随第四阶段清退。
 - 外观：src/future-*.css、punk-eq.css、punk-eq-instruments.ts、punk-lyrics.css、punk-signal.css与foobar相关样式。
 - 模型/版本与复现：[art说明](../art/README.md)。
 

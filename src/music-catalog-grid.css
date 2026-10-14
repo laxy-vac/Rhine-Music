@@ -4,7 +4,6 @@
 .music-catalog-grid-host[hidden] { display: none !important; }
 .music-app[data-music-layout="grid"][data-mode="archive"] #three-scene { visibility: hidden; }
 .music-app[data-music-layout="grid"][data-mode="archive"] .music-navigation { visibility: hidden; }
-.music-app[data-design="archive"] .foobar-catalog-tools .foobar-catalog-control[aria-label="LAYOUT"] { display: none; }
 .music-app[data-design="rhine"] .music-catalog-grid-host {
   position: absolute; inset: 285px calc(31.366667% + 24px) 130px 36px; z-index: 5;
   overflow: auto; overscroll-behavior: contain; padding: 12px;

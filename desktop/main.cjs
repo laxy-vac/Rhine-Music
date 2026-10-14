@@ -184,7 +184,7 @@ else {
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
    window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e6e8e3',show:false,autoHideMenuBar:true,icon:sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
    windowAspectController=attachWindowAspect(window,{screen:require('electron').screen,initialAspect:preferences.windowAspect});
-   {const title=sourcePreview?'Rhine Music · 源码验证':'Rhine Music · 品尝版 0.3.1-preview.1';window.setTitle(title);window.webContents.on('page-title-updated',event=>{event.preventDefault();window.setTitle(title)})}
+   {const title=sourcePreview?'Rhine Music · 源码验证':`Rhine Music · ${app.getVersion()}`;window.setTitle(title);window.webContents.on('page-title-updated',event=>{event.preventDefault();window.setTitle(title)})}
    // Restore the intended CSS proportions on startup/reload, including profiles
    // with an older saved page zoom. Windows DPI scaling remains under the OS.
    window.webContents.on('dom-ready',()=>{if(window&&!window.isDestroyed())window.webContents.setZoomFactor(1)});

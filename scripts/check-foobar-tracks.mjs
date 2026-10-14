@@ -127,140 +127,148 @@ export async function createTrackFixture() {
     if (specifier === "./music-display-layout") return displayLayout;
     throw new Error(`Unexpected public array layout import: ${specifier}`);
   });
-  const catalogSource = await readFile(path.join(project, "src/foobar-catalog.ts"), "utf8");
-  const shelvesSource = await readFile(path.join(project, "src/foobar-shelves.ts"), "utf8");
-  const catalog = runModule(catalogSource, "foobar-catalog.js", (specifier) => {
-    if (specifier === "./music-catalog") return musicCatalog;
+  const markupSource = await readFile(path.join(project, "src/music-catalog-markup.ts"), "utf8");
+  const catalogMarkup = runModule(markupSource, "music-catalog-markup.js", specifier => {
     if (specifier === "./music-application-state") return applicationState;
     if (specifier === "./music-view-settings") return viewSettings;
-    throw new Error(`Unexpected catalog import: ${specifier}`);
-  });
-  const shelves = runModule(shelvesSource, "foobar-shelves.js", (specifier) => {
     if (specifier === "./music-catalog") return musicCatalog;
-    if (specifier === "./music-catalog-shelves") return musicShelves;
-    throw new Error(`Unexpected shelf import: ${specifier}`);
+    throw new Error(`Unexpected catalog markup import: ${specifier}`);
   });
-  return { catalog, shelves, musicCatalog, musicShelves, arrayLayout, displayLayout, applicationState, viewSettings, records,
+  return { catalog: musicCatalog, shelves: musicShelves, musicCatalog, musicShelves, arrayLayout, displayLayout,
+    applicationState, viewSettings, catalogMarkup, records,
     replaceRecords(next) { dataModule.records = next; } };
 }
 
-function setOptions(catalog, options, query = "") {
-  catalog.configureFoobarCatalog(options, query);
+function configure(catalog, options, query = "") {
+  catalog.configureMusicCatalog(options, query);
 }
 
-function entrySequence(catalog, group) {
-  return Array.from(group.records, (index) => catalog.getFoobarEntry(index));
+function entriesForGroup(catalog, group) {
+  return Array.from(group.entryKeys, key => catalog.getMusicEntryByKey(key)).filter(Boolean);
 }
 
-function assertCatalogHasOnly(records, expectedNames, label) {
-  assert.deepEqual(Array.from(records, (entry) => entry.name), expectedNames, label);
+function assertGroupNames(groups, expectedNames, label) {
+  assert.deepEqual(Array.from(groups, group => group.name), expectedNames, label);
 }
 
 export async function runChecks() {
-  const { catalog, shelves, records } = await createTrackFixture();
+  const fixture = await createTrackFixture();
+  const { musicCatalog: catalog, musicShelves: shelves, applicationState, records, catalogMarkup } = fixture;
+  const musicApplication = applicationState.musicApplication;
   const originalRecords = records;
 
-  setOptions(catalog, { show: "albums", group: "genre", sort: "artist", layout: "array" });
-  const albumEntries = catalog.getFoobarDisplayEntries();
-  assert.equal(albumEntries.length, 2, "album mode should create one entry per canonical album");
-  assert.deepEqual(Array.from(albumEntries, (entry) => [entry.index, entry.recordIndex]), [[0, 0], [1, 1]]);
-  assert.deepEqual(Array.from(catalog.getFoobarCatalogRecords()), [0, 1]);
-  assert.equal(shelves.getFoobarShelves().length, 1);
+  configure(catalog, { layout: "shelf", show: "albums", group: "genre", sort: "artist" });
+  const albumEntries = catalog.getMusicDisplayEntries();
+  assert.equal(albumEntries.length, 2, "album SHOW creates one public entry per canonical album");
+  assert.deepEqual(Array.from(albumEntries, entry => [entry.index, entry.recordIndex]), [[0, 0], [1, 1]]);
+  assert.deepEqual(Array.from(catalog.getMusicCatalogRecords()), [0, 1]);
+  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [2],
+    "SHELF keeps the two visible album entries together regardless of their group labels");
 
-  setOptions(catalog, { show: "tracks", group: "genre", sort: "artist", layout: "array" });
-  const trackEntries = catalog.getFoobarDisplayEntries();
-  assert.equal(trackEntries.length, 29, "track mode should flatten 24 + 5 songs");
-  assert.equal(new Set(Array.from(trackEntries, (entry) => entry.key)).size, 29, "each track needs a distinct stable key");
+  configure(catalog, { show: "tracks", group: "genre", sort: "artist" });
+  const trackEntries = catalog.getMusicDisplayEntries();
+  assert.equal(trackEntries.length, 29, "TRACKS flattens 24 + 5 songs");
+  assert.equal(new Set(trackEntries.map(entry => entry.key)).size, 29, "each track has a distinct stable key");
   assert.equal(trackEntries[0].track.title, "Needle");
-  assert.equal(trackEntries[0].record.title, "Needle", "the display record uses the track title");
-  assert.equal(trackEntries[0].record.en, "Guest Artist", "the display record uses the track artist");
-  assert.equal(trackEntries[0].record.album, records[0].album, "track entries keep their parent album and cover source");
-  assert.deepEqual(Array.from(shelves.getFoobarShelves(), (shelf) => shelf.records.length), [20, 9], "twenty-slot shelves spill groups without gaps");
-  assert.strictEqual(records, originalRecords, "track mode must not replace the album-based records array");
-  assert.equal(records.length, 2, "the canonical album count remains two");
+  assert.equal(trackEntries[0].record.title, "Needle", "the public display record uses the track title");
+  assert.equal(trackEntries[0].record.en, "Guest Artist", "the public display record uses the track artist");
+  assert.strictEqual(trackEntries[0].record.album, records[0].album, "track entries retain the canonical album and cover source");
+  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9],
+    "the public shelf renderer fills twenty entries before continuing the next group");
+  assert.strictEqual(records, originalRecords, "TRACKS never replaces the album-based canonical records array");
+  assert.equal(records.length, 2);
 
-  setOptions(catalog, { show: "tracks", group: "genre", sort: "added" });
-  let groups = catalog.getFoobarCatalogGroups();
-  assertCatalogHasOnly(groups, ["Alternative", "Jazz"], "genre groups sort by name");
-  assert.deepEqual(Array.from(groups, (group) => group.records.length), [24, 5]);
+  configure(catalog, { layout: "array", group: "genre", sort: "added" });
+  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [24, 5],
+    "grouped ARRAY keeps each public catalog group in its own column");
+  configure(catalog, { layout: "shelf", group: "decade", sort: "added" });
+  let groups = catalog.getMusicCatalogGroups();
+  assertGroupNames(groups, ["1990s", "2000s"], "decade grouping inherits the parent album year");
+  assert.deepEqual(Array.from(groups, group => group.entryKeys.length), [5, 24]);
 
-  setOptions(catalog, { show: "tracks", group: "decade", sort: "added" });
-  groups = catalog.getFoobarCatalogGroups();
-  assertCatalogHasOnly(groups, ["1990s", "2000s"], "decade grouping inherits the parent album year");
-  assert.deepEqual(Array.from(groups, (group) => group.records.length), [5, 24]);
+  configure(catalog, { group: "az", sort: "added" });
+  groups = catalog.getMusicCatalogGroups();
+  assertGroupNames(groups, ["A", "B", "G"], "A-Z grouping uses each track's artist");
+  assert.deepEqual(Array.from(groups, group => group.entryKeys.length), [23, 5, 1]);
 
-  setOptions(catalog, { show: "tracks", group: "az", sort: "added" });
-  groups = catalog.getFoobarCatalogGroups();
-  assertCatalogHasOnly(groups, ["A", "B", "G"], "artist-initial grouping uses the individual track artist");
-  assert.deepEqual(Array.from(groups, (group) => group.records.length), [23, 5, 1]);
-
-  setOptions(catalog, { show: "tracks", group: "none", sort: "added" });
-  groups = catalog.getFoobarCatalogGroups();
+  configure(catalog, { group: "none", sort: "added" });
+  groups = catalog.getMusicCatalogGroups();
   assert.equal(groups.length, 1);
-  assert.deepEqual(Array.from(groups[0].records), Array.from({ length: 29 }, (_, index) => index), "ADDED keeps source album and disc/track order");
+  assert.deepEqual(Array.from(groups[0].entryKeys), Array.from(trackEntries, entry => entry.key),
+    "ADDED keeps source album and disc/track order");
 
-  setOptions(catalog, { show: "tracks", group: "none", sort: "artist" });
-  let ordered = entrySequence(catalog, catalog.getFoobarCatalogGroups()[0]);
-  const artists = ordered.map((entry) => entry.track.artist || entry.record.album.artist);
-  assert.deepEqual(artists, [...artists].sort((a, b) => a.localeCompare(b, "zh-CN", { sensitivity: "base", numeric: true })), "artist sort uses each track artist");
-  assert.equal(ordered[0].recordIndex, 0);
-
-  setOptions(catalog, { show: "tracks", group: "none", sort: "title" });
-  ordered = entrySequence(catalog, catalog.getFoobarCatalogGroups()[0]);
-  const titles = ordered.map((entry) => entry.track.title);
-  assert.deepEqual(titles, [...titles].sort((a, b) => a.localeCompare(b, "zh-CN", { sensitivity: "base", numeric: true })), "title sort uses each track title");
-
-  setOptions(catalog, { show: "tracks", group: "none", sort: "year" });
-  ordered = entrySequence(catalog, catalog.getFoobarCatalogGroups()[0]);
-  assert.equal(ordered[0].recordIndex, 1, "year sort places the 1994 parent album before the 2002 album");
+  configure(catalog, { sort: "artist" });
+  let ordered = entriesForGroup(catalog, catalog.getMusicCatalogGroups()[0]);
+  const artists = ordered.map(entry => entry.track.artist || entry.record.album.artist);
+  assert.deepEqual(artists, [...artists].sort((a, b) => a.localeCompare(b, "zh-CN", { sensitivity: "base", numeric: true })),
+    "ARTIST sorting uses each track artist");
+  configure(catalog, { sort: "title" });
+  ordered = entriesForGroup(catalog, catalog.getMusicCatalogGroups()[0]);
+  const titles = ordered.map(entry => entry.track.title);
+  assert.deepEqual(titles, [...titles].sort((a, b) => a.localeCompare(b, "zh-CN", { sensitivity: "base", numeric: true })),
+    "TITLE sorting uses each track title");
+  configure(catalog, { sort: "year" });
+  ordered = entriesForGroup(catalog, catalog.getMusicCatalogGroups()[0]);
+  assert.equal(ordered[0].recordIndex, 1, "YEAR sorting inherits the 1994 parent album year");
   assert.equal(ordered.at(-1).recordIndex, 0);
 
-  setOptions(catalog, { show: "tracks", group: "genre", sort: "artist" }, "Needle");
-  groups = catalog.getFoobarCatalogGroups();
-  const needleEntries = groups.flatMap((group) => entrySequence(catalog, group));
-  assert.equal(needleEntries.length, 1, "a track query must not include sibling tracks");
+  configure(catalog, { group: "genre", sort: "artist" }, "Needle");
+  groups = catalog.getMusicCatalogGroups();
+  const needleEntries = groups.flatMap(group => entriesForGroup(catalog, group));
+  assert.equal(needleEntries.length, 1, "a track query excludes its sibling tracks");
   assert.equal(needleEntries[0].track.title, "Needle");
-  assert.deepEqual(Array.from(catalog.getFoobarCatalogRecords()), [0], "main filtering still returns canonical album indexes");
+  assert.deepEqual(Array.from(catalog.getMusicCatalogRecords()), [0], "filtered results retain canonical parent indexes");
 
-  setOptions(catalog, { show: "tracks", group: "none", sort: "added" });
-  groups = catalog.getFoobarCatalogGroups();
-  const firstTrack = catalog.getFoobarEntry(groups[0].records[0]);
-  const secondTrack = catalog.getFoobarEntry(groups[0].records[1]);
-  catalog.setFoobarFocus(firstTrack.key);
-  const firstLocation = shelves.getFoobarEntryLocation(firstTrack.key);
+  configure(catalog, { group: "none", sort: "added" });
+  const allShelves = shelves.getMusicCatalogShelves();
+  const firstTrack = catalog.getMusicEntryByKey(allShelves[0].entryKeys[0]);
+  const secondTrack = catalog.getMusicEntryByKey(allShelves[0].entryKeys[1]);
+  catalog.focusMusicEntry(firstTrack.key);
+  const firstLocation = shelves.getMusicEntryLocation(firstTrack.key);
   assert.equal(firstLocation.slot, 0);
-  const navigatedAlbum = shelves.navigateFoobar(firstTrack.recordIndex, "row", 1);
-  assert.equal(navigatedAlbum, 0, "same-album row navigation returns the canonical album index");
-  assert.equal(catalog.getFoobarFocusedEntry(0).key, secondTrack.key, "same-album navigation still moves the entry focus");
+  const rowTarget = shelves.navigateMusicEntry(firstTrack.recordIndex, "row", 1);
+  assert.equal(rowTarget.key, secondTrack.key, "row navigation returns the next stable entry");
+  assert.equal(musicApplication.catalogFocus.entryKey, firstTrack.key,
+    "pure navigation leaves focus changes to its caller");
+  catalog.focusMusicEntry(rowTarget.key);
+  assert.equal(musicApplication.catalogFocus.entryKey, secondTrack.key);
 
-  const allShelves = shelves.getFoobarShelves();
-  const rememberedTarget = catalog.getFoobarEntry(allShelves[1].records[6]);
-  const currentEntry = catalog.getFoobarEntry(allShelves[0].records[7]);
-  shelves.getFoobarEntryLocation(rememberedTarget.key);
-  catalog.setFoobarFocus(currentEntry.key);
-  shelves.getFoobarEntryLocation(currentEntry.key);
-  assert.equal(shelves.navigateFoobar(currentEntry.recordIndex, "lane", 1), rememberedTarget.recordIndex, "lane navigation returns the target album index");
-  assert.equal(catalog.getFoobarFocusedEntry(rememberedTarget.recordIndex).key, rememberedTarget.key, "lane navigation remembers the target shelf slot");
+  const rememberedTarget = catalog.getMusicEntryByKey(allShelves[1].entryKeys[6]);
+  const currentEntry = catalog.getMusicEntryByKey(allShelves[0].entryKeys[7]);
+  shelves.getMusicEntryLocation(rememberedTarget.key);
+  catalog.focusMusicEntry(currentEntry.key);
+  const laneTarget = shelves.navigateMusicEntry(currentEntry.recordIndex, "lane", 1);
+  assert.equal(laneTarget.key, rememberedTarget.key, "lane navigation restores the destination shelf slot");
+  assert.equal(musicApplication.catalogFocus.entryKey, currentEntry.key,
+    "lane navigation does not commit public focus");
 
-  const toolMarkup = catalog.foobarCatalogMarkup();
-  assert.equal((toolMarkup.match(/class="foobar-layout-mark"/g) || []).length, 3, "all three layout choices receive the mark hook");
-  const gridMarkup = catalog.foobarGridMarkup(0, rememberedTarget.key);
-  assert.equal((gridMarkup.match(/class="foobar-grid-card foobar-album-item foobar-track-card/g) || []).length, 29, "track grid renders one small-cover card per track");
+  const tools = catalogMarkup.musicCatalogToolsMarkup();
+  assert.match(tools, /data-foobar-catalog="show"/);
+  assert.match(tools, /data-foobar-catalog="group"/);
+  assert.match(tools, /data-foobar-catalog="sort"/);
+  assert.doesNotMatch(tools, /data-foobar-catalog="layout"|aria-label="LAYOUT"/,
+    "the Punk shell no longer renders its retired LAYOUT control");
+  assert.match(tools, /data-action="foobar-random"/, "RANDOM PICK remains part of the Punk shell");
+
+  const gridMarkup = catalogMarkup.musicGridMarkup(1, rememberedTarget.key);
+  assert.equal((gridMarkup.match(/class="foobar-grid-card foobar-album-item foobar-track-card/g) || []).length, 29,
+    "the shared grid renders one card per public track entry");
   assert.equal((gridMarkup.match(/data-foobar-track=/g) || []).length, 29);
   assert.equal((gridMarkup.match(/data-foobar-entry=/g) || []).length, 29);
   assert.match(gridMarkup, /data-foobar-record="1" data-foobar-entry="track\|album-jazz\|album-jazz-track-03" data-foobar-track="album-jazz-track-03"/);
   assert.match(gridMarkup, /foobar-album-grid/);
   assert.doesNotMatch(gridMarkup, /foobar-track-list|foobar-track-row|foobar-track-album/);
 
-  setOptions(catalog, { show: "albums", group: "genre", sort: "artist" });
-  const restoredAlbumEntries = catalog.getFoobarDisplayEntries();
-  assert.deepEqual(Array.from(restoredAlbumEntries, (entry) => [entry.index, entry.recordIndex]), [[0, 0], [1, 1]], "switching back restores canonical album entries");
-  assert.deepEqual(Array.from(catalog.getFoobarCatalogRecords()), [0, 1]);
-  assert.deepEqual(Array.from(shelves.getFoobarShelves(), (shelf) => shelf.records.length), [2]);
+  configure(catalog, { show: "albums", group: "genre", sort: "artist" });
+  const restoredAlbumEntries = catalog.getMusicDisplayEntries();
+  assert.deepEqual(Array.from(restoredAlbumEntries, entry => [entry.index, entry.recordIndex]), [[0, 0], [1, 1]],
+    "switching back to ALBUMS restores canonical entries");
+  assert.deepEqual(Array.from(catalog.getMusicCatalogRecords()), [0, 1]);
+  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [2]);
   assert.strictEqual(records, originalRecords);
   assert.equal(records.length, 2);
 
-  console.log("Foobar TRACKS catalog, focus, navigation, shelves and cards passed.");
+  console.log("Public TRACKS catalog, focus, navigation, shelves and shared grid markup passed with synthetic records.");
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
