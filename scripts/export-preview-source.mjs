@@ -152,11 +152,11 @@ function authorizeUntrackedPath(value, destination) {
   if (!fs.existsSync(absolute)) throw new Error(`--include-untracked file does not exist: ${relative}`);
   const stat = fs.lstatSync(absolute);
   if (stat.isSymbolicLink() || !stat.isFile()) throw new Error(`--include-untracked accepts regular files only: ${relative}`);
-  destination.add(relative.toLowerCase());
+  destination.set(relative.toLowerCase(), relative);
 }
 
 function parseArgs(argv) {
-  const options = { out: defaultRelativeOutput, force: false, dryRun: false, help: false, includeUntracked: new Set() };
+  const options = { out: defaultRelativeOutput, force: false, dryRun: false, help: false, includeUntracked: new Map() };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--help' || value === '-h') {
@@ -241,6 +241,7 @@ function isExcluded(relative) {
   const parts = lower.split('/');
   const base = parts.at(-1);
 
+  if (parts.includes('__pycache__') || /\.(?:pyc|pyo|pyd)$/i.test(base)) return true;
   if (parts.some((part) => ['.git', 'node_modules', 'dist', 'release', '.tools', '.local', 'data', 'presets', 'preset'].includes(part))) return true;
   if (lower === 'memory.md' || base === 'memory.md') return true;
   if (['source-manifest.txt','source-export-readme.md'].includes(lower)) return true;
@@ -261,7 +262,7 @@ function isIncludedPath(relative) {
   if (extraFileAllowlist.has(normalized.toLowerCase())) return true;
   const parts = normalized.split('/');
   if (parts.length === 1) return rootFileAllowlist.has(parts[0].toLowerCase());
-  return sourceDirectories.includes(parts[0]);
+  return sourceDirectories.includes(parts[0].toLowerCase());
 }
 
 function assertNoSymlinkAncestors(targetPath) {
@@ -277,32 +278,28 @@ function assertNoSymlinkAncestors(targetPath) {
   }
 }
 
-function walkSourceDirectory(relativeDirectory, files) {
-  const absoluteDirectory = path.join(repoRoot, ...relativeDirectory.split('/'));
-  if (!fs.existsSync(absoluteDirectory)) return;
-  const rootStat = fs.lstatSync(absoluteDirectory);
-  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
-    throw new Error(`Expected a real source directory: ${relativeDirectory}`);
+function findWorkingTreeFile(relativePath) {
+  const normalized = normalizeRelative(relativePath);
+  const parts = normalized.split('/');
+  const actualParts = [];
+  let absolutePath = repoRoot;
+
+  for (let index = 0; index < parts.length; index += 1) {
+    if (!fs.existsSync(absolutePath) || !fs.lstatSync(absolutePath).isDirectory()) return null;
+    const actualName = fs.readdirSync(absolutePath).find((entry) => entry.toLowerCase() === parts[index].toLowerCase());
+    if (!actualName) return null;
+
+    actualParts.push(actualName);
+    absolutePath = path.join(absolutePath, actualName);
+    const stat = fs.lstatSync(absolutePath);
+    if (stat.isSymbolicLink()) throw new Error(`Refusing a symlink in source: ${actualParts.join('/')}`);
+    if (index < parts.length - 1 && !stat.isDirectory()) return null;
+    if (index === parts.length - 1 && !stat.isFile()) {
+      throw new Error(`Expected a regular source file: ${actualParts.join('/')}`);
+    }
   }
 
-  const visit = (absolutePath, relativePath) => {
-    for (const entry of fs.readdirSync(absolutePath, { withFileTypes: true })) {
-      const childRelative = normalizeRelative(`${relativePath}/${entry.name}`);
-      if (isExcluded(childRelative)) continue;
-      const childAbsolute = path.join(absolutePath, entry.name);
-      const stat = fs.lstatSync(childAbsolute);
-      if (stat.isSymbolicLink()) throw new Error(`Refusing a symlink in source: ${childRelative}`);
-      if (stat.isDirectory()) {
-        visit(childAbsolute, childRelative);
-      } else if (stat.isFile()) {
-        files.push({ path: childRelative, bytes: stat.size });
-      } else {
-        throw new Error(`Unsupported filesystem entry in source: ${childRelative}`);
-      }
-    }
-  };
-
-  visit(absoluteDirectory, relativeDirectory);
+  return { path: actualParts.join('/'), bytes: fs.statSync(absolutePath).size };
 }
 
 function collectSourceFiles(includeUntracked) {
@@ -310,39 +307,43 @@ function collectSourceFiles(includeUntracked) {
   const tracked = new Set(trackedPaths.map((item) => item.toLowerCase()));
   const untrackedPaths = gitPaths(['ls-files', '--others', '--exclude-standard', '-z']);
   const unknownTracked = trackedPaths.filter((item) => !isExcluded(item) && !isIncludedPath(item));
-  const approvedUntracked = new Set([...approvedUntrackedPaths, ...includeUntracked]);
+  const approvedUntracked = new Map([
+    ...[...approvedUntrackedPaths].map((item) => [item.toLowerCase(), item]),
+    ...includeUntracked,
+  ]);
   const unknownUntracked = untrackedPaths.filter((item) => !isExcluded(item) && (!isIncludedPath(item) || !approvedUntracked.has(item.toLowerCase())));
   if (unknownTracked.length || unknownUntracked.length) {
     const unknown = [...unknownTracked, ...unknownUntracked];
     throw new Error(`Paths outside the source allowlist were found; review before export:\n${unknown.slice(0, 30).map((item) => `  ${item}`).join('\n')}${unknown.length > 30 ? `\n  ... and ${unknown.length - 30} more` : ''}`);
   }
 
-  const files = [];
-  for (const relativeDirectory of sourceDirectories) walkSourceDirectory(relativeDirectory, files);
-  for (const relativePath of rootFileAllowlist) {
-    const actualPath = [...trackedPaths, ...untrackedPaths].find(item => item.toLowerCase() === relativePath) ?? relativePath;
-    const absolutePath = path.join(repoRoot, actualPath);
-    if (!fs.existsSync(absolutePath)) continue;
-    const stat = fs.lstatSync(absolutePath);
-    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error(`Expected a regular root file: ${relativePath}`);
-    files.push({ path: actualPath, bytes: stat.size });
-  }
-  for (const relativePath of extraFileAllowlist) {
-    const absolutePath = path.join(repoRoot, ...relativePath.split('/'));
-    if (!fs.existsSync(absolutePath)) continue;
-    const stat = fs.lstatSync(absolutePath);
-    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error(`Expected a regular approved config file: ${relativePath}`);
-    files.push({ path: relativePath, bytes: stat.size });
-  }
-
   const unique = new Map();
-  for (const file of files) {
+  const addFile = (relativePath, required = false) => {
+    const file = findWorkingTreeFile(relativePath);
+    if (!file) {
+      if (required) throw new Error(`Tracked source file is missing from the working tree: ${relativePath}`);
+      return;
+    }
     const key = file.path.toLowerCase();
-    if (unique.has(key)) throw new Error(`Duplicate source path: ${file.path}`);
+    if (unique.has(key)) return;
     if (file.bytes > maxFileBytes) {
       throw new Error(`A source file exceeds the 90 MB limit: ${file.path} (${file.bytes} bytes)`);
     }
     unique.set(key, file);
+  };
+
+  for (const relativePath of trackedPaths) {
+    if (!isExcluded(relativePath) && isIncludedPath(relativePath)) addFile(relativePath, true);
+  }
+  for (const relativePath of untrackedPaths) {
+    if (!isExcluded(relativePath) && isIncludedPath(relativePath) && approvedUntracked.has(relativePath.toLowerCase())) {
+      addFile(relativePath);
+    }
+  }
+  for (const relativePath of approvedUntracked.values()) {
+    if (!isExcluded(relativePath) && isIncludedPath(relativePath)) {
+      addFile(relativePath, includeUntracked.has(relativePath.toLowerCase()));
+    }
   }
 
   for (const trackedPath of trackedPaths) {

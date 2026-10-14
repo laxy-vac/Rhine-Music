@@ -20,7 +20,7 @@ node scripts/build-source-preview.mjs --interface-only
 
 构建完成后运行根目录的 `启动源码验证.cmd`。如果修改了原生宿主或桌面组件，使用 `构建源码验证.cmd`，再完整退出并重新启动窗口。入口复用现有工具，不会自动安装依赖、下载组件或扫描曲库；缺少组件时按项目维护说明处理。
 
-标准命令入口为：`npm run desktop`、`npm run build:preview`、`npm test`、`npm run package:preview` 和 `npm run export:source`。`npm test` 运行选定的离线合成检查；安装包构建复用准备好的项目内工具。干净源码不携带依赖或桌面工具，新机器准备方式见 [CONTRIBUTING](CONTRIBUTING.md) 与[本地开发](docs/LOCAL-DEVELOPMENT.md)。
+本地开发入口为：`npm run desktop`、`npm run build:preview` 和 `npm test`；准备交付物时可用 `npm run package:preview` 生成安装器，或用 `npm run export:source` 生成源码ZIP。`npm test` 运行选定的离线合成检查。全部日常开发与GitHub发布都使用本仓库的同一个 `main`，不需要导出或同步另一份源码。新克隆不包含本机忽略的依赖与桌面工具；新机器按[贡献说明](CONTRIBUTING.md)和[本地开发](docs/LOCAL-DEVELOPMENT.md)准备环境，普通入口不会自动安装依赖或下载工具。
 
 ## 项目结构
 
@@ -30,7 +30,11 @@ node scripts/build-source-preview.mjs --interface-only
 - `scripts/`、`windows/`：开发、离线检查和 Windows 相关脚本。
 - `docs/`、`verification/`：当前状态、架构、操作说明及历史验收证据。
 
-私有工作仓库仍跟踪旧构建产物和 Git 历史，不应直接作为干净源码提交。`npm run export:source` 生成独立 source ZIP，不含 `.git`、`node_modules/`、`dist/`、`release/`、`.tools/`、调试符号或本机配置；历史进度 Markdown 与原有 NOTICE 继续保留。解压后由用户自行审核并初始化自己的 Git 仓库。此过程不改写现有私有历史。
+本仓库是唯一的本地开发仓库，也是用户自行设置GitHub远程后发布的仓库。新的 `main` 从干净基线提交 `167d140` 建立，基线含4062个源码文件；本机现有 `node_modules/`、`.tools/`、`dist/`、`release/` 与运行数据仍留在原位并由Git忽略，main不跟踪它们。源码ZIP只是可选交付物，不是GitHub发布或第二份源码的工作流程。
+
+旧主线改名为本地历史分支 `archive/pre-github-main-2026-10-15`；旧 `local/development`（`052bf9a`）及标签也保留为本地历史。用户自行配置远程并只推送 `main`；不得自动推送历史分支或标签，不使用 `git push --all`、`--mirror` 或强推。
+
+`npm run export:source` 仍可生成不含 `.git`、`node_modules/`、`dist/`、`release/`、`.tools/`、调试符号或本机配置的源码ZIP；它只用于交付，不替代当前仓库的GitHub发布。历史进度Markdown与原有NOTICE继续保留在源码交付物中。
 
 ## 当前进度与已知限制
 

@@ -4,7 +4,9 @@
 
 ## 工作目录与入口
 
-真正的仓库是 `Rhine-Music-Demo-AudioEnhanced`，不是外层工作区。命令明确工作目录，先检查Git状态，保留用户改动。
+唯一活动Git仓库是 `Rhine-Music-Demo-AudioEnhanced`；它同时用于本地开发和用户自行发布到GitHub。所有命令都在该仓库根目录执行，先检查Git状态并保留用户改动。日常开发不导出或同步第二份源码。
+
+main从干净基线提交 `167d140` 建立，基线包含4062个源码文件。本机 `node_modules/`、`.tools/`、`dist/`、`release/` 和运行数据留在原位并由Git忽略；新克隆需在用户批准后自行准备依赖与桌面工具。旧主线在本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development` 停在 `052bf9a`，原有标签保留为本地历史。用户自行设置远程并只推送 `main`；不推历史分支或标签，不使用 `--all`、`--mirror` 或强推。
 
 当前入口 **启动源码验证.cmd** 或 `npm run desktop` 直接打开“Rhine Music · 源码验证”Electron桌面窗口。朋友品尝版采用独立NSIS安装包；旧 `release/Rhine Music.exe` 是历史自解压产物，不用它验收当前源码。
 
@@ -93,13 +95,13 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 品尝版安装后使用 `<安装目录>/data` 和 `<安装目录>/presets`，不使用源码profile、不自动迁移现有个人文件。源码预览兼容读取旧preferences内嵌主题预设，以及新EQ文件缺失时的旧profile/audio-processing-presets.json；下一次用户保存才写入新预设目录，旧文件保留。两主题预设与EQ分开持久化，坏文件或启动后的外部编辑会拒绝覆盖并报告。
 
-## 品尝版打包与干净源码
+## 品尝版打包与交付源码ZIP
 
 `npm test`（或 `node scripts/test-preview.mjs`）是默认离线检查入口，仅合成状态、窗口比例模型、主题预设和音频处理数学，不开设备、不联网、不读个人库。`npm run build:preview` 构建界面；`npm run package:preview` 或 `打包品尝版.cmd` 复用已准备的Electron、原生组件、Python/Unicorn和NSIS生成安装器。`Build-Windows-EXE.cmd` 现在转到此入口。旧package-desktop/build-windows脚本留作历史，可能联网准备依赖，不作为当前默认入口。
 
 打包不会自动执行 npm ci 或下载缺项。NSIS 3.13经用户批准，仅解压在 `.tools/installer-tools/nsis/3.13/nsis-3.13`，ZIP来自官方SourceForge，SHA-256为 `ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8`；不改系统PATH、注册表或权限。构建产物位于 `.tools/preview-release/<版本>-<时间>/`，交付副本放外层packaging目录。安装器实际运行才会在HKCU登记应用和生成卸载器，不能把编译通过当作安装/卸载通过。
 
-`npm run export:source` 输出干净源码ZIP到 `.tools/preview-release/source`，含文件清单和校验值；不包含Git历史、依赖、工具、产物、个人数据或机器验证JSON。原私有历史不改写。新机器应在自己审核源码与许可后安装项目依赖，分别准备桌面工具；CI仅检查源码，不自动发布安装包。详细目录、边界和验收结果见[品尝版说明](PREVIEW-RELEASE.md)。
+`npm run export:source` 是可选交付步骤，输出源码ZIP到 `.tools/preview-release/source`，含文件清单和校验值；不包含Git历史、依赖、工具、产物、个人数据或机器验证JSON。它不是GitHub同步流程；本地开发与用户自行上传都在当前仓库的 `main` 完成。此次main以干净首提交 `167d140` 建立，旧主线改名为本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development`、原有标签保留。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细目录、边界和交付验收结果见[品尝版说明](PREVIEW-RELEASE.md)。
 
 ## 检查索引与边界
 
