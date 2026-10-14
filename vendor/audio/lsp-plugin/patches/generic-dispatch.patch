@@ -1,0 +1,16 @@
+diff --git a/modules/lsp-dsp-lib/src/main/dsp.cpp b/modules/lsp-dsp-lib/src/main/dsp.cpp
+--- a/modules/lsp-dsp-lib/src/main/dsp.cpp
++++ b/modules/lsp-dsp-lib/src/main/dsp.cpp
+@@ -70,5 +70,1 @@
+-            // Dectect CPU options
+-            IF_ARCH_SPECIFIC_INIT(
+-                cpuid_t f;
+-                cpuid(&f);
+-            );
++            // Rhine's generic fallback initializes only the portable generic DSP.
+@@ -81,4 +77,1 @@
+-                // Initialize architecture-dependent functions that utilize architecture-specific features
+-                IF_ARCH_SPECIFIC_INIT(
+-                    LSP_DSP_CPU_NAMESPACE::dsp_init(&f)
+-                );
++                // Architecture dispatch is omitted by this build-only compatibility patch.

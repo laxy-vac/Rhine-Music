@@ -1,0 +1,443 @@
+/* Future lyrics: restrained research panels around the existing reading layout. */
+html .music-app[data-design="rhine"] #music-lyrics-page {
+  --future-lyrics-panel: var(--future-panel, var(--surface));
+  --future-lyrics-edge: var(--future-edge, var(--line));
+  --future-lyrics-edge-hi: var(--future-edge-hi, var(--ink));
+  --future-lyrics-shadow: var(--future-shadow, var(--ink));
+  --future-lyrics-instrument: var(--future-instrument, var(--ink));
+  --future-lyrics-label: var(--future-label, var(--ink));
+  color: var(--future-lyrics-instrument);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .settings-page-heading h1 {
+  color: var(--future-lyrics-instrument);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .settings-page-heading small,
+html .music-app[data-design="rhine"] #music-lyrics-page .settings-page-heading p {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page #lyrics-page-content {
+  border-top-color: var(--future-lyrics-edge);
+}
+/* The pane/scrollers clip their own content; the outer carrier must let the
+   glass shadow fade outside the pane instead of cutting it at the workspace. */
+html .music-app[data-design="rhine"] .music-settings-page.music-lyrics-page,
+html .music-app[data-design="rhine"] #music-lyrics-page #lyrics-page-content {
+  overflow: visible;
+}
+@media (max-width: 980px) {
+  html .music-app[data-design="rhine"] #music-lyrics-page #lyrics-page-content {
+    overflow: auto;
+  }
+}
+
+/* Keep the column geometry; only the central reading lane is a full surface. */
+html .music-app[data-design="rhine"] #music-lyrics-page :is(.lyrics-side, .lyrics-main) {
+  border-color: transparent;
+  border-radius: 22px;
+  color: var(--future-lyrics-instrument);
+  background: none;
+  box-shadow: none;
+}
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-main {
+  border-color: color-mix(in srgb,var(--future-highlight) 60%,transparent);
+  background: linear-gradient(150deg,color-mix(in srgb,var(--surface) 76%,transparent),color-mix(in srgb,var(--surface) 45%,transparent));
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 12px 32px color-mix(in srgb,var(--future-shadow) 7%,transparent),inset 0 1px 0 var(--future-highlight);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-side-summary {
+  border-bottom-color: transparent;
+  color: var(--future-lyrics-instrument);
+  background: none;
+  font-weight: 500;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-side-summary::after {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-index {
+  display: inline-grid;
+  place-items: center;
+  min-width: 23px;
+  box-sizing: border-box;
+  border-radius: 0;
+  padding: 2px 4px;
+  color: var(--accent);
+  background: none;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-side-body {
+  scrollbar-color: color-mix(in srgb, var(--future-lyrics-edge-hi) 28%, transparent) transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(
+  .lyrics-data-block,
+  .lyrics-spectrum-section,
+  .lyrics-offset-section,
+  .lyrics-source-section,
+  .lyrics-source-manager
+) {
+  border-color: var(--future-lyrics-edge);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-left > .lyrics-spectrum-section {
+  background: transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-data-heading {
+  color: var(--future-lyrics-label);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-data-row {
+  border-bottom-color: transparent;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(
+  .lyrics-data-label,
+  .lyrics-link-stage,
+  .lyrics-help,
+  .lyrics-spectrum-meta,
+  .lyrics-track-reference,
+  .lyrics-manager-summary
+) {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-data-value,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-transport-state {
+  color: var(--future-lyrics-instrument);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-spectrum-bars {
+  border-bottom-color: var(--future-lyrics-edge);
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent 21px,
+    color-mix(in srgb, var(--future-lyrics-edge) 42%, transparent) 22px
+  );
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-main-header {
+  border-bottom-color: transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-main-title h2 {
+  color: var(--future-lyrics-instrument);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(.lyrics-eyebrow, .lyrics-line-counter, .lyrics-current-time) {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-sync-tools {
+  border-bottom-color: transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-follow-control {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-follow-control input {
+  accent-color: var(--accent);
+  appearance: none;
+  position: relative;
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 1px solid var(--future-lyrics-edge-hi);
+  border-radius: 8px;
+  background: var(--future-lyrics-panel);
+  box-shadow: none;
+}
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-follow-control input::after {
+  content: ""; position: absolute;
+  top: 2px; left: 2px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--future-lyrics-label);
+  box-shadow: none; transform: translateX(0);
+}
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-follow-control input:checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb,var(--accent) 9%,var(--future-lyrics-panel));
+}
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-follow-control input:checked::after {
+  transform: translateX(10px); background: var(--accent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-scroller {
+  scrollbar-color: color-mix(in srgb, var(--future-lyrics-edge-hi) 28%, transparent) transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line {
+  position: relative;
+  border-left-color: transparent;
+  padding-left: 12px;
+  border-radius: 12px;
+  opacity: 1;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line.is-active {
+  border-left-color: transparent;
+  background: linear-gradient(90deg,color-mix(in srgb,var(--accent) 7%,transparent),transparent 85%);
+}
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 1.1em; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line-button,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-untimed-line {
+  color: var(--future-lyrics-instrument);
+  background: transparent;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line-time {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line-text {
+  color: var(--future-lyrics-label);
+  letter-spacing: -.015em;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line.is-active .lyrics-line-text {
+  color: var(--future-lyrics-instrument);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line-button:hover .lyrics-line-text {
+  color: color-mix(in srgb, var(--accent) 78%, var(--future-lyrics-instrument));
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line-translation {
+  color: color-mix(in srgb, var(--future-lyrics-label) 80%, var(--future-lyrics-instrument));
+}
+
+/* Quiet, compact notice panels retain their existing standby/loading/error states. */
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-frame {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--future-lyrics-panel) 96%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--future-lyrics-edge-hi) 10%, transparent),
+    0 4px 12px color-mix(in srgb, var(--future-lyrics-shadow) 8%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-rail {
+  border-bottom-color: var(--future-lyrics-edge);
+  color: var(--future-lyrics-instrument);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 88%, var(--future-lyrics-edge));
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-code {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-body {
+  background: color-mix(in srgb, var(--future-lyrics-panel) 97%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-title {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 2px;
+  outline-color: color-mix(in srgb, var(--future-lyrics-edge) 60%, transparent);
+  color: var(--future-lyrics-instrument);
+  text-shadow: none;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-eyebrow {
+  color: var(--accent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice[data-state="error"] :is(.lyrics-notice-eyebrow, .lyrics-notice-title) {
+  color: #b94a43;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-text,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-foot {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-foot {
+  border-top-color: var(--future-lyrics-edge);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-foot-value {
+  color: var(--future-lyrics-instrument);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-quiet-button,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-primary-button,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-offset-nudge,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-import-button {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 3px;
+  color: var(--future-lyrics-instrument);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 96%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-primary-button {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--future-lyrics-edge));
+  color: color-mix(in srgb, var(--accent) 78%, var(--future-lyrics-instrument));
+  background: color-mix(in srgb, var(--accent) 7%, var(--future-lyrics-panel));
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-quiet-button:hover,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-offset-nudge:hover,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-import-button:hover,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-source-settings-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--future-lyrics-edge));
+  color: var(--accent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-settings-gear {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 50%;
+  color: var(--future-lyrics-label);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 96%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-settings-gear:hover,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-settings-gear:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--future-lyrics-panel));
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(
+  .lyrics-offset-controls input,
+  .lyrics-query-input,
+  .lyrics-source-form-input,
+  .lyrics-source-mapping,
+  .lyrics-source-select
+) {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 2px;
+  color: var(--future-lyrics-instrument);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 98%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(
+  .lyrics-offset-controls input,
+  .lyrics-query-input,
+  .lyrics-source-form-input,
+  .lyrics-source-mapping,
+  .lyrics-source-select,
+  .lyrics-settings-gear,
+  .lyrics-quiet-button,
+  .lyrics-primary-button,
+  .lyrics-offset-nudge,
+  .lyrics-import-button,
+  .lyrics-preference-close,
+  .lyrics-dialog-tab
+):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-cover-frame {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--future-lyrics-panel) 90%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--future-lyrics-edge-hi) 14%, transparent),
+    0 10px 24px color-mix(in srgb, var(--future-lyrics-shadow) 12%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-album-title {
+  color: var(--future-lyrics-instrument);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(.lyrics-album-artist, .lyrics-album-meta) {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-candidate-card,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-custom-source-row {
+  border-color: var(--future-lyrics-edge);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-dialog {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 18px;
+  color: var(--future-lyrics-instrument);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 97%, transparent);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--future-lyrics-shadow) 12%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-dialog-toolbar {
+  border-bottom-color: var(--future-lyrics-edge);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-dialog-tabs {
+  gap: 12px;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-dialog-tabs .lyrics-dialog-tab {
+  border-radius: 2px 2px 0 0;
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-dialog-tabs .lyrics-dialog-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--future-lyrics-instrument);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-header h2 {
+  color: var(--future-lyrics-instrument);
+  font-weight: 600;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-close {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 3px;
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page :is(
+  .lyrics-preference-track,
+  .lyrics-preference-label,
+  .lyrics-preference-effective
+) {
+  color: var(--future-lyrics-label);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-dialog .lyrics-source-select {
+  border-color: var(--future-lyrics-edge);
+  border-radius: 2px;
+  color: var(--future-lyrics-instrument);
+  background: color-mix(in srgb, var(--future-lyrics-panel) 98%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-actions > button {
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-line {
+    transition: none;
+  }
+}

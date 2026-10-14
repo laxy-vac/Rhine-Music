@@ -1,0 +1,31 @@
+/* Keep the established Punk grid placement; Future uses its own surface tokens. */
+.music-app:not([data-page="music"]) .music-catalog-grid-host,
+.music-app[data-mode="detail"] .music-catalog-grid-host,
+.music-catalog-grid-host[hidden] { display: none !important; }
+.music-app[data-music-layout="grid"][data-mode="archive"] #three-scene { visibility: hidden; }
+.music-app[data-music-layout="grid"][data-mode="archive"] .music-navigation { visibility: hidden; }
+.music-app[data-design="archive"] .foobar-catalog-tools .foobar-catalog-control[aria-label="LAYOUT"] { display: none; }
+.music-app[data-design="rhine"] .music-catalog-grid-host {
+  position: absolute; inset: 285px calc(31.366667% + 24px) 130px 36px; z-index: 5;
+  overflow: auto; overscroll-behavior: contain; padding: 12px;
+  color: var(--ink); pointer-events: auto;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-album-grid {
+  display: grid; grid-template-columns: repeat(auto-fill,minmax(136px,1fr)); gap: 18px;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-grid-card {
+  padding: 10px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); color: var(--ink); text-align: left; overflow: hidden;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-grid-card[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-cover-image { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; margin-bottom: 8px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host :is(strong,small,em,.foobar-album-copy>span) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host :is(small,em) { color: var(--muted); font-style: normal; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-catalog-group>h2 { display: flex; justify-content: space-between; margin: 10px 0; font-size: 12px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-cover-placeholder { display: grid; place-items: center; aspect-ratio: 1; color: var(--muted); font-size: 10px; }
+@media (min-width: 721px) and (max-width: 1100px) {
+  .music-app[data-design="rhine"] .music-catalog-grid-host { right: calc(43% + 24px); }
+}
+@media (max-width: 720px) {
+  .music-app[data-design="rhine"] .music-catalog-grid-host { inset: 285px 16px auto; height: max(0px, calc(42vh - 299px)); }
+}

@@ -1,0 +1,32 @@
+/* Native snapshots separate fixed controls, page carrier, title and content. */
+html:has(.music-app[data-design="rhine"]) { view-transition-name: none; }
+.music-app[data-design="rhine"] { view-transition-name: future-sheet; }
+.music-app[data-design="rhine"] > .music-header { view-transition-name: future-navigation; }
+.music-app[data-design="rhine"] > .music-playback { view-transition-name: future-transport; }
+.music-app[data-design="rhine"] .music-settings-page:not([hidden]) > .settings-page-heading { view-transition-name: future-title; }
+.music-app[data-design="rhine"] .music-settings-page:not([hidden]) > :is(.settings-page-layout,#lyrics-page-content,#signal-page-content,#theme-page-content),
+.music-app[data-design="rhine"][data-page="music"] > .album-panel:not([hidden]) { view-transition-name: future-content; }
+html:has(.music-app[data-design="rhine"])::view-transition { pointer-events: none; }
+html:has(.music-app[data-design="rhine"])::view-transition-group(*) { animation: none; }
+html:has(.music-app[data-design="rhine"])::view-transition-image-pair(*) { isolation: isolate; }
+html:has(.music-app[data-design="rhine"])::view-transition-old(*),
+html:has(.music-app[data-design="rhine"])::view-transition-new(*) { mix-blend-mode: normal; }
+html:has(.music-app[data-design="rhine"])::view-transition-old(future-navigation),
+html:has(.music-app[data-design="rhine"])::view-transition-old(future-transport) { animation: none; opacity: 0; }
+html:has(.music-app[data-design="rhine"])::view-transition-new(future-navigation),
+html:has(.music-app[data-design="rhine"])::view-transition-new(future-transport) { animation: none; }
+html:has(.music-app[data-design="rhine"])::view-transition-old(future-sheet) { animation: future-sheet-out 180ms linear both; }
+html:has(.music-app[data-design="rhine"])::view-transition-new(future-sheet) { animation: future-sheet-in 260ms ease-out both; }
+html:has(.music-app[data-design="rhine"])::view-transition-old(future-title),
+html:has(.music-app[data-design="rhine"])::view-transition-old(future-content) { animation: future-content-out 150ms ease-out both; }
+html:has(.music-app[data-design="rhine"])::view-transition-new(future-title) { animation: future-content-in 270ms 25ms cubic-bezier(.22,1,.36,1) both; }
+html:has(.music-app[data-design="rhine"])::view-transition-new(future-content) { animation: future-content-in 340ms 45ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes future-sheet-out { to { opacity: 0; } }
+@keyframes future-sheet-in { from { opacity: .72; } to { opacity: 1; } }
+@keyframes future-content-out { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes future-content-in { from { opacity: .5; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+@media(prefers-reduced-motion:reduce) {
+  html:has(.music-app[data-design="rhine"])::view-transition-group(*),
+  html:has(.music-app[data-design="rhine"])::view-transition-old(*),
+  html:has(.music-app[data-design="rhine"])::view-transition-new(*) { animation-duration: 0s; animation-delay: 0s; }
+}

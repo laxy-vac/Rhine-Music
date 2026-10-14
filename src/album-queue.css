@@ -1,0 +1,355 @@
+.music-app .album-queue-popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(392px, calc(100vw - 24px));
+  max-height: min(68vh, 540px);
+  overflow: hidden;
+  color: var(--ink);
+  font: 13px/1.45 MiSans, system-ui, sans-serif;
+  isolation: isolate;
+}
+
+.music-app .album-queue-popover[hidden] {
+  display: none !important;
+}
+
+.music-app .album-queue-popover :is(button, strong, span, small, p) {
+  min-width: 0;
+}
+
+.music-app .album-queue-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 76px;
+  padding: 14px 17px 12px;
+}
+
+.music-app .album-queue-heading-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.music-app .album-queue-kicker {
+  font-size: 9px;
+  line-height: 1.3;
+  letter-spacing: 0.13em;
+  opacity: 0.68;
+}
+
+.music-app .album-queue-heading-copy strong,
+.music-app .album-queue-heading-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-app .album-queue-heading-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.music-app .album-queue-heading-copy > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.music-app .album-queue-count {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 5px;
+  font-family: "Archive Mono", monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app .album-queue-count small {
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 9px;
+}
+
+.music-app .album-queue-list {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+}
+
+.music-app .album-queue-track {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 62px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.music-app .album-queue-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+.music-app .album-queue-cover-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.music-app .album-queue-cover-fallback {
+  display: flex;
+  align-items: end;
+  gap: 3px;
+  height: 14px;
+  opacity: 0.48;
+}
+
+.music-app .album-queue-cover-fallback i {
+  display: block;
+  width: 3px;
+  height: 7px;
+  background: currentColor;
+}
+
+.music-app .album-queue-cover-fallback i:nth-child(2) {
+  height: 14px;
+}
+
+.music-app .album-queue-cover-fallback i:nth-child(3) {
+  height: 10px;
+}
+
+.music-app .album-queue-track-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.music-app .album-queue-track-title,
+.music-app .album-queue-track-artist {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-app .album-queue-track-title {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.music-app .album-queue-track-artist {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.music-app .album-queue-track-meta {
+  display: grid;
+  grid-template-columns: auto 22px 38px;
+  align-items: center;
+  justify-items: end;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.music-app .album-queue-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.music-app .album-queue-badges .hi-res-badge,
+.music-app .album-queue-badges .dsd-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.music-app .album-queue-track-number,
+.music-app .album-queue-track-duration {
+  font-family: "Archive Mono", monospace;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app .album-queue-track-duration {
+  text-align: right;
+}
+
+.music-app .album-queue-current {
+  display: none;
+  grid-column: 1 / -1;
+  color: inherit;
+  font-size: 8px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.music-app .album-queue-track.is-current .album-queue-current {
+  display: block;
+}
+
+.music-app .album-queue-empty {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  padding: 22px 18px 24px;
+}
+
+.music-app .album-queue-empty strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.music-app .album-queue-empty span,
+.music-app .album-queue-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.music-app[data-design="rhine"] .album-queue-popover {
+  border: 1px solid color-mix(in srgb, var(--line) 85%, white 15%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  box-shadow: 0 16px 42px rgb(24 30 35 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.42);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+}
+
+.music-app[data-design="rhine"] .album-queue-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.music-app[data-design="rhine"] .album-queue-track {
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.music-app[data-design="rhine"] .album-queue-track:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.music-app[data-design="rhine"] .album-queue-track.is-current {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.music-app[data-design="rhine"] .album-queue-track.is-current .album-queue-track-title {
+  color: var(--accent);
+}
+
+.music-app[data-design="rhine"] .album-queue-track:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 78%, white);
+  outline-offset: -2px;
+}
+
+.music-app[data-design="rhine"] .album-queue-cover {
+  border-radius: 8px;
+}
+
+.music-app[data-design="archive"] .album-queue-popover {
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--page-bg);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--ink) 12%, transparent), 0 1px 0 var(--line);
+  font-family: var(--design-font);
+}
+
+.music-app[data-design="archive"] .album-queue-popover [data-cjk="true"] {
+  font-family: var(--design-font);
+}
+
+.music-app[data-design="archive"] .album-queue-header {
+  min-height: 76px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--page-bg);
+}
+
+.music-app[data-design="archive"] .album-queue-heading-copy > span,
+.music-app[data-design="archive"] .album-queue-count small {
+  color: color-mix(in srgb, var(--page-bg) 72%, var(--ink));
+}
+
+.music-app[data-design="archive"] .album-queue-track {
+  border-radius: 0;
+  font-family: inherit;
+}
+
+.music-app[data-design="archive"] .album-queue-track:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.music-app[data-design="archive"] .album-queue-track.is-current {
+  background: var(--ink);
+  color: var(--page-bg);
+}
+
+.music-app[data-design="archive"] .album-queue-track.is-current :is(.album-queue-track-artist, .album-queue-track-meta) {
+  color: color-mix(in srgb, var(--page-bg) 72%, var(--ink));
+}
+
+.music-app[data-design="archive"] .album-queue-track.is-current .album-queue-current {
+  color: var(--page-bg);
+}
+
+.music-app[data-design="archive"] .album-queue-cover {
+  border-radius: 0;
+}
+
+.music-app[data-design="archive"] .album-queue-track:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+@media (max-width: 520px) {
+  .music-app .album-queue-popover {
+    width: min(392px, calc(100vw - 20px));
+  }
+
+  .music-app .album-queue-track {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 9px;
+    min-height: 58px;
+    padding-inline: 9px;
+  }
+
+  .music-app .album-queue-cover {
+    width: 38px;
+    height: 38px;
+  }
+
+  .music-app .album-queue-track-meta {
+    grid-template-columns: auto 36px;
+  }
+
+  .music-app .album-queue-track-number {
+    display: none;
+  }
+}

@@ -1,0 +1,11 @@
+.music-app .window-aspect-settings { margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface) 65%,transparent); }
+.music-app .window-aspect-settings h2 { margin:0;font-size:19px; }
+.music-app .window-aspect-settings .style-section-heading small { color:var(--muted);font-size:10px;letter-spacing:.12em; }
+.music-app .window-aspect-settings .settings-row { margin:16px 0 10px; }
+.music-app .window-aspect-settings p { margin:10px 0;color:var(--fg-soft,var(--muted));font-size:12px;line-height:1.6; }
+.music-app .window-aspect-baseline { color:var(--muted);font-size:11px; }
+.music-app[data-design="archive"] .window-aspect-settings { border-radius:0;padding:16px;background:var(--panel); }
+.music-app[data-design="archive"] .window-aspect-settings .style-section-heading { padding-bottom:9px;border-bottom:2px solid var(--ink); }
+.music-app[data-design="archive"] .window-aspect-settings h2 { font-family:var(--design-font);font-size:16px; }
+.music-app[data-design="archive"] .window-aspect-settings .settings-row { border:0;background:none;padding:6px 0; }
+.music-app[data-design="archive"] .window-aspect-settings .settings-select-trigger { border-radius:0; }

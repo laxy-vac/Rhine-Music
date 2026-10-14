@@ -1,0 +1,537 @@
+/* Standalone EQ workspace, sharing the settings page's Rhine surface and type. */
+.music-app #music-eq-page {
+  display: none;
+}
+
+.music-app[data-page="eq"] #music-eq-page:not([hidden]) {
+  display: grid;
+}
+
+.music-app #music-eq-page[hidden] {
+  display: none !important;
+}
+
+.music-app .music-settings-page.music-eq-page {
+  inset: 128px 40px max(128px, calc(var(--playback-height, 80px) + 52px));
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-heading {
+  row-gap: 2px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-heading small {
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-heading h1 {
+  margin-top: 0;
+  font-size: clamp(23px, 2.3vw, 30px);
+  line-height: 1.15;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-page-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  padding-top: 10px;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-content {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 4px 8px 0;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor {
+  min-width: 0;
+  width: 100%;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-controls {
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-head-controls {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-head-controls > .settings-row {
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
+  padding: 6px 9px;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  font-size: 12px;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-head-controls > .settings-row > span {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-number-pair {
+  grid-column: span 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-number-pair label {
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-preset-title-control {
+  display: none !important;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure {
+  min-width: 0;
+  margin: 0 0 8px;
+  overflow: clip;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary::after {
+  content: "⌄";
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 14px;
+  transition: transform 140ms ease;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-preset-summary {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-app .music-settings-page.music-eq-page [data-processing-presets-slot] {
+  min-width: 0;
+  padding: 0 10px 10px;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-presets {
+  gap: 7px;
+  margin: 0;
+  padding: 10px;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-preset-fields {
+  min-width: 0;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-preset-fields .settings-row {
+  min-width: 0;
+  margin: 5px 0;
+  font-size: 12px;
+}
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-preset-actions {
+  gap: 6px;
+}
+
+/* The existing EQ controls stay shared; only the standalone workspace is denser. */
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip {
+  grid-auto-columns: clamp(260px, 25vw, 290px);
+  height: 330px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip > .eq-band-card {
+  height: 320px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-gain {
+  min-height: 178px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-gain input[type="range"] {
+  height: 168px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"] {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-indicator {
+  top: 6px;
+  height: 22px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"]::after {
+  width: 6px;
+  height: 6px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-response-figure {
+  height: clamp(142px, 16vh, 168px);
+  min-height: 142px;
+}
+
+@media (min-width: 901px) {
+  .music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-preset-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 4px 14px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .music-app .music-settings-page.music-eq-page {
+    left: 25px;
+    right: 25px;
+  }
+}
+
+@media (max-width: 700px) {
+  .music-app .music-settings-page.music-eq-page {
+    inset: 108px 20px max(128px, calc(var(--playback-height, 80px) + 48px));
+    gap: 8px;
+  }
+
+  .music-app .music-settings-page.music-eq-page .settings-page-heading h1 {
+    font-size: 23px;
+  }
+
+  .music-app .music-settings-page.music-eq-page .eq-page-layout {
+    padding-top: 7px;
+  }
+
+  .music-app .music-settings-page.music-eq-page #eq-page-editor .eq-head-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .music-app .music-settings-page.music-eq-page #eq-page-editor .eq-number-pair {
+    grid-column: 1 / -1;
+  }
+
+  .music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip {
+    grid-auto-columns: min(290px, max(220px, calc(100vw - 56px)));
+  }
+}
+
+@media (max-width: 420px) {
+  .music-app .music-settings-page.music-eq-page #eq-page-editor .eq-head-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-app .music-settings-page.music-eq-page #eq-page-editor .eq-number-pair {
+    grid-column: 1;
+  }
+
+  .music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary {
+    gap: 7px;
+    padding-inline: 9px;
+  }
+}
+
+.music-app[data-layout="portrait"][data-page="eq"] .music-settings-page.music-eq-page {
+  inset: 134px 20px max(128px, calc(var(--playback-height, 80px) + 48px));
+}
+
+@media (max-height: 560px) {
+  .music-app[data-page="eq"] .music-settings-page.music-eq-page {
+    top: 92px;
+    bottom: max(128px, calc(var(--playback-height, 80px) + 52px));
+    gap: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-app .music-settings-page.music-eq-page .eq-preset-disclosure > summary::after {
+    transition: none;
+  }
+}
+
+/* Controls and preview share the page's normal scrolling document flow. */
+.music-app .music-settings-page.music-eq-page #eq-page-content {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-content > [data-processing-apply-status] {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+.music-app .music-settings-page.music-eq-page #eq-page-content > [data-processing-apply-status]:empty { display: none; }
+
+.music-app .music-settings-page.music-eq-page .eq-preset-disclosure {
+  display: block;
+  max-height: none;
+  overflow: clip;
+}
+
+.music-app .music-settings-page.music-eq-page [data-processing-presets-slot] {
+  min-height: 0;
+  overflow: visible;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor {
+  display: block;
+  min-height: 0;
+  overflow: visible;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-controls {
+  grid-template-rows: auto auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-controls-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  gap: 10px;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-controls-main > :is(.eq-head-controls, .eq-workspace) { flex: 0 0 auto; }
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-control-error {
+  flex: 0 0 auto;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-control-error:empty {
+  display: none;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-response-figure {
+  position: static;
+  inset: auto;
+  bottom: auto;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-self: stretch;
+  width: 100%;
+  height: clamp(200px, 28vh, 300px);
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.music-app .music-settings-page.music-eq-page #eq-page-editor .eq-response-chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip {
+  align-content: start;
+  grid-auto-columns: 220px;
+  height: 270px;
+  max-height: none;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip > .eq-band-card {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 4px;
+  height: 260px;
+  padding: 8px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-card > header,
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-actions {
+  gap: 5px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-index {
+  gap: 5px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-index i {
+  width: 6px;
+  height: 6px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-actions button {
+  min-height: 23px;
+  padding: 2px 5px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-enabled {
+  min-height: 22px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-enabled {
+  gap: 5px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-enabled input[role="switch"] {
+  flex-basis: 36px;
+  width: 36px;
+  min-width: 36px;
+  height: 22px;
+  min-height: 22px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-enabled input[role="switch"]::after {
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-enabled input[role="switch"]:checked::after {
+  transform: translateX(14px);
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-selects {
+  gap: 5px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-selects label {
+  gap: 2px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-selects :is(select, .settings-select-trigger) {
+  min-height: 28px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-adjustments {
+  grid-template-columns: minmax(80px, 0.78fr) minmax(0, 1.22fr);
+  gap: 5px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-gain {
+  grid-template-columns: minmax(20px, 1fr) 52px;
+  gap: 2px 3px;
+  min-height: 148px;
+  padding-top: 2px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-gain input[type="range"] {
+  width: 24px;
+  min-width: 24px;
+  height: 138px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-gain :is(.editable-range-value, .editable-range-number) {
+  width: 52px;
+  max-width: 52px;
+  min-height: 22px;
+  padding-inline: 2px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-values {
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-field {
+  grid-template-columns: minmax(0, 1fr) 46px;
+  gap: 2px 4px;
+  font-size: 9px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"] {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-indicator {
+  top: 5px;
+  height: 18px;
+}
+
+.music-app .music-settings-page.music-eq-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-number {
+  min-height: 25px;
+  padding-inline: 2px;
+  border-radius: 7px;
+  font-size: 9px;
+}
+
+@media (max-height: 760px) {
+  .music-app .music-settings-page.music-eq-page #eq-page-editor .eq-response-figure {
+    height: clamp(180px, 28vh, 240px);
+  }
+}
+
+.music-app[data-page="eq"] .music-settings-page.music-eq-page {
+  bottom: 24px;
+}
+
+.music-app[data-page="eq"][data-playback-visible="true"] .music-settings-page.music-eq-page {
+  bottom: calc(var(--playback-height, 80px) + 44px);
+}
+
+.music-app[data-layout="portrait"][data-page="eq"] .music-settings-page.music-eq-page {
+  bottom: 16px;
+}
+
+.music-app[data-layout="portrait"][data-page="eq"][data-playback-visible="true"] .music-settings-page.music-eq-page {
+  bottom: calc(var(--playback-height, 80px) + 44px);
+}

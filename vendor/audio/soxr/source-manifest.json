@@ -1,0 +1,322 @@
+{
+  "version": "0.1.3",
+  "sourceArchiveUrl": "https://downloads.sourceforge.net/project/soxr/soxr-0.1.3-Source.tar.xz",
+  "sourceArchiveSha256": "b111c15fdc8c029989330ff559184198c161100a59312f5dc19ddeb9b5a15889",
+  "upstreamFiles": [
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/CMakeLists.txt",
+      "size": 10112,
+      "sha256": "7af671e1282cee7140f2f85ec37d607468bf80c1d90d439340169bd80e308198"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/COPYING.LGPL",
+      "size": 26432,
+      "sha256": "f2f118b9029ec1871b953639ecc46651b2fc7b62e295e6cf3ef2ac4c9a058b33"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/LICENCE",
+      "size": 1024,
+      "sha256": "dc98676341fdcd29d9f279c9679d6a75288785b174ded8d1b2e316c366166135"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/NEWS",
+      "size": 2410,
+      "sha256": "490966b220ad4b335057c5c92ecc47380c346709b08f942354df085d05163211"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/README",
+      "size": 2866,
+      "sha256": "c3d94aa8237daeb4e6bd5b6555b72bf5cf1fbe9319f5980fd5362cdc5982f90e"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/soxr-config.h.in",
+      "size": 693,
+      "sha256": "eb14fed7c02b5446e0266681f29ffcd97923f294ab4c3c7fb924fb84a3045321"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/aliases.h",
+      "size": 1989,
+      "sha256": "5ad419882124571d5e7c031f6c2eeaec3b7f7a2daba3dc2a906b2be65fff8fd8"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/avfft32.c",
+      "size": 989,
+      "sha256": "1cc2e2eb0addd4d5f4014480731b5557923eb9525051676f91707c6b6739886c"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/avfft32s.c",
+      "size": 1015,
+      "sha256": "6e4927198b52fb51ea9e7290b89e84456e8d008c22b4ab49daa162ce54b9a875"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/ccrw2.h",
+      "size": 2048,
+      "sha256": "620542698a4af0cd503b35e94965f76f0696681dc283c4963080c808ea919074"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/CMakeLists.txt",
+      "size": 3705,
+      "sha256": "a259ff8e724b5ac6fa1f8dd217de276cb791145b63dbb7e9933d34d91c1a744b"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr-core.c",
+      "size": 7560,
+      "sha256": "ec8755248757ad1116b0e783cd8546e69b3a9809e29e5481fb9ec703a36e8777"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr.c",
+      "size": 22393,
+      "sha256": "224322c832160c03c0ab27277e4c6282c880606c63624e624e6890081361be5c"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr.h",
+      "size": 5278,
+      "sha256": "c712cda53c3ac23bdfda9bc8658be00420b007afab9ef019a5ebd391fead445d"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr32.c",
+      "size": 265,
+      "sha256": "6eaf2b8b33f75c4892c83c7aeb458f8040d416d494e39e442c699a57719d2876"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr32s.c",
+      "size": 311,
+      "sha256": "ff94ae48c7fe5ccbd54273261bcfafddfe29e515f57b9769e435bb0ee8c6a6ad"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr64.c",
+      "size": 272,
+      "sha256": "d6614bf50d2b34578dc1720e3c6a2e9c6a301a575bed3636f72c686d42ad8558"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/cr64s.c",
+      "size": 320,
+      "sha256": "5120e3f128b09a328f8a541cfbac37a09b80d4727d2ad5bd9b771adb63f1e3f9"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/data-io.c",
+      "size": 5785,
+      "sha256": "e88ee7cfddac5dcbb6a9fc6cd246d2de8526fa35973c5a84a55abb7c0a4bd8c7"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/data-io.h",
+      "size": 881,
+      "sha256": "6001cee72944963da2b58bc4c47c1186bba4dda480b0dc31c6b8b0c56da80b6e"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/dbesi0.c",
+      "size": 6745,
+      "sha256": "06ea6d16a2d781c77a3f528357c42a7d4559a39b515dbf8109290d679edc3394"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/dev32s.h",
+      "size": 1545,
+      "sha256": "01d1a646fe09d81af61902c6e6de30b3d7ef428a03bb0360969cd80bd5c60678"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/dev64s.h",
+      "size": 1236,
+      "sha256": "70b367aa3ba72f09df2c45b0e854bcd5a2d8ff967a79ef11e0b4f8e5e310339d"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g_cache.h",
+      "size": 2198,
+      "sha256": "1eea9b4a924e6004b438f64352b74399fbb3bcea57ee936c0ad44bdc6b2e325b"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g.c",
+      "size": 37406,
+      "sha256": "604e71c0dcebe1922f718f43077ccebf588c770aa76e37d28b70cbefbaa2eca1"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g.h",
+      "size": 1070,
+      "sha256": "81c587dfca362c501ab11f7a245135175217b1c58da1b85632372b769978e6aa"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g32.c",
+      "size": 980,
+      "sha256": "a0dd216835fdf11a55a815ece61013e91c65fb3f356f23fba4137fd813b6f1ee"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g32s.c",
+      "size": 939,
+      "sha256": "408efd66aaf6823695b2e5daf7fb011da4fc23bc15230d59285446077458e962"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fft4g64.c",
+      "size": 961,
+      "sha256": "8f94a82d565245e1afd28e0f4ce572ed0abf380a9bbf6718fc5e54d59d286d87"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/fifo.h",
+      "size": 2729,
+      "sha256": "400502cea5c47022b0350f14b90209470f6cbc2e15c96e5adb9297bb5d44d28f"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/filter.c",
+      "size": 9689,
+      "sha256": "86bff80d41d720f2758ef7cf77a4bd2c3c4b2d8ab9a310cb1c9d1daab2fc537a"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/filter.h",
+      "size": 1860,
+      "sha256": "419065db3578a061fe822d091b641409df7761fb791e5570c71e31aa64dc9801"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/half-coefs.h",
+      "size": 2734,
+      "sha256": "95d3b41777f070544ef394ef0a031f0be51035590285f66698b1cadd6422abf8"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/half-fir.h",
+      "size": 1931,
+      "sha256": "f2f683646d1a25ac2c7b3e275d9fd9bac82a81d1f8cae50e1fb535b94a371863"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/internal.h",
+      "size": 1923,
+      "sha256": "25208e096c6f67029d9cbc29acda3580031a02454f81d28eb84fac35efaf96a0"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/math-wrap.h",
+      "size": 763,
+      "sha256": "444ecdd5403f8de33682f032f4c2d002207c5bfe0fcde2e11e43e71dd3b87600"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft-avx.h",
+      "size": 1498,
+      "sha256": "faa0be3a2696bd812fd9ceb0bb115cb97b41db47783c5f58e04cd49a526992e7"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft-wrap.c",
+      "size": 2552,
+      "sha256": "73c3d4e86e05a966a83dd39b9b6994ad78ca746f561dcd4bfdb1f515fef533ab"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft.c",
+      "size": 67826,
+      "sha256": "2949635f6107983832a7fcb6b7a539b43022fdd64d6cc01904ff5f7d792bb4c4"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft.h",
+      "size": 7013,
+      "sha256": "98df5afd0529f0be91c5308bd4b5296454df565d4a50eaa042b477b4d8d796d7"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft32.c",
+      "size": 1648,
+      "sha256": "22683e58db40c9e729129936ef8eff72d470fa4dcaf88ca7f63899fc3a980522"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft32s.c",
+      "size": 1523,
+      "sha256": "e062c0ffb5d9cd05eab71da67bb1a8d15ed79a432b8f65bbb0aa8b5e5f054b8e"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/pffft64s.c",
+      "size": 1533,
+      "sha256": "b7a9f7aea8c2c43769f3d18c450b60a5a29803df3081d554c616cce8611b85d7"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/poly-fir.h",
+      "size": 4415,
+      "sha256": "178fdb1ccac2ff24f2d5d856b63a3d6b756830a6254326381e06ce46b9c4a4a4"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/poly-fir0.h",
+      "size": 1784,
+      "sha256": "c06b652aaa9e034729782ff52c8a8f68df6eb956dc000cd521590f349df92559"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/rdft_t.h",
+      "size": 1362,
+      "sha256": "0641f2c59f4634ebc67001d474405fb6c1210985b812ed914054e5c343c36f6f"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/rdft.h",
+      "size": 825,
+      "sha256": "2a0c68bce7395ad380b7ec19f1c73ee57a46e9cd50e339e48aaa4e335e0fa531"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/rint-clip.h",
+      "size": 3667,
+      "sha256": "63265a84f83aec1b66ab790181312c487d1bd525debe7ee0d15716f617610b11"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/rint.h",
+      "size": 3538,
+      "sha256": "1f306bce28e40cd48b5cd8ea68eb5ddf1c4123fc98768f94d9dda05dde2721eb"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/samplerate.h",
+      "size": 22,
+      "sha256": "56204403ea88dfeac8b1d315e28280efd9b550872085adb574b01631956d75b4"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/soxr-lsr.c",
+      "size": 4388,
+      "sha256": "a5aff245aa4e10a91aff97947711785d60946a280aeb76d7cc39886f77f031c6"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/soxr-lsr.h",
+      "size": 3112,
+      "sha256": "d93e2f3055c584dab454ef99bf3f0dace537a8ae3a2b57a6a113fe43f8e74d6a"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/soxr.c",
+      "size": 22844,
+      "sha256": "d54e1b84bcaf73c38024c66bd594bb55fb02247afec8d726e27e30acd4d44421"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/soxr.h",
+      "size": 13984,
+      "sha256": "dfd18fae32b77b484bda918dbaac122ddd402512041a96977fc01377f69684a4"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/std-types.h",
+      "size": 1002,
+      "sha256": "b10b0d00a8b1f8a04207dd5efa331fe69a1a315f4da4ddf0f7a9586c83f22d01"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/util-simd.c",
+      "size": 2095,
+      "sha256": "0ef71eff4ddcadac17c3a0ea56ef47b6a379facc0a9f00852be51e124fada4b7"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/util32s.c",
+      "size": 230,
+      "sha256": "fcf3e92a8713d103289e64f1c53bbb00bef395d16c33b813243c12903f4d85ed"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/util32s.h",
+      "size": 862,
+      "sha256": "8b06e69fd1bf122cdc62cad7913de205f14aa950f20c9db67ac8e490d281b82d"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/util64s.c",
+      "size": 230,
+      "sha256": "d566a5135647edc7b5cd90b35753618722efcbb42fd221d5748e14a0dc4f0087"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/util64s.h",
+      "size": 866,
+      "sha256": "e890d3d569feefda54c49b14a097f142e13f4bf22c92ed3f40cfca93f1cbc483"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/vr-coefs.c",
+      "size": 5563,
+      "sha256": "9f15fa8f1100d260b9d7571bb087c38468073ec8fbeeb13ea9e5118b58f9a6a4"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/vr-coefs.h",
+      "size": 5336,
+      "sha256": "4b3c91f2ab202aa2eded009985b5a51f05a678dcb5cb7dc883437ae1a78d5bc0"
+    },
+    {
+      "path": "vendor/audio/soxr/source/soxr-0.1.3-Source/src/vr32.c",
+      "size": 21401,
+      "sha256": "6219c4924d9746faa224e8c11a7315698aea5008e0f3f1863c86730b8e6a5d95"
+    }
+  ]
+}

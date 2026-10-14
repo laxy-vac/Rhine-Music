@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "assets": {
+    "front": "rail-front.png",
+    "mid": "rail-mid.png",
+    "back": "rail-back.png"
+  },
+  "axes": {
+    "x": [
+      139.408556,
+      19.905185
+    ],
+    "y": [
+      46.628912,
+      -59.51124
+    ],
+    "z": [
+      0.0,
+      -132.933348
+    ]
+  },
+  "res": [
+    900,
+    900
+  ],
+  "ppu": 147.0,
+  "origin": [
+    450.0,
+    581.62
+  ],
+  "pitch": 1.0,
+  "label": [
+    [
+      165.48,
+      547.56
+    ],
+    [
+      251.91,
+      559.9
+    ],
+    [
+      251.91,
+      578.51
+    ],
+    [
+      165.48,
+      566.17
+    ]
+  ],
+  "projection": {
+    "source": "white case inspect-23 cover quad",
+    "lowPoseDegrees": 25.27,
+    "screenRollDegrees": -6.360394891,
+    "orthographicScale": 6.12244898,
+    "cameraRight": [
+      0.948357582,
+      0.317203492,
+      0.0
+    ],
+    "cameraUp": [
+      -0.135408789,
+      0.404837757,
+      0.904306889
+    ],
+    "cameraNormal": [
+      0.28684926,
+      -0.857606173,
+      0.426883042
+    ]
+  },
+  "pitchAxis": "y",
+  "source": {
+    "blenderVersion": "3.6.23",
+    "script": "art/build_style_player_rail.py",
+    "reproducibleSourceSha256": "fe7b0be7b45821a467c89edb0688f29763f845bbffc582545ceca1f8ca2d6c06",
+    "blend": "art/style-player-rail.blend",
+    "engine": "CYCLES",
+    "backend": "OPTIX",
+    "devices": [
+      "NVIDIA GeForce RTX 5080 (OPTIX)"
+    ],
+    "effectiveBackend": "OPTIX",
+    "physicalGpuCount": 1,
+    "selectedBackendDevices": [
+      "NVIDIA GeForce RTX 5080 (OPTIX)"
+    ],
+    "deviceSelectionNote": "Only Blender devices whose type matches the selected backend are enabled.",
+    "sceneDevice": "GPU",
+    "samples": 48,
+    "denoising": true,
+    "transparentRGBA": true,
+    "renders": {
+      "front": {
+        "seconds": 167.71,
+        "device": "GPU",
+        "samples": 48,
+        "backend": "OPTIX",
+        "devices": [
+          "NVIDIA GeForce RTX 5080 (CUDA)",
+          "NVIDIA GeForce RTX 5080 (OPTIX)"
+        ],
+        "effectiveBackend": "OPTIX",
+        "physicalGpuCount": 1,
+        "selectedBackendDevices": [
+          "NVIDIA GeForce RTX 5080 (OPTIX)"
+        ],
+        "assetSha256": "40892e4b785db9b9dcfea484a4e1ff7d53573d4c4db2c0aa401e909de616e86d",
+        "executionRecordNote": "Retained from the 10:16:22 run. compute_device_type=OPTIX and scene.cycles.device=GPU; that startup revision marked both the CUDA and OPTIX entries for the same RTX 5080 as use=true. No exact executed script hash was captured. This image was not rendered by the mid/back partial run; assetSha256 records the retained file."
+      },
+      "mid": {
+        "seconds": 173.273,
+        "device": "GPU",
+        "samples": 48,
+        "backend": "OPTIX",
+        "devices": [
+          "NVIDIA GeForce RTX 5080 (OPTIX)"
+        ],
+        "executedSourceSha256": "fe7b0be7b45821a467c89edb0688f29763f845bbffc582545ceca1f8ca2d6c06",
+        "assetSha256": "9e985d6f3b2ec3115a499a82e0e55f08a5ea5e65bef99a852437101047900782"
+      },
+      "back": {
+        "seconds": 0.746,
+        "device": "GPU",
+        "samples": 48,
+        "backend": "OPTIX",
+        "devices": [
+          "NVIDIA GeForce RTX 5080 (OPTIX)"
+        ],
+        "executedSourceSha256": "fe7b0be7b45821a467c89edb0688f29763f845bbffc582545ceca1f8ca2d6c06",
+        "assetSha256": "ba55a95dcacf19a88f304418e2d2afcf9d5f0177c9b50c932e18c7adc2ccea96"
+      }
+    },
+    "fallbackReason": null,
+    "renderedVariants": [
+      "mid",
+      "back"
+    ],
+    "executedSourceSha256": "fe7b0be7b45821a467c89edb0688f29763f845bbffc582545ceca1f8ca2d6c06",
+    "executionRecordNote": "The manifest retains per-image device and sample facts when only a subset was rendered. The source hash identifies this executed script revision.",
+    "retainedFrontAssetSha256": "40892e4b785db9b9dcfea484a4e1ff7d53573d4c4db2c0aa401e909de616e86d",
+    "frontRetentionNote": "The final partial build rendered only mid/back. The existing front PNG was retained unchanged; its current SHA256 is stored per image."
+  }
+}

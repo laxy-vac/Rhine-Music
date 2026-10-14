@@ -1,0 +1,3490 @@
+{
+  "schemaVersion": 1,
+  "kind": "rhine-lsp-eq-sources",
+  "license": "LGPL-3.0-or-later",
+  "components": [
+    {
+      "name": "lsp-dsp-units",
+      "version": "1.0.38",
+      "repository": "https://github.com/lsp-plugins/lsp-dsp-units",
+      "tag": "1.0.38",
+      "commit": "186be049af15d9678d80c8b3dee67817e4487535",
+      "archiveUrl": "https://codeload.github.com/lsp-plugins/lsp-dsp-units/zip/186be049af15d9678d80c8b3dee67817e4487535",
+      "archiveSha256": "dd352dd1d0e94fbcb3d41498abeab3d0cf73e141a45932896d69915e72fc93a3",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "name": "lsp-dsp-lib",
+      "version": "1.1.1",
+      "repository": "https://github.com/lsp-plugins/lsp-dsp-lib",
+      "tag": "1.1.1",
+      "commit": "2f93492a3af9532c364b6d426cca9a1a7d5fe0f3",
+      "archiveUrl": "https://codeload.github.com/lsp-plugins/lsp-dsp-lib/zip/2f93492a3af9532c364b6d426cca9a1a7d5fe0f3",
+      "archiveSha256": "829d6835852fa23726df36a5671a5799b08279b3c5f3a8c703460ed37561d80e",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "name": "lsp-common-lib",
+      "version": "1.0.49",
+      "repository": "https://github.com/lsp-plugins/lsp-common-lib",
+      "tag": "1.0.49",
+      "commit": "072e4ad8c495ee19f8dda1a94d5c09c2ce78525f",
+      "archiveUrl": "https://codeload.github.com/lsp-plugins/lsp-common-lib/zip/072e4ad8c495ee19f8dda1a94d5c09c2ce78525f",
+      "archiveSha256": "b8c78f34c415e6da84b30d011f58d59d7e65896466c8ce58c2635f9e6f4361dc",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "name": "lsp-lltl-lib",
+      "version": "1.0.33",
+      "repository": "https://github.com/lsp-plugins/lsp-lltl-lib",
+      "tag": "1.0.33",
+      "commit": "64a0f36cb2cd42cd2952ed123f51518fcde9eb87",
+      "archiveUrl": "https://codeload.github.com/lsp-plugins/lsp-lltl-lib/zip/64a0f36cb2cd42cd2952ed123f51518fcde9eb87",
+      "archiveSha256": "803d6a66feb8210bd0308669351590e5ec0d1010a8b6e73b17df70b75f0a280a",
+      "license": "LGPL-3.0-or-later"
+    },
+    {
+      "name": "lsp-runtime-lib",
+      "version": "1.0.36",
+      "repository": "https://github.com/lsp-plugins/lsp-runtime-lib",
+      "tag": "1.0.36",
+      "commit": "52d887e515a59a3839db15d6d8536b1e0df46de0",
+      "archiveUrl": "https://codeload.github.com/lsp-plugins/lsp-runtime-lib/zip/52d887e515a59a3839db15d6d8536b1e0df46de0",
+      "archiveSha256": "0ffba1657bb08d93d47f01437ec48bb9d7cd0ac64606d9f502c27212ff412dfa",
+      "license": "LGPL-3.0-or-later"
+    }
+  ],
+  "includeDirectories": [
+    "vendor/audio/lsp/lsp-common-lib/include",
+    "vendor/audio/lsp/lsp-dsp-lib/include",
+    "vendor/audio/lsp/lsp-dsp-units/include",
+    "vendor/audio/lsp/lsp-lltl-lib/include",
+    "vendor/audio/lsp/lsp-runtime-lib/include"
+  ],
+  "buildSources": [
+    "vendor/audio/lsp/lsp-dsp-units/src/main/filters/Equalizer.cpp",
+    "vendor/audio/lsp/lsp-dsp-units/src/main/filters/Filter.cpp",
+    "vendor/audio/lsp/lsp-dsp-units/src/main/filters/FilterBank.cpp",
+    "vendor/audio/lsp/lsp-dsp-units/src/main/misc/windows.cpp",
+    "vendor/audio/lsp/lsp-dsp-lib/src/main/dsp.cpp",
+    "vendor/audio/lsp/lsp-dsp-lib/src/main/generic/generic.cpp",
+    "vendor/audio/lsp/lsp-common-lib/src/main/bits.cpp",
+    "vendor/audio/lsp/lsp-common-lib/src/main/cpuid.cpp",
+    "vendor/audio/lsp/lsp-common-lib/src/main/singletone.cpp",
+    "vendor/audio/lsp/lsp-common-lib/src/main/stdio.cpp"
+  ],
+  "sourceFiles": [
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/COPYING.LESSER",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/alloc.h",
+      "sha256": "f7fdcac0ed1748a0d01a8b3c3a0522dda600731c8574382a8d727279539d6232"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/aarch64/atomic.h",
+      "sha256": "8a50427e38cda5dc23542704d6ae57c927fe4753bff4b0f25d99df7c1511ff7f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/aarch64/bits/int_log2.h",
+      "sha256": "2f86fb583dc21fd8e892548bcdfd27500eb4727e59abc8390a0dbc910582b05e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/aarch64/bits/reverse.h",
+      "sha256": "f2c89727d201f6718aabfc80fb2151db262eccae899499ed19df6b53ba1ba87e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/aarch64/endian.h",
+      "sha256": "7335187c68ac5ffff3d5214bc9333e1e29b838c521b516ea1078b58a1c6227d8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/aarch64/hwcap.h",
+      "sha256": "6e76b8f4dd618cf7f9142f8a0ce88fd2acc718242687ee354bf9bfbb1d5e6684"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/atomic-armv6.h",
+      "sha256": "b06f2cca6202c0fa8009d4c05a3309fe3edaeea1b2920853ea0f236c4b4f5aa9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/atomic-legacy.h",
+      "sha256": "92f9ab6dcf933968e5234eff5875262bcb02547ff6eb2b91947b3fec7422942e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/atomic.h",
+      "sha256": "92ec8bb59b33dfb4b36c376bcf66013a648126296a863d9a8b6af763e5fa24a2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/bits/int_log2.h",
+      "sha256": "82aa5591aab22395fc781c0e5f8785b49bf515b322191790295dcc5f31317226"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/bits/reverse-armv6.h",
+      "sha256": "36ae5c895aba7e17cbac272abc0503cf4aa9c03c0bd99cab4f1322db836e9739"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/bits/reverse-armv7.h",
+      "sha256": "29b3f912cc3d061aa38cbedf69ab4464785f4497f69077af37a0ed0659575f0f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/endian.h",
+      "sha256": "7feef91aaf486195947606a11306a267477c103bad90c91708c6a1e8754ee745"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/arm/hwcap.h",
+      "sha256": "0f4ffe7953dfe9d1c78694d3d394fb0ed766038c39a67e21bf2d37d2885dc5f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/generic/atomic.h",
+      "sha256": "e794a56f59dc1c4ee8d1634e851d396ea3ac2202947e8f90f78689e79dae30f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/generic/bits/int_log2.h",
+      "sha256": "45f7f5d433c5d9fede3d3b6c7f4f2cf6ec74b1b9ef601c3049f865426d48145f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/generic/bits/reverse.h",
+      "sha256": "66c0a36a803d039ae3bb6b8fac8b0e10a7d5434a6f8a6384c90318d1fc2ede77"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/generic/endian.h",
+      "sha256": "589b8b2b9950d6c7256ad8abd9fd52a6ac5eb66350c89c7090a2f4b4e1494bdf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/generic/hwcap.h",
+      "sha256": "04e1e8de87ab350d420710991398b07be00a559dd11ff8ce590f079f9a049cf3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/x86/atomic.h",
+      "sha256": "53f8ba32589b646fb33c51686f99482ee775e604eeb039998e248f3bd3ae0120"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/x86/bits/int_log2.h",
+      "sha256": "e9b264278b7d4995c52f2e7d18cb826910951c1d63ae331f1fbdf2243bc45f64"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/x86/bits/reverse.h",
+      "sha256": "710c00748dae259b8e0684d54f857aa12644575097648cf1e8d39ec728244a39"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/x86/endian.h",
+      "sha256": "63218395775d19597fa67e12ad7ea5408a6d10663f9a1f70ad3b2b2d17c74ad5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/arch/x86/hwcap.h",
+      "sha256": "88b15966b5b63b004040f55e94cbb505c8d9517c058dc5ae9647619508f1bb47"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/atomic.h",
+      "sha256": "fe6bf558cf5a7eb629348e357de27a91fc7f01e339b8eb59bfb6ff58ee57d5bf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/bits.h",
+      "sha256": "14aa9bf4625952cc9fe5362ca08e2e4773ab41e4ead5f80bf31bcd621cf1e6a7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/cpuid.h",
+      "sha256": "453ed008d93dfbb017becf150913052f7d24efa0f582df410288db57c4c26628"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/debug.h",
+      "sha256": "84c4de2238d0851a97eba58bff520648d26651e9769a9f0ca6797ee8fec53fd2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/endian.h",
+      "sha256": "3583425dc526d9349408bf380eb325cb70d3f3ff89f546a51879a803c8feee5c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/finally.h",
+      "sha256": "77839b61d4769d918e0de52fb3640adf5446aa753d5c53f8f58454654e8402ce"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/fixed_int.h",
+      "sha256": "ece13568b75f2f55769315f52a6fb40f448de8bb4eddfa40b7b6196ea83b4c89"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/new.h",
+      "sha256": "12d73bc96b8a7f5493d6d79940ff081244c7f5637f7b56be32abea287a71a7ee"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/singletone.h",
+      "sha256": "293acdaf5961f970962d9f3477b0e9216e7e3e67556bb85bc0441b4d79c5f58b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/static.h",
+      "sha256": "d95b499b86672db3668c0da993c9e9c37b99b19d7bb47943b99c28cae87baf66"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/status.h",
+      "sha256": "cd575626f2d46aca42d279936efa3b3f62daeecd683d6eda4ffe6a2c51fc64f8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/types.h",
+      "sha256": "dfa7ba37a439fd7b5c468a4131efdad106ff8b43fc0e49a76d2ba097a4af622b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/utility.h",
+      "sha256": "054be6fb8a61861439cef39aa2278ab3ed800253ca364635813949c87dd3067f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/variadic.h",
+      "sha256": "c7ad01f160cdc8da7a1c5431c19c1299eb7937ec8ea4aa0614cd24137e1009fc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/common/version.h",
+      "sha256": "17dd91e40106c741b4a3ac041d67a6e63a13f81da706f3dceefb4681ae48237e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/stdlib/locale.h",
+      "sha256": "7bd3909750da62573947a528553928cf12fdba8fc27f892e80b697640ab3a577"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/stdlib/math.h",
+      "sha256": "902f04d9305d5bffda9197051a052f07eb8aeedf9ddfba9900221d9383c4238f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/stdlib/stdio.h",
+      "sha256": "c3141e2fbf1e3bdbdeaa545a1ba0730c9a7abbfea21eac6861898382ea8e0814"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/stdlib/stdlib.h",
+      "sha256": "359cd9a460a6b0a807076d62448bfefe54e3bc61defa0a4e9ebcf51f68af72c0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/lsp-plug.in/stdlib/string.h",
+      "sha256": "b6856d394d69a7d9c77cd2a4d42911483d0bc9b71feb3be60c8acdfd8b3d428b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/aarch64/asimd/memswap.h",
+      "sha256": "323732a4dd685daa7f206ca071f471bb7e52150f2a8feaaa78c8557e40f7a5c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/aarch64/cpuid.h",
+      "sha256": "1fbed0e3bd0ed0643b59d7376854fa99300da63b63c59b29e93d8882721276b7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/aarch64/memswap.h",
+      "sha256": "8633034587c43347b75ccc38ed9be73a79a891ec15310aa5fbad067da3a4cb91"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/arm/cpuid.h",
+      "sha256": "b1f7c60862de9d238c3728fa3d55832f4ce273894b16a89341d442500a375c70"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/arm/memswap.h",
+      "sha256": "8eb725fafcabacdee3f1c625f1ee6aba98ac7b0700be57605e8218fac7f8806a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/arm/neon-d32/memswap.h",
+      "sha256": "bc4ff598a71c7c01d0366279c110fab655a92d6a5640248afce884d82d43d0c1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/generic/cpuid.h",
+      "sha256": "763c9c495f7ab7c2072f8990c9702477cfb6a9cc246df7fbfa443fb9af8e63a3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/generic/memswap.h",
+      "sha256": "9e0b45c6c5408588f111907490b065a9ceb441a59ab1294ed68e1a0e68e93e52"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/x86/avx/memswap.h",
+      "sha256": "495e7868a13d459e3a8e57fca7139db7688a138fd67719a8e607a2ede5b25333"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/x86/avx512/memswap.h",
+      "sha256": "76c7ea25a5d1779f6c343ec34b866d577fbd09cb9ae562aeb6eb980384d8bdfe"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/x86/cpuid.h",
+      "sha256": "5a2b619e90b6eb8c3d02a1d38eb525c16a54a4ac52f27a94afc66eb158959ddc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/x86/memswap.h",
+      "sha256": "7cb42a952a7588f1fcf6a41ce0a6a72507a9ef384dfc61d21ed815904a596779"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/include/private/common/arch/x86/sse/memswap.h",
+      "sha256": "9613ad7dec7ed397a9b38173b8f15be7b2aebc5a823aa1505810815554a5a33d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/README.md",
+      "sha256": "0c2c4910a6c18480df8d64980866db17808fc0c47bbdc9256a5164071b22bb29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/src/main/bits.cpp",
+      "sha256": "af9b145ba0ac7103c427aed1a3cdee63d2bbdcc64859d645b7fb604a91042972"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/src/main/cpuid.cpp",
+      "sha256": "6c7eb2c6e390361c37c40e6b08a0981eaaf0c290b484721708ed977671d4bbc7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/src/main/singletone.cpp",
+      "sha256": "7db0852914c73394b9e434003ae866fdd1f23270c003f2069a028555aafd718c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-common-lib/src/main/stdio.cpp",
+      "sha256": "b076b2830877b44f50eb9a5eee0fb7d3eaa5eea48b9e1e0460cf882d313c2657"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/COPYING.LESSER",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/3dmath.h",
+      "sha256": "ce30e676a41f1ce043df4c2e2833b9ed078289a161f7aec65d86737e7a64afe5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/3dmath/types.h",
+      "sha256": "5d927a8b82eb162206e4f8f478cd0ebad68e50a0ed9ef5d47479726a284f5c7e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/bitmap.h",
+      "sha256": "0724e116dcf3836ff5ee5fec8cf6dec9e1452bfb09b76000b77839ff01a5b708"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/bitmap/b1b8.h",
+      "sha256": "47b98c71dadde8fa96386272d533e1f5c1f5ce53adfa3523010e74893a0efb18"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/bitmap/b2b8.h",
+      "sha256": "d7c1c9b8839a43da3e0ae6201980a7bcf55fc4fb37914ba912d04de965ea216c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/bitmap/b4b8.h",
+      "sha256": "13dea5c4228864143c3adb42fba64470575eeaa2732d90eceaeecc68e22079df"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/bitmap/b8b8.h",
+      "sha256": "8bde09c04dcb6dac097f28692f8a0cae817be2527c0a5cca0ebff195e1698496"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/coding.h",
+      "sha256": "fc42aa296c73a5c8e505c6bf230119209213cf893208619d00e8ae707120b785"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/complex.h",
+      "sha256": "cfff3e2da1461c094f840d333af5fbb5ccf8d2e2d011de6b9d39e56b22f48ef7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/context.h",
+      "sha256": "8e18692fe7405439a7b206ae6c474f47e5d050c439b462102fede157004876ab"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/convolution.h",
+      "sha256": "9edd144d0bea75a2f22eb24702b60a64dcb0511823cea7185dca551772eac76c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/copy.h",
+      "sha256": "c5cc6765abe6c6a33fd0721ec5450ac7068e469f96ea46ea5afd89852ac5a629"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/correlation.h",
+      "sha256": "f395111129f3035d16dda3e6da7da7a95cbfacf05515ddec0b7bf1b7359fcf6d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/dynamics.h",
+      "sha256": "76552992d4499ce73dfc992491145fc53bb2397b488f8ae1ccc34de9dd69e4ad"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/dynamics/compressor.h",
+      "sha256": "679c5e3ae0e29158ed33316f7ffec509666f77a2a759b83cd9b5cb4560498966"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/dynamics/expander.h",
+      "sha256": "d1fc2a9448ad0bc50259edcaac3e7d36bb9fad116b02852abc52b41b848d73bc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/dynamics/gate.h",
+      "sha256": "ad3e3e9875566facaa31bc785f91cbfa213e646234132b0e07d0f211004deeec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/dynamics/types.h",
+      "sha256": "b1e5904f5cf1dafb74f3380e8389ad6a6210268949ed6a6ac7e0cc066443ed4a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/fastconv.h",
+      "sha256": "ab60227e5c5bc25e805f9fcfcf9f64e75b87551c44f8088a072437ab339dd203"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/fft.h",
+      "sha256": "05f7ac516d66742a547cb982409ebce2e11afa27b09eb66e6f766362ca12e968"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters.h",
+      "sha256": "f3a0841fad92eb38b821208b7ff0bdfde5064de130954c1428db4a0d0a3e8565"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/dynamic.h",
+      "sha256": "2ff70b88b5f28f24e9d5d85f033120385015a93b72d19bb5320a4247b789114b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/fill.h",
+      "sha256": "10982bfe0ee7157f4c043a047bfcc9190f557487bf300dbb8fa2d8c8e5e7fa66"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/pack.h",
+      "sha256": "a53b112afce807972acf154359e97fc105f736d7875aac4587a674e29289d6d4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/static.h",
+      "sha256": "5c346667fced18bd30564508e5b69fa3789c82a304060d6f5ca5988421005b35"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/transfer.h",
+      "sha256": "e1ddb174f84a349dd80689961ff94a6dd2ab334ae0fb5959def1ad8e0f0397e0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/transform.h",
+      "sha256": "7acfe7a3a7ab3912d1a66c032e8ae23bdd6017f5a87dc8e7d6f5546e8f3599f8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/filters/types.h",
+      "sha256": "7d03d0115fcf7fa394664fa489d8f6e6eedcf543cfaa44bd937a2bd588cf1fd3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/float.h",
+      "sha256": "4549871af800dcea700bf65c62cb7f7c5aa19bc92cd1e013c95918dcfcff5d1a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/graphics.h",
+      "sha256": "4478a9ef7f1fc80afea31513e3f0eb07808b58fc782e6fbbd1aa76424d215e8b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/hmath.h",
+      "sha256": "79bc0eb293ce3218ae9d3cb8c043087a20da758f14133140b96f8e36cd78fbaa"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/hmath/hdotp.h",
+      "sha256": "eca5923b417d8895f3eb793de7246c15b15640ef2ac6eeaec08a86669b78d85a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/hmath/hsum.h",
+      "sha256": "3e4cc811435209132dae3502ad71bc8f2e508e0962169c484a29a0cd21d26b69"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/interpolation.h",
+      "sha256": "442ef008ea39c9b996f2e4ca1ee7027d0f4d093f51346322ebc095c143981b61"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/interpolation/linear.h",
+      "sha256": "d9d97e74d415a506eeb72832a1036fa97289578f6b1c1260cde353ca901c0ce8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/mix.h",
+      "sha256": "832874e94aaddd36029a881f51fed728983f682a8496825b66d417527754498c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/msmatrix.h",
+      "sha256": "a11569121c06c0c6b4ca81f95c9de8d5bfb070b9f94a2d0a904dfc4266e1a8d6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pan.h",
+      "sha256": "02d3f4bc77469813b3b839b3790c3e8f5f1769e778ed84818ccabeae21283ec5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pcomplex.h",
+      "sha256": "6f1b7db2ea75d5e8c5c1227864e08ab5f0fb4a5055a31ae472a994b440a7b8fd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath.h",
+      "sha256": "ec8312c9192cd89c725d07e902f4b5990c38f82d84c1356d538cae8a94d1b9cd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/abs_vv.h",
+      "sha256": "2a91da0877390a1da96a8c2c22c59f4d8d641ad990d252876a5f91f2058a0f50"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/clamp.h",
+      "sha256": "d87285055c49b0db16949aa2dd6864f333ef1877af78006acfbb7f431e866f03"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/cos.h",
+      "sha256": "2f4f8b49ada206b76b3a85a8942dcaeee23077e015576967c0063ab530bfcbe5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/exp.h",
+      "sha256": "6ae83ddca2aad5a683e272443034b5665a57f4f37ca034d3de46c897099e7ede"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/fmop_kx.h",
+      "sha256": "71df81e6dcbc7f4b78622c5b76fc5c5ffaa86b5b9ee90b96ff218634e5358a69"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/fmop_vv.h",
+      "sha256": "b22dee6f19356a9ab7aae167ee7d2387379286a6a4f28c90331a3227751e03bc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/lanczos.h",
+      "sha256": "b34ce9feb2911c600afd213b0d4e76fd40eee0afacc5ea189e4590643bd2abff"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/lerp.h",
+      "sha256": "e9b07016893f9c2c0f6b2c6614f03429d19d88d5d7ac3b238fb80f8831d74598"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/log.h",
+      "sha256": "33c58f15126465b5e35e0e9605ad564e44a2f157ed203b384b74b9ca449f8510"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/lramp.h",
+      "sha256": "4d5529ddae98be532d5bf12b9a23d43d4ef476f36521911afe67a67c3d5f8d72"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/minmax.h",
+      "sha256": "74057ce905138cfccef844bd3079b189ca0cc9652fc293b07a09a19bdf41efa3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/ms_minmax.h",
+      "sha256": "cbfe5eb88068869ccfa1a9fe036e5fda9187f24100523362cf0b75a04740a02d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/normalize.h",
+      "sha256": "39fa7c4090813a06b407d60174dd16a5ae0196ef3a491c4249532881c2292c76"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/op_kx.h",
+      "sha256": "1b3978a83e743763429501d56b474fdc20109f9931ed20439a464fb8429afe18"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/op_vv.h",
+      "sha256": "d828c8500b30a937afbd993dc53b508b3e3aa5067a69f36b15fd96c3235fe133"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/pmix.h",
+      "sha256": "3452903b83431156019f36c89621a5195be189052c15645a0e3573ebbf2006fd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/pow.h",
+      "sha256": "7906bc61e8af023a9c048cb5e85c1a5e6fd448aae7af2bcbc803be7767204fd7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/sin.h",
+      "sha256": "2a4fd6d67b67d5bf99a82a29775031aa6a964833211f81c2f903204a2260e6e0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/sqr.h",
+      "sha256": "f0f59abd43ecaad8a0124576df8d1c31dd3f217409b76eabcd53272d48c48a02"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/pmath/sqrt.h",
+      "sha256": "66cb8223c31efd5b4e02b68a0a15224928862da8fc3220317f3f7b04b35aa32b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/resampling.h",
+      "sha256": "a2a688707cec542446835c955d1a323d5d14ae8e4622f2fc8d2c341b53fa2d7f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/search.h",
+      "sha256": "54ff79d28c0430d6afeee116562525d08a62653112a14130f5d6b3b49a64e88a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/search/iminmax.h",
+      "sha256": "6dd5b5ded30d74735c2d9d31ee1fc9bdd4fb8abeb5211a1fb170a51800a03b85"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/search/minmax.h",
+      "sha256": "6e9a95089742a7e2892cd7ad5bdaa29190873cc0cb0d6afa2ef5fc4085e3eb8c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/smath.h",
+      "sha256": "f03b756d28fce73d017bf2d85bce8ff1ae9691817074f7ba115f4c9bd852eb08"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/common/types.h",
+      "sha256": "d35e9b2f44f6dc09cbc027e1a96a47b2ae9a5985868cee17d32861719e4f5fb7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/dsp.h",
+      "sha256": "0a14ac1a744bc6841440e8b06ee6fc9c011567cb101aa261ad018f8e79700613"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/lsp-plug.in/dsp/version.h",
+      "sha256": "0d72dab76ebc097650a59afedeb58ef2f88fad104d03559c416d6552647a5d06"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/complex.h",
+      "sha256": "85f6035a8ebd4e20632ac66c691ff2895b42b1e609865c9a64c1e0db9a7816e0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/convolution.h",
+      "sha256": "3e25f35f569da133cce70d8257c742ded37e616902e926bf9295f0b7ad3f1513"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/copy.h",
+      "sha256": "7b47b2043162206500e526a488c102a16b811cc103be59820196f35ed934e3df"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/correlation.h",
+      "sha256": "11322bb4bbd590a0e0c8bbd2777913c07838fc07eb631bf798b419ca1a025de8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/dynamics.h",
+      "sha256": "267b795b1742ceade48a42880942c95985236bf2407264ddc216c03e9dbb9425"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/dynamics/compressor.h",
+      "sha256": "a5f2baaf09bff6d5b8fde20d467a4537ef81e86c5a4011e8baa0d48a166fb51e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/dynamics/expander.h",
+      "sha256": "68638b48f109efdbe0aed4fff48d8c1b7368bc8bf21844da072c58d928b3bc7c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/dynamics/gate.h",
+      "sha256": "6ccad059a587445d4cfab53e313d11851a9373a1a93df9f6050d5262ebe9ab83"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv.h",
+      "sha256": "967b376560f97cc56cf27dc2d125044d339e2c9f75be1230143cc94299fdbef8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv/apply.h",
+      "sha256": "739b829737084d41669cc322b22bdebdcdbc8d3a3b40bf47b4c9e092429983e8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv/const.h",
+      "sha256": "9d874cf55735b030fd2ebab15b719f446ad3562e2151e720bebf1fd501993388"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv/papply.h",
+      "sha256": "4e592743ffe4c2258824ab943267450a646a5e73b4e1cfb29229a38cd4bd8ba3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv/parse.h",
+      "sha256": "6d2e1b87c268b5e410f93ccfe055bfb2e7b17c94f2450ffaf5f0f1082291e360"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fastconv/restore.h",
+      "sha256": "367268a990014903d871d5dd676b4b4812bb0cc39b5f01ed4cd3ef59eabc49f9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft.h",
+      "sha256": "813ade7df0548337198d518e5a06dbc13447cdf0cbe344468cd9167d3da44ccb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/butterfly.h",
+      "sha256": "031b4b13abf33889b4634a5a455b9fd059c0e229b075051518067ed30afc7831"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/const.h",
+      "sha256": "2c4865aef914a6d2f9a02a70f9bcc74249591f593669ea9b6918bfca9e6ebace"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/normalize.h",
+      "sha256": "f2f31ce76c6e3a7c00ced294e5e0edf2a982b77e043635e738e387515aa7c646"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/pbutterfly.h",
+      "sha256": "f94f1ded96cd34e69c2ffcdfe357437cb9a5960a8668449040c89d581929b485"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/pscramble.h",
+      "sha256": "c03523738d3117352d8f8e0db0c76d070370253df6c56ef0cea02506584631a3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/fft/scramble.h",
+      "sha256": "5f2ddd076691ff43df06da30dac47112a783fc3ffc3d26edba2ac53a944c81af"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters.h",
+      "sha256": "fbc3f2058003b8030509415020005445830fd1627343446d4303931d7bcbd195"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters/common.h",
+      "sha256": "d5e329a61822d31c83e87faab2cbcc97dc224173df6dd655f7a3decb0de0d3bb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters/dynamic.h",
+      "sha256": "743f7b7ed45e9449fdacd318df3cc3e01ee480176a819be826d2ad070e35926a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters/static.h",
+      "sha256": "494b175296fe753a727c2cdb8b174d6239627759ca9c14e87ccb53affa2cd905"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters/transfer.h",
+      "sha256": "82f38c9e050e5eb14cbcd1a3c5739be5f5f453debe259e04de95446248d5b75a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/filters/transform.h",
+      "sha256": "f702b1641fc8020c4fd382b033479dadfc94a4b793eafe21b2e2dd36b5daab6f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/float.h",
+      "sha256": "12d818ce27ee3dbc687a646275e97e52fdc2b21b62ae3acd0ea9be57c9bf9da0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/graphics/axis.h",
+      "sha256": "9569e36da02fbc20cb48cd941e126572b319b3ee80268101853a17a0a07ba719"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/graphics/colors.h",
+      "sha256": "3fe54007b62c6b416d7fce89a8a9b8c7addf95338d9b95e0dd8e0cef56134bda"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/graphics/effects.h",
+      "sha256": "7ff5e8bfdc437e9154a49ef3dbef860ac3bb73a2c64d08bb16098327a6c07be1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/graphics/pixelfmt.h",
+      "sha256": "687c98a661f1ce3b565bce4862076957386201f5d0f143d10b5d70900d80566f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/hmath/hdotp.h",
+      "sha256": "b3c61cae8184bfab73f3dec12a589ff1bfaf51f16c62954d104352d846aa93ca"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/hmath/hsum.h",
+      "sha256": "f904aeed9d128b48f64aa96e215e09a84744f180dbded6a33726a39b2290ffe0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/interpolation/linear.h",
+      "sha256": "7c53643b51fad04f52f7899d3c47f95ad23672dc9a15c0c4069bbc7c70b463e3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/mix.h",
+      "sha256": "f68d5912b3cbc33260cb4e2969a7970f579463552df625625729d09fff5406e7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/msmatrix.h",
+      "sha256": "64ed3a68388d9a4e2988d342c3fc523a53e41a19dd2780771a91a224ce33be2a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pan.h",
+      "sha256": "d8c9bb24ff2e201f1510f4d1b25f0ed52ff5a6fef5a182d722ffb16f7e0b4cff"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pcomplex.h",
+      "sha256": "09459558db67a7b80c65193c1e69e9aac95b0ed64ef2bb16274c5849f583b386"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pfft.h",
+      "sha256": "29ef49427716c1dbb1bd6a0942b0e33455ec80b15411f0fb29332e1a4b5d5080"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath.h",
+      "sha256": "49fa5fcc0dd7d983f9f6386328803b2ac81cf5fdf28f0e9bca292eceee437f21"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/abs_vv.h",
+      "sha256": "d4aa5aea3c0dcff1f7d8aca6e29b76dc268e583bad704b788aa592ca2b3cabbe"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/clamp.h",
+      "sha256": "a6ac011ccaf1368c5ab2c7ee0500eeafac252b0194dfc264414034084cde29ea"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/cos.h",
+      "sha256": "6d1d4dcae15724651f856ae85a885027191d09cfe4c639d6be329e25bf1122d3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/exp.h",
+      "sha256": "be25cd9a464d411dc6b831eca0e79368cc775080a10712900c3352c4b90c6448"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/fmop_kx.h",
+      "sha256": "71fd35dde10a1b978ebd6740e9152a81f058d93fbdbe8c038b43972535753baa"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/fmop_vv.h",
+      "sha256": "205cadcd83b40a494166a061ded2a966e754b6209d4abc1e887d0dd7368fb472"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/lanczos.h",
+      "sha256": "1cd0bebeeb8bda053a04df659b1d5f5a019b225b7c420b3cf940d251524509ce"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/lerp.h",
+      "sha256": "dfd5d5f1b4dede85a3bf56d13ce387526b07e0225cf0001adc89161486a8fb0b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/log.h",
+      "sha256": "1dc7250518bdc313ceeec99be45537a8829205b6408f97610a5c16be3a6d3d32"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/lramp.h",
+      "sha256": "4f42d5fd2126f3d8152dba2ae6588f8dcca7c0703122c2953aa436f679e607a4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/minmax.h",
+      "sha256": "4e1ce1483208abb94202e3aec347640fac6fbb5c43a70d2afb87286d1e470929"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/ms_minmax.h",
+      "sha256": "fd00ac53613520cfaab425ab061e08ee1ef2f073d25f5a2f6a37ac61e592cc8d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/op_kx.h",
+      "sha256": "0cba8798326ce9f9783a28fd065499905754528cb1a6b31e18a2b736a93b4619"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/op_vv.h",
+      "sha256": "1234541dc7342f8b1a465ca279ca8b1e397c1afab31855ac99d479165970a6f4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/pmix.h",
+      "sha256": "4a05fbc1360867327261d898d8a473b42239e6229c2812575649f0a9cb9be25c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/pow.h",
+      "sha256": "cb701e7722eb0c00a22f8da1a60bc17bd332c3ed27728a6a977123ffdae073b0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/sin.h",
+      "sha256": "72cce545ffd511861f3ff3dd0ee9729936fbb73be40a1d26dd6569635a126a52"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/sqr.h",
+      "sha256": "886011c64adc390a2cef3a42bc31dfbf2ee0f9e71d3e2d616f45080567f49ea0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/pmath/ssqrt.h",
+      "sha256": "3249c68376f4a8dfc8331bf7b1c7f59059904ac62b5b53e193f864a255c7e3bb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/resampling.h",
+      "sha256": "8577840459507244268768f43e07daf0891f85e41cd181e2dc2c63935b9e227f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/search/iminmax.h",
+      "sha256": "12a819aaee3de5823462edc2d06a1ec84e9a3bcf867765a2c8d2570801c35ff4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/asimd/search/minmax.h",
+      "sha256": "835cbe1e17d3f23d4aafea2ab42357718531f175b0c64daaced0a208e0938552"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/fpcr.h",
+      "sha256": "d182a998ec550f7e9312281f872db85d8e63399745784ca30cee6158e6474823"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/aarch64/init.h",
+      "sha256": "d3efd7125c7e2422835e2661a85ee80d0c95f9040b28e8162f5e7d83f5c86863"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/fpscr.h",
+      "sha256": "24e2ede0e24c4dd202dcb6cc361078e98966701aa0e32645dc698c644cc1006a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/init.h",
+      "sha256": "3c37d37120f9abd4219d1124c4e2a49eb1a4af08419b930795fac5c4d23528a7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/complex.h",
+      "sha256": "bb6c863b62a193be4ef40f79a0e171b7f65ae81996d6e4de27a16bd53aa38557"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/convolution.h",
+      "sha256": "2c26e8763b4cdb515ec832821aa1c8efaff70285aa0cd00928a9754b3edd670b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/copy.h",
+      "sha256": "8befd4576fc63958da0427145e69abb17f8149801fb8591905bae9b7f330f2e9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/correlation.h",
+      "sha256": "15bca79cf7c12c3d90743d6ec54c60a1b7a791731eab2223563e28b17ccb25ee"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/dynamics.h",
+      "sha256": "4292d30347a10b4555c45d9d7213909fc62cb5120ceec20b4e7928bcc116b2d4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/dynamics/compressor.h",
+      "sha256": "231bcf9b68fda809ba58fd8121ec6f80c67a7c756e4afa20fd8fde58a28bd328"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/dynamics/expander.h",
+      "sha256": "7c5a0ea295b40d64e8000cdfb9e12dacfe60cd617282380d210c9782eeceec2b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/dynamics/gate.h",
+      "sha256": "4acdba2da3a5ffdbf1c7b7265d462529835695f63ea12b1fd13a4bf0897b1dec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fastconv.h",
+      "sha256": "d2ac2acdd7017e8e0f1cfe5b0a001bb633e99a2a417b4ad6b6063ef14f860a05"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fastconv/apply.h",
+      "sha256": "e73b50c686353aca868ca41312e0aa106817540b6b7aba8c5d9da7683efc68d7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fastconv/papply.h",
+      "sha256": "029271686680304161ba586b138ced88ed7f69251337987674f1228240625c09"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fastconv/parse.h",
+      "sha256": "4524cfb23eaa65878eab78fd7ab170c22e676f2aa2f356f18faaefaf6d80580b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fastconv/restore.h",
+      "sha256": "5288b672b27ac1189a178e19ddbe4256472f79c8ae2e88c6017110cdc891c2f5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft.h",
+      "sha256": "81fa49a5f7d7f576cd25d94bb7d8bf90632139491847ce56dbd02e98e3275570"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/butterfly.h",
+      "sha256": "307ba1601eefc533ed910c4148a523fdd38f5be65f01bbdd45af39c01fa841e9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/const.h",
+      "sha256": "84d6ca2394b095b5a5f622e48ef0a334e4c01880b6368d8dd6edbd0a08c6ce85"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/normalize.h",
+      "sha256": "4828dc125f9f367761d41c97e43abf814740310aebc6f080484c4b548e9304fc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/pbutterfly.h",
+      "sha256": "6b2b0b862d99f4c5fba47114abc6015306f996cddd4bee0665a7f107b7222069"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/pscramble.h",
+      "sha256": "3c298dce1c9b866c9d60e7ef00b8832bcb41d2071dde96184b7a6c616509b596"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/fft/scramble.h",
+      "sha256": "e0a39e9325c55fac5809723d3680d85dd5e2ca544b858d006bd82d31b2f51183"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters.h",
+      "sha256": "0a768e793f3cb2a1941935a5a6c1cd649aae979a208ee9e938e212c43b690f0e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters/common.h",
+      "sha256": "592951f2282c3a67d040e6634bfa1443da3d47330b3ff1577964101e0797b97e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters/dynamic.h",
+      "sha256": "b564a902ac93bc226f54e3c35d656173da98837e1b515fea40d1fc83f3321a0a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters/static.h",
+      "sha256": "2b3b5f26545e3c7bf099755fa295d5d1c0f07a6429e25a3d437144c89b8b7f28"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters/transfer.h",
+      "sha256": "f5bd2984e821057f4a441fe78525e1cdf44be16ae58b3b392a7916f820c58894"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/filters/transform.h",
+      "sha256": "7d06b7c5e5c44d01206b274e996281294cc9d04260ec7d0cfd03434fc8be795f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/float.h",
+      "sha256": "64b17a66843de6b22800f6e3658f639b9e636892a032865cfce084b585294742"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/graphics/axis.h",
+      "sha256": "c7b79ebc36c2481ecc4ddf816f2b5bfed09d1de72c1588c937a883f08acd6e1a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/graphics/colors.h",
+      "sha256": "99cff0477c5921c1f5df8ceaf41424872774bdb3c00b807a204af4c0f6e8a213"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/graphics/effects.h",
+      "sha256": "e48e41c58da3ec73c0a6cd796e74f238c30687459e2c39ad03cb2ce7d833947e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/graphics/pixelfmt.h",
+      "sha256": "6d9a1c313a6ec30dfa4d67ae052ccae7aa0e09668d4ac034062b7763d5ae3d47"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/hmath/hdotp.h",
+      "sha256": "a782330e4be6acf5fe7c7b51afc6a8d382364a3fee27e4043710f4d9e6e4dc81"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/hmath/hsum.h",
+      "sha256": "5dfa9a7b10c5d3512e01f9e722b91efe86dabac68e806dbea7437b0a9ff46243"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/interpolation/linear.h",
+      "sha256": "8a4cf11d95e78b9a95d0dd32e8c460ebe32d7c3cea27191e7dfc497e8adc7a39"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/mix.h",
+      "sha256": "a41f8caac902a70c967da8b4edf46c268d640597dc7cd5a3d634b82b32b51849"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/msmatrix.h",
+      "sha256": "359b279ebf7b9e63eff91eaeb8e7807e843a88848ee97cbdbffe76f2fdfe6136"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pan.h",
+      "sha256": "94598dcffd798942e8c15233a48d9b967736fe16926a96d53ede74be3570dd80"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pcomplex.h",
+      "sha256": "2913a9b74d95532f9839bdfa66dde80f0a14295683ede4c8c9c4a915fbda40a8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath.h",
+      "sha256": "0d412f554b400ee3a2e1be2bfacaf358b651386409afc4f89354096f3222fbec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/abs_vv.h",
+      "sha256": "0e3952cbe3be32f47fffcd6b57f668adf62b2b6ee4f7df03bfabb0f4b5f8d72c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/clamp.h",
+      "sha256": "0bccd8df273601b78acbcce44e39e03ad3c5a9a40c460fed2b55197a44c49722"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/cos.h",
+      "sha256": "93c13a238c3bdb7e719b423bb7c671d32f45f666ac35652ef70bd9e62e7f9887"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/exp.h",
+      "sha256": "a385ba3ecbb3c42f0d18dc8f3eecbc6f0128d638ed9c1dbdf4fa39ffd709d598"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/fmop_kx.h",
+      "sha256": "020d150a8e7dd30b851f8573f50f9d9306d2d81053406a17cf3f77cbaab9a79a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/fmop_vv.h",
+      "sha256": "b4db8a471401ed453d19b366418b2fcf8a5e9175dc9204b74243b3412eebde26"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/lanczos.h",
+      "sha256": "f8dc2ea891c2b5e335cf739ea215b96ccc90dc6052ba64cec47c22592bc8c9ab"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/lerp.h",
+      "sha256": "82d5981a5122186ae7056f1f70bcb3f83e77a730d552c7d8ff97d50016cb352c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/log.h",
+      "sha256": "407a30c756bfe6741d192e8d344c3c27810fb8e53f59ee2c7b74db211290e01f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/lramp.h",
+      "sha256": "8c11cdedadd29825a49c0937073423ac28e49325ef17d7c2f1f954e21fa904c5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/minmax.h",
+      "sha256": "cfd69d32a31a90979b8858feec78141da2b7759ea86c09e4ed50e6fe5153920f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/ms_minmax.h",
+      "sha256": "cc2a32f3b798ce141bc9bfac1c71c6a706fcd4eceea48b3071526ab0ddf93c2d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/op_kx.h",
+      "sha256": "d3b7273be73cee6b1bd0ae082b578091636d7df1b61eb5732a6e98527cf89d2b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/op_vv.h",
+      "sha256": "17f1f4c85a319fd7271ca8b494845180171c883463baa9a573052528c0734e5d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/pmix.h",
+      "sha256": "5fd0e1c4511ae207f5ce699f000cb4fec35c2a6434142e40bbdb3869784f9aa0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/pow.h",
+      "sha256": "535d97f9385bb090c2b8c59148dccf77ae3a6954e9059a552fd0bf37ef26018b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/sin.h",
+      "sha256": "7e35cb99911e6ff4cc915cb137c60b5e58157798457f806ef78669680f5534c7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/sqr.h",
+      "sha256": "0e1e87a0ad3a196bc57d00bc161a86a8370ce65a8c676cc9db8ce515635c2616"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/pmath/ssqrt.h",
+      "sha256": "ef476b20689e6ffe0c4eafd0b1b78f1824c053b43b19bef2fddabcbb8b59b5ad"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/resampling.h",
+      "sha256": "42149c71bfe81eafea659b050a2d043e3dee16ed436eaebddde327591571719b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/search/iminmax.h",
+      "sha256": "e0128a78923a87d16764029a307be64d64227ed4625b279901a04f6d4d856afe"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/arm/neon-d32/search/minmax.h",
+      "sha256": "1ef85d4519ea9e3951cd32c1d3afb80bfa0d4d05f8edf5150f2cd044925797ba"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/3dmath.h",
+      "sha256": "2f340655fc4018693a0af1049ba24b2a72a37e19c50189923a85aeccccad846a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap.h",
+      "sha256": "75d8637c8f6a23831bc73e36420a3a7dbeb0386e05f0f809e967832968f5fa84"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap/b1b8.h",
+      "sha256": "5f2b6a40838d26e97f4dcde934bda603d53d3ebb413275b37ad6e2d99cd753e7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap/b2b8.h",
+      "sha256": "97851cf1f5a110a9ac76428e5f91abbc0aa6b531c598d9e8530d93807c57f9e0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap/b4b8.h",
+      "sha256": "731f86661283c5ef3a2b9e4aaf8dcee8919a4835c05df747babc4c35197c217f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap/b8b8.h",
+      "sha256": "1433320a1c4d638c7e38a8677306fbfa22f9dcc1c6fcc67388772d59fd3881bf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/bitmap/helpers.h",
+      "sha256": "bdd8d52d74b33d37b9491788d07a0f70937317e100b4f701161276c4e7f74ba3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/coding.h",
+      "sha256": "3944f695fc2e53e0c9e6f7b48f6caf56238d5bad44c1d69a50a63a1af6c8b0fd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/complex.h",
+      "sha256": "4703c26d8299ecb9cda6791ec4237b285011deb9fca88848a6af7ff0fcfa47fb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/context.h",
+      "sha256": "a10ecd1699162f9b8d51020ac150badc34372ccaff8bb9f4a791f39a7dab825d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/convolution.h",
+      "sha256": "ce0c25aac68a1d46653f644b08f5d16f923786ba44a98d41ba48966f797bdf1d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/copy.h",
+      "sha256": "a932da1711916aef4091b4873a94fea7ce36ff3e2ca017a153c8b5b994a0a702"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/correlation.h",
+      "sha256": "c9732c4222fc4690bc75850f18251e48acb6c536a01952e45ff82ac6ba2946ac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/dynamics.h",
+      "sha256": "34ca36394ef3eb24e54b13cfbc0f58361bce92e2627f6994dbf5b799623f7cb5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/dynamics/compressor.h",
+      "sha256": "f0508fa4227cecf1a202bab6be42601b889d9946840d850ed86e4eb6e44b103b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/dynamics/expander.h",
+      "sha256": "7b97709120cb9b45b1b948e2aee65672d25bd825df11da2fe634975d4d4f0261"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/dynamics/gate.h",
+      "sha256": "7e45e1b289d5433bf000ebbbb14a0b8f1184b3c9420a323e315da9d7eca834f4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/fastconv.h",
+      "sha256": "5bd2432c56aae2b482844e57e938402be656aa49aeae791c4690ed5ccc7ab250"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/fft.h",
+      "sha256": "f1dd77fc6061cff64a44a3f48d6199a1fb28f3be39df42f4a9e4fb6727f30d67"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters.h",
+      "sha256": "cddd3d52a54ccbc57ee695d43db522b1905b70157759f433f523cf160e045d7a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/common.h",
+      "sha256": "423d604e5e4c56b980d3feb389eae95d5ba915441462f3877cd5c726b9e78440"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/dynamic.h",
+      "sha256": "7adc916c194af0d8d97b1f478d9661f11167268cbe79731cb11bc320c3f746df"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/fill.h",
+      "sha256": "10cfef1ae41e18c1fd9d93c04d9105f7418306f28bd1f102379967d3b5536a02"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/pack.h",
+      "sha256": "01fdb32b35444a4cc735e44882eea6e0cc1be8c71c5cc9e38b74573fa2e14e33"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/static.h",
+      "sha256": "93d18d67c707a6c3e1c4550886f429db985fa2c3a08c8dfe6e55ceee18c8d921"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/transfer.h",
+      "sha256": "553dc0025b0a80b2c2e569317ac5c9b551ad0c1749ef9047195e3fd7fcd08cf0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/filters/transform.h",
+      "sha256": "b8b66f27e5939006d749d007748be9544650b6efa19d141a87774e29229ab157"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/float.h",
+      "sha256": "78a8d18f28599c9218e1125d517d7441432dcf7d3631fc9e7684011097b377cf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/graphics.h",
+      "sha256": "769b690dc0c3dda5bfc132bae6a9d6eb1d892130d0035c60cdb3274e203dc3b8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/graphics/axis.h",
+      "sha256": "82c2abe691f6f5f5ccfeed004c5f571ce0f14748e0a23b32be9951c9bb8b0963"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/graphics/effects.h",
+      "sha256": "771a9574070fcde6be7edbc280d10e85e7961a9b55328a757a5dde463ad7961f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/graphics/interpolation.h",
+      "sha256": "c4da3acf601e7afcb272c350ab7962ab5e94fdf0c4aef9b8e77651f717118628"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/graphics/pixelfmt.h",
+      "sha256": "43e28db74462bea299307e0ea25ebe7bb9064ce20ce79b75b88c2610bcb119da"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/hmath.h",
+      "sha256": "4fd9346fee6a6b55f5f20a88f1e4b244d12caffe7c3cfc63d9220997f017b579"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/hmath/hdotp.h",
+      "sha256": "111596037d402901246f629d387f28af313c336f02e3afed7fc5520ec6ae4cc1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/hmath/hsum.h",
+      "sha256": "2b4ab2a6effdebf26c7cdc0133e096621c56e1433d2184634ee9405347d50aa2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/init.h",
+      "sha256": "15b42234fca88b697021eae16648de6c7d3b1674759f2538fb244717ca7653ab"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/interpolation/linear.h",
+      "sha256": "df9810314e9c67043810ae1da596255777ebe1bf861830147154d4aa1e6f73ac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/mix.h",
+      "sha256": "37a2a35c1719ca298099e066720729e126def0a6de75ad1eef6409b9e5f2f486"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/msmatrix.h",
+      "sha256": "7078417d0e5139cf363308bc7f7209a7eeaf97f3bcedb25dde3e9a64ebf7f734"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pan.h",
+      "sha256": "d6b3c25077c50cf6d630073be04faa7091102aa77cf55e69ceceec010b2d0ef3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pcomplex.h",
+      "sha256": "1a2a666f490a7cbffa67fa164e053cd8534bd9862a9c65a72deab4c65d0d209a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath.h",
+      "sha256": "44f13a87843ce022830513f2e9caace57d850608e49b36f51bad77115e7c7378"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/abs_vv.h",
+      "sha256": "e97d798289d36742e01d3d6f0f6f8da12e71f8a1b19b5b9c8d469d0723a15377"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/clamp.h",
+      "sha256": "895312138613fa5f59220a90180ef5542c50e1d0851bae8d2d824be08bcc0a21"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/cos.h",
+      "sha256": "e002a4302140e19b6e4529e3d432a0cfea72877ca204a5ccbc8f984d8fa2b7e4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/exp.h",
+      "sha256": "7ac37c5b30fd7bb4e703327252876e99b94a69765c56b59d83873f56f56b907e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/fmop_kx.h",
+      "sha256": "9ddf93e3fb1a054c0ede6ad87fce2113cbf743b76be74805814b8a40eb3ba4a4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/fmop_vv.h",
+      "sha256": "891e2bf1845eaf06d329159b2d84db6404f442cabecd7f6e62355b3a343ef710"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/lanczos.h",
+      "sha256": "2a0fce995cf122fa4294bfe55e2078ef1251038899375f4efd205aa7f2e35a92"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/lerp.h",
+      "sha256": "8b4ca51814b11af7db93e48fe2465b7fbaa2eb8345892e4d15d47b54a47c762d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/log.h",
+      "sha256": "37a3fa73d4190b75b7d86a047794085152f0c8df4f134a90f0b4c8c7640aa4af"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/lramp.h",
+      "sha256": "50bd6212617828465fe2ea228b377cce4b420a044c5babe2f43ffbe1ca9f694e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/minmax.h",
+      "sha256": "9dce8aedba5aff42c3a9c480bdea7a7ca5812955cd1cfcf44bb2421c6eed3a7a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/ms_minmax.h",
+      "sha256": "45f32183428c86ec1678b851ca546d4d8cb562b58701c153b3a22b93dc85b49e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/normalize.h",
+      "sha256": "792f8ebe1e5954e20522225a635adf0194905ff97fe515328027881c2551dc05"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/op_kx.h",
+      "sha256": "e63fadafbeff8477757130ed3d31fd523ae0c177d45f85ba1a7509d6189d7dc8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/op_vv.h",
+      "sha256": "d81eafa7b5a1337a06e799755de1d585548c5bc8c4a14fef3467bcbfaeab26c6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/pmix.h",
+      "sha256": "2cca2613031b7758abee4da261044eb5115cce5937ac218b8bd6374ac43f8d1c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/pow.h",
+      "sha256": "0f16b49b6cb4e349e2e6d4b3630e22591d430707e6ec008e47e86e8158896f58"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/sin.h",
+      "sha256": "cdd5963a3fd0dedf148a729f8dd5a2837e26cb137668efc21491f6c409cfa241"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/sqr.h",
+      "sha256": "bb7ffe0cd047bec0f96eb021751426bf3ab7e361e8d41bb292fc747336c7ef37"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/pmath/ssqrt.h",
+      "sha256": "7390da13d12cf001728f91c63bb0fd6245758a704984813e6178a6b117053c90"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/resampling.h",
+      "sha256": "46f3acd0b816229a9a9b0fde630919c9af2c3ccff2a4592e68160ae3adb44d10"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/search.h",
+      "sha256": "b33bc8c260b213e7fd2ace6af0dc147d01e2049d40d17e67a8a60f815f276eb0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/generic/smath.h",
+      "sha256": "b4327c549d20d245282f5b1d5af0dfc6846db9945b1f11f30481ed06a5021e0d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/3dmath_nz.h",
+      "sha256": "95987e935f5b1b1cfd510e83e2a1266a59f8c0af6ca2e840c637b2e397cb3c0e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/3dmath.h",
+      "sha256": "0819cbe18304d29e627bd41ef6458ac6136f49f86d09166785bfa3597e053d0e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/3dmath/3dmath_nz.h",
+      "sha256": "ef9a958a6fda594fd23a69122155290ff5e9d2abd7a83c039378e60264ad0d08"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/3dmath/3dmath.h",
+      "sha256": "ea88085201a51ab2078c36e9802f23aee896bb5a476fd90d940ae4836a19fa5d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/3dmath/common.h",
+      "sha256": "534d7e98cac26d3180ef72269f98ad7ccecf4979f86e2b2ab115f3c70adce815"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/complex.h",
+      "sha256": "622fb3a2616d958c432239694d54a67f4dff274d679f6b493e996cf9b0f376e5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/convolution.h",
+      "sha256": "888961875f8dd4630333c6c43a08de682709f78cc7c7ba5f0189580d58ceb5dc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/copy.h",
+      "sha256": "32c47f27813a175212e75801aa9a971382c8db1b5fca78eabc3d30b5f826b899"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/correlation.h",
+      "sha256": "ee20485607c26510be0b2eb4e224e321e769758c5fb85466ad3dcaf6754dbdd2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/export.h",
+      "sha256": "3550b88ad872d261b0ecb84606d5837f0a82e25990965a1e371d5cfd14d9050a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fastconv.h",
+      "sha256": "646364f8cf2b6effba9bd02901102f2f9f7e1f3566cc39cc2909fc90238748a9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fastconv/apply.h",
+      "sha256": "7edb1f34805df33488596c18f8bc96dcc18bba04591a9b39a4a8461b8542982d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fastconv/butterfly.h",
+      "sha256": "3756b2d7332deaf331d501e41bc4ad33eb75b7a693bf8b16338b40707f757ceb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fastconv/prepare.h",
+      "sha256": "eb4e60ece3a873bf01e62f0ac9468d0832516765b81294422142b451b23885a9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft.h",
+      "sha256": "7313dce227c0bac0f00f59f4f4ea5e752d5c3d1395d212f155320077fd6e7d80"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/butterfly.h",
+      "sha256": "0379002e0e948cc6a462766f21af5dbf0791b8376bea630d6a4257ca9de15e8d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/const.h",
+      "sha256": "b8470b2bcac777de22fc6ae71949bf9ff78b1772bf3dba9d4d55f33303e81d08"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/normalize.h",
+      "sha256": "ae1c7221aa21a8ed5cfacf1c8f2da1327f4d08ed4e113715a24f11c5f123ef1f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/p_butterfly.h",
+      "sha256": "2b6dc754dfc73a2f0e4c491d3703df55847d7807941f15dbe10c6cbe4f9c94cb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/p_repack.h",
+      "sha256": "4b99916cf4357347a74b70f839dbd7744128f3644e9aff7d8d888579d6bec873"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/p_scramble.h",
+      "sha256": "92906f3d6e5e1bac908dbf74bf38e59008bf2a4eafc2ee04cb5b50ee08a5fc1b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/fft/scramble.h",
+      "sha256": "bbdd438778cbf652e0b5438a741c7eec47b530cf6909a80eab6bb15210461e12"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters_nz.h",
+      "sha256": "c4e5beb4d1af9990a37fe3fad051aaa0a11c53786416b84cdf35f3192eefefb7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters.h",
+      "sha256": "7f5bd144a9292466875efb34046cc2a9dbcf18874c418f8b1e568c01e4ca02b5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/common.h",
+      "sha256": "1d5772c1687538ac3a4775263cba747a87661236ec2b9f60c5aa3944e36c27aa"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/dynamic_nz.h",
+      "sha256": "6f0b93e765d675ed30318628d0c027e11c211ed08b886361e07f3008ffb14055"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/dynamic.h",
+      "sha256": "055fa8b8382c52568bad3f45fcfbd8b517deffe19110ea549e3c1b3e2799f352"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/fill_nz.h",
+      "sha256": "5af43ee9df3aeb470e00ebf289ea1337c74f5d83c827886c0afea7bcf6ad363e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/pack_nz.h",
+      "sha256": "e868dcbe0443e8f3f30a0b6a50e34985d4c5f6ad09096385bb619ddbb2db0d0c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/pack.h",
+      "sha256": "114e4ff9c5a67c977f72d436013b4262eeb0678608c5b031f40684ab562fac0d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/static_nz.h",
+      "sha256": "f6bda76e0099c7d5442ac119241ae539ce721006b14ae17a3124e700c04d67f1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/static.h",
+      "sha256": "c42ba01c7e9ec9d5844e028d05617158182aab0bce965fe665f06a6dfa5d867e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/transfer.h",
+      "sha256": "393dab40a75232511ea5bc817f15ec1d87ee34cebe5256a3dd1262791e20ae5a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/filters/transform.h",
+      "sha256": "cc14c96a048c4ae518f8c085d6056683b8167d53d53511bce8c0215c8a570611"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/float.h",
+      "sha256": "eb0eed6b8d8400cc89b173bbf5f098a5f1bc86e6bed82f62ea7bb61f1245d4c6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/graphics/axis.h",
+      "sha256": "b185de6ce85c5229108a293a43e0b7a26b8cac8a23b7e3f465e226b266cdf213"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/graphics/pixelfmt.h",
+      "sha256": "d47f9e2ad7b0ab46f778a3d6ac4481e924ff1f672fb8c98b17ef8c82dfcf7028"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/hmath/hdotp.h",
+      "sha256": "f8bc0344c6949b5117ac5f6122be588933b5163baf80108c46c0ae66c2b9c221"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/hmath/hsum.h",
+      "sha256": "be766da4952f422f089732a2c34c41a4942793e3a25d8d0a53fede181245c27e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/interpolation/linear.h",
+      "sha256": "cd771b1271f9dbc76ad05bb714a58250f13bfc3a29f26364c266b945a5feec43"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/mix.h",
+      "sha256": "283f03487b6ae98e8ccb7ea61ff16870324d3f9dfe5b66d2bdaba6d4cf2743b6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/msmatrix.h",
+      "sha256": "6bed802a9ca5a096908b435d745fb318e89f9daf83f7d6e9bc694a7b3fee8d0a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pan.h",
+      "sha256": "96ea40cd4b38614d5c6242f83b72a8a72ac05c8fe7cd2b74935fdc1591d4e2f7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pcomplex.h",
+      "sha256": "44b424f6da7b4c1951bc01c9e40b3ba5d9e788c16f00b9d56a54de35abe5ec10"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pfft.h",
+      "sha256": "d1db1e2f8304dca110791c3f1e4025daea32051cde95cc7012908f2c2f01c8c0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath.h",
+      "sha256": "64950d2052911a2f549cb8d25cf9ccc1fb0db8a0f7fb02e83a3699f45f6eafd0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/abs_vv.h",
+      "sha256": "e686516c54bca421744810a8aba8f02987691dd64276dbc1b692e7b39161267c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/clamp.h",
+      "sha256": "1b1ea1de2959fa5daa903f8cb1c34d7b508019f149efd5dec33acbcb9d458120"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/fmop_kx.h",
+      "sha256": "fcc968fe473849758bccc38d53b00afc25d1867ffd953bdcde5bbfe89446ffa8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/fmop_vv.h",
+      "sha256": "fd48af5bef0b5dc4f33a9069e1005cd4202622211ceb798b417ff1feeb5c926e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/lerp.h",
+      "sha256": "d10f206da57eb95c498158174ad7d3caa0e595e46242046b2897b0a75d6f4690"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/lramp.h",
+      "sha256": "9e9994e7eb07219eb77b380d1cb07e6d3b0070f1cafaa5014ba01261a211b8bd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/minmax.h",
+      "sha256": "1be139792e4cb2dab5fa61dddeec9e51a5de62f2cbd00be83f62489e3e272fca"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/ms_minmax.h",
+      "sha256": "0f9266799987a6ed738f560b34cd0ae66d541644be45f46131d6629e306a4a61"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/normalize.h",
+      "sha256": "0a47bcec3d0bb2412877a50d1ec897bf30aecd614fee4128b2b475f2bd3b0634"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/op_kx.h",
+      "sha256": "23617fd59b77de971bcba6e75da22044c128ff5c098485495f9042a57c03f91a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/op_vv.h",
+      "sha256": "c363ac44da9427fce37ceab0667631afd1590ba48c5692275e0f47a18a5c68e3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/pmix.h",
+      "sha256": "a228dd11f69e644ae97e9e4a1505500cf14a96b7f22cb1b7d3ab54726aeb1eea"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/sqr.h",
+      "sha256": "9ca39fcd89c1a41de55ccf21b6065f9f97b537596bba9b59e84efacd6e97679a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/pmath/ssqrt.h",
+      "sha256": "4a13912b284d5ba5b19093130a1165fd011ee0b0d63410977689966619cad02e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/resampling.h",
+      "sha256": "e4a485e65125c86728acbd696d76027abe59774ca4bedcb41f0058442a295568"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/search/minmax.h",
+      "sha256": "71cf06a528f80f67ca00c98127bbbd466b8640fafad874228b00146feb42caf7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx/xcr.h",
+      "sha256": "0d7946a08dcd82258d91261157daf3bf754669c7f1d8d327b2e95ae1374b4944"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/dynamics.h",
+      "sha256": "d183eace0b8b0839de59c268bc430b12b44fa8bf94bd4fe9b7ee3dcdced6bfec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/dynamics/compressor.h",
+      "sha256": "b5be90391891682c06fb0c11089e704b0e31f0b03665300be49bfae0782ff9f7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/dynamics/expander.h",
+      "sha256": "2a5bf87715044190a55184d83b43f53dcd6e463134968ffdc51bcf3c89164ab8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/dynamics/gate.h",
+      "sha256": "3248cd432881f6896efbd4118287f23b0aed6d5f7b6dc91aeb17a9108f217860"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/fft/normalize.h",
+      "sha256": "6712e5d4bd1b034635bd4330a8ce7f152a771baca8588aebe11d16214c730211"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/float.h",
+      "sha256": "7ba9e4f2c814c075fc136a6151f2cf7bade57480de50b858f9e620e15b9a8970"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/graphics/colors.h",
+      "sha256": "3b64b8a61990d8fabc5ed01e0501bbb4fc1bb2696db8ace0f6d7656de11b4392"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/graphics/effects.h",
+      "sha256": "c121e9c6140701b0885c7c18a15aeb84c3040d40fd25942050ba4eedfb53241d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/graphics/pixelfmt.h",
+      "sha256": "036395482bb961bbd94985e6fca7022769073d17daf229a1880c594c188462dc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/graphics/transpose.h",
+      "sha256": "89e69df6f5efcf68dce3e52bc72574c3741d09a7b10385762f4d09588998ec05"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath.h",
+      "sha256": "7e1e2c7bf00365aa3f1ec85256bb059b2eedea4064c159499e2bd594c6b41bc7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/cos.h",
+      "sha256": "d6e0f2088be3b6fe1028b075415c85fd5a4cb2cf5b483ae29aa15e2d8ddd4df8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/exp.h",
+      "sha256": "e15213dc23997ac2126877c5e6399e913d6da0ebbe8a18212588fd6e8ea470c1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/fmop_kx.h",
+      "sha256": "7bf812fba306d0a21390c23a3b959285342f82e85d19e0e833a9afed88254e59"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/lanczos.h",
+      "sha256": "cdd253aee4c9b1f784850a56f6f7a4223ff21b889662ceab17df7ae267d92493"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/log.h",
+      "sha256": "eed1150902a5ece979ce594c78c46a68a5031574277189fcfea45d194b811784"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/op_kx.h",
+      "sha256": "af00c2f0dbbd03067132bcb88fefb28a414f08817f45c51d51deab0ed6a903c9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/pow.h",
+      "sha256": "17066cdb235f78c5086350bbd6e646ca5e751d3d6e89a321982f9f76811be9e0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/pmath/sin.h",
+      "sha256": "a22a6cecf75416bc83cea65282fac8373c0f3448fc35689b4a86801ffdc48ab9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx2/search/iminmax.h",
+      "sha256": "deed163d14c42475dbf31b7c2ec45885eba3ee4455c1dd52e04203494d44cab8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/complex.h",
+      "sha256": "3a17fd3c91a5b94e4d57790ca8b44f6b0230edd28aee7d453abc12e78bca156a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/convolution.h",
+      "sha256": "c3b952a8067118dc48a604793cfdc501917d3b65cef554cc1378d6feb24cd1dc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/copy.h",
+      "sha256": "2a33562c2b427711147b9004e41ed56b0fc39f4215ce2196244f6638c0d31e40"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/correlation.h",
+      "sha256": "50edeed42812b8cc4839c37d4913b4bab1a3d2a7a16ce3eadcaac7d1f9960733"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/dynamics.h",
+      "sha256": "3fbc6411e531495b1f6078028ab52aa1dd0f367f1a0e8e83f5df90c1dd125a48"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/dynamics/compressor.h",
+      "sha256": "d2471199138d4cb4a06a4f5455eb0fa75100ee96821c166651d96ffc65246e3e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/dynamics/expander.h",
+      "sha256": "b8a8eee8fd8e825fda59201c4f82c150f5cd9dd25ada850ae6775ce0731b1107"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/dynamics/gate.h",
+      "sha256": "10bb2767f9edf0e956ea8d45a474303350cec4893bfc5c8b48b9448c61427242"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft.h",
+      "sha256": "50894d3d9c08bb9591222bcc0b0fa0f80d57b3e087cbed755d506fde9ad37aea"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/butterfly.h",
+      "sha256": "e2e5ea1876420be589f4390f6ccf3777170895bc50a33a250b73e7fa5ea45682"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/const.h",
+      "sha256": "4d30e67f3394814223432cb1bb778837713eb451c4f71be5c3c97952411bab02"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/normalize.h",
+      "sha256": "71b3690d260f1a060cd671e8284522b9fadaf1acd441a536f9feb3c9c980de47"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/p_butterfly.h",
+      "sha256": "3c5b1b75705de8ec85a4180f4a40e8ad615a0165c2c0df9c87be77fd99cff1a1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/p_repack.h",
+      "sha256": "caee23d23313c389533b7a96db4599e5217c3fa379fc8d7faf7029c8adc88396"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/p_scramble.h",
+      "sha256": "ef67a345f309068d1dea23ebc049f78697be0fb71d22265b0fcf7bf98de56b0b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/fft/scramble.h",
+      "sha256": "ce6a3b09b078686a0bf5cc2b820fd7c773f49804c35eee7ec914c44dc168f517"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters.h",
+      "sha256": "c800eee58a6490ca4550acbb2d4e16a918a734906dc02d36d54ae24b725f7849"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/common.h",
+      "sha256": "1e7d5e2ac4f05464d6730f38de0399b72f71b0671cbb3acebb441a44749c3a1a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/dynamic.h",
+      "sha256": "c3b012d4cba741db05a1dc80c3b25bad64c58f24bbf928a548db3ea5a4720b84"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/fill.h",
+      "sha256": "308f33f1a6a03d3c104d9323775801c9029f7aabd79bdf880277f7c6d5c57711"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/pack.h",
+      "sha256": "18f3dbf01683cc8ed01a7f439b3b28401d25f5a2e838f9f9eefcf8582795904b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/static.h",
+      "sha256": "b855eb4ca42ead123ed531982f60e9d2e1ad03e1bfab2ef9978629d4a998b6bb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/filters/transform.h",
+      "sha256": "54d9b0e260777056b5ea1418eb00c73efc7979ad920d97a933d2ab285faa4c21"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/float.h",
+      "sha256": "2058fd9cb5b7669a0b6f5fafbb9b9eb71bd657303a42a7e1695e219140fb4b01"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/graphics/axis.h",
+      "sha256": "e8a77802fcdf657a46dc8d636fd626bbf90ac2e744c9fe4e743c3ccff8dba0f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/hmath.h",
+      "sha256": "006e7cc517b93966ccfa9ee964524862d4d0c2567b7f405cb6885185910936dc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/hmath/hdotp.h",
+      "sha256": "d243c22df5f05b3ec69c394575cb6cccb1bd1412a8189ed55acdad6eb05fa01f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/hmath/hsum.h",
+      "sha256": "2cf5b009e7172179fdbacfa91a86ddc7f751180d36462929d0ab470b42f65bc5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/mix.h",
+      "sha256": "e800b3d908bb5cd21d8072cc7714f8a58e55508b8eadc2b943c3e2117427ef1b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/msmatrix.h",
+      "sha256": "8d7c571f512a9025577062d1d1f5eb8de632ed74c530df7a50f4cf09b4ad9b59"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pan.h",
+      "sha256": "996765da314588d850099293a4f0e0bf9747d25374964c564524a9b9a411ee99"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pcomplex.h",
+      "sha256": "73edbc353d13c461704a9adeb9ad199f7069b307fd7cbdfc91edb708fe018c18"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pfft.h",
+      "sha256": "9c2fe75d9eb6abeaa36be1d6f921c128c45bf5b947d8eb88e448839a68a6f515"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath.h",
+      "sha256": "fb95a55167c0ebf7cc04fa2d4daa79eb99212934bf881324cfbc3be8559bf320"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/abs_vv.h",
+      "sha256": "b14709b77b973fbb0752e9faabbb7d2ac3d0f4e5706cb8fbe554e41be2c3c5f4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/clamp.h",
+      "sha256": "95d7e44a3ef9d7910b6c7062f0f2b264483b6d9746faec672e7d2e7ee072c66a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/cos.h",
+      "sha256": "7de9e7e15283b34bfb960eda372be43e2dc18f45cad2a04063eabf7fbf0f937d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/exp.h",
+      "sha256": "1f438bcf2de2b5d4c98250d2b89849100356211a65f5f6aa0f5dd4d421323ab3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/fmop_kx.h",
+      "sha256": "ea2520329fc402920b21da5fc78b7fe5a88981dc0347c8fcff1f1825e11cffba"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/fmop_vv.h",
+      "sha256": "853444bd9fa472d56edcd4abd5bea201f15bf6bf93c8d69d148ed1e0b975de08"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/lanczos.h",
+      "sha256": "2f60a542de864c7ffbc07b9659f9ab72aa4ef96e12e4ac75866a893d26b6429e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/lerp.h",
+      "sha256": "22d8ba2eda3f305d1f86e47cba78843a272d22d084b474d65f610eb4d7ae9d8e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/log.h",
+      "sha256": "ad3bfa115bff8c755193c5726d60ba62d9a30c631d46e4d022d7c6c47b7905e5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/lramp.h",
+      "sha256": "1032fd1709c9ee4c666a616c765983375a0a2830dd794d829c98ddc01756fb8b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/minmax.h",
+      "sha256": "ab050082736f2e590765afe2a4079ea83fd83bf63f805a53f4cfa3cdeeb18c71"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/ms_minmax.h",
+      "sha256": "1fd04302b0683f03bc5ad0d85f9421d177f6ebd56d99a05f1626eafb4e7641bc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/normalize.h",
+      "sha256": "a2d75c9177a834109f21e78b21cd777923be398e26d6c331626645ddade5d33c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/op_kx.h",
+      "sha256": "2f3d0c1452ec854f23aba321cc107e61a5874b368ea602d4c189f1045ce113f9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/op_vv.h",
+      "sha256": "5aaf6f67d33e68a11e8e982a8b05e426fe4b5a8de01fc0892bdd80cf4cb0fecc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/pmix.h",
+      "sha256": "aa7a430ca45d4fae5c84c81fb0081c5033a2f285a90adbebaab6ea6c55535f7b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/sin.h",
+      "sha256": "bcd5f9a296755e1ef554e75aaaacbdc0cad4f8c7644faed776611ef63c512a7d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/sqr.h",
+      "sha256": "3f61cf0ea63caf1f914c889eef64cb43f139d064a17e178b742f32f62b42087e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/pmath/ssqrt.h",
+      "sha256": "597a3e8c1c13f50545ad5a3045436de7047394a7ea244246c2e16a1b31d53b7e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/search.h",
+      "sha256": "93d794b93436e58d29c02662f2b38e602ad491012f98a4081fb80ecffd436d23"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/search/iminmax.h",
+      "sha256": "0fd2c09c2bd0d23f4636ee624f13c35891f6b072930ef969f34f319c4508fed3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/avx512/search/minmax.h",
+      "sha256": "50801942c9464594dfafe2c5ac8dd474a9f07a7269d4359c485878dbde88bbe1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/copy.h",
+      "sha256": "e84ad8195ed5158cee710e22c6ea789927e1bd44597df4eb78e715cdd08d82b0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/defs.h",
+      "sha256": "0be2bdc7fd09d31a9703b5d1808b59829a50ce63ac60824b762706378c9bec5c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/float.h",
+      "sha256": "a69a2d4d00b9dea045f455688a14dd42e61d4d2aba4435680e67d21f62e51074"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/graphics.h",
+      "sha256": "5e859a8a053f5cdf49540357d94bbcd6556e130fcc523145b2c6c3edfd9443b7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/init.h",
+      "sha256": "558c7e8d9cd9eb8170a45cb88b74b87930bcd2e981368e4dda9793f84f46802d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/3dmath.h",
+      "sha256": "d38a55a466052a2cb51f6e80283b151bf911d5ce71ebe81086648f94559261f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/complex.h",
+      "sha256": "cd18482852055297abc344ef907482907034f1eb84a288b07f4f67da57be7c04"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/convolution.h",
+      "sha256": "1590199931975d59165d30ec716844055e9bf3be84014a55fbc1de27cb689682"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/copy.h",
+      "sha256": "164909795b7afa359b032482c645c88c38a245df9cb8a6fcb0542b3ab7d8a528"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/correlation.h",
+      "sha256": "8a0af67e68cf60a48f5a299eed10bc8e9b86353f525e7d18a57fea13f693769c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv.h",
+      "sha256": "88a85db682e8fd56dd2a48d3cf23a7a18cc0685a23012be6174cc1c0e3dda16e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv/apply.h",
+      "sha256": "901fb7b0cdcb92a1fecfaf48f160f6639ae6d1fee5dffffe4d8de0b880ca05c7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv/irestore.h",
+      "sha256": "af7c1441950a3d7c91e2d27ace70781e9e65495d6c653d9ce0033adea797702d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv/papply.h",
+      "sha256": "db10367cdf41df02f0d92668fc6c1432039e28d7856be750f31f58b193ff304e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv/parse.h",
+      "sha256": "40a0dab10b32397bdb69a679e3e48db0df4ad073c2224832fc768dcadd4d073c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fastconv/restore.h",
+      "sha256": "01a1a373c36c70a563bbfe20b8c24f78dea89e91476598e8ec75d959f84c5634"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft.h",
+      "sha256": "84b10d19449795aa8464c935dcef4984b8ecdb1b09faff22bd75ed72de46e8ee"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/butterfly.h",
+      "sha256": "16a0dbc3f96653ae6cc1114d3fdf2452bb5c17a2312a1a1cfffe6dad84acf835"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/const.h",
+      "sha256": "65e08a055e81396ff09676894c3458ac32116f5cfa9858b73d339f4b7343e9c0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/normalize.h",
+      "sha256": "2015fc149c21c7847f3efc1cdb761e7273bc5284b0b04cc72a5ca93c2a66a44d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/p_butterfly.h",
+      "sha256": "99a79d9c58d477a8c628a1c127c39a424a7d766a80fade867f1bba73851c2e33"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/p_scramble.h",
+      "sha256": "aa106f05dd04063f2d83fc99d60328a512348b954711e9fc815a06f00b030712"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/p_switch.h",
+      "sha256": "f20575add5fe5f18a758a4255c6836f9b98e43d97fe2ba3496a7d7714f20b2a3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/scramble.h",
+      "sha256": "edf5104681eefab5f927244ef12f27a9a568cd2b364f5889b2f437354511d7cc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/fft/switch.h",
+      "sha256": "00322e3e0b7d530bf8cdc232a9af66c307080d4c3f96a86c9caf5842d1333537"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters.h",
+      "sha256": "7af4d47ed2ac1ef28de5b9837c8b745611ae2c6709725ef52e5c49082d52c36b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/common.h",
+      "sha256": "e33d1c1c73ac0180df43b8f7832fbed7c8f4b96a4695c2dcd0cb92ab80084abf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/dynamic.h",
+      "sha256": "655be4fa93e728668ff54a218b4eb897250777f0e3a40720e664b800e7bf9a0b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/fill.h",
+      "sha256": "e778ff67062bc2d98f9159bc56564dd6aa01268ea056232a89722413c3ddca29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/pack.h",
+      "sha256": "abd6908979641d86fb45029c5a8504149efdbf6c3f316a6c3672314c8f22249a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/static.h",
+      "sha256": "1ec8902ea61a9554f604ab65fbb03e3c4c30f66ea98917055b44d00b21751e07"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/transfer.h",
+      "sha256": "ec7269ace35901c0ed832d80df8a290331c5a2c7aea6d08d4fb513143a081b00"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/filters/transform.h",
+      "sha256": "f7a5379f0da3ef6a56896a5fcd1be295961594c49b85f230a1e8bbe487bd1219"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/float.h",
+      "sha256": "58b58f8e954dc7103bcdbd14a7f2f1cdb1b28b8cd889764cbc9e64b4d70bc7c8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/graphics.h",
+      "sha256": "727a859c2536cf297dccc6d3e18bb49355dda4a6bc630e09fd3476aedbc4bfd9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/graphics/axis.h",
+      "sha256": "ffef13f68498edd2e604040737929e8883a97cb1d1bc5b4f9f977842580d41f0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/graphics/fill.h",
+      "sha256": "15a0a105aa1e9f881dc27a4d7497a6f4c1649418f7dec5ee28901b40f9540e1c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/hmath/hdotp.h",
+      "sha256": "a795522a11c876e2bac0253cc6b8e7e412a1736d949c8ebbc36879533b795ec7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/hmath/hsum.h",
+      "sha256": "e6e23ea3c9c066328c43aff98f0b9d8fd4d75b66956c41b4024dbb12a769beb3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/interpolation/linear.h",
+      "sha256": "5599a61448f4b899dcf1ea771670c198f11e29a298198eefdf6f0521aaafc933"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/mix.h",
+      "sha256": "f790ca04dbacb6738199800df6bdfaba5dc22dcb28f26bbc1917f3bb751e51c6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/msmatrix.h",
+      "sha256": "e949c2bc8d9f38aa37ba57c9ee486ae2fc7999cc1802b769896c5142c41c88c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/mxcsr.h",
+      "sha256": "e60e9f8628276eac7c3677e1e34b04c4cc810d91f1f9b04d133644558719ceb1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pan.h",
+      "sha256": "540ef39db2754d35932aa66c6c3efbcacee59aef3a21faf2e8585a5579439b5b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pcomplex.h",
+      "sha256": "cd73725dbac10f0941b29d368564203e2cea5313db8a78e9c5c9d79e9b16e41f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath.h",
+      "sha256": "2e41c63255e5844736d25aabd73bf14fdce608ae6ece2cc8d063dd86dd710954"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/abs_vv.h",
+      "sha256": "33e4f7587010624606c4db6e0d50519b9ccb8265a9f0f61bd8660c0cc314070f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/clamp.h",
+      "sha256": "1eb23c7103cd347fee493d3f30734a5f58872400478028a8d431355da369ecc0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/fmop_kx.h",
+      "sha256": "673569873680658e9ba344b8f807e21cda43c56c51dc37120a64b361da77ff47"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/fmop_vv.h",
+      "sha256": "a2b8967075d475669971a41319d78a330c1edbe1054c77a7ed9667b5d94e9d61"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/lerp.h",
+      "sha256": "c8c3f6e5ab508e5a4caf301b08c4d24529cc827f8431100790a0c0dd2bab46ec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/lramp.h",
+      "sha256": "a599645b5ac345b9d29cf4000ff7c6efa589370db6a55edc546c2cd135d0b977"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/minmax.h",
+      "sha256": "942d8b1f75555f62f4d907eba80c918933a517e84b56cd8c62b7d69795b55234"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/ms_minmax.h",
+      "sha256": "96e23b3359899c19d33cbc1ed7e66574ca7fe0fde93d38c61bb29129eb28784d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/normalize.h",
+      "sha256": "fb9dd34bfc98b9bcf348516a8562ba1c0e09806b475c8e733432aeb5c2082071"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/op_kx.h",
+      "sha256": "73344ee39144417f34705cb1ce9c9fd307cf0dd31b81fb963d2797039d8cc9be"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/op_vv.h",
+      "sha256": "7e1498235c31452f812806fe5bff4e2d3d5951deee59b02986f35b5ac071f72d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/pmix.h",
+      "sha256": "cebba6a54ba8e88d2bcfddaea65a84b8759142bf7ee009daf0d0849175bd183f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/sqr.h",
+      "sha256": "d13ef7304da5b5a0d0a3c5435a8e7613ef9e98a085f2db18ed291cfc2128859b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/pmath/ssqrt.h",
+      "sha256": "8a93f06431caa699958a14a904041b6990e1d4c4b4c631f6bdf6349b80a8203e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/resampling.h",
+      "sha256": "aaed9464f9a96de0be73404a077674ac6bfba9343b109b5c5d28b48d8484846d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/search/minmax.h",
+      "sha256": "0eb4ec05b6bbb59965b381bc1fe67d6098dbf9eb905287e0adfc583b7b087eba"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse/smath.h",
+      "sha256": "94f018dcf4a104794160090d1d8bc3cd8fc68ff67d59d7d4cc61418ca1062156"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/3dmath.h",
+      "sha256": "8c73304b8ecb2c8f23f0ed2f8763ae1bbc23662171c1a4f1872c073c5f57e9dd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/dynamics.h",
+      "sha256": "2c59a9ba9d7aeea3a3b0284b29c78de8d939ffaa019914f8323fd0693626de40"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/dynamics/compressor.h",
+      "sha256": "2aad679c1f20737e242398bca5503c49d0293488489eec7a7a1c51b71228a71e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/dynamics/expander.h",
+      "sha256": "326202f980d82f819d8d18817ebd522ac2f9ffb47f961a917180189c10746bc1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/dynamics/gate.h",
+      "sha256": "dcba0d93dbeb27c181ebdf06641c31c1ad8414b563d02c4edf2df1ad1c722ea0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/float.h",
+      "sha256": "00acca470220f4c937fd0016174e46134c52e14b57de4f7f77eeb57f65670dd8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/graphics/axis.h",
+      "sha256": "9800a91f74b67c98ee5d0f69c1f4d5098895322e0a079ccaa81e1eaa96a754fd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/graphics/colors.h",
+      "sha256": "ac8c384fd4b8a6bc947d7e6f33446723af7d54e420f49b739ab5139771c9c769"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/graphics/effects.h",
+      "sha256": "9f2b03276c1f9213e994214e7457b37f6a2a4daa835da4e23a25d6c6678cdd05"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/graphics/pixelfmt.h",
+      "sha256": "750273f5ec404633b1c2138fed7c5f2a4f19b7cb8e365633db79bd4b405ec454"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath.h",
+      "sha256": "3960808f29b8b16fb6cadd4dc73e3e82471718ef6d4775ecd17c257b0a3dda49"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/cos.h",
+      "sha256": "5160f38642e570791abad04380d6808f9ec894664e5515afc936f6ef72ee988c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/exp.h",
+      "sha256": "e3b53fbce0bdb83275f01bb3d511bd1700fc58f7bf1ae2c04008a7fbe2adfbcd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/fmop_kx.h",
+      "sha256": "a3efaea6520a406cc23848a0457f2875a9da14cf22cf24b1abd471b1d6278d73"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/fmop_vv.h",
+      "sha256": "1072819d661bc43cbfde3ffcc3f70a89e17084b175df4f14b8dae5e4fc02769d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/lanczos.h",
+      "sha256": "a6fcab46dde3c2330e086b90797a95dcba1bb1f7966db9f3acd343337a850e34"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/log.h",
+      "sha256": "83958376aa52e1c2867d4ff9a82f605d2edb06207ec1ffe9caaa2c3cee55ecc2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/op_kx.h",
+      "sha256": "bef36db03f8d5049ff9c1f075882abf5fa64a75ae46674099385beee26582cc1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/op_vv.h",
+      "sha256": "2e86d43627f10f22359cf1be0645098e12ffe7a1e106093ecef4df37de1e40a4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/pow.h",
+      "sha256": "8b1f0a97c0995c6192dc2f3021ff4fc1127140deb4d7188b314fc1604c4154a3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/pmath/sin.h",
+      "sha256": "fec3f2e7f03040c535df8abca6ed3cd7e26c5aeed50b2bea69cabd030b029a60"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse2/search/iminmax.h",
+      "sha256": "2698233f88f32fa090804ef0ab546336d52e91f76bbd255fe1c9305db0b425d9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/3dmath.h",
+      "sha256": "6fec93a2abef78932ca47f31bf47dae1c73d4e4136cda4ca36a9116fd0db068e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/copy.h",
+      "sha256": "78886407db69422040c222ec9db84d9d08141997632a4b51791158f0d6b89d57"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/correlation.h",
+      "sha256": "c4f6959ba6554051722b969362f30012bab5a8a9985aae89a150a586a617b791"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters.h",
+      "sha256": "aec01c745e31711042fe27e2b588c7d2abcc5d292f052b4e6f14f9ac1a7203df"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters/common.h",
+      "sha256": "2e49ecfd9475399d4c3ae290e7d3a362716683c16dacdc2704e621877a562abb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters/dynamic.h",
+      "sha256": "aa46dad48797570debebfe2e24b57d44f74af01b5ca1d0a3742d793ccf32ce8a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters/pack.h",
+      "sha256": "b6dcd38080a8b247183cb382e28ffefe18b5f21f258f5b52ec44198c1dea938d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters/static.h",
+      "sha256": "b4316fc11c2212f73dd141a8272c6c2c26efc521528d20693576ace8b1867806"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/filters/transform.h",
+      "sha256": "a1afc72201b62ea0b6e968875652365bcb5b4abc8cc524822edd4dcce2a64167"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/graphics.h",
+      "sha256": "c6e1d131ca878cbc6971186f8750cbac1f79a58d267d16c7689561a018c9cb31"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse3/pcomplex.h",
+      "sha256": "53c9dc25e3aea6286a98e67e33595b78fd40c422db58347ca93f580ebfc4513d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/arch/x86/sse4/3dmath.h",
+      "sha256": "50a47972e0f7a702c38125a578ff882d7f1a41b6fdb2a1bce18dcba3f0c420de"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/dsp/exports.h",
+      "sha256": "444e9b0eccbd221fd6abd4ae550d398dff4d61a6f3d6f8328c8b1a2ca9013521"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/utest/dsp/3d/helpers.h",
+      "sha256": "e9642b5e9d8f0d2be8c7643f42d8d031c1f694c1ea167a31ea0bc548af2a7de3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/include/private/utest/dsp/bitmap/util.h",
+      "sha256": "d141e09d5a0dba06fe509cea6e45b5367ef15a46bc5e6429cf19f504332ed328"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/README.md",
+      "sha256": "cf81f039b4a6f3bfd4fc559bde3d51cc30b22cb6f4a99ab04b59e0b85aa6e863"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/src/main/dsp.cpp",
+      "sha256": "d4ad49ff3b18bd0cfbabf3c65a17b1d67489e3543dd73784020fef29a0d0ecd6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-lib/src/main/generic/generic.cpp",
+      "sha256": "7d6609398d305c259a626a01e682faed2874174cf452748a63162c4032e13292"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/COPYING.LESSER",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/Allocator3D.h",
+      "sha256": "1494fde45115ca6bcdc97774656db80a4df9d02fbcb44d7a4e9816d97cf6dbb9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/bsp/context.h",
+      "sha256": "347160aa8b992d806079acb02ff7532ae5c430cbb9e7ee7a1c334adeb95b56f8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/bsp/types.h",
+      "sha256": "12db5b4e3d6f1c4ee3b090f80a71c5c1b1a670a4ba90f4b03e6c8743556a59db"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/Object3D.h",
+      "sha256": "1498d728a82d6f7ba1190f92113cebf4643c9304ceb7754d9bc9daf994fbced3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/raytrace.h",
+      "sha256": "f79dd874bf75a0334b1661ae9b988960681c1d4390b6cacbbdc6187469af7eef"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/RayTrace3D.h",
+      "sha256": "8f4a8b99bb8fe023e1b4eef3870862a8ad8d27bc83695073f01a41d1c8db7659"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/rt/context.h",
+      "sha256": "c1a2025098a13c2c642bccf7b98e5310ad537c7bd941d229e31dd7452307f3a3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/rt/mesh.h",
+      "sha256": "5c99bffafca574f9d485cd86a188d456b5bc84d18e9aeff1aaf66b7c8501d9e8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/rt/plan.h",
+      "sha256": "88ea5646d63640d2118a99d20b3b8ad1b236c94aca0a6a39a3004b555b839628"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/rt/types.h",
+      "sha256": "894f6f97fc8ce1f923be31f3459c87fe7addf8b0a7e0e3c17d10028f04d22486"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/Scene3D.h",
+      "sha256": "0e15c1ed9ef46aa79ba384dd4829be4d92fc5ceef8e2bbefb0a2105c8f9c4aa7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/types.h",
+      "sha256": "9d0c9a2c347fd19ea59d3280e8ca4a007808310d9699f686a2d9c2f2371e0e88"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/3d/view/types.h",
+      "sha256": "f117ef74b73a20603df915da28a95b9d85dcbaa3ce441cb167af7f97db204b4f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/const.h",
+      "sha256": "d9acb843a22a6d7bdf4ce24a9cdd77ec76628431c0c4b1dc1560af7cffe5bd29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/ctl/Blink.h",
+      "sha256": "4ae63a9aaedabb9859cc6a2ac998212f0bddc05bac85299dd2d40dde3654f7c5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/ctl/Bypass.h",
+      "sha256": "945ba279527022a2852eac8707bd8335d8f12e743ceb4bef2a7b66e913aa2acc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/ctl/Counter.h",
+      "sha256": "4148b9715a4aff8603556c16d8a5c73aa9b194f19d6ef795c6883c77d189416b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/ctl/Crossfade.h",
+      "sha256": "9df01e663729b93092471b0b2b0d7b2a706b5a4fbe1d24e39ab75f8f23fc56c0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/ctl/Toggle.h",
+      "sha256": "04aefafff373efa50228655a9697aca8299746099932b9c2fab2c60ebdcfc405"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/AutoGain.h",
+      "sha256": "007c1a66e840570d46730a50e3889e966bc499d9b6869afaa9bf41e593e35723"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/Compressor.h",
+      "sha256": "189112eafbf72b0d8e9e3c828e8c1a1d6ab08ef4828b595634acc7457f596a34"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/DynamicProcessor.h",
+      "sha256": "baa0d83a532a339157316557280d4bd872f8240a0b41b5b15a83e81d1f3a6b8b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/Expander.h",
+      "sha256": "994dc17a9021e52c34dee45c0ffd19a89bb3fa4f2e8a34175d35bc4264a037f0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/Gate.h",
+      "sha256": "22d77d22a187abff785f18e65114a5a03eab46a99e8566bf2caacddf0f598d79"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/Limiter.h",
+      "sha256": "2db731844df07c9bc06f4f362146a1955efb77d088eee6839c9b61df8b64172c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/SimpleAutoGain.h",
+      "sha256": "e61d89d649169333e125d0f2ce5d4e13b30ab18c1357b93d6a101b5850f6f89b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/dynamics/SurgeProtector.h",
+      "sha256": "b94c153bc8149fa79b88deed500492c9f0a6fdfb226ba71f44a8d24d0b23dff8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/ButterworthFilter.h",
+      "sha256": "ff0e9cf8d84e61cd90cc97acbbc57cfbc8c05fe2a43da49f838030ac41a78da0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/common.h",
+      "sha256": "e08f6899acaf2f169c411a2c91dc84d67522bb6e1ad2f128412eb0fc1c8b11af"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/DynamicFilters.h",
+      "sha256": "84de05022652d807c38ed10df38dc37a83d3f638265483a12938b5df0836e44b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/Equalizer.h",
+      "sha256": "633500461a48b20281fe04cf0f71972d18185d3f9d044a850637058256e84063"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/Filter.h",
+      "sha256": "1fcac2ea44802f23adb85d89cd6e6f99236236f9b5080da0fa9ac9ca6782d4a4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/FilterBank.h",
+      "sha256": "522e9c3d48cf6cf8ff85677b965471cdd66d1edc836e994b47acf668cc38322c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/filters/SpectralTilt.h",
+      "sha256": "a45572b3cc921f7ea1d67df5faeeb057c8d3e8c76580dc539cd420cf2b985dc8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/iface/IStateDumper.h",
+      "sha256": "41f7aa8ba591d62a1cc15282899a77239ca75a1c6fe229017e0c539d5cec4338"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/Correlometer.h",
+      "sha256": "fe646dcb7b6473e9d1e39214f71a14502a47f05ff293a0a7bc5c7934c469a649"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/ILUFSMeter.h",
+      "sha256": "779d7b086b3acbcf723d5296e0d28bdea36213c453e3cea05e0815f68eb34d33"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/LoudnessMeter.h",
+      "sha256": "af2f62a662c38b24dad8b48b83e48c0084ec3817cc3d0fafeded9c574b367a73"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/Panometer.h",
+      "sha256": "3fe20f0cf8d7d8e5c9b38f3286629a685676309839d6bd9267a3224e56df6986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/PeakMeter.h",
+      "sha256": "53ddd29f5375e15497e03f9bbcbbf24d4aff0b8bdd27ae5ecdaac6ae25c643d6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/meters/TruePeakMeter.h",
+      "sha256": "99311bc8ca82b75401f9e848a7e58e83b41c84bb989d2ce15c059cabcab8283b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/broadcast.h",
+      "sha256": "4bfc3587e420ae97ddd8f0cdf01a12ae1e3b9b69ecde26808e7d5951a9f0d01b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/envelope.h",
+      "sha256": "c6d53860bc4c262ecebe3b95b9d3946fce17c383f90fb8add4e93e441bf577cb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/fade.h",
+      "sha256": "83eaf397862e376f6fa268e4a62ba6c088a111f304ecdf6bfbb38c002cd33876"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/fft_crossover.h",
+      "sha256": "87e70269af6ce1489935871aa636a6d1be0d53eaf41bac25cf1887acbd272bac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/interpolation.h",
+      "sha256": "1123f1ca4ec9eaa969a94687fe5f6cb537f38a946c1fa4cf18048ac95b82fc43"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/lfo.h",
+      "sha256": "ed3bacd0ec0f9ad4af8712fb0b2c36b0f7016fd7bed94285cf8cafd470ad436f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/quickmath.h",
+      "sha256": "3474641c0eafa431776804d77a0ba8a6d674ab594da92eafeb8d37596607b633"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/sigmoid.h",
+      "sha256": "3d5f9013a76132d670b5d22dc29abc4c3b4e32e27c75c29c9e6e83ab980ad95b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/misc/windows.h",
+      "sha256": "690cdef6a0e2f9e0f0012de12966f95a294b14b0736a9acab6836746f9013f5f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/noise/Generator.h",
+      "sha256": "7e7ddb5e69e5bdce2af0c5db4632c6efc9aec6b4612105461e9a214c1b5d3eae"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/noise/LCG.h",
+      "sha256": "b6f1ce1eddfa1ca895e33fa834cae758a93e0c1cf348539f44627aa0ec2f66d3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/noise/MLS.h",
+      "sha256": "0076ced4d6a62b244f5fee330e36ebca5150d61759e97d6195262b70f04f68bb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/noise/Velvet.h",
+      "sha256": "2eb13b091cf851d18c838ebc81373d0e2b0261121183d20709a1c7492e1691d0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/helpers/batch.h",
+      "sha256": "3fc05fa4d57409608d33fb6314552d67f99ccf6fe184bfd46323e710f032a609"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/helpers/playback.h",
+      "sha256": "cc24ed9dfa4a019c378fdab057eecf52c80f2add2d309804da82682a38f09ae5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/InSampleStream.h",
+      "sha256": "7998ff9dd48a0cc6e8e340bc79d3e544fceca081af80093a6556ba936990660c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/Playback.h",
+      "sha256": "90de975f95d5d5d639495e509e5912415585eb5233bbf0f45e1b3d2d2877bc4c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/PlaySettings.h",
+      "sha256": "67ea0aae3eee1793307c2f3bcd7b8606b095519fa5be7e710362ccad4e096639"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/Sample.h",
+      "sha256": "4d22a525b393d60e997d143d441191ace7d10d545b89059a49e8820de5e54251"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/SamplePlayer.h",
+      "sha256": "1e204d454138609e6275aa3ccc55cf74253169eaab68f5a80ff97080972c1810"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/sampling/types.h",
+      "sha256": "01c813a1c81fc2a8e807c87d87525960a3ea8938bfbead928526e0f40a8a9271"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/shared/AudioStream.h",
+      "sha256": "d182687b562ce6645cdd12c37fd47b986e5520971fc1f56ab9f50757f3f1a98f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/shared/Catalog.h",
+      "sha256": "c69f98beb203c8aedb69f916d5c159b24bc2050536bd6bcdce678110826acc4c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/stat/QuantizedCounter.h",
+      "sha256": "b50065f809a1113d3feea012d6c0eaed132da2691bb3890167c952e01b11ecc4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/units.h",
+      "sha256": "59153a9973ba76f3387121180dff598fd46d6eeee7af330a8e7355b00dc4171a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/ADSREnvelope.h",
+      "sha256": "1f19fc70117752db0cad3d5521aa7220878c18d8d1cd8e1d38c33d6ab1425f06"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Analyzer.h",
+      "sha256": "594225accb3abb4bc5dd031bb517fef693cf5f95ea21c2c7cc693ecb860228f1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Convolver.h",
+      "sha256": "f71dad55f260985d7913b24b8f228eac10617a7429e7768b97e6dacd8c4577d4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Crossover.h",
+      "sha256": "d40575f228f16e93c391f3906098fee62c7a686644baae6cd275e645f7ae84e2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Delay.h",
+      "sha256": "c79042bb6a5d0850111551d7e44b4103363963394976bb8f1ce0bee57f379d2f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Depopper.h",
+      "sha256": "abfba69f9e9ad1482320c03e98a29a4b8cc64c9d63371be5112b6ac10898f2c7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Dither.h",
+      "sha256": "b3ac622d40380fce6b342c4df8639ef8faf3162316ba30d123132666a5300e98"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/DynamicDelay.h",
+      "sha256": "dc707993b78f7c5955033b2617bd282ed989019006302e0de232721f49181805"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/FFTCrossover.h",
+      "sha256": "cd9ff765aed978f4886b2fb33326c1adaa848c39919e833881888b5a9be0b43a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/LatencyDetector.h",
+      "sha256": "8d941b6786b1aacbe8c421dbaa0ba033ae74d7ed6b736b8655b4d7cacdbbab03"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/MeterGraph.h",
+      "sha256": "bc09e61b7ee2bf3f5810175f43d46086d0e6fe55fb6a6c2f8f848d01c2831d82"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/MultiSpectralProcessor.h",
+      "sha256": "e1f2557d34cc4597b31b5beab564402075689b6e682738f9223d829c67ad5130"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Oscillator.h",
+      "sha256": "ae673045dfb60a3eeb6be30e2aff185956305429c53c679fd344d9acace7ddf8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Oversampler.h",
+      "sha256": "422087379cec35b41cabef20b5472f8eb4cc958cfa62db43bed307dc00d3bc13"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Randomizer.h",
+      "sha256": "a04f4dde91c9e63ef4a731b9836f2319236d19ed3f6ad9963e32bad966f044b9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/RawRingBuffer.h",
+      "sha256": "8b84045bebecdb6b0af9b888d8884913a199ac1ae3ef31ba348da74fe00a1314"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/ResponseTaker.h",
+      "sha256": "6e290776f25c3a9e7121df60bb764ba3a39f75856d13abc53241eaa4a51f1d6c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/RingBuffer.h",
+      "sha256": "11be5184fe466acde6c54c51320cf8b67187c0883f5e2b647dcb248a2864835e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/ScaledMeterGraph.h",
+      "sha256": "1adc1f4fb6820dd3fe90db348279a71f1605e771f3623380e9aeb191d3603406"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/ShiftBuffer.h",
+      "sha256": "7067b14b61f8be7b6095f8b9b6194b789d6ac7347e0b62b6b98b1d2dd7fcef69"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Sidechain.h",
+      "sha256": "093a0bb6cdd080eb13dace24bc40402b93694447edc3a4a641a6267724944ef8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/SpectralProcessor.h",
+      "sha256": "20a323fa50673d8799599befd23e63f2a2eb2bef73304c340a935259a996fff2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/SpectralSplitter.h",
+      "sha256": "f51471525c08c9a98a1b02156677de6292261574f88252732023cbe9f49567e4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/SyncChirpProcessor.h",
+      "sha256": "d2c869ed092cac3d0378758155bda19b47140473cfb3b7c1d7c1c5dfc5dceb43"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/util/Trigger.h",
+      "sha256": "8f257561e64a8abb0ecbbe095c15ca42825737d18e83915db92d4d58de71a504"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/lsp-plug.in/dsp-units/version.h",
+      "sha256": "a05a1e921d0c272136f45c756895c381db58be60d61bd7157518171b62a97bfc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/include/private/3d/scene/obj.h",
+      "sha256": "7d22a70525b185e80cf915c0470950b7a2018a24c9d0677e93df16a29ff2ffec"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/README.md",
+      "sha256": "b528ef0222684ea116ca5be3fb615f4f52cb85e911903b3c835e2dc79824b46e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/src/main/filters/Equalizer.cpp",
+      "sha256": "16403176f212a94e7f86fb703378ffbc4e66bddd3a9c2f87c4056147b95a6187"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/src/main/filters/Filter.cpp",
+      "sha256": "b22b5a2610c080ebc6af0b2669bcbc359e7e7f86fbd71d4424c042068955a9b9"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/src/main/filters/FilterBank.cpp",
+      "sha256": "6a13c546fb9db27c28ce57c57596a53197aef7fa11d59726c45891d5f69306f7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-dsp-units/src/main/misc/windows.cpp",
+      "sha256": "d961eaf3fdb3385a04d070f78dbabfbdbbefcd3f6b5c843d04d3c684bb6e27f0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/COPYING.LESSER",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/bitset.h",
+      "sha256": "331fc5a9a55a4c146f02d6abc68681b61e52b70b1a7d0f065be0b66b32191567"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/darray.h",
+      "sha256": "a2c02c839745d3647ff698ed0f13f9b87a59ac3fe9e2794bcb74722a4af8e033"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/ddeque.h",
+      "sha256": "29df7e4ff116d53accf49f059427e8197a9c7fd55402cf3956a3ad5fda91ef42"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/hash_index.h",
+      "sha256": "627a71dbbdb7b79cffc25c3a9aaedc08a74b2173007a877c4081c68d867cfeac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/iterator.h",
+      "sha256": "b1ecfd4edafa96a3b163d29e7a42358765809eb90b43acf473a469e352c18a47"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/parray.h",
+      "sha256": "a8e307ef5fc6e35614231f9eb6b7b26cb635c912e72f2e2c4b88f2157d6476c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/phashset.h",
+      "sha256": "0ff8a7475dcfb11280bcc37c37a9ec7a18c0849efff257497b6dce3f3bf60375"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/pphash.h",
+      "sha256": "5f67a70f83de78772e3215952497558b65cd7f58e6414c217fc932ee7780ddd8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/ptrset.h",
+      "sha256": "689de45c52b0b2a18eef639adcc445a8c95387bb619780129722c5856e335a05"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/shbuffer.h",
+      "sha256": "6477a4c3943a4bf74bca2f1defb0ff656919903a12d054410ccfd5393b471f66"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/spec.h",
+      "sha256": "fcb371531bd876b251bfee00aa91c0646c9f5054efd81c180499fbd8767f4804"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/state.h",
+      "sha256": "362030e3942ad74cc7f5c4a7a8b101e830ba47511da391bb15fd98944527a126"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/types.h",
+      "sha256": "da9a5f4af7106f3bd7d469d2156d69a48191062936dbace03d3702bb2f349b2c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/include/lsp-plug.in/lltl/version.h",
+      "sha256": "9e8f98429ce24d0d61ecda7dfbeda27b58c45ed1b813c4a17c72c1a62ec7dfd2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-lltl-lib/README.md",
+      "sha256": "04485f6e17c44544dcc31ea3451ad58ac3d8cdb55837caf4bd8c87b7a368b3d6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/COPYING",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/COPYING.LESSER",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/EnvResolver.h",
+      "sha256": "902d9d66ef1d62942068e01ca18b720911189d7e1d2f78ee4e3dc08410bd9f29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/evaluator.h",
+      "sha256": "ba918eefc34003e4992b4d95f144dd84cb3b4766c62cae78ad79338298fc9438"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/Expression.h",
+      "sha256": "7c8858288528ed8aec5b8a4f2c393b9781dd3360b8e59938f630c413650b4281"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/format.h",
+      "sha256": "d8e49a46db05f071930236af96c0ba30a2f7e2d0fc4a4f7e6ad3a0d9c5a8d42a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/functions.h",
+      "sha256": "5096fb4b63af84a64ce61f9229e6afae0a6bf3ae1d481ca67bf210c1972e857a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/Parameters.h",
+      "sha256": "269e6349a0f421a804b29804e1f6ac3e771a5621a5399e9e84734fc1bd806110"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/parser.h",
+      "sha256": "1f08e544b1a7c7d5526403163f6363b9f4d8c46168fc2cf1dfdc317bd9f48fcc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/Resolver.h",
+      "sha256": "e7d0aaf903dc7bac218753e3eee5d98b611a6ba3dc8a12b2b76ab3166598f8d8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/token.h",
+      "sha256": "2bb51746d651d6b401f995cedb4211c9c55ead2c2244a55c469b93617a7a55c5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/Tokenizer.h",
+      "sha256": "e2ecf3b34c2167b943ae8d491a35867191f8b2566ca71abbd66ea808cdf2264c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/types.h",
+      "sha256": "b490b9a278fb74d26ebfa506cb0ccb63d1518ca848cf25326a4ac827258d51bb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/expr/Variables.h",
+      "sha256": "1143a2541dc0a425b1c033123e8c29d34f0b1579de94c4d7a1d21e8a427fbef4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/bookmarks.h",
+      "sha256": "5046dc4688db75f4f309e276f608f0f9533f3d7daa3c65e07c09f44b6a0137de"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/config/IConfigHandler.h",
+      "sha256": "a865e0f1132d3c37f7f0825dfb48a7fd581fc06e66e3b8c6bb60b08522ea29f8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/config/PullParser.h",
+      "sha256": "b4d0b9f203bc72b2d5fc0a653447d300189a58833be9560e6f182866e89286c0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/config/PushParser.h",
+      "sha256": "5e566a18f214ef0c57c1edcc19487631eb062f16c290424cd30b266a02e4af37"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/config/Serializer.h",
+      "sha256": "7ce3b41d80cd7c46fbe3bbb4dbff9fb59c7f07ab982f0759f80198ad8fa839d4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/config/types.h",
+      "sha256": "a13880ff76d9d78c302920eeb2bcab5355d189e20981022d3371ceea69cffe3d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/Hydrogen.h",
+      "sha256": "2cb5ada7711c19fd07be1ab6e696624ffeee844f09d63f48f7dc2b7e03b1d01a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/const.h",
+      "sha256": "4f2c99f776945026c112936a5e617f2af8c1f4dbf1fe86c5d8c11110a14a873d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/defs.h",
+      "sha256": "9ed4ac24a13fc9dcbcb6689f4aa6510b66d0cbfb65dceb65f874a0d4125f5f25"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/Enum.h",
+      "sha256": "2aa3b6aed547f255547eb87710af3e695d6211f6e2a8ebd55711302c32af0d9c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/Handles.h",
+      "sha256": "a6cf96bc0c99a246c221329210058f1537750b31bda374a7d1a663c36cd67b24"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/Object.h",
+      "sha256": "a6ef37ebfae81353dad67d0e2423fdfbcab393833ee93bbf21d24034a3be5dd6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/ObjectStream.h",
+      "sha256": "d67aef905bff41fd9551666d50ec3aa8b5db540bfb8e79115f6aa8b0c02ad57d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/ObjectStreamClass.h",
+      "sha256": "5dd4bb81f3ff0dbe262e692b5cdae18dfc95fc094168f334a63f87e9919062c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/ObjectStreamField.h",
+      "sha256": "b5c99d70f0f6c98fcb8d48edc78ef83d65ad2e9dde41d3ffe4a7af5ff8ddaa0d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/RawArray.h",
+      "sha256": "b40dfda3bcd4baffff7e3645458f282abf6d1c6d48df36907d2a16765c06c783"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/String.h",
+      "sha256": "13dd6dcb3dafcea3f9db2dc0f3ca9558e8bc1fb1434a8131a137a23a0c38d262"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/java/wrappers.h",
+      "sha256": "60cb037d444332572f8a38490233726f44705baf8774191cb17d0b152e7086c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom.h",
+      "sha256": "b42930348070865762151748bb1e89e54ec220b53d694c15aae4a732f4a9f4dd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Array.h",
+      "sha256": "d3b5e2781403b24ea33953676256e56c7b36a61e899bd97b3d9911c31c8d57c1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Boolean.h",
+      "sha256": "92390750638d2ac65f5f49b79fcb96f4a2dc20d0a78daeaf94be94d9817293f8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Double.h",
+      "sha256": "0fc30595f5a8a987b01c12cd5cdc43a429b3946d579a0cc7fa7fc0441b68c0a8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Integer.h",
+      "sha256": "4b26db4dfe3f5e4ab94d45aeaee20a6d326026982e260df50142522191cc4064"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Node.h",
+      "sha256": "99b331ee42a783595cf6312d038be296d55ae4337eb86c6a79a394d51a103514"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/Object.h",
+      "sha256": "d45c43bd6d856e7a31364952f064add54f4e53a80a56ab72dc046a990d1395ce"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/dom/String.h",
+      "sha256": "eab57d0c6b97b54170697cbf9dc6c91ea3403db2310f31ab2330200b7eb0c2d0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/Parser.h",
+      "sha256": "a7be3465be9d94c051d3ef030513a9fa5cc5ca133a96b482f4d4637696459f71"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/Serializer.h",
+      "sha256": "7af180bb0d00ce2f89c4c37620e4c25990ce8bc7ba49786eb7cfeeae15e322d5"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/token.h",
+      "sha256": "1828de74198f8ec208f42c26fce0e2f9082d93b272ee65847b542c9b3868896b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/json/Tokenizer.h",
+      "sha256": "12876e4fa724ac6196130eb62c2126017409fe4118ce84dc1bc81399492f3dcc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lnk/types.h",
+      "sha256": "ea1e364796e2987a4b1a56df01d93d1d43db55e9935a26458a296c06a9da214f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/AudioReader.h",
+      "sha256": "aab822684a7038f3ca075008bf9bde85cba5fc9d36e0e30dbd04c98cb51d790a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/AudioWriter.h",
+      "sha256": "dc82ff3626093667f9083d2c71fb9b0f37ee630393749a8718c275bfc00662c7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/ChunkAccessor.h",
+      "sha256": "55a941f187599bfcad3a724f1494b6d4be32b91a43f138bf66fff25965931c20"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/ChunkReader.h",
+      "sha256": "ce8a50148f2c3d1806ad29b67c6c0f8898746416069a352a2a5849ec597dc360"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/ChunkReaderStream.h",
+      "sha256": "531f0abdb9dabde4ce08b425ec2ac834efb2684599ed843921b37ac6fe5d14c3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/ChunkWriter.h",
+      "sha256": "64a42ea8437b8bd54561f024a17cea182bdd0b0f3d8e27a29df2964e9aa38374"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/ChunkWriterStream.h",
+      "sha256": "61e1dc82ccd5873dfe382880c6e272d21acae5d5a075d455b01782a28026127f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/File.h",
+      "sha256": "b594150e856d85b99756aad1aded2583e71f9e766c8e020739dc7a28e7997697"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/IAudioFormatSelector.h",
+      "sha256": "73d13321b1f2baf9e3ce7d8b8362c21003a60c0a5074c3843abcd6e72d9f0a29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/InAudioStream.h",
+      "sha256": "baed1b2f3759fdfc212b95a229a1deda4413eafc751d951d5001c4bf952eae74"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/lspc.h",
+      "sha256": "4b6dac544cef624a97a0a27f73325dfc5d769fa3c20038077a19ed6b3585c883"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/util.h",
+      "sha256": "be165cea5665727ce0c8d798f99173eacc16ea33bb6b3745a6566f7433d9fd42"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/util/audio.h",
+      "sha256": "1b73f958150f95dc24ca807967dc5c9d47d87f36c7319474ef85e1a68a27b738"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/util/config.h",
+      "sha256": "72ba8b449cc79161a0404c98c09e5e25f13b2bed86dbef032d486f84f50acf23"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/lspc/util/path.h",
+      "sha256": "1941fabeef593af11b10981a8547d063448c536a70b2de7e51a6dc93326708f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/Compressor.h",
+      "sha256": "b0e36f11233b40ba1d2befca6cec93645e59f07b20331dd4873b205506816a9d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/const.h",
+      "sha256": "bd446bb3a1a7b38760352ef9acaaa27557c4bdb2564a060cc796f3955ae8b26e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/Decompressor.h",
+      "sha256": "202e779e1dd2c8d732ae7a0cdb7d05503e16265dd0ea11f469abf90bd66f5bbd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/IObjHandler.h",
+      "sha256": "8e68166f007aba77a2a281ccf759c819580c4d8d89fd03d8243bd3db8c731dce"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/PullParser.h",
+      "sha256": "e8c9e7c7ee71a1d07c927b57610e8f608954bf0abc1306a2f309b22feee8439f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/obj/PushParser.h",
+      "sha256": "2dfd8a8c831a517511211f03c0c3e532f6121ca4f2364c9aa664e4b7f9915c01"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/RoomEQWizard.h",
+      "sha256": "6b9c60fe06c0fca0a2d313a5f6e6bf0e149da313673451fa66247114f2bade63"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/sfz/DocumentProcessor.h",
+      "sha256": "eef0293d2bb45d92ac6631e81377d65c0dc842cf12bd31283e4cc972ec79b4f1"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/sfz/IDocumentHandler.h",
+      "sha256": "e889c9d9b1d4d5a2bcd714786c333a3a17ff779ee5a56e1c0cd5c7e854dd02ea"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/sfz/parse.h",
+      "sha256": "244046dac0f60b43a83dd41b7eadf0f8bab7ff836d8413897637680f1373b1c6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/sfz/PullParser.h",
+      "sha256": "2a31a8c6bcfc3883bcfd34a7335a4c55174397c672661e35911235c3fad9cccc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/sfz/types.h",
+      "sha256": "e4da05b70ed6a997991927426ebd781b7132f7029d8112960a595b3a12fc3ccf"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/url.h",
+      "sha256": "0040fcef99d21ec986d5aaad55cb47cbecae4a265c7ddddb586f2037cda88e27"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xml/const.h",
+      "sha256": "dad7b8ba3d505f1a29c585d35b5c52c6c9fbb650c6d1a693e27556a2bf14cc95"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xml/IXMLHandler.h",
+      "sha256": "8163e230260a75f9f386ce6cb25fb32faf982666c79e16cade60fb39cdf52f82"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xml/PullParser.h",
+      "sha256": "670d83dadfca6f7553a20673b9bf6c3e838bca434c186513054a6396a85d2d36"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xml/PushParser.h",
+      "sha256": "b25bedc94d4f2b2b28f196b9ea38c45d520a99eba50732addcafebfe88e4f7cc"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/Color.h",
+      "sha256": "3a8dd84b826b87ca46f4ea83bf8aab6c995a8f1697a88abdc6d8b93ac8e6a968"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/ColorItem.h",
+      "sha256": "aefafa76f1a9adf31ba8ed3731860a08664ab12ed03795ab5458bfe82a4256c8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/Extension.h",
+      "sha256": "9d7f2572884d73682e769143261d0bcd673a360ca8a21a7889511f844cb4dc21"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/Header.h",
+      "sha256": "babca3056b211d933898011303b20f1c398537806178fb4cae2226b1aab664c2"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/Parser.h",
+      "sha256": "995986455b8b99a4691f6b7a38f36b130b5844bf576c2c17e107bf3ac9d227eb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/fmt/xpm/xpm.h",
+      "sha256": "bbe7222fe2b22df30e6d400ca5dafc942d74163cbc2a534541f9ae468186b159"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/i18n/Dictionary.h",
+      "sha256": "2e9cc2676fd79e771bacfb32ef741d8ed5c8ef954a1746e84e0eb723ed052ed8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/i18n/IDictionary.h",
+      "sha256": "983b4253831532cbcb18ba2dc7962dbf6e5c105f1d10d3c4bc7de8827f27d663"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/i18n/JsonDictionary.h",
+      "sha256": "1faef1eb8341bbfda84c710696d8325bafd93d4f522c6aa01fd6af28074c4afa"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/charset.h",
+      "sha256": "b1bcaae753f7e34a82ed1623ddaeb53cfddaae4d820b0c12332754616c289cac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/CharsetDecoder.h",
+      "sha256": "2459c74407f6f904b0c2108e010d8465375581f7ac244fb3595176d80bd1a411"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/CharsetEncoder.h",
+      "sha256": "4668874d1c04700cd43e5bab17d312fb86a806d86734aaa9b5f2ea8028940fcb"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/Dir.h",
+      "sha256": "8ed7585395b3b3f8ff11f6b56974e8f6a4009564415a0e621108e283c3f922d0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/File.h",
+      "sha256": "bdf957a34bbbceaf2ebef265ca64bcaa0d945da54bf6179af74fa2816ad99069"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/IInSequence.h",
+      "sha256": "a489a267f1b717e088ea3656916312da3a4863982e524d8f64729a7f9e7808ad"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/IInStream.h",
+      "sha256": "334e992058f49000009c46e5427e2857aeece8434249adc026e0ec196fb6a345"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InBitStream.h",
+      "sha256": "a8e4fdb7821753f1f5a5808b9a689b7c9f73c32cda2126f2485f96c5e5831974"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InBufStream.h",
+      "sha256": "b5c1330355ff8bf0af5b755de6042efdf682cdd8b6a38c66a97a8d72a3aac430"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InFileStream.h",
+      "sha256": "40338f6c234e3b9d8a540a4d985d600c12f30b02844cd3011aeafe404f194442"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InMarkSequence.h",
+      "sha256": "0e23caa7ec113020f74cbe6e99692b88cf88f2e2290226a7199a363aab0d7c37"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InMemoryStream.h",
+      "sha256": "3d497708ad7540fecdde168ba66ea2e9029a3173515fb713edf85a749fcfdb37"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InSequence.h",
+      "sha256": "ae6487ac4d88f811da23372a241e14d7e8a771bce13e8c850e3783bf311e4a1a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InSharedMemoryStream.h",
+      "sha256": "5dd1782df994ce5a0b68bbb84169aab682c6d90490fddc5836b7bfc1aa27b6df"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/InStringSequence.h",
+      "sha256": "98c65a3f4494491158e9ab357dd0e3b0060399d5c59bc378a992d24079a465a0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/IOutSequence.h",
+      "sha256": "9a082788380aa2d122cfaa3f373d63d1eb9addee780c9a709f64ec92f1313e07"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/IOutStream.h",
+      "sha256": "aa121f5f890ebc6182ab5d1fa98c3c529c0a3043c22cd5f1dfaa5e7c92c026e8"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/NativeFile.h",
+      "sha256": "9836937c1b42364428e6dea9c9b856eabed780409acd87962dc0127f81e5c251"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/OutBitStream.h",
+      "sha256": "cf2ad6f47fed713f9b3f988da97f942f51ea055a124209354aebb67745def81a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/OutFileStream.h",
+      "sha256": "dba319e150b33925c6cd7eea02f77d9f074ebc14f103b6897dafb268de6f5b27"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/OutMemoryStream.h",
+      "sha256": "121e189bf65353f9c4d6416781f823afd13ad28074d46ed2cbb195fe85f9bf91"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/OutSequence.h",
+      "sha256": "fba81b786ac84100b07ef95558d4b8b2c2a604cbb4ec8a63dc2204aac447cbf0"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/OutStringSequence.h",
+      "sha256": "f90202029f9003e662f852e8bfdc86c878001334f98194dbf31af1a6b82bd82e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/Path.h",
+      "sha256": "d7df7456e31aada102af351a371b582348f5b3420af30ef24db8f0a9fe60074f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/PathPattern.h",
+      "sha256": "735678c32a29678871fdcb623c91e1c26f1927e676c5ce3f75fb7a942468d04a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/io/StdioFile.h",
+      "sha256": "126995db69b1868225f6076b76b09e519f6a4a00491c49339ba170e1b515f8c3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/Condition.h",
+      "sha256": "9376731aedb3751d1576888f0f6fea9e475f5dc97921653522a029399ff4cb71"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/IExecutor.h",
+      "sha256": "eb6c79fedee361bc99044bb57e2bb61c2cdb5d229749bdd15c586e88124f2b56"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/IRunnable.h",
+      "sha256": "c37b31c1543303b365444cdaa4731e25e038715123c4030032a5b4b85dd531c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/ITask.h",
+      "sha256": "4563b680f4b901305ab18f2acad17a42de092934ac6e3e05500c6eb628764089"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/Library.h",
+      "sha256": "9e6a46bbbb7cc45b6c2c5ceb767d532cffc2a0c8b99be2a25aab04d05d875d77"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/Mutex.h",
+      "sha256": "ac75963c8461df27483d9080b41cb9abe80ecdc58a0cb14b0e09fbd6c6f73827"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/NativeExecutor.h",
+      "sha256": "81ab033b1179233ad46ebe4e61cb09ee0566fe782d57ba381bf289603515ea41"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/Process.h",
+      "sha256": "0fcfbbbd578d8f092d5b935cea0722b91f31a1c8be425b95132d37cfb0f8c17f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/SharedMem.h",
+      "sha256": "b3309456d00f5826648634b90c9f3a8d5ed0cae47e3d15fb85401d96bb8bd954"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/SharedMutex.h",
+      "sha256": "3f52912c76a786724d5d79a607e5784102498f4af67b0495037a55db2dee5674"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/ipc/Thread.h",
+      "sha256": "07f0c4e16f5d837fac537b53a61b117f0243cbf1ab0a505761c1544882a6c4bd"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/Bitmap.h",
+      "sha256": "8c426bfac686bf02564ae848561b340ec677ebef5981a430bce05434716f6b42"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/IColorMap.h",
+      "sha256": "c0a31b92418fa8ec3cbe0f589a0e9ecaa07fd83e9cdb515a39eb748bff93cc7e"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/IInAudioStream.h",
+      "sha256": "69caac4e6858ec3460c3ccb0b6199f51041ee1d0bd3846f5733ddd1dda9b3498"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/InAudioFileStream.h",
+      "sha256": "e1a1bba6b34099340f1cddb59f5abb87727c4e63289e6c6d737818c036ea48ee"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/IOutAudioStream.h",
+      "sha256": "202ce7614385cae9f96b0f3188159c99a125d4da620aca9c9868507cbda6dcce"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/OutAudioFileStream.h",
+      "sha256": "071d5f8935e1e9cb7bdc766083be9a1a72cbf2734ab9a1f8aa58e9bbe1bca45b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/pixel.h",
+      "sha256": "40e8853255b67dd4a9d41e0afc52eef97975022739e5fe38a2a5274cabb79b21"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/sample.h",
+      "sha256": "abb1c59ab2327fef706c10956395fe88731518e4c9d9cde3146a196a57431225"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/mm/types.h",
+      "sha256": "a89264c3d8645b5b7df253ee627a66b3ee70876df42e85b67b28e943f7a7bb32"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/midi.h",
+      "sha256": "af4b67dac1f3386146a5af6994c637714f86b0c56b42160bb118ef189d6e9062"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc.h",
+      "sha256": "cb4d691d52f1f8220d4f9d2ee91e8de9ef55dc7e5dcdfc373bb7bbf2ace26fc4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc/debug.h",
+      "sha256": "ac78dcfde3aef33950764f523a0f54e2bc78403e4089abde8fc6ee840937c533"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc/forge.h",
+      "sha256": "d37d2d3791bfb0c5cea9a05ca9477afabe7a1a5b116ff04919bc2d716a4bfa19"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc/parse.h",
+      "sha256": "23b8b23c1309cf9b19d86c9d720e5dc761f0bf10f8b03d19f3c9f67447eef062"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc/pattern.h",
+      "sha256": "2739c90641e05718ea4dc7dbff89d904684282c812af7f54441626684805e02f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/protocol/osc/types.h",
+      "sha256": "a8b9f72887e4e2de75025e60ce0c44cfef9dcb417b56f330daa00b84f7ca28d7"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/buffer.h",
+      "sha256": "ee94ef18ef03f2227fc1262a7ef20c08b7bd04cd530decac03a8b99ec5dd6972"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/BuiltinLoader.h",
+      "sha256": "bcfd227025898264c9a3163c6dae03aaa650f532fe9cba71d66cdbe4e2748c5a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/Compressor.h",
+      "sha256": "02e61561330e2931446a526cb8e88afcf69d59e48bbb93ae976112a40732ac8c"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/Decompressor.h",
+      "sha256": "fa29d0f3077a913ed19366679e131d829a08e9ca02d1bcb572a55ee653d3f836"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/DirLoader.h",
+      "sha256": "1165a82db6683613f67d5a4918b15f9ea88bf98557a53238308eda49eabda4ac"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/Environment.h",
+      "sha256": "5b20901eb7b2372682120b5e8738575394eaf02ddee1c918d140d464c9daac28"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/ILoader.h",
+      "sha256": "1b302c38bd7379567628157c6c09495a01eab54381d5b0b332847808f986b5ef"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/OutProxyStream.h",
+      "sha256": "d1578c32271eb5da75a22d105d95cc4ead6bb2a4d72bcc27d0d20b6b72caa287"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/PrefixLoader.h",
+      "sha256": "254b2f91631b5bb5124d8b273bc95fa460a16fbe83114ef10404270dcd5988f6"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/resource/types.h",
+      "sha256": "c844cf91fdbbeafe1f9bf97f18161bff00dbdaf9c273dfc260fe90c2097e79c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/runtime/Color.h",
+      "sha256": "0654faf9d8e1ee73824743bfed7759d6a27e73d6214b592cb095b14f40d7cc2b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/runtime/LSPString.h",
+      "sha256": "4cea66099aa030027957496c6fc58477c4243bb7291b2b319b771fbd98c72025"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/runtime/system.h",
+      "sha256": "3fcd99419ff18913234f7abf859507a0bcb2882c26c0f64b0f56c481355950c4"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/runtime/uuid.h",
+      "sha256": "67163be564fe097de50ed68651607ebe44c7907a01ec79eb6192a07ec5eeac06"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/lsp-plug.in/runtime/version.h",
+      "sha256": "a3746fdd5674f871ce8bf5ef14f34afa773ad99dbeee7e824a3a658a5e16762f"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/Tokenizer.h",
+      "sha256": "4a687c653f911f40ad21afe5184a8282f2bc4adbc1d57b4604c4d7b8e14ac68a"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/utils.h",
+      "sha256": "ac6d3428944ac4ddf64a2813be771f6c1c01b7ee50e180f76dea573a9a97c232"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/XPM1BuiltinParser.h",
+      "sha256": "0a4fc2474aeae5c23877d31ecb7740193f81471985cbfc4af6c9af398f12b728"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/XPM1StreamParser.h",
+      "sha256": "47bdb2acee3656f30ce4f520e58569f22e6437309455faa69b64c398d5abf202"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/XPM2StreamParser.h",
+      "sha256": "ce689d62afda4e295e5a7e72bb2a6f85d9401cd574be98b92c1e73b07e400eed"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/XPM3BuiltinParser.h",
+      "sha256": "08b7a37c0895add9203ec5e3ea82325cf50a56643cdad40da8b2f938d88599f3"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/fmt/xpm/XPM3StreamParser.h",
+      "sha256": "1dd89d4ab4325f996369115debdc2b489c90e93ea655ebafa63e2ba908624d8b"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/mm/ACMStream.h",
+      "sha256": "23a5c2a36d459e33a8726e645b32e1b79a2d2c6afcc9bf1d74b66440e032d363"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/mm/bitmap/xpm.h",
+      "sha256": "339aa67a34961d7586b3c626bd6a297949a93007d3c13fde8eee52c6da553d2d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/mm/MMIOReader.h",
+      "sha256": "a934134b497e4d1071af3bfee54fc6db3ef555e60f418add97532e8553f90e29"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/include/private/mm/MMIOWriter.h",
+      "sha256": "280b308440d850cfcd747e2f051d1651fdd9083588793d22bc94c974ce22120d"
+    },
+    {
+      "path": "vendor/audio/lsp/lsp-runtime-lib/README.md",
+      "sha256": "935634095891acb9bd40904ba001cc557a7bb1b876a21517ac21a3a7ed864a91"
+    }
+  ]
+}

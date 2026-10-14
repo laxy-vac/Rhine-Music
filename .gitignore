@@ -1,0 +1,35 @@
+# Local dependencies and build outputs
+/node_modules/
+/dist/
+/release/
+/.tools/
+/.local/
+/data/
+/presets/themes/*.json
+/presets/eq/*.json
+__pycache__/
+*.py[cod]
+*.log
+*.pdb
+*.obj
+*.ilk
+
+# Private workspace notes and machine-specific raw verification
+/Memory.md
+/reference/
+/docs/SONY-CRELU-VERIFICATION.json
+/docs/SONY-PHASE-VERIFICATION.json
+/docs/SONY-X86-VERIFICATION.json
+/docs/WINDOWS-ENHANCED-VERIFICATION.json
+
+# Local credentials and workspace configuration
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+*.key
+*.keystore
+/.aws/
+/.codex/
+/.agents/

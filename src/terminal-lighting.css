@@ -1,0 +1,139 @@
+/* Future terminal response is layered over the shared warm-white/night tokens. */
+html
+  .music-app[data-design="rhine"][data-terminal-lighting="local"]
+  [data-terminal-receiver],
+html
+  .music-app[data-design="rhine"][data-terminal-lighting="full"]
+  [data-terminal-receiver] {
+  border-color: color-mix(
+    in srgb,
+    var(--line) calc(100% - var(--terminal-light-edge, 0%)),
+    color-mix(in srgb, var(--surface) 64%, var(--accent))
+      var(--terminal-light-edge, 0%)
+  );
+  --terminal-receiver-shadow:
+    inset var(--terminal-light-x, 0px) var(--terminal-light-y, 0px) 0
+      color-mix(
+        in srgb,
+        var(--surface) var(--terminal-light-highlight, 0%),
+        transparent
+      ),
+    0 2px 10px
+      color-mix(
+        in srgb,
+        var(--ink) var(--terminal-light-shadow, 0%),
+        transparent
+      ),
+    0 0 var(--terminal-light-spread, 0px)
+      color-mix(
+        in srgb,
+        var(--accent) var(--terminal-light-halo, 0%),
+        transparent
+      );
+  box-shadow: var(--terminal-receiver-shadow);
+}
+
+/* The selected navigation skin has a stronger base selector. Keep its light
+   response on the same shadow layer instead of silently reverting to a fixed edge. */
+html .music-app[data-design="rhine"]:is([data-terminal-lighting="local"], [data-terminal-lighting="full"])
+  .music-header .music-topnav > button[data-terminal-receiver] {
+  box-shadow: var(--terminal-receiver-shadow);
+}
+
+html
+  .music-app[data-design="rhine"]
+  :is(
+    .music-topnav > button,
+    .theme-switch > button,
+    .music-style-page button,
+    .music-settings-page button,
+    #music-eq-page button,
+    #music-lyrics-page button:not(.lyrics-line-button),
+    #music-signal-page .signal-models button,
+    #playback-toggle,
+    #play-pause
+  ):not(:disabled) {
+  transition:
+    translate 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+html
+  .music-app[data-design="rhine"]
+  :is(
+    .music-topnav > button,
+    .theme-switch > button,
+    .music-style-page button,
+    .music-settings-page button,
+    #music-eq-page button,
+    #music-lyrics-page button:not(.lyrics-line-button),
+    #music-signal-page .signal-models button,
+    #playback-toggle,
+    #play-pause
+  ):not(:disabled):hover {
+  translate: 0 -1px;
+}
+
+html
+  .music-app[data-design="rhine"]
+  :is(
+    .music-topnav > button,
+    .theme-switch > button,
+    .music-style-page button,
+    .music-settings-page button,
+    #music-eq-page button,
+    #music-lyrics-page button:not(.lyrics-line-button),
+    #music-signal-page .signal-models button,
+    #playback-toggle,
+    #play-pause
+  ):not(:disabled):active {
+  translate: 0 0.5px;
+}
+
+html
+  .music-app[data-design="rhine"]
+  #music-lyrics-page
+  .lyrics-line-button.is-active[data-terminal-receiver] {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html
+    .music-app[data-design="rhine"]
+    :is(
+      .music-topnav > button,
+      .theme-switch > button,
+      .music-style-page button,
+      .music-settings-page button,
+      #music-eq-page button,
+      #music-lyrics-page button:not(.lyrics-line-button),
+      #music-signal-page .signal-models button,
+      #playback-toggle,
+      #play-pause
+    ) {
+    transition: none;
+    translate: none;
+  }
+}
+
+html
+  .music-app[data-design="rhine"][data-reduced-motion="true"]
+  :is(
+    .music-topnav > button,
+    .theme-switch > button,
+    .music-style-page button,
+    .music-settings-page button,
+    #music-eq-page button,
+    #music-lyrics-page button:not(.lyrics-line-button),
+    #music-signal-page .signal-models button,
+    #playback-toggle,
+    #play-pause
+  ) {
+  transition: none;
+  translate: none;
+}

@@ -1,0 +1,122 @@
+.music-app .editable-range-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 4.4em;
+  min-height: 32px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  cursor: text;
+}
+
+.music-app .editable-range-value:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent) 10%);
+}
+
+.music-app .editable-range-value:focus-visible,
+.music-app .editable-range-number:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 54%, transparent);
+  outline-offset: 2px;
+}
+
+.music-app .editable-range-value:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.music-app .editable-range-number {
+  box-sizing: border-box;
+  width: 7em;
+  min-width: 5.5em;
+  min-height: 34px;
+  padding: 4px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app .music-settings-page .settings-page-content input.editable-range-number {
+  width: 7em;
+  min-width: 5.5em;
+  max-width: 7em;
+  min-height: 34px;
+  padding: 4px 7px;
+}
+
+.music-app .editable-range-number[aria-invalid="true"] {
+  border-color: #ad746f;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ad746f 20%, transparent);
+}
+
+.music-app .music-settings-page .settings-row > input[type="range"] {
+  flex: 0 1 240px;
+  width: clamp(100px, 30%, 240px);
+}
+
+.music-app .music-settings-page .settings-row > .editable-range-value {
+  margin-left: -10px;
+}
+
+.music-app .music-settings-page .quality-range > div > .editable-range-value {
+  min-width: 4.2em;
+  min-height: 30px;
+  margin-inline: 5px;
+}
+
+.music-app .music-settings-page .quality-range > div > .editable-range-number {
+  width: 6em;
+}
+
+.music-app .music-playback .playback-volume > .editable-range-value {
+  min-width: 3.5em;
+  min-height: 28px;
+  padding-inline: 5px;
+  border: 0;
+  background: transparent;
+}
+
+.music-app .music-playback .playback-timeline > .playback-progress-value {
+  min-width: 3.2em;
+  min-height: 28px;
+  padding-inline: 2px;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10px;
+  text-align: center;
+  cursor: text;
+}
+
+.music-app .music-playback .playback-timeline > .editable-range-number {
+  width: 5em;
+  min-width: 4.4em;
+  min-height: 28px;
+  padding: 3px 4px;
+  font-size: 10px;
+}
+
+.music-app[data-layout="portrait"] .music-settings-page .settings-row > .editable-range-value {
+  min-width: 4em;
+  margin-left: -12px;
+}
+
+@media (max-width: 700px) {
+  .music-app .music-settings-page .settings-row > .editable-range-value {
+    min-width: 3.8em;
+    min-height: 30px;
+    padding-inline: 6px;
+  }
+}

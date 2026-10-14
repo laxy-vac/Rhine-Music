@@ -1,0 +1,26 @@
+/* Punk signal monitor: bounded live field, wrapping controls and fully visible readouts. */
+.music-app[data-design="archive"] #music-signal-page {
+  min-width:0;min-height:0;grid-template-rows:minmax(0,1fr);overflow:hidden;
+  #signal-page-content { height:100%;min-height:0;min-width:0;box-sizing:border-box;padding:0;border:0;overflow:hidden; }
+  .signal-workspace { display:grid;grid-template-rows:auto minmax(0,1fr) 112px;height:100%;min-width:0;min-height:0;box-sizing:border-box;gap:10px;padding:0;border:0;background:var(--page-bg);font-family:var(--design-font); }
+  .signal-toolbar { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;min-height:34px;padding:0 0 7px;border-bottom:2px solid var(--ink);font-size:11px; }
+  .signal-ident { display:flex;flex-wrap:wrap;flex:0 1 auto;gap:10px;min-width:0;overflow:visible;white-space:normal; }
+  .signal-status { padding:4px 8px;font-size:10px;white-space:nowrap; }
+  .signal-status[data-live="true"] { color:var(--on-accent,var(--page-bg)); }
+  .signal-archive-controls { display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:100%; }
+  .signal-archive-model-label { display:inline;color:var(--fg-soft);font-size:10px; }
+  .signal-models button,.signal-archive-controls > button { min-height:30px;padding:0 11px;font-size:11px;white-space:nowrap; }
+  .signal-viewport { min-width:0;min-height:0;overflow:hidden;border:1px solid var(--line);background:var(--panel); }
+  .signal-trace { display:grid;grid-template-rows:auto minmax(36px,1fr) auto;gap:6px;min-width:0;min-height:96px;box-sizing:border-box;margin:0;padding:7px 0 0;border-top:2px solid var(--ink); }
+  .signal-trace-heading,.signal-footer { display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-width:0;min-height:16px;color:var(--fg-soft);font-size:11px;line-height:1.4;letter-spacing:.04em; }
+  .signal-footer { overflow:visible;white-space:normal; }
+  .signal-data-state { min-width:0;overflow:visible;overflow-wrap:anywhere;text-overflow:clip; }
+  .signal-meter,.signal-trace-time { flex:none;white-space:nowrap;font-variant-numeric:tabular-nums; }
+  .signal-trace input[type="range"] { inset:28px 0 23px; }
+  .signal-trace > .editable-range-value,.signal-trace > .editable-range-number { display:none; }
+  .signal-spectrum-caption { left:48px;right:16px;bottom:4px;flex-wrap:wrap;gap:4px 14px;font-size:11px; }
+  .signal-resolution,.signal-probe { min-width:0;white-space:normal;overflow-wrap:anywhere; }
+  .signal-classic-caption > div { min-width:0;gap:16px; }
+  .signal-classic-caption h2 { min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35; }
+  .signal-large-time { flex:none;white-space:nowrap; }
+}

@@ -1,0 +1,272 @@
+/* Contemporary RhineLab: Swiss information hierarchy over Space Age materials.
+   The shared album/lyrics layout and the native scene remain the same. */
+.music-app[data-design="rhine"] {
+  /* Inherit the original record archive palette from music.css. Material
+     styling must not introduce a darker, grayer second Future palette. */
+  /* These subtle tints belong to material reflections, never the room backdrop. */
+  --future-prism-cool: rgb(210 216 216 / .08);
+  --future-prism-warm: rgb(245 226 190 / .13);
+  --future-prism-pearl: rgb(234 234 231 / .14);
+  --future-panel: color-mix(in srgb, var(--surface) 96%, var(--page-bg));
+  --future-glass: color-mix(in srgb, var(--surface) 56%, transparent);
+  --future-edge: color-mix(in srgb, var(--ink) 9%, transparent);
+  --future-edge-hi: color-mix(in srgb, var(--ink) 24%, var(--line));
+  --future-highlight: color-mix(in srgb, var(--surface) 30%, white);
+  --future-shadow: #3d403e;
+  --future-instrument: var(--ink);
+  --future-label: color-mix(in srgb, var(--ink) 25%, var(--muted));
+  --future-radius: 14px;
+}
+.music-app[data-design="rhine"][data-theme="night"] {
+  --future-prism-cool: rgb(169 189 191 / .08);
+  --future-prism-warm: rgb(190 170 138 / .09);
+  --future-prism-pearl: rgb(208 215 213 / .08);
+  --future-shadow: #030709;
+  --future-highlight: color-mix(in srgb, var(--surface) 82%, white);
+  --future-edge: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+#stage.music-app[data-design="rhine"] {
+  background: var(--page-bg);
+}
+.music-app[data-design="rhine"] .music-header {
+  align-items: center;
+}
+/* Horizontal overflow also clips the cross axis. Reserve a transparent gutter
+   for the soft light while negative margins keep the controls in place. */
+.music-app[data-design="rhine"] .music-header .music-topnav {
+  --future-nav-top-padding: 7px;
+  gap: 10px;
+  padding: calc(var(--future-nav-top-padding) + 48px) 48px 48px;
+  margin: -48px;
+  max-width: calc(100% + 96px);
+}
+@media (max-width: 1100px) {
+  .music-app[data-design="rhine"] .music-header .music-topnav { --future-nav-top-padding: 3px; }
+}
+.music-app[data-design="rhine"][data-layout="portrait"] .music-header .music-topnav {
+  --future-nav-top-padding: 0px;
+  width: calc(100% + 96px);
+  max-width: calc(100% + 96px);
+}
+.music-app[data-design="rhine"] .music-brand strong {
+  letter-spacing: -.035em;
+}
+.music-app[data-design="rhine"] .music-header .music-topnav > button {
+  /* Every hover target owns its padding and a separate gap. */
+  box-sizing: content-box;
+  padding-inline: 16px;
+  margin-inline: 0;
+  border-radius: var(--future-radius);
+  transition: color 140ms, background-color 140ms, box-shadow 140ms;
+}
+.music-app[data-design="rhine"] .music-header .music-topnav > button:hover {
+  background: color-mix(in srgb, var(--surface) 64%, transparent);
+}
+.music-app[data-design="rhine"] .music-header .music-topnav > button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--future-glass);
+  box-shadow: 0 3px 12px color-mix(in srgb,var(--future-shadow) 8%,transparent), inset 0 1px 0 var(--future-highlight);
+}
+.music-app[data-design="rhine"] .music-header .theme-switch {
+  padding: 3px;
+  gap: 4px;
+  border-color: var(--future-edge);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 42%, transparent);
+}
+.music-app[data-design="rhine"] .music-header .theme-switch::before {
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--future-shadow) 12%, transparent), inset 0 1px 0 var(--future-highlight);
+}
+.music-app[data-design="rhine"] .music-header .theme-switch button {
+  border-radius: 18px;
+  color: var(--future-label);
+}
+.music-app[data-design="rhine"] .music-header .theme-switch button[aria-pressed="true"] {
+  color: var(--ink);
+}
+/* Precision readout integrated into the header, with the same existing node/timer. */
+.music-app[data-design="rhine"] .music-header .music-topnav > .foobar-clock {
+  min-width: 112px;
+  gap: 3px;
+  padding: 2px 8px 3px 15px;
+  border: 0;
+  border-left: 1px solid var(--future-edge);
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  font-family: MiSans, system-ui, sans-serif;
+}
+.music-app[data-design="rhine"] .music-header .foobar-clock::before {
+  left: 5px;
+  top: 6px;
+  width: 2px;
+  height: 15px;
+  border-radius: 0;
+  background: var(--accent);
+  box-shadow: none;
+}
+.music-app[data-design="rhine"] .music-header .foobar-clock strong {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: .035em;
+  font-variant-numeric: tabular-nums;
+}
+.music-app[data-design="rhine"] .music-header .foobar-clock small {
+  color: var(--future-label);
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+/* Archive typography floats over the scene; the existing field layout stays shared. */
+@media (min-width: 721px) {
+  .music-app[data-design="rhine"] .library-status { top: 116px; left: 42px; }
+}
+.music-app[data-design="rhine"] .album-panel::before {
+  content: none;
+}
+.music-app[data-design="rhine"] .album-panel .music-eyebrow {
+  color: var(--future-label);
+  letter-spacing: .16em;
+}
+.music-app[data-design="rhine"] .album-panel .selection-rule {
+  border-bottom-color: var(--future-edge-hi);
+}
+.music-app[data-design="rhine"] .album-panel .selection-profile-heading {
+  background: none;
+  border-top-color: transparent;
+  border-bottom-color: var(--future-edge);
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--future-label);
+}
+.music-app[data-design="rhine"] .album-panel .selection-profile-heading > span:first-child {
+  padding: 2px 5px;
+  color: var(--page-bg);
+  background: var(--ink);
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+.music-app[data-design="rhine"] :is(.settings-page-heading small,.album-panel .music-eyebrow,.selection-profile-heading,.lyrics-eyebrow,.lyrics-index) {
+  font-family: "Archive Mono",MiSans,sans-serif;
+}
+.music-app[data-design="rhine"] .album-panel .selection-profile dt {
+  color: var(--future-label);
+}
+.music-app[data-design="rhine"] .album-panel .selection-profile dd {
+  font-variant-numeric: tabular-nums;
+}
+.music-app[data-design="rhine"] .album-panel .open-album {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: flex-start;
+  width: 188px;
+  max-width: 100%;
+  min-height: 42px;
+  margin-top: 26px;
+  padding: 10px 0;
+  gap: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: 500 11px/1.4 "Archive Mono", MiSans, sans-serif;
+  letter-spacing: .055em;
+  transition: color 160ms;
+}
+.music-app[data-design="rhine"] .album-panel .open-album:hover {
+  color: var(--accent);
+  background: transparent;
+}
+.open-album-access-label { display: none; }
+.music-app[data-design="rhine"] .album-panel .open-album-label { display: none; }
+.music-app[data-design="rhine"] .album-panel .open-album-access-label {
+  display: inline;
+  font: inherit;
+  white-space: nowrap;
+}
+.music-app[data-design="rhine"] .album-panel .open-album-arrow { font: 400 18px/1 MiSans, sans-serif; }
+.music-app[data-design="rhine"] .album-panel .music-tabs {
+  border-color: var(--future-edge);
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.music-app[data-design="rhine"] .album-panel .track-row {
+  border-color: var(--future-edge);
+}
+/* A thin floating control deck: the existing measured GPU glass surface follows
+   this radius, so its refraction/cutout stays aligned with the CSS shell. */
+.music-app[data-design="rhine"] .music-playback {
+  --glass-tint: color-mix(in srgb, var(--surface) 64%, transparent);
+  border-radius: 999px;
+  border-color: color-mix(in srgb,var(--future-highlight) 70%,var(--line));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--future-shadow) 12%, transparent), inset 0 1px 0 var(--future-highlight);
+}
+.music-app[data-design="rhine"] .music-playback .playback-glass {
+  background: linear-gradient(130deg,color-mix(in srgb,var(--future-highlight) 35%,transparent),transparent 42%,var(--future-prism-cool) 72%,var(--future-prism-warm)),var(--glass-tint);
+  backdrop-filter: blur(18px) saturate(1.35);
+}
+.music-app[data-design="rhine"] .music-playback[data-glass-renderer="gpu"] .playback-glass {
+  background: linear-gradient(130deg,color-mix(in srgb,var(--future-highlight) 24%,transparent),transparent 42%,color-mix(in srgb,var(--future-prism-cool) 28%,transparent) 72%,color-mix(in srgb,var(--future-prism-warm) 24%,transparent));
+}
+.music-app[data-design="rhine"][data-page="music"] .music-playback[data-glass-renderer="gpu"] .playback-glass {
+  backdrop-filter: none;
+}
+.music-app[data-design="rhine"]:not([data-page="music"]) .music-playback[data-glass-renderer="gpu"] .playback-glass {
+  background: linear-gradient(130deg,color-mix(in srgb,var(--future-highlight) 30%,transparent),transparent 42%,var(--future-prism-cool) 72%,var(--future-prism-warm)),var(--glass-tint);
+}
+.music-app[data-design="rhine"] .music-playback .playback-glint {
+  animation: none;
+  opacity: 0;
+}
+.music-app[data-design="rhine"] .music-playback .playback-buttons button,
+.music-app[data-design="rhine"] .music-playback .playback-queue {
+  border-radius: 50%;
+}
+.music-app[data-design="rhine"] .music-playback .playback-buttons #playback-toggle {
+  border: 1px solid color-mix(in srgb,var(--future-highlight) 72%,var(--line));
+  background: linear-gradient(150deg,var(--surface),color-mix(in srgb,var(--surface) 78%,var(--page-bg)));
+  box-shadow: 0 4px 12px color-mix(in srgb,var(--future-shadow) 12%,transparent), inset 0 1px 0 var(--future-highlight);
+}
+.music-app[data-design="rhine"] .music-playback .playback-cover {
+  border-radius: 10px;
+}
+.music-app[data-design="rhine"] .music-settings-page {
+  background: transparent;
+}
+.music-app[data-design="rhine"] .settings-page-heading h1 {
+  font-weight: 600;
+  letter-spacing: -.025em;
+}
+.music-app[data-design="rhine"] .settings-page-heading small {
+  color: var(--future-label);
+  letter-spacing: .18em;
+}
+.music-app[data-design="rhine"] :is(.settings-page-nav button,.settings-subnav button,.settings-select-trigger,.settings-select-menu,.music-panel,.music-audio-info) {
+  border-radius: var(--future-radius);
+  border-color: var(--future-edge);
+}
+.music-app[data-design="rhine"] :is(#music-settings,#music-theme-page,.music-panel) :is(input:not([type="range"],[type="checkbox"]),select,.settings-row) {
+  border-radius: var(--future-radius);
+  border-color: var(--future-edge);
+}
+.music-app[data-design="rhine"] :is(#music-settings,#music-theme-page) .panel-section {
+  border-color: var(--future-edge);
+  border-radius: var(--future-radius);
+}
+.music-app[data-design="rhine"] :is(.music-panel,.music-audio-info,.album-queue-popover) {
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 15%, transparent), inset 0 1px 0 var(--future-highlight);
+}
+.music-app[data-design="rhine"] .album-queue-popover {
+  border-radius: 18px;
+  border-color: var(--future-edge);
+}
+@media(prefers-reduced-motion:reduce) {
+  .music-app[data-design="rhine"] :is(.open-album,.music-topnav > button) { transition: none; }
+}

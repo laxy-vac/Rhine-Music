@@ -1,0 +1,569 @@
+/** Shared album interaction surface with independent Future and Punk skins. */
+export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
+  const panel = document.createElement("aside");
+  panel.className = "album-panel";
+  panel.tabIndex = -1;
+  panel.hidden = true;
+  panel.inert = true;
+  panel.setAttribute("aria-label", "专辑信息");
+  panel.dataset.panelState = "browse";
+
+  // Future's reading veil belongs to the persistent pane, not to the browse
+  // surface that fades out while the camera opens an album.
+  const readingVeil = document.createElement("div");
+  readingVeil.className = "album-panel-veil";
+  readingVeil.hidden = true;
+  readingVeil.setAttribute("aria-hidden", "true");
+
+  const viewport = document.createElement("div");
+  viewport.className = "album-panel-scroll";
+  const callout = root.querySelector<HTMLElement>(".album-callout")!;
+  const article = root.querySelector<HTMLElement>("#album-detail-content")!;
+  const content = () => article.querySelector<HTMLElement>("#album-tab-content");
+
+  function rememberPosition(node: HTMLElement, label: string) {
+    const parent = node.parentNode;
+    const nextSibling = node.nextSibling;
+    const marker = document.createComment("album-panel:" + label);
+    parent?.insertBefore(marker, node);
+    return { node, parent, nextSibling, marker };
+  }
+
+  const calloutPosition = rememberPosition(callout, "music-browse");
+  const articlePosition = rememberPosition(article, "music-detail");
+  panel.append(viewport);
+  root.append(readingVeil, panel);
+
+  let active = false;
+  let destroyed = false;
+  let wanted = false;
+  let revision = 0;
+  let frame = 0;
+  let album = "";
+  let focusAfterOpen = false;
+  let focusAfterClose = false;
+  let buttonAnimation: Animation | undefined;
+  let typingFrame = 0;
+  let typingLabel: HTMLElement | undefined;
+  const fullLabels = new WeakMap<HTMLElement,string>();
+  let sceneTabindex: string | null = null;
+  let sceneTabindexCaptured = false;
+  let rootAlbumPanelValue: string | null = null;
+  let rootAlbumPanelCaptured = false;
+  let originalArticleState: { hidden: boolean; inert: boolean } | undefined;
+  let originalButtonState: { node: HTMLElement; hidden: boolean; inert: boolean } | undefined;
+  let originalArticleTabindex: string | null = null;
+  const tabAnimations = new Set<Animation>();
+  let scanHead: HTMLElement | undefined;
+
+  const openButton = () => callout.querySelector<HTMLElement>('.open-album[data-action="open"]');
+  const futureTheme = () => {
+    const app = root.closest<HTMLElement>(".music-app");
+    return app?.dataset.design === "rhine" || root.dataset.design === "rhine";
+  };
+  const instant = () => reduced() || matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function cancelFrame() {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+  }
+
+  function cancelButtonAnimation(finish = false) {
+    cancelTyping();
+    const animation = buttonAnimation;
+    buttonAnimation = undefined;
+    if (!animation) return;
+    try {
+      if (finish) animation.finish();
+      else animation.cancel();
+    } catch {
+      animation.cancel();
+    }
+  }
+  function cancelTyping() {
+    cancelAnimationFrame(typingFrame);typingFrame=0;
+    if(typingLabel){typingLabel.textContent=fullLabels.get(typingLabel)??typingLabel.textContent;typingLabel.style.removeProperty('width');typingLabel=undefined;}
+  }
+  function typeButton(duration=520) {
+    cancelTyping();
+    if(futureTheme()||instant())return;
+    const label=openButton()?.querySelector<HTMLElement>('.open-album-label');
+    if(!label)return;
+    const text=fullLabels.get(label)??label.textContent??'';fullLabels.set(label,text);
+    const width=label.getBoundingClientRect().width;label.style.width=`${width}px`;typingLabel=label;
+    const glyphs=Array.from(text),noise='#%/\\=<>_01',start=performance.now();
+    const tick=(now:number)=>{const p=Math.min(1,(now-start)/duration),count=Math.min(glyphs.length,Math.floor(p*glyphs.length));
+      label.textContent=glyphs.map((char,i)=>i<count?char:noise[(i*7+Math.floor(now/45))%noise.length]).join('');
+      if(p<1)typingFrame=requestAnimationFrame(tick);else cancelTyping();};
+    tick(start);
+  }
+
+  function cancelTabAnimations(finish = false) {
+    for (const animation of tabAnimations) {
+      try {
+        if (finish) animation.finish();
+        else animation.cancel();
+      } catch {
+        animation.cancel();
+      }
+    }
+    tabAnimations.clear();
+    scanHead?.remove();
+    scanHead = undefined;
+  }
+
+  function trackTabAnimation(animation: Animation) {
+    tabAnimations.add(animation);
+    void animation.finished.then(
+      () => tabAnimations.delete(animation),
+      () => tabAnimations.delete(animation),
+    );
+    return animation;
+  }
+
+  /** Reveal existing text in reading order, without replacing any content or pane. */
+  function revealFutureFields(scope: HTMLElement, reverse = false) {
+    if (!futureTheme() || instant() || panel.hidden) return;
+    const selectors = scope === callout
+      ? ".music-eyebrow, .selection-rule, #selection-title, .selection-artist, .selection-meta, .selection-profile-heading, .selection-profile dl > div"
+      : ".music-tabs, .disc-heading, .track-row, .album-about > *, .producer-section > *, .empty-tracks";
+    const fields = Array.from(scope.querySelectorAll<HTMLElement>(selectors))
+      .filter(node => node.getClientRects().length > 0).slice(0, 16);
+    for (const [index, field] of fields.entries()) trackTabAnimation(field.animate(
+      [{ clipPath: reverse ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)", opacity: .3 },
+        { clipPath: "inset(0)", opacity: 1 }],
+      { duration: 320, delay: Math.min(index, 7) * 24,
+        easing: "cubic-bezier(.22,.7,.22,1)", fill: "backwards" },
+    ));
+  }
+
+  function notifyPanelLayout() {
+    root.dispatchEvent(new Event("album-panel-layout"));
+  }
+
+  function focusArticle() {
+    const target = article.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]') ??
+      article.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    if (target) target.focus({ preventScroll: true });
+    else {
+      article.tabIndex = -1;
+      article.focus({ preventScroll: true });
+    }
+  }
+
+  function focusOpenButton() {
+    const button = openButton();
+    if (button) button.focus({ preventScroll: true });
+    else panel.focus({ preventScroll: true });
+  }
+
+  function setBrowse() {
+    article.hidden = true;
+    article.inert = true;
+    article.style.removeProperty("height");
+    article.style.removeProperty("overflow");
+    const button = openButton();
+    if (button) {
+      button.hidden = false;
+      button.inert = false;
+    }
+    panel.dataset.panelState = "browse";
+    viewport.scrollTop = 0;
+  }
+
+  function setExpanded() {
+    const button = openButton();
+    if (button) {
+      button.hidden = true;
+      button.inert = true;
+    }
+    article.hidden = false;
+    article.inert = false;
+    article.style.removeProperty("height");
+    article.style.removeProperty("overflow");
+    panel.dataset.panelState = "expanded";
+    notifyPanelLayout();
+  }
+
+  function settle(open: boolean, moveFocus = false) {
+    const retainRightFocus = moveFocus && panel.contains(document.activeElement) && root.dataset.operationFocus === "right";
+    if (open) {
+      setExpanded();
+      if (retainRightFocus) focusArticle();
+    } else {
+      setBrowse();
+      if (retainRightFocus) focusOpenButton();
+    }
+    focusAfterOpen = false;
+    focusAfterClose = false;
+  }
+
+  function animateButton(mode: "exit" | "enter", ticket: number, complete: () => void) {
+    const button = openButton();
+    if (!button || instant()) {
+      complete();
+      return;
+    }
+
+    const keyframes: Keyframe[] = futureTheme()
+      ? mode === "exit"
+        ? [{ opacity: 1, clipPath: "inset(0)" }, { opacity: 0, clipPath: "inset(0 0 0 100%)" }]
+        : [{ opacity: .3, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0)" }]
+      : mode === "exit"
+        ? [{ opacity: 1, clipPath: "inset(0)" }, { offset:.85,opacity:1,clipPath:"inset(0 92% 0 0)" }, { opacity: 0, clipPath: "inset(0 100% 0 0)" }]
+        : [{ opacity: 0.25, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0)" }];
+    const animation = button.animate(keyframes, {
+      duration: futureTheme()?240:mode==='exit'?360:520,
+      easing: mode === "exit" ? "cubic-bezier(.4,0,.7,.2)" : "cubic-bezier(.2,.7,.2,1)",
+      fill: "none",
+    });
+    buttonAnimation = animation;
+    if(mode==='enter')typeButton();else cancelTyping();
+    void animation.finished.then(
+      () => {
+        if (buttonAnimation === animation) buttonAnimation = undefined;
+        if (active && ticket === revision && wanted === (mode === "exit")) complete();
+      },
+      () => {
+        if (buttonAnimation === animation) buttonAnimation = undefined;
+      },
+    );
+  }
+
+  function revealArticle(ticket: number, from: number) {
+    if (!active || ticket !== revision || !wanted) return;
+    const button = openButton();
+    if (button) {
+      button.hidden = true;
+      button.inert = true;
+    }
+    article.hidden = false;
+    article.inert = false;
+    revealFutureFields(article);
+    notifyPanelLayout();
+    article.style.height = Math.max(0, from) + "px";
+    article.style.overflow = "hidden";
+    panel.dataset.panelState = "expanding";
+
+    const to = Math.max(0, article.scrollHeight);
+    if (instant() || to <= from) {
+      settle(true, focusAfterOpen);
+      return;
+    }
+
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (!active || ticket !== revision || !wanted) return;
+      const p = Math.min(1, (now - start) / 360);
+      const eased = 1 - Math.pow(1 - p, 3);
+      article.style.height = (from + (to - from) * eased) + "px";
+      if (p < 1) frame = requestAnimationFrame(tick);
+      else {
+        frame = 0;
+        settle(true, focusAfterOpen);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+  }
+
+  function beginOpen(ticket: number, from: number) {
+    if (!active || ticket !== revision || !wanted) return;
+    if (article.hidden) {
+      const button = openButton();
+      if (button) {
+        button.hidden = false;
+        button.inert = true;
+      }
+      article.inert = true;
+      panel.dataset.panelState = "button-exit";
+      animateButton("exit", ticket, () => {
+        if (!active || ticket !== revision || !wanted) return;
+        const currentButton = openButton();
+        if (currentButton) {
+          currentButton.hidden = true;
+          currentButton.inert = true;
+        }
+        revealArticle(ticket, 0);
+      });
+      return;
+    }
+    revealArticle(ticket, from);
+  }
+
+  function revealButton(ticket: number) {
+    if (!active || ticket !== revision || wanted) return;
+    viewport.scrollTop = 0;
+    const button = openButton();
+    if (button) {
+      button.hidden = false;
+      button.inert = false;
+    }
+    panel.dataset.panelState = button ? "button-enter" : "browse";
+    if (!button) {
+      setBrowse();
+      if (focusAfterClose && panel.contains(document.activeElement) && root.dataset.operationFocus === "right") focusOpenButton();
+      focusAfterClose = false;
+      return;
+    }
+    animateButton("enter", ticket, () => {
+      if (!active || ticket !== revision || wanted) return;
+      button.inert = false;
+      panel.dataset.panelState = "browse";
+      if (focusAfterClose && panel.contains(document.activeElement) && root.dataset.operationFocus === "right") focusOpenButton();
+      focusAfterClose = false;
+    });
+  }
+
+  function collapseArticle(ticket: number, from: number) {
+    if (!active || ticket !== revision || wanted) return;
+    if (article.hidden) {
+      settle(false, false);
+      return;
+    }
+    article.inert = true;
+    article.hidden = false;
+    article.style.height = Math.max(0, from) + "px";
+    article.style.overflow = "hidden";
+    panel.dataset.panelState = "collapsing";
+
+    if (instant() || from <= 0) {
+      article.hidden = true;
+      article.inert = true;
+      article.style.removeProperty("height");
+      article.style.removeProperty("overflow");
+      revealButton(ticket);
+      return;
+    }
+
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (!active || ticket !== revision || wanted) return;
+      const p = Math.min(1, (now - start) / 280);
+      const eased = 1 - Math.pow(1 - p, 3);
+      article.style.height = (from * (1 - eased)) + "px";
+      if (p < 1) frame = requestAnimationFrame(tick);
+      else {
+        frame = 0;
+        article.hidden = true;
+        article.inert = true;
+        article.style.removeProperty("height");
+        article.style.removeProperty("overflow");
+        revealButton(ticket);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+  }
+
+  function restorePosition(position: ReturnType<typeof rememberPosition>) {
+    const { node, marker, parent, nextSibling } = position;
+    const destination = marker.parentNode ?? parent;
+    if (!destination) return;
+    const reference = marker.parentNode === destination
+      ? marker.nextSibling
+      : nextSibling?.parentNode === destination ? nextSibling : null;
+    destination.insertBefore(node, reference);
+  }
+
+  function restoreSceneTabindex() {
+    if (!sceneTabindexCaptured) return;
+    const scene = root.querySelector<HTMLElement>("#three-scene");
+    if (scene) {
+      if (sceneTabindex === null) scene.removeAttribute("tabindex");
+      else scene.setAttribute("tabindex", sceneTabindex);
+    }
+    sceneTabindex = null;
+    sceneTabindexCaptured = false;
+  }
+
+  function cancelMotion(finishAnimations = false) {
+    cancelFrame();
+    cancelButtonAnimation(finishAnimations);
+    cancelTabAnimations(finishAnimations);
+  }
+
+  function deactivate() {
+    if (!active) return;
+    revision++;
+    cancelMotion();
+    wanted = false;
+    focusAfterOpen = false;
+    focusAfterClose = false;
+
+    const button = openButton();
+    if (button) {
+      button.hidden = originalButtonState?.node === button ? originalButtonState.hidden : false;
+      button.inert = originalButtonState?.node === button ? originalButtonState.inert : false;
+    }
+    if (originalArticleState) {
+      article.hidden = originalArticleState.hidden;
+      article.inert = originalArticleState.inert;
+    } else {
+      article.hidden = false;
+      article.inert = false;
+    }
+    article.style.removeProperty("height");
+    article.style.removeProperty("overflow");
+    if (originalArticleTabindex === null) article.removeAttribute("tabindex");
+    else article.setAttribute("tabindex", originalArticleTabindex);
+
+    restorePosition(calloutPosition);
+    restorePosition(articlePosition);
+    restoreSceneTabindex();
+    if (rootAlbumPanelCaptured) {
+      if (rootAlbumPanelValue === null) delete root.dataset.albumPanel;
+      else root.dataset.albumPanel = rootAlbumPanelValue;
+    }
+    rootAlbumPanelValue = null;
+    rootAlbumPanelCaptured = false;
+    panel.hidden = true;
+    panel.inert = true;
+    panel.dataset.panelState = "browse";
+    readingVeil.hidden = true;
+    active = false;
+    originalArticleState = undefined;
+    originalButtonState = undefined;
+  }
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const onReducedMotionChange = (event: MediaQueryListEvent) => {
+    if (!event.matches || !active) return;
+    revision++;
+    cancelMotion();
+    settle(wanted, false);
+  };
+  reducedMotion.addEventListener?.("change", onReducedMotionChange);
+
+  return {
+    element: panel,
+    get active(): boolean { return active; },
+    setActive(next: boolean) {
+      if (destroyed || active === next) return;
+      if (!next) { deactivate(); return; }
+
+      revision++;
+      cancelMotion();
+      wanted = false;
+      originalArticleState = { hidden: article.hidden, inert: article.inert };
+      originalArticleTabindex = article.getAttribute("tabindex");
+      const button = openButton();
+      originalButtonState = button ? { node: button, hidden: button.hidden, inert: button.inert } : undefined;
+      viewport.append(callout, article);
+      if (!panel.isConnected) root.append(panel);
+      article.hidden = true;
+      article.inert = true;
+      article.style.removeProperty("height");
+      article.style.removeProperty("overflow");
+      if (button) {
+        button.hidden = false;
+        button.inert = false;
+      }
+      panel.dataset.panelState = "browse";
+      panel.hidden = false;
+      readingVeil.hidden = false;
+      panel.inert = false;
+      active = true;
+      rootAlbumPanelValue = root.dataset.albumPanel ?? null;
+      rootAlbumPanelCaptured = true;
+      root.dataset.albumPanel = "true";
+
+      const scene = root.querySelector<HTMLElement>("#three-scene");
+      sceneTabindex = scene?.getAttribute("tabindex") ?? null;
+      sceneTabindexCaptured = true;
+      scene?.setAttribute("tabindex", "-1");
+    },
+    setVisible(visible: boolean, inert = false) {
+      if (!active) return;
+      const reveal=visible&&panel.hidden;
+      panel.hidden = !visible;
+      readingVeil.hidden = !visible;
+      panel.inert = inert;
+      if(reveal&&!wanted)typeButton();
+    },
+    setOpen(open: boolean) {
+      if (!active || wanted === open) return;
+      const from = article.hidden ? 0 : article.getBoundingClientRect().height;
+      const wasFocusedInArticle = article.contains(document.activeElement);
+      wanted = open;
+      const wasFocusedOnButton = openButton()?.contains(document.activeElement) ?? false;
+      focusAfterOpen = open && wasFocusedOnButton && root.dataset.operationFocus === "right";
+      focusAfterClose = !open && wasFocusedInArticle;
+      if (wasFocusedOnButton || (!open && wasFocusedInArticle)) panel.focus({ preventScroll: true });
+      revision++;
+      const ticket = revision;
+      cancelMotion();
+      if (instant()) {
+        settle(open, open ? focusAfterOpen : focusAfterClose);
+        return;
+      }
+      if (open) beginOpen(ticket, from);
+      else collapseArticle(ticket, from);
+    },
+    contentChanged(id: string) {
+      if (!active || album === id) return;
+      album = id;
+      revision++;
+      cancelMotion();
+      focusAfterOpen = false;
+      focusAfterClose = false;
+      viewport.scrollTop = 0;
+      settle(wanted, false);
+      if (!panel.hidden) {
+        revealFutureFields(callout);
+        if (wanted) revealFutureFields(article);
+      }
+      if(!wanted&&!panel.hidden)typeButton();
+    },
+    scrollTarget() {
+      return active ? viewport : null;
+    },
+    scanTab(previous: "tracks" | "about", next: "tracks" | "about") {
+      if (!active || article.hidden) return;
+      cancelTabAnimations();
+      const body = content();
+      if (!body || instant()) return;
+      const reverse = previous === "about" && next === "tracks";
+      if (futureTheme()) { revealFutureFields(article, reverse);return; }
+      panel.dataset.scanDirection = reverse ? "left" : "right";
+      trackTabAnimation(body.animate(
+        [{ clipPath: reverse ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)" }, { clipPath: "inset(0)" }],
+        { duration: 320, easing: "cubic-bezier(.22,.7,.22,1)" },
+      ));
+      const button = article.querySelector<HTMLElement>("#tab-" + next);
+      if (button) trackTabAnimation(button.animate(
+        [{ clipPath: reverse ? "inset(0 0 0 100%)" : "inset(0 100% 0 0)" }, { clipPath: "inset(0)" }],
+        { duration: 250, easing: "linear" },
+      ));
+      const head = document.createElement("i");
+      head.className = "album-tab-scan";
+      head.setAttribute("aria-hidden", "true");
+      body.append(head);
+      scanHead = head;
+      const travel = body.clientWidth;
+      trackTabAnimation(head.animate(
+        [{ transform: "translateX(" + (reverse ? travel : 0) + "px)" }, { transform: "translateX(" + (reverse ? 0 : travel) + "px)" }],
+        { duration: 320, easing: "cubic-bezier(.22,.7,.22,1)" },
+      ));
+    },
+    finish() {
+      if (!active) return;
+      revision++;
+      cancelFrame();
+      cancelButtonAnimation(true);
+      cancelTabAnimations(true);
+      settle(wanted, wanted ? focusAfterOpen : focusAfterClose);
+    },
+    destroy() {
+      if (destroyed) return;
+      deactivate();
+      restorePosition(calloutPosition);
+      restorePosition(articlePosition);
+      restoreSceneTabindex();
+      calloutPosition.marker.remove();
+      articlePosition.marker.remove();
+      panel.remove();
+      readingVeil.remove();
+      reducedMotion.removeEventListener?.("change", onReducedMotionChange);
+      destroyed = true;
+    },
+  };
+}

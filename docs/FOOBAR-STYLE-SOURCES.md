@@ -1,0 +1,49 @@
+# foobar / RhinE Style 资源来源
+
+> 本文保留原始资产、许可及移植阶段溯源，不作为当前UI布局说明。现行两主题/可调盒体/字体/歌词/信号以 [THEME-PAGE](THEME-PAGE.md) 与 [PROJECT-STATUS](PROJECT-STATUS.md) 为准；旧阶段授权不自动延续。
+
+2026-10-12完整操作界面阶段补充：header/transport/frame/stage/style/signal及lib/emblem/nowplaying/lyrics/archive交互按本机主题源码移植到foobar专属DOM和控制分支。顶栏操作与本播放器一一映射，02为EQ，无Playlists；05Style与主题同页。源码依原MIT适配，不加载foobar组件或读取其profile。源几何header73、transport64、status32，Archive右信息栏456、20槽分架、Style左右62%/预览结构；宿主系统菜单/Preferences映射到本项目对应页面，官方LSP窗口保持原生。
+
+另从同一本地包 `assets/intro/<10skin>/` 复制至 `src/assets/style/intro/`：每皮肤intro.json+144JPG，1450文件、151,658,971bytes（144.63MiB），逐文件SHA-256全部匹配。未重绘/转码、未下载或执行原安装器。曾有本轮145个aurora副本落到新目标根，已核对后仅移动这些新副本归位，原目录未动，最终10×145结构与源完全对应。`foobar-intro.ts`按metadata fps/res/tracked points播放原片，原overlay/cue在Canvas适配，按需加载、14帧前瞻/6并发；动画不能冒充音频或硬件检测。现有Audio Archive MIT原文继续覆盖所复制资产/改编代码。
+
+盒型、货架和地面资源来自本机 `../RhinE-1.4.0-portable/audio-archive-1.4.0`（RhinE 1.4.0 主题包），逐字节复制到 `src/assets/style/`，目录对应关系为：`assets/render/case/` → `case/`，`assets/render/rail/` → `rail/`，`assets/render/floor/` → `floor/`。配色 token 使用固定官方提交 `cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0` 的 [`tokens.json`](https://raw.githubusercontent.com/ericzhang12111-cell/RhinE/cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0/theme/tokens/tokens.json)，源于 RhinE 官方主题目录。资源集包含 10 个盒型皮肤、盒体/封面投影元数据、货架、三种地面外观和全部配色；没有读取 foobar 的 profile、曲库、缓存或数据库，也没有复制安装包、可执行文件和组件二进制。
+
+## 参考入口与可复用资源
+
+2026-10-12字形/SHELF/随机补充：archive.js:820-833的SHELF是无框两行导航，cx=arrayW×.774、y=H−82，标签9/500/.14em灰色、组名13/700/.14em正文色，箭头36×36命中区且边界变暗。grid.js:195-230的RANDOM PICK位于阵列x32/y22、网格y54，高22，左侧10×10骰子轮廓/三枚2×2accent点、右侧R提示，不是纯文字末尾按钮。lib/tokens.js:55,69-78与lib/text.js:42-65使用整串fontFor：任何CJK字符命中即整串Microsoft YaHei UI；不是浏览器逐字缺字回退。本轮按这些源码规则适配，未安装字体、改源包或访问profile。
+
+2026-10-12补充原播放栏和数字调查：transport.js:109-143、:329-377与archive.js:1024-1034确认44dp首槽是播放封面及inspect入口，空闲空框、播放缺图小方块及橙色状态条，暂停保留；右键Playlists因用户不需要而不引入。archive.js:790-797/:908-915及lib/motion.js:62-78分别定义架内序号、四位档案编号和460ms字轮。新增源GeistMono-Light.ttf（147756bytes，SHA-256 `6b46aec3f2b91bf224ba7922029bde4d5d453c0217b53b2e65019582549c3023`）嵌入src/assets/style/fonts并以300字重加载；沿用已保存OFL许可，无系统安装。
+
+固定上游 tokens 原字节 SHA-256：`e4644e74a387d4b006cb32666e18e0ebbdc3c6f9dcb5db33fde92a75082fe420`。联网读取仅用于补齐 HEARTH；本地临时来源副本位于工作区 `.task-tmp/theme-upstream/tokens.json`。没有下载或执行上游安装器。
+
+- `js/style.js:2-8,112-140,294-304` 实现 Style 页面：盒型皮肤、配色卡片、浅/深模式和显示选项均可即时应用。盒型预览使用阵列图和正面图。
+- `tokens/tokens.json:2-34` 定义 ARCHIVE、HAZARD、FLARE、FIELD、COLD FRONT、HEARTH 六套配色，每套含 light/dark 两组颜色。前五套与 1.4.0 资源包中的原值一致，HEARTH 来自固定官方提交。新界面可直接读取这些 token。
+- `js/lib/bus.js:16-22` 定义 PLAIN、LAB DECK、REAL STYLE 三个地面选项；`js/archive.js:416-483` 加载地面、底板、阴影和光照图。
+- `assets/render/case/<皮肤>/` 每个皮肤含 `case.json`、`array-clear.png`、`array-frost.png`、`hero-clear.png`、`hero-frost.png` 及 `inspect-00.png` 至 `inspect-59.png`。10 个皮肤为 aurora、blue、coral、frost、glass、hazard、marble、red、tide、white；每个目录 65 个文件。
+- 盒体不是运行时 GLB 网格。`js/archive.js:14-15` 明确采用预渲染 clear/frost sprite，`case.json` 提供封面四边形和投影轴；`js/lib/album.js:7-13,66-72` 载入皮肤元数据与盒体图。例：`case/white/case.json:51-69,116-120,3242-3246` 中轴向 `[79.31,36.9]`、`[57.56,-50.85]`、`[0,-75.21]`，阵列/正面图分别为 600×600、1000×1000，检查序列为 60 帧、900×900。
+- 顶边专辑名的源公式见 `js/archive.js:588-605`：`x0=-1.80, x1=1.10, y=.15, z=3.5`，用 `case.json` 的阵列原点和 x/y/z 投影轴构成仿射映射；标签长 2.90、表面宽 0.30 模型单位。纸条为 `#E9E6DD`，左侧 4 px accent 条，文字为 `#1B1C18`；拉丁文字用 Geist Mono SemiBold 17 px，CJK 用 Microsoft YaHei UI 18 px，单行并在末尾省略。源代码直接建立字号，不经过 `TEXT_SCALE`。脊标见 `js/archive.js:576-585`：100×60 的标签四边形中分两行绘制 `ARC` 与四位编号，字号分别为 15、22 px，不另盖纸色矩形。
+- `assets/render/rail/` 含 `rail-back.png`、`rail-front.png`、`rail-mid.png` 和 `rail.json`。元数据为 900×900、98 px/单位、槽距 1、原点 `[450,581.62]`，另含正面编号牌的四边形。
+- `floor/deck-dark/` 与 `floor/deck-light/` 各有 `floor.json`、`plate.jpg`、六张 shade 和六张 glow 图。参数为 98 px/单位、`floor_z=-0.51`；底板 4800×3600、原点 `[1800,3300]`；阴影图 1400×1400、原点 `[420,588]`。`floor/real-dark/` 是单套暖色木桌场景，含底板、阴影及专用 frost 盒体和 rail 图；`floor.json` 的 `fade=#2b1300`、`tint=0.4`、`glow=false`。源代码将 REAL STYLE 固定关联 frost 皮肤（`js/lib/bus.js:18-22`）。
+- 源阵列合成次序见 `js/archive.js:613-646,665-703`：先画地面；由后向前绘制每层货架，并按深度交错货架段与唱片盒；单盒先绘封面四边形，再叠 frost/clear 盒体，之后绘脊标签、顶标题和选中角标。选中时 clear/frost sprite 按 clear 值交叉淡入，封面清晰图只按 clear 值覆盖；远层盒体以背景色淡化。高视角 foobar 档继续使用这套 600×600 阵列 sprite 与原投影轴，方向翻转和显示/隐藏货架属于移植器设置。
+- player 档的低视角盒图取自原始 `inspect-23.png`，不是重绘的 PNG，也不声称它是 RhinE 的另一台官方相机。`case/white/case.json` 的 `inspect[23]` 给出 cover/label 四边形、`origin=[424.23,681.20]`、crop `[137,134,626,632]`，检查 PPU 为 147。由阵列 cover 和原始 axes 可得封面边长 2.78 单位；frame 23 竖边投影得到相对正面的 25.27° 姿态。按正交投影行归一与点积约束恢复第三轴后，整体屏幕刚性旋转 −6.3604° 使 z 轴竖直；旋转后 axes 为 x `[139.4086,19.9052]`、y `[46.6289,-59.5112]`、z `[0,-132.9333]` px/单位。player 档检查动画从 frame 23 连续播放到 frame 59，foobar 档仍从 0 到 59。
+- 低视角货架使用单独的 `src/assets/style/camera-player/rail/` 渲染图和 `rail.json`；生成源为本仓库 `art/build_style_player_rail.py` 与 `art/style-player-rail.blend`。不能把高视角 foobar rail PNG 直接放在低视角盒图下。低地面将旧 plate/shade/glow 作为平面图按原 case axes 到 frame 23 axes 的 2×2 仿射映射，底图与阴影以各自origin对齐，并按 `floor_z×(targetZ−A×sourceZ)` 修正地面平面的高度（A为该平面的2×2重投影/拉伸矩阵）。原相机且不拉伸时该项正好为零，原相机拉伸时与源中段阴影公式等价；低档保留地面与托架的离地关系。盒体低视角素材仍是 frame 23 的原始高分辨率图。
+- 本仓库 `art/rhine-archive.blend` 与 `art/archive-assembly.blend` 来自 `art/build_archive.py` / `art/build_assembly.py`，生成的是 Rhine Lab cassette shell/optics GLB；它们不是 RhinE Audio Archive 的十款盒型模型，也不是低视角贴图的来源。
+- 该主题用 Hi-Res 标记的入口见 `js/lib/nowplaying.js:106-107`，为当前配色 accent 芯片；参考代码中没有 DSD 徽标或独立金色盒边 shader。移植器沿用播放器自身的 Hi-Res/DSD 识别，并以主播放器的金边绘制要求呈现 Hi-Res。
+
+## 当前独立foobar主题的坐标约定
+
+用户已否定此前混合/低视角方案。当前只使用原foobar array axes、原array/inspect图、原rail与floor资源；低视角Blender模型/素材保留在历史目录，当前renderer不再导入或运行相应分支。上方有关player低档的段落仅记录资源历史。
+
+foobar独立构建20槽货架，按原buildShelves把当前曲库分组依序填满，末架仍保留20槽。它不读取普通Three Scene的循环cell、相机或选中屏幕位置；点击以原record索引映射回播放器。源轴向、槽距1、层距4.7、sprite比例0.54、`clamp(min(arrayWidth/936,height/731),1,1.6)`及 `[round(arrayWidth*.37),height-87]` 原点保留。arrayWidth适配本播放器的信息栏边界，未声称整个宿主窗口与foobar2000像素一致。每架按实际Spring位置淡入/淡化、后架到前架绘制，架内按源y/z深度交错盒体与托架；原地面与托架分别绘制。
+
+原inspect PNG已裁切并下采样：例如glass/inspect-00实际254×319，而meta.crop为虚拟900px画布的[190,123,520,654]。必须把整张PNG绘到crop目的矩形，不能再次用crop裁切PNG。转向沿用0…59帧，最终位置为arrayWidth*.49、height*.5，大小依原inspectK的2倍与fit限制。原封面先以模糊图垫底，再合成clear/frost，未选中的盒子保留自己的封面。盒顶标题仍按源轴/纸条/字体映射；Hi-Res/DSD沿用本播放器实际格式识别。
+
+## 2026-10-13：可调Punk三维重建的来源与限度
+
+用户明确接受按本节已列的原始多视角图重建，并要求标明差异。已核对本机1.4.0资源与官方仓库v1.4提交 `86dedfb3a8d8215c899debab6bf292fafc654cf8` 的资源结构，未发现原始三维模型或建模脚本；`case.json`是投影数据，不包含物理材质值。新增的 `art/build_punk_reference_case.py`、`art/punk-reference-case.blend`、`public/assets/punk-reference-case.glb` 为本项目根据这些图重建，沿用来源许可和署名；并非原作者发布的网格。
+
+模型保留一个共用盒体，分14部件；十套外观用可组合的材质参数和程序纹理复现。封面窗与铭牌平面由白色hero投影反求，螺钉/槽/徽记/倒角依原图可见轮廓建立。未拍到的内侧、深度、精确截面及原贴图/烘焙光照无法从PNG唯一还原。透光与不透光的材质类别明确区分，IOR、粗糙度、厚度、膜层数值均为估计；不宣称物理参数或像素完全一致。原预渲染资源保持原字节，仍可切回旧外观。
+
+## 许可（原资源）
+
+`audio-archive-1.4.0/LICENSE` 采用 MIT，版权标记为 “the Audio Archive authors”。其原文随资源复制到 `public/licenses/audio-archive-style-mit.txt`，适用于本次复制的主题代码和资产。该许可文件第 23-24 行单独说明 Geist Mono 字体按 SIL Open Font License 1.1 授权；本轮已将本地参考包内的Regular/Medium/SemiBold/Bold四个字体文件嵌入src/assets/style/fonts，并保留OFL.txt及public/licenses/geistmono-ofl.txt；没有安装系统字体。foobar2000 自身许可见参考包 `foobar2000/doc/license.html:24-40`，与本次复用的 RhinE 主题资产许可分开。

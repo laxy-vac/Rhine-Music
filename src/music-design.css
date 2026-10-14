@@ -1,0 +1,1110 @@
+/* Archive UI skin. The native LSP panel and Windows file dialogs live outside
+   this root and keep their own appearance. */
+.music-app .style-preview-reference { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, .62fr); align-items: center; width: 100%; padding: 10px 8px 24px; }
+.music-app .style-preview-reference figure { display: grid; grid-template-rows: minmax(0, 1fr) auto; margin: 0; min-width: 0; }
+.music-app .style-preview-reference img { display: block; width: 100%; height: auto; object-fit: contain; filter: none; transform: none; }
+.music-app .style-preview-reference figcaption { color: var(--muted); font: 9px "Archive Mono", monospace; text-align: center; letter-spacing: .12em; }
+.music-app .style-case-art[data-case-art]:not([data-case-art="rhine"]) img { filter: none; }
+.music-app[data-design="archive"] {
+  --well: color-mix(in srgb, var(--surface) 86%, var(--ink));
+  --fg-soft: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  --hair: color-mix(in srgb, var(--line) 76%, transparent);
+  --panel-hi: color-mix(in srgb, var(--panel) 82%, var(--surface));
+  --case: var(--surface);
+  --case-hi: color-mix(in srgb, var(--surface) 78%, white);
+  --on-accent: var(--surface);
+  --design-font: "MiSans", system-ui, sans-serif;
+  --design-mono: "Archive Mono", Consolas, "Cascadia Mono", ui-monospace, monospace;
+  --design-radius-control: 10px;
+  --design-radius-card: 18px;
+  --design-radius-panel: 24px;
+  --design-shadow-card: 0 10px 28px rgb(23 30 28 / 0.08);
+  --design-edge: color-mix(in srgb, var(--line) 82%, transparent);
+  color: var(--ink);
+  color-scheme: light;
+  font-family: var(--design-font);
+  background-color: var(--page-bg);
+}
+
+.music-app[data-design="archive"][data-theme="night"] {
+  color-scheme: dark;
+  --case-hi: color-mix(in srgb, var(--surface) 78%, white 4%);
+}
+
+.music-app[data-design="archive"] {
+  /* Keep Latin in Geist Mono; only missing CJK glyphs use the existing YaHei. */
+  --design-font: "Archive Mono", "Microsoft YaHei UI", "Microsoft YaHei", "MiSans", Consolas, ui-monospace, sans-serif;
+  --design-mono: "Archive Mono", "Microsoft YaHei UI", "Microsoft YaHei", Consolas, "Cascadia Mono", ui-monospace, monospace;
+  --design-radius-control: 2px;
+  --design-radius-card: 2px;
+  --design-radius-panel: 2px;
+  --design-shadow-card: none;
+  --design-edge: color-mix(in srgb, var(--ink) 34%, var(--line));
+  --hair: color-mix(in srgb, var(--ink) 28%, transparent);
+  --fg-soft: color-mix(in srgb, var(--ink) 76%, var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app[data-design="archive"] :is(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+.music-app[data-design="archive"] :is(.music-settings-page, .settings-page-content, .music-panel, .music-audio-info, .lyrics-scroller, .library-path-list, .lyrics-candidate-list, .settings-select-menu) {
+  scrollbar-color: var(--line) transparent;
+  scrollbar-width: thin;
+}
+
+.music-app[data-design="archive"] :is(.music-settings-page, .settings-page-content, .music-panel, .music-audio-info, .lyrics-scroller, .library-path-list, .lyrics-candidate-list, .settings-select-menu)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.music-app[data-design="archive"] :is(.music-settings-page, .settings-page-content, .music-panel, .music-audio-info, .lyrics-scroller, .library-path-list, .lyrics-candidate-list, .settings-select-menu)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: var(--muted);
+  background-clip: padding-box;
+}
+
+/* ARCHIVE — compact foobar-style modules, crisp contrast and index rules. */
+.music-app[data-design="archive"] .music-vignette::before,
+.music-app[data-design="archive"] .music-vignette::after {
+  display: none;
+  background: none;
+}
+
+.music-app[data-design="archive"] .music-browse-veil {
+  background: none;
+}
+
+.music-app[data-design="archive"] .music-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--ink);
+}
+
+.music-app[data-design="archive"] .music-brand strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--design-mono);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.1em;
+}
+
+.music-app[data-design="archive"] .music-brand strong::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+}
+
+.music-app[data-design="archive"] .music-brand > span,
+.music-app[data-design="archive"] :is(.music-eyebrow, .music-counter .music-eyebrow, .selection-rule, .music-keyhint, .music-bottomline, .settings-page-heading small, .music-style-heading small, .lyrics-eyebrow, .lyrics-index, .lyrics-data-heading, .signal-workspace :is(small, .signal-index), .audio-info-eyebrow, .audio-info-index, .playback-label, .playback-time) {
+  font-family: var(--design-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.music-app[data-design="archive"] .music-topnav {
+  gap: 0;
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .music-topnav > button {
+  min-height: 42px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  transition: color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .music-topnav > button:hover,
+.music-app[data-design="archive"] .music-topnav > button[aria-pressed="true"] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.music-app[data-design="archive"] .music-topnav > button[aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.music-app[data-design="archive"] .theme-switch {
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .theme-switch::before {
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--accent);
+  transition: transform 100ms steps(2, end);
+}
+
+.music-app[data-design="archive"] .theme-switch button {
+  border-radius: 0;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .theme-switch button[aria-pressed="true"] {
+  color: var(--on-accent, var(--surface));
+  background: transparent;
+}
+
+.music-app[data-design="archive"] .music-topnav .minimal-transport {
+  border-color: var(--line);
+}
+
+.music-app[data-design="archive"] .music-topnav .minimal-transport button:not(.transport-track) {
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .theme-dot.day {
+  border: 1px solid var(--muted);
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .theme-dot.night {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+}
+
+.music-app[data-design="archive"] .album-callout {
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--design-edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .selection-rule {
+  border-block: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--muted);
+}
+
+.music-app[data-design="archive"] #selection-code-number,
+.music-app[data-design="archive"] #selection-number,
+.music-app[data-design="archive"] #detail-card-id,
+.music-app[data-design="archive"] #genre-position,
+.music-app[data-design="archive"] .lyrics-index,
+.music-app[data-design="archive"] .audio-info-index {
+  color: var(--accent);
+  font-family: var(--design-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app[data-design="archive"] .music-navigation {
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] :is(.album-stepper > button, .genre-stepper > button, .genre-stepper div button, .music-back, .settings-page-back) {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.album-stepper > button:hover, .genre-stepper > button:hover, .genre-stepper div button:hover, .music-back:hover, .settings-page-back:hover) {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.music-app[data-design="archive"] .music-detail::before {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .music-settings-page {
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--page-bg);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .settings-page-heading {
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 12px;
+}
+
+.music-app[data-design="archive"] .settings-page-heading small {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.music-app[data-design="archive"] .settings-page-heading h1 {
+  font-family: var(--design-mono);
+  font-size: clamp(23px, 2.4vw, 31px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.music-app[data-design="archive"] .settings-page-layout {
+  border-top: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.music-app[data-design="archive"] .settings-page-nav {
+  border-right-color: var(--design-edge);
+}
+
+.music-app[data-design="archive"] .settings-page-nav button {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-family: var(--design-mono);
+  transition: color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .settings-page-nav button[aria-current="page"],
+.music-app[data-design="archive"] .settings-subnav button[aria-current="location"] {
+  border-color: var(--design-edge);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.music-app[data-design="archive"] :is(.settings-category, .panel-section, .quality-control, .quality-advanced, .audio-settings-section, .library-folder-section, .library-path-list, .eq-preset-disclosure, .eq-response-figure, .eq-band-card, .tone-filter-card, .signal-workspace, .lyrics-left, .lyrics-main, .lyrics-right, .lyrics-notice-frame, .style-case-card, .style-scheme-card, .style-display-card, .style-library-section, .style-preset-section) {
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.settings-category, .panel-section, .quality-control, .quality-advanced, .audio-settings-section, .library-folder-section, .eq-preset-disclosure, .eq-response-figure, .eq-band-card, .tone-filter-card, .signal-workspace, .lyrics-left, .lyrics-main, .lyrics-right, .lyrics-notice-frame, .style-display-card, .style-library-section, .style-preset-section) {
+  border: 1px solid var(--design-edge);
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] :is(.settings-row, .quality-range, .library-path-row, .library-path-actions button, .settings-page-content select, .settings-page-content input:is([type="number"], [type="text"]), .settings-select-trigger, .editable-range-number, .editable-range-value, .lyrics-offset-controls input, .lyrics-query-input, .lyrics-source-form-input, .lyrics-source-mapping, .lyrics-source-select) {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background-color: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .settings-page-content input[type="checkbox"][role="switch"],
+.music-app[data-design="archive"] .eq-parametric-enabled input[role="switch"] {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.settings-category > h2, .panel-section h3, .library-folder-heading h2, .music-style-heading h1, .lyrics-main-title h2, .audio-info-header h2) {
+  font-family: var(--design-mono);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+.music-app[data-design="archive"] :is(.settings-category-intro, .settings-row > small, .quality-control small, .library-path-row small, .library-folder-note, .lyrics-help, .lyrics-album-meta, .audio-info-footnote) {
+  color: var(--fg-soft);
+}
+
+.music-app[data-design="archive"] .library-path-row {
+  border-bottom-color: var(--line);
+}
+
+.music-app[data-design="archive"] .library-path-row[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.music-app[data-design="archive"] .music-panel-scrim,
+.music-app[data-design="archive"] .lyrics-preference-backdrop {
+  background: rgb(9 14 15 / 0.58);
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] :is(.music-panel, .model-viewer, .lyrics-preference-dialog, #music-audio-info) {
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.2);
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] :is(.music-panel, .model-viewer, .lyrics-preference-dialog, #music-audio-info) :is(button, input:not([type="range"]), select, textarea) {
+  border-radius: 0;
+}
+
+.music-app[data-design="archive"] :is(.settings-select-menu, .lyrics-candidate-card, .audio-info-card, .audio-info-connector, .audio-feature-placeholder) {
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .settings-select-option {
+  border-radius: 0;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .settings-select-option:hover,
+.music-app[data-design="archive"] .settings-select-option[aria-selected="true"] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+.music-app[data-design="archive"] .music-playback {
+  --glass-tint: var(--panel);
+  --glass-edge: var(--design-edge);
+  --glass-shadow: transparent;
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: none;
+  transition: border-color 100ms linear, background-color 100ms linear;
+}
+
+.music-app[data-design="archive"] .playback-glass,
+.music-app[data-design="archive"] .music-playback[data-glass-renderer="gpu"] .playback-glass,
+.music-app[data-design="archive"][data-theme="night"] .music-playback[data-glass-renderer="gpu"] .playback-glass {
+  border-radius: 0;
+  background: var(--panel);
+  background-image: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .playback-glint {
+  display: none;
+  background: none;
+  animation: none;
+}
+
+.music-app[data-design="archive"] :is(.playback-buttons button, .playback-queue, .playback-utilities button, .playback-info-trigger) {
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.playback-buttons button:hover, .playback-queue:hover, .playback-utilities button:hover, .playback-info-trigger:hover) {
+  border-color: var(--line);
+  color: var(--accent);
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .music-boot-overlay {
+  border: 1px solid var(--design-edge);
+  border-radius: 2px;
+  background: var(--page-bg);
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .signal-workspace {
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] .music-style-preview {
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] :is(.style-section-heading, .style-preview-heading) {
+  border-bottom: 1px solid var(--design-edge);
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] :is(.style-case-card, .style-scheme-card) {
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.style-case-card.is-selected, .style-scheme-card.is-selected) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.music-app[data-design="archive"] :is(.style-case-name, .style-scheme-name, .style-preview-heading, .style-card-kicker, .style-setting-row > span > small) {
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .style-setting-row {
+  border-bottom-color: var(--line);
+}
+
+.music-app[data-design="archive"] .lyrics-main-header,
+.music-app[data-design="archive"] .audio-info-header,
+.music-app[data-design="archive"] .lyrics-preference-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.music-app[data-design="archive"] :is(.lyrics-notice-frame, .lyrics-notice-rail, .audio-info-card-heading, .lyrics-data-heading) {
+  border-radius: 0;
+}
+
+.music-app[data-design="archive"] :is(.lyrics-line.is-active, .lyrics-line-button:hover, .audio-info-card[data-active="true"]) {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.music-app[data-design="archive"] input[type="range"] {
+  accent-color: var(--accent);
+}
+
+.music-app[data-design="archive"] input[type="range"]::-webkit-slider-runnable-track {
+  border-radius: 0;
+  background: var(--line);
+}
+
+.music-app[data-design="archive"] input[type="range"]::-webkit-slider-thumb {
+  border: 2px solid var(--panel);
+  border-radius: 0;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.music-app[data-design="archive"] input[type="range"]::-moz-range-track {
+  border-radius: 0;
+  background: var(--line);
+}
+
+.music-app[data-design="archive"] input[type="range"]::-moz-range-thumb {
+  border: 2px solid var(--panel);
+  border-radius: 0;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.music-app[data-design="archive"] :is(.eq-graphic-gain input[type="range"], .eq-parametric-gain input[type="range"]) {
+  accent-color: var(--band-color, var(--accent));
+}
+
+.music-app[data-design="archive"] .eq-graphic-gain input[type="range"]::-webkit-slider-thumb,
+.music-app[data-design="archive"] .eq-parametric-gain input[type="range"]::-webkit-slider-thumb {
+  background: var(--band-color, var(--accent));
+  box-shadow: 0 0 0 1px var(--band-color, var(--accent));
+}
+
+.music-app[data-design="archive"] .eq-graphic-gain input[type="range"]::-moz-range-thumb,
+.music-app[data-design="archive"] .eq-parametric-gain input[type="range"]::-moz-range-thumb {
+  background: var(--band-color, var(--accent));
+  box-shadow: 0 0 0 1px var(--band-color, var(--accent));
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content [aria-invalid="true"],
+.music-app[data-design="archive"] .music-panel [aria-invalid="true"] {
+  border-color: #a05f59;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #a05f59 20%, transparent);
+}
+
+/* The two-family chooser is a button card, not a wrapper around a button. */
+.music-app #music-theme-page .design-family-section {
+  margin: 0 0 24px;
+}
+
+.music-app #music-theme-page .design-family-section > .style-section-heading {
+  margin-bottom: 14px;
+}
+
+.music-app #music-theme-page .design-family-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design] {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  min-height: 174px;
+  box-sizing: border-box;
+  padding: 17px 18px 42px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  text-align: left;
+  background: var(--panel);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design] > small {
+  display: block;
+  color: var(--muted);
+  font-family: var(--design-mono, ui-monospace, Consolas, monospace);
+  font-size: 10px;
+  line-height: 1.35;
+  letter-spacing: 0.08em;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design] > strong {
+  display: block;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design] > span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design] > i {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-grid;
+  min-height: 22px;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--surface);
+  font-family: var(--design-mono, ui-monospace, Consolas, monospace);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design]:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design][aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.music-app #music-theme-page button.design-family-card[data-style-design][aria-pressed="true"] > i {
+  border-color: var(--accent);
+  color: var(--on-accent, var(--surface));
+  background: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .music-app #music-theme-page .design-family-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-app #music-theme-page button.design-family-card[data-style-design] {
+    min-height: 150px;
+  }
+}
+
+/* The live monitor keeps its original canvas and image treatment; these rules
+   only skin its HTML frame, controls, and trace rail in Archive. */
+.music-app[data-design="archive"] :is(.signal-viewport, .signal-trace) {
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .signal-toolbar,
+.music-app[data-design="archive"] .signal-trace-heading {
+  border-bottom: 1px solid var(--line);
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .signal-models {
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] .signal-models button {
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  font-family: var(--design-mono);
+  transition: color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .signal-models button[aria-pressed="true"] {
+  color: var(--page-bg);
+  background: var(--ink);
+}
+
+/* Built-in EQ surfaces and knobs; the independent LSP panel is not targeted. */
+.music-app[data-design="archive"] :is(.eq-controls, .eq-head-controls, .eq-workspace, .eq-engine-choice, .eq-graphic-bank, .eq-parametric-strip, .eq-parametric-adjustments, .eq-band-selects, .eq-number-pair, .eq-band-fields, .tone-filter-card) {
+  border-color: var(--design-edge);
+}
+
+.music-app[data-design="archive"] .eq-engine-choice {
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] .eq-engine-choice button {
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .eq-engine-choice button[aria-pressed="true"] {
+  color: var(--page-bg);
+  background: var(--ink);
+}
+
+.music-app[data-design="archive"] :is(.eq-number-pair input:not([type="range"]), .eq-band-fields input[type="number"], .eq-band-fields select, .tone-filter-card input[type="number"], .eq-dial-number) {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .eq-graphic-bank {
+  border-block: 1px solid var(--design-edge);
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] .eq-graphic-band {
+  border-right-color: var(--line);
+}
+
+.music-app[data-design="archive"] .eq-graphic-lock,
+.music-app[data-design="archive"] .eq-band-actions button,
+.music-app[data-design="archive"] .eq-legend-item {
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] button.eq-parameter-dial[role="slider"] {
+  border: 1px solid color-mix(in srgb, var(--band-color) 42%, var(--line));
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] button.eq-parameter-dial[role="slider"]::before {
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .eq-dial-indicator {
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .eq-dial-number {
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+/* Lyrics cards, source forms, and their in-app options dialog. */
+.music-app[data-design="archive"] :is(.lyrics-workspace, .lyrics-data-block, .lyrics-offset-section, .lyrics-source-section, .lyrics-search-panel) {
+  border-color: var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.lyrics-quiet-button, .lyrics-offset-nudge, .lyrics-import-button, .lyrics-primary-button) {
+  border-radius: 0;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .lyrics-primary-button {
+  color: var(--page-bg);
+  background: var(--ink);
+}
+
+.music-app[data-design="archive"] .lyrics-source-section :is(input, select, button),
+.music-app[data-design="archive"] .lyrics-offset-controls :is(input, button) {
+  border-radius: 0;
+}
+
+/* Archive appearance editor and preview cards. */
+.music-app[data-design="archive"] .music-style-page {
+  font-family: var(--design-font);
+}
+
+.music-app[data-design="archive"] :is(.style-section-heading, .style-card-kicker, .style-case-name small, .style-scheme-name small, .style-preview-meta, .style-preview-index) {
+  font-family: var(--design-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app[data-design="archive"] .style-case-art,
+.music-app[data-design="archive"] .style-preview-stage {
+  border-radius: 0;
+}
+
+.music-app[data-design="archive"] :is(.style-display-card, .style-library-section, .style-preset-section) {
+  border: 1px solid var(--design-edge);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+/* In-app custom select menus and editable numeric range companions. */
+.music-app[data-design="archive"] .settings-select-menu {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] :is(.editable-range-value, .editable-range-number) {
+  border-color: var(--line);
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] :is(.music-settings-page .settings-page-content .settings-row > button, .library-path-actions button, .lyrics-quiet-button, .lyrics-offset-nudge, .lyrics-import-button, .eq-engine-choice button, .eq-graphic-lock, .eq-band-actions button, .audio-info-placeholders button) {
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+/* The custom select trigger has a more specific base rule in its component CSS. */
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .settings-select-trigger,
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .quality-heading > button.settings-select-trigger,
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .quality-control.settings-select-row > button.settings-select-trigger,
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .ftp-fields > div > button.settings-select-trigger,
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-band-selects .settings-select-trigger {
+  border-color: var(--line);
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: none;
+  transition: color 90ms linear, border-color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .settings-select-trigger:hover:not(:disabled),
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .settings-select-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .settings-select-trigger::after {
+  transition: transform 90ms linear;
+}
+
+/* Live signal labels sit on the canvas, so give the surrounding HTML readouts
+   the same family mono while leaving plotted data and artwork intact. */
+.music-app[data-design="archive"] .signal-large-time,
+.music-app[data-design="archive"] .signal-spectrum-caption {
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .signal-viewport::before,
+.music-app[data-design="archive"] .signal-viewport::after {
+  font-family: var(--design-mono);
+}
+
+/* The LSP status card and launch button are app UI; the separate native
+   editor window remains outside this DOM theme root. */
+.music-app[data-design="archive"] .lsp-eq-controls {
+  padding: 10px 12px;
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .lsp-native-editor {
+  border-color: var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .lsp-native-editor-status:not([data-state="error"]),
+.music-app[data-design="archive"] .lsp-eq-description {
+  color: var(--muted);
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .lsp-native-editor-status:is([data-state="busy"], [data-state="open"]) {
+  color: var(--accent);
+}
+
+.music-app[data-design="archive"] .lsp-native-editor-open {
+  border-color: var(--design-edge);
+  border-radius: 0;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: none;
+  font-family: var(--design-mono);
+  transition: color 90ms linear, border-color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .lsp-native-editor-open:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+/* Honor both the saved app preference and the operating-system preference. */
+.music-app[data-design="archive"]:is(.reduce-motion, [data-reduced-motion="true"]) *,
+.music-app[data-design="archive"]:is(.reduce-motion, [data-reduced-motion="true"]) *::before,
+.music-app[data-design="archive"]:is(.reduce-motion, [data-reduced-motion="true"]) *::after {
+  animation-duration: 0.001s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001s !important;
+  scroll-behavior: auto !important;
+}
+
+.music-app[data-design="archive"]:is(.reduce-motion, [data-reduced-motion="true"]) button.design-family-card[data-style-design]:hover {
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-app[data-design="archive"] *,
+  .music-app[data-design="archive"] *::before,
+  .music-app[data-design="archive"] *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+    scroll-behavior: auto !important;
+  }
+
+  .music-app[data-design="archive"] button.design-family-card[data-style-design]:hover {
+    transform: none !important;
+  }
+}
+
+/* Parametric EQ declares its dial and band-card surfaces with more-specific
+   selectors; flatten those surfaces without changing the functional dial or
+   response-curve geometry. */
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip > .eq-band-card {
+  border-color: color-mix(in srgb, var(--band-color) 42%, var(--line));
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-parametric-strip > .eq-band-card.is-locked {
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"] {
+  border-color: color-mix(in srgb, var(--band-color) 42%, var(--line));
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"]::before {
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] button.eq-parameter-dial[role="slider"]:hover:not(:disabled) {
+  border-color: var(--band-color);
+  background: color-mix(in srgb, var(--band-color) 10%, var(--surface));
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-indicator {
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] .music-settings-page .settings-page-content .eq-controls[data-eq-mode="parametric"] .eq-dial-number {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+/* Album detail and playlist rows in Archive. */
+.music-app[data-design="archive"] .music-tabs {
+  border-bottom: 1px solid var(--design-edge);
+  border-radius: 0;
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] .music-tabs > button[role="tab"] {
+  border-radius: 0;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .music-tab-indicator {
+  height: 2px;
+  background: var(--accent);
+}
+
+.music-app[data-design="archive"] .track-row {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 6px;
+  font-family: var(--design-font);
+  transition: color 90ms linear, background-color 90ms linear;
+}
+
+.music-app[data-design="archive"] .track-row:hover,
+.music-app[data-design="archive"] .track-row.search-track-highlight {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.music-app[data-design="archive"] :is(.track-number, .track-duration, .track-format-name, .album-facts small, .detail-overline, .disc-heading) {
+  font-family: var(--design-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app[data-design="archive"] .album-facts {
+  border-top-color: var(--design-edge);
+}
+
+/* Keep settings dense in Archive, while preserving the existing responsive flow. */
+.music-app[data-design="archive"] .music-settings-page {
+  gap: 14px;
+}
+
+.music-app[data-design="archive"] .settings-page-layout {
+  gap: 20px;
+  padding-top: 14px;
+}
+
+.music-app[data-design="archive"] #music-settings .settings-page-layout {
+  grid-template-columns: 184px minmax(0, 1fr);
+}
+
+.music-app[data-design="archive"] .settings-page-nav {
+  gap: 2px;
+  padding-right: 12px;
+}
+
+.music-app[data-design="archive"] .settings-page-nav button {
+  min-height: 38px;
+  padding: 6px 8px;
+}
+
+.music-app[data-design="archive"] .settings-page-content {
+  padding: 0 6px 18px 0;
+}
+
+.music-app[data-design="archive"] .settings-row {
+  min-height: 42px;
+  padding: 7px 10px;
+}
+
+.music-app[data-design="archive"] #sony-settings .settings-row {
+  min-height: 42px;
+  margin: 4px 0;
+  padding: 7px 10px;
+}
+
+.music-app[data-design="archive"] .music-panel {
+  padding: 22px 25px;
+}
+
+.music-app[data-design="archive"] .panel-section {
+  padding: 14px 0;
+}
+
+.music-app[data-design="archive"] .music-panel .panel-heading {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.music-app[data-design="archive"] .music-panel .panel-heading small {
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] :is(.music-empty button, .music-detail .detail-overline button) {
+  border: 1px solid var(--design-edge);
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] .music-empty button:not(.subtle) {
+  color: var(--on-accent, var(--surface));
+  background: var(--accent);
+}
+
+.music-app[data-design="archive"] .music-detail .detail-overline button {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.music-app[data-design="archive"] .music-empty {
+  border: 1px solid var(--design-edge);
+  border-left: 3px solid var(--accent);
+  padding: 24px;
+  background: var(--panel);
+}
+
+.music-app[data-design="archive"] #music-toast {
+  border: 1px solid var(--design-edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--design-mono);
+}
+
+.music-app[data-design="archive"] #music-loading {
+  background: var(--page-bg);
+  backdrop-filter: none;
+}
+
+.music-app[data-design="archive"] :is(#music-loading strong, #music-loading small, .library-status, .music-bottomline) {
+  font-family: var(--design-mono);
+  letter-spacing: 0.08em;
+}
+
+.music-app[data-design="archive"] .library-status > i {
+  border-radius: 0;
+}
+
+@media (max-width: 900px) {
+  .music-app[data-design="archive"] #music-settings .settings-page-layout {
+    grid-template-columns: 156px minmax(0, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .music-app[data-design="archive"] #music-settings .settings-page-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-app[data-design="archive"] .settings-page-nav {
+    padding-right: 0;
+  }
+
+  .music-app[data-design="archive"] .music-panel {
+    padding: 18px 16px;
+  }
+}
+@media (any-pointer: coarse) {
+  .music-app[data-design="archive"] :is(.music-topnav > button, .settings-page-nav button, .settings-row, .settings-select-trigger, .style-setting-row, .lsp-native-editor-open, .settings-select-option) { min-height: 44px; }
+  .music-app #music-theme-page .design-family-card { min-height: 44px; }
+}

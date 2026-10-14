@@ -1,0 +1,5 @@
+{
+  "name": "rhine-music-source-preview",
+  "private": true,
+  "main": "main.cjs"
+}

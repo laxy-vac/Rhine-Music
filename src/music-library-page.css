@@ -1,0 +1,149 @@
+/* Folder management lives inside Settings > Music Library. */
+.music-app #library-management-settings #library-page-body {
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+}
+#library-management-settings .panel-intro,
+#library-management-settings .panel-section p { font-size: 12px; }
+#library-management-settings .panel-section h3 { font-size: 15px; }
+.music-app[data-design="archive"] #library-management-settings #library-page-body:has(#genre-json) {
+  display: block;
+}
+.library-folder-section {
+  padding: 4px 0 16px;
+}
+
+.library-folder-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.library-folder-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.library-folder-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.library-path-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 154px;
+  gap: 16px;
+}
+
+.library-path-list {
+  min-width: 0;
+  min-height: 244px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+
+.library-path-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 14px;
+}
+
+.library-path-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-path-row small,
+.library-path-row em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.library-path-row[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.library-path-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.library-path-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.library-path-actions button:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.library-path-empty {
+  padding: 60px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.library-path-draft {
+  margin: 12px 0 5px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.library-folder-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+#library-management-settings .json-editor {
+  width: 100%;
+  min-height: 330px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  tab-size: 2;
+}
+
+@media (max-width: 760px) {
+  .library-path-manager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .library-path-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .library-path-actions button {
+    flex: 1 0 100px;
+  }
+  .library-path-row {
+    gap: 8px;
+    padding: 10px;
+    font-size: 12px;
+  }
+  #library-management-settings .panel-actions {
+    flex-wrap: wrap;
+  }
+}

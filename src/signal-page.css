@@ -1,0 +1,363 @@
+/* Audio Archive 1.4.0 composition, adapted to Rhine's shared palette.
+   Copyright (c) 2026 the Audio Archive authors, MIT; assets/signal/LICENSE.txt. */
+.music-app #music-signal-page {
+  display: none;
+}
+.music-app[data-page="signal"] #music-signal-page:not([hidden]) {
+  display: grid;
+}
+.music-app #music-signal-page[hidden] {
+  display: none !important;
+}
+.music-app .music-settings-page.music-signal-page {
+  inset: 126px 36px max(126px, calc(var(--playback-height, 80px) + 48px));
+  gap: 10px;
+}
+.music-signal-page .settings-page-heading h1 {
+  font-size: clamp(23px, 2.3vw, 30px);
+}
+.music-signal-page #signal-page-content {
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.signal-workspace {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) 90px;
+  gap: 12px;
+  color: var(--ink);
+}
+.signal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.signal-ident {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  white-space: nowrap;
+}
+.signal-square {
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+}
+.signal-status {
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--page-bg);
+  background: var(--ink);
+}
+.signal-status[data-live="true"] {
+  background: var(--accent);
+}
+.signal-models {
+  display: inline-flex;
+  border: 1px solid var(--line);
+}
+.signal-models button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font:
+    10px ui-monospace,
+    Consolas,
+    monospace;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition:
+    background-color 180ms,
+    color 180ms;
+}
+.signal-models button i {
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+}
+.signal-models button:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.signal-models button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--page-bg);
+}
+.signal-models button[aria-pressed="true"] i {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.signal-models button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+}
+.signal-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.signal-viewport::before,
+.signal-viewport::after {
+  content: "+";
+  position: absolute;
+  top: 0;
+  color: var(--line);
+  font:
+    20px ui-monospace,
+    Consolas,
+    monospace;
+  pointer-events: none;
+}
+.signal-viewport::before {
+  left: 1px;
+}
+.signal-viewport::after {
+  right: 1px;
+}
+.signal-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.signal-classic-ground {
+  position: absolute;
+  inset: -40px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(38px);
+  opacity: 0.13;
+  z-index: -1;
+}
+.signal-workspace:not([data-signal-mode="classic"])
+  :is(.signal-classic-ground, .signal-classic-caption) {
+  display: none;
+}
+.signal-classic-caption {
+  position: absolute;
+  bottom: 16px;
+  left: 20px;
+  right: 20px;
+  border-top: 3px solid var(--ink);
+  padding-top: 14px;
+  pointer-events: none;
+}
+.signal-classic-caption small {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 0;
+  padding: 5px 12px;
+  color: var(--page-bg);
+  background: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+.signal-classic-caption > div {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+}
+.signal-classic-caption h2 {
+  margin: 0;
+  font-weight: 500;
+  font-size: clamp(18px, 2.6vw, 38px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.signal-classic-caption p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.signal-large-time {
+  font:
+    clamp(20px, 3vw, 40px) ui-monospace,
+    Consolas,
+    monospace;
+  white-space: nowrap;
+}
+.signal-spectrum-caption {
+  display: flex;
+  position: absolute;
+  bottom: 0;
+  left: 48px;
+  right: 24px;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font:
+    10px ui-monospace,
+    Consolas,
+    monospace;
+  pointer-events: none;
+}
+.signal-workspace:not([data-signal-mode="spectrum"]) .signal-spectrum-caption {
+  display: none;
+}
+.signal-probe {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.signal-trace {
+  position: relative;
+  margin: 0 20px;
+  display: grid;
+  grid-template-rows: 16px minmax(24px, 1fr) 18px;
+  gap: 7px;
+  min-height: 0;
+}
+.signal-trace-heading,
+.signal-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.signal-trace-time {
+  font-variant-numeric: tabular-nums;
+}
+.signal-trace-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.signal-trace input[type="range"] {
+  position: absolute;
+  inset: 19px 0 25px;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.signal-trace:has(input:focus-visible) {
+  outline: 1px solid var(--accent);
+  outline-offset: 5px;
+}
+.signal-footer {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.signal-data-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.signal-meter {
+  font-variant-numeric: tabular-nums;
+}
+/* One lightweight scan cover, interruptible and outside playback controls. */
+.music-page-scan {
+  position: absolute;
+  z-index: 5;
+  inset: 126px 0 max(126px, calc(var(--playback-height, 80px) + 48px));
+  pointer-events: none;
+  overflow: hidden;
+}
+.music-page-scan[hidden] {
+  display: none;
+}
+.music-page-scan-head {
+  position: absolute;
+  inset: 0;
+  background: var(--page-bg);
+  will-change: transform;
+}
+.music-page-scan-head::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.music-page-scan-head::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 2px;
+  width: 160px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--ink) 15%, transparent) 3px 4px
+  );
+  mask-image: linear-gradient(90deg, #000, transparent);
+}
+@media (max-width: 1300px) and (min-width: 701px) {
+  .music-app .music-topnav {
+    gap: 15px;
+  }
+  .music-app .music-topnav .transport-track {
+    max-width: 70px;
+  }
+}
+@media (max-width: 1000px) {
+  .signal-models button {
+    padding: 0 10px;
+  }
+  .signal-toolbar {
+    letter-spacing: 0.04em;
+  }
+}
+@media (max-width: 700px) {
+  .music-app .music-settings-page.music-signal-page {
+    inset: 100px 16px max(116px, calc(var(--playback-height, 80px) + 34px));
+  }
+  .signal-workspace {
+    grid-template-rows: auto minmax(0, 1fr) 80px;
+    gap: 7px;
+  }
+  .signal-toolbar {
+    align-items: flex-start;
+  }
+  .signal-models {
+    margin-left: auto;
+  }
+  .signal-models button {
+    padding: 0 9px;
+    font-size: 9px;
+  }
+  .signal-trace {
+    margin: 0 8px;
+  }
+  .signal-classic-caption {
+    left: 8px;
+    right: 8px;
+  }
+  .signal-spectrum-caption {
+    font-size: 8px;
+    flex-wrap: wrap;
+  }
+  .signal-meter {
+    display: none;
+  }
+  .music-page-scan {
+    top: 100px;
+    bottom: max(116px, calc(var(--playback-height, 80px) + 34px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .signal-models button {
+    transition: none;
+  }
+}

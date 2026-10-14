@@ -1,0 +1,237 @@
+.music-app .lyrics-global-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(100%, 920px);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 3px 0 22px;
+  color: var(--ink);
+}
+
+.music-app .lyrics-global-settings-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.music-app .lyrics-global-eyebrow {
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+.music-app .lyrics-global-settings-heading h2 {
+  margin: 0;
+  font-size: clamp(19px, 2vw, 25px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.music-app .lyrics-global-intro {
+  max-width: 720px;
+  margin: -8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.music-app .lyrics-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 15px;
+  background: color-mix(in srgb, var(--surface) 56%, var(--page-bg));
+}
+
+.music-app .lyrics-settings-section-heading {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.music-app .lyrics-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.music-app .lyrics-settings-select,
+.music-app .lyrics-settings-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 88%, var(--page-bg));
+  font: inherit;
+  font-size: 11px;
+}
+
+.music-app .lyrics-settings-input[readonly] {
+  color: var(--muted);
+  cursor: default;
+}
+
+.music-app .lyrics-settings-cache-actions,
+.music-app .lyrics-settings-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.music-app .lyrics-settings-button,
+.music-app .lyrics-settings-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 31px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.music-app .lyrics-settings-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.music-app .lyrics-settings-primary {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.music-app .lyrics-settings-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+
+.music-app .lyrics-settings-button:disabled,
+.music-app .lyrics-settings-primary:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+}
+
+.music-app .lyrics-settings-hint,
+.music-app .lyrics-settings-status {
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.music-app .lyrics-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.music-app .lyrics-settings-actions .lyrics-settings-status {
+  flex: 1 1 260px;
+}
+
+.music-app .lyrics-settings-sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.music-app .lyrics-settings-source-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+
+.music-app .lyrics-settings-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  padding: 9px 0;
+}
+
+.music-app .lyrics-settings-source-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.music-app .lyrics-settings-source-info strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.music-app .lyrics-settings-source-info small {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.music-app .lyrics-settings-source-actions {
+  flex: 0 0 auto;
+}
+
+.music-app .lyrics-settings-source-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.music-app .lyrics-settings-mapping {
+  resize: vertical;
+  font-family: ui-monospace, Consolas, monospace;
+  line-height: 1.5;
+}
+
+.music-app .lyrics-settings-source-form .lyrics-settings-actions {
+  justify-content: flex-end;
+}
+
+.music-app .lyrics-settings-source-form .lyrics-settings-status {
+  flex: 1 1 auto;
+  margin-right: auto;
+}
+
+@media (max-width: 620px) {
+  .music-app .lyrics-global-settings {
+    gap: 10px;
+  }
+
+  .music-app .lyrics-settings-card {
+    padding: 12px;
+  }
+
+  .music-app .lyrics-settings-source-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .music-app .lyrics-settings-source-form .lyrics-settings-actions {
+    justify-content: flex-start;
+  }
+}

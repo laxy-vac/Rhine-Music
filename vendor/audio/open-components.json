@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "name": "iir1",
+      "vendorDirectory": "iir1",
+      "repository": "https://github.com/berndporr/iir1",
+      "commit": "bb21b64ea2daa9eda92e57763e21c0e322411f34",
+      "revisionNote": "master HEAD observed 2026-10-10; commit date 2025-07-07",
+      "license": "MIT",
+      "licenseFile": "COPYING",
+      "archive": {
+        "file": "iir1-bb21b64ea2daa9eda92e57763e21c0e322411f34.zip",
+        "url": "https://codeload.github.com/berndporr/iir1/zip/bb21b64ea2daa9eda92e57763e21c0e322411f34",
+        "sha256": "D08CF830294BEAF7A1273F7E533AFCAB2CBB93D2FBB4BE329925FB4544EC6B4F"
+      },
+      "buildSources": [
+        "iir/Biquad.cpp",
+        "iir/RBJ.cpp"
+      ],
+      "files": [
+        {
+          "source": "COPYING",
+          "path": "COPYING",
+          "sha256": "5f7c9d16593a211bd72927201ee216cf4c0c9cea7c7d82eac3f1fb1367d86bfa"
+        },
+        {
+          "source": "README.md",
+          "path": "README.md",
+          "sha256": "e527a453f40e1038627c88490eb6681a558d0c4ff99989a35014557944f78766"
+        },
+        {
+          "source": "iir/Biquad.cpp",
+          "path": "iir/Biquad.cpp",
+          "sha256": "5cc65e6f630e17cdd3601343386d0851b39af6bc05a174278b6957fcb7b13c5d"
+        },
+        {
+          "source": "iir/Biquad.h",
+          "path": "iir/Biquad.h",
+          "sha256": "5b2f0d86d88b2f5615e802a536549080bd8873f62662692215ffef6e989ab353"
+        },
+        {
+          "source": "iir/Common.h",
+          "path": "iir/Common.h",
+          "sha256": "ec256958589087c54f4350f322c8baf7da070932a36c3d608b9c5e817a4f2516"
+        },
+        {
+          "source": "iir/MathSupplement.h",
+          "path": "iir/MathSupplement.h",
+          "sha256": "5e808195ffc2ccc16958cc2bed56cd7692540e953f80a38c599a65802db19a97"
+        },
+        {
+          "source": "iir/RBJ.cpp",
+          "path": "iir/RBJ.cpp",
+          "sha256": "94e1fab6e95c19b3998972bac01c3a884897aa085853144635de0cafaf1bf79a"
+        },
+        {
+          "source": "iir/RBJ.h",
+          "path": "iir/RBJ.h",
+          "sha256": "434bb675910b768b4e0a923172ddb5f6c4888089beb6d2123e2299eb85b3db8b"
+        },
+        {
+          "source": "iir/State.h",
+          "path": "iir/State.h",
+          "sha256": "d7187ac4f074fcd635c0c87686820303d933ecd85074477bd272797b4935c9a0"
+        },
+        {
+          "source": "iir/Types.h",
+          "path": "iir/Types.h",
+          "sha256": "da1eb142687dc7d467219a4b1baa8ea71e11a83d88c63d4daeb063d1c17f2a05"
+        }
+      ]
+    },
+    {
+      "name": "r8brain-free-src",
+      "vendorDirectory": "r8brain",
+      "repository": "https://github.com/avaneev/r8brain-free-src",
+      "commit": "cb2abb9977efe2471979b380ed95daa56ab4fdb9",
+      "tag": "7.6",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "archive": {
+        "file": "r8brain-free-src-cb2abb9977efe2471979b380ed95daa56ab4fdb9.zip",
+        "url": "https://codeload.github.com/avaneev/r8brain-free-src/zip/cb2abb9977efe2471979b380ed95daa56ab4fdb9",
+        "sha256": "DD7374B2E3B4BBF7623CF503A141EF41ECB117412951741E4FED595B14727C10"
+      },
+      "buildSources": [],
+      "files": [
+        {
+          "source": "LICENSE",
+          "path": "LICENSE",
+          "sha256": "5b2fca0def6e5c93d42f2cb226f4731cfbb6eb30bf12226ad6a9ff299d333c2a"
+        },
+        {
+          "source": "README.md",
+          "path": "README.md",
+          "sha256": "9bcbb9652a5d406b478f25a5987820ce9909c684bf51e9ef499c7694c5c86194"
+        },
+        {
+          "source": "CDSPBlockConvolver.h",
+          "path": "CDSPBlockConvolver.h",
+          "sha256": "634f36b35a03ac3655c2e0b423d92559db681c6a396a8ff31f6423e577599c38"
+        },
+        {
+          "source": "CDSPFIRFilter.h",
+          "path": "CDSPFIRFilter.h",
+          "sha256": "afa7195a01fa63c55db5f22c0d2b9e813f9c8613ed6c83da82bd25fec0acd3b9"
+        },
+        {
+          "source": "CDSPFracInterpolator.h",
+          "path": "CDSPFracInterpolator.h",
+          "sha256": "e1ca87b42c1cc949c7bab4781c92c215794e57d4a31661c5446c0bb6f91f51eb"
+        },
+        {
+          "source": "CDSPHBDownsampler.h",
+          "path": "CDSPHBDownsampler.h",
+          "sha256": "fb2fc1afb2e4e57fb755428e609000201c3fb405d30309300b3d82b7227a3c8d"
+        },
+        {
+          "source": "CDSPHBDownsampler.inc",
+          "path": "CDSPHBDownsampler.inc",
+          "sha256": "c9983c315b5ad45c448f941e4c6d39c498a935e12234e3388c22cd1db501798d"
+        },
+        {
+          "source": "CDSPHBUpsampler.h",
+          "path": "CDSPHBUpsampler.h",
+          "sha256": "ecf4de5e40cd91f380d08d2069f65f24b333d65202c31c0b1a4d55e96c47b18b"
+        },
+        {
+          "source": "CDSPHBUpsampler.inc",
+          "path": "CDSPHBUpsampler.inc",
+          "sha256": "c0bf41fe273a58ee9826cbd6a278a3a5717d332efdcbf437c6713fa176513dcd"
+        },
+        {
+          "source": "CDSPProcessor.h",
+          "path": "CDSPProcessor.h",
+          "sha256": "f7d7b57001bd34d79179a03477225669405f2889e8a20e53da732def724e9eea"
+        },
+        {
+          "source": "CDSPRealFFT.h",
+          "path": "CDSPRealFFT.h",
+          "sha256": "23d0e1a5cf04289574570c49efabd3384b61ebe3be5d34a26aa10614a08eba72"
+        },
+        {
+          "source": "CDSPResampler.h",
+          "path": "CDSPResampler.h",
+          "sha256": "4298ae7bd965f56cbfa554f33ecc8615c6453bbccf92b001d0e74858a3ba0064"
+        },
+        {
+          "source": "CDSPSincFilterGen.h",
+          "path": "CDSPSincFilterGen.h",
+          "sha256": "c5ee2159220cfeead04154aa56323fa0bd912aca10a6f71c42451510bbaa2a74"
+        },
+        {
+          "source": "r8bbase.h",
+          "path": "r8bbase.h",
+          "sha256": "8e4182d4eb914a3ff1c6adf016798506d1996fbac6fdedbcaa704b89f56ab6ca"
+        },
+        {
+          "source": "r8bconf.h",
+          "path": "r8bconf.h",
+          "sha256": "229f3c43c734b14dd40b23b4ec56a3b707563427fb8bf470f1ed074210817318"
+        },
+        {
+          "source": "r8butil.h",
+          "path": "r8butil.h",
+          "sha256": "de7b790cd0ae8fa466f1526888b945b643a7b2bdbaf594fb7c077b7a9683b5ee"
+        },
+        {
+          "source": "fft/fft4g.h",
+          "path": "fft/fft4g.h",
+          "sha256": "272d8dc846718e0c4adf3c8a46090e0328c9a2c7b458fcf24e221ed873dec578"
+        }
+      ]
+    }
+  ]
+}
