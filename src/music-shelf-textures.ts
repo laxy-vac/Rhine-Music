@@ -4,17 +4,21 @@ import * as THREE from "three";
 export function createMusicShelfTextures() {
   const size = 256;
   const bed = new Uint8Array(size * size * 4);
+  const endBed = new Uint8Array(size * size * 4);
   const roughness = new Uint8Array(size * size * 4);
   const normal = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const offset = (y * size + x) * 4;
-    // Deterministic fine grain, with a restrained machining direction.
+    // Fine sanded grain and the soft broad shade seen in rail-mid. It is a
+    // surface cue, not a second physical trench across every slot.
     const noise = ((Math.imul(x + 17, 374761393) ^ Math.imul(y + 31, 668265263)) >>> 0) % 101 / 100 - .5;
     const brush = Math.sin(y * Math.PI * 2 * 53 / size + Math.sin(x * Math.PI * 2 / size) * .12);
-    gray(bed, offset, 229 + noise * 24 + brush * 3);
-    gray(roughness, offset, 205 + noise * 12 + brush * 16);
-    normal[offset] = 128;
-    normal[offset + 1] = Math.round(128 + brush * 3);
+    const shade = Math.sin(Math.PI * y / (size - 1)) ** 4;
+    gray(bed, offset, 245 - shade * 40 + noise * 18 + brush);
+    gray(endBed, offset, 245 + noise * 18 + brush);
+    gray(roughness, offset, 222 + noise * 16 + brush * 4);
+    normal[offset] = Math.round(128 + noise * 3);
+    normal[offset + 1] = Math.round(128 + brush + noise * 3);
     normal[offset + 2] = 255;
     normal[offset + 3] = 255;
   }
@@ -24,6 +28,7 @@ export function createMusicShelfTextures() {
 
   return {
     bed: texture(bed, size, size, "Music tray fine matte grain", true),
+    endBed: texture(endBed, size, size, "Music tray end platform grain", true),
     roughness: texture(roughness, size, size, "Music tray brushed metal roughness"),
     normal: texture(normal, size, size, "Music tray machining micro normal"),
     hazard: texture(hazard, 128, 32, "Music tray end safety stripes", true),

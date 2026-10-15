@@ -14,16 +14,18 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 const isArrayBump = process.argv.includes("--array-bump");
-const isArrayTray = process.argv.includes("--array-tray");
+const isArrayTrayStructure = process.argv.includes("--array-tray-structure");
+const isArrayTray = process.argv.includes("--array-tray") || isArrayTrayStructure;
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
 const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
-const arrayTrayPhase = process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
+const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
+  : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
 const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray;
 const unifiedOutput = path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
-const arrayTrayOutput = path.join(project, ".tools", "array-tray", arrayTrayPhase);
+const arrayTrayOutput = path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -1439,8 +1441,7 @@ function arrayCompositionRenderSnapshot() {
   const shelfMeshes = [];
   scene.sceneResources?.group.traverse(object => { if (object.isInstancedMesh) shelfMeshes.push(object); });
   const laneIndexedKinds = new Set(["Music shelf side rails", "Music shelf rail highlights",
-    "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
-    "Music shelf end safety stripes"]);
+    "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps", "Music shelf end platforms"]);
   const meshes = [
     ...scene.instances.map((mesh, index) => ({ kind: mesh.userData.casePart || "case-instance-" + index, mesh })),
     { kind: "cover", mesh: scene.covers.array },
@@ -1471,9 +1472,12 @@ function arrayCompositionRenderSnapshot() {
         meshes: meshes.map(({ kind, mesh }) => {
           let indices = [];
           if (slotIndex >= 0) {
-            if (["Music shelf base", "Music shelf front number plates", "Music shelf plate markers", "Local music floor finish"].includes(kind))
+            if (["Music shelf base", "Music shelf front number plates", "Music shelf plate markers", "Music shelf end safety stripes",
+              "Local music floor finish"].includes(kind))
               indices = laneIndex >= 0 ? [laneIndex] : [];
             else if (laneIndexedKinds.has(kind)) indices = laneIndex >= 0 ? [laneIndex * 2, laneIndex * 2 + 1] : [];
+            else if (["Music shelf support feet", "Music shelf foot pins"].includes(kind)) indices = laneIndex >= 0
+              ? [0, 1, 2, 3].map(offset => laneIndex * 4 + offset) : [];
             else if (kind === "Music floor seams and locator marks") indices = [slotIndex];
             else if (kind.startsWith("Record shelf")) indices = [slotIndex,
               ...(mesh.count >= scene.positions.length * 2 ? [slotIndex + scene.positions.length] : [])];
@@ -1688,10 +1692,13 @@ const arrayTrayTextureWatched = new Set();
 const arrayTrayPartNames = ["Music shelf base", "Music shelf side rails", "Music shelf rail highlights",
   "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
   "Music shelf end safety stripes", "Record shelf tray", "Record shelf glass rims", "Record shelf recessed bed",
-  "Record shelf guide grooves", "Record shelf index strip", "Record shelf tick"];
+  "Record shelf guide grooves", "Record shelf index strip", "Record shelf tick",
+  "Music shelf front number plates", "Music shelf plate markers", "Music shelf support feet",
+  "Music shelf end platforms", "Music shelf foot pins"];
 function arrayTrayStructureSnapshot() {
   const scene = archiveScene, group = scene.sceneResources?.group;
   const matrix = new THREE.Matrix4();
+  scene.scene.updateMatrixWorld(true);
   const rowLabels = [];
   group?.traverse(object => {
     if (object.name.startsWith("Music shelf row label ")) rowLabels.push({ name: object.name, visible: object.visible });
@@ -1699,6 +1706,7 @@ function arrayTrayStructureSnapshot() {
   return { design: scene.musicStyle.design, theme: scene.theme, floor: scene.musicStyle.floor,
     layout: scene.displayLayout.effective, shelfCanvas: scene.displayLayout.canvas === "shelf",
     resourceGroupVisible: !!group?.visible, physicalTrayGroupVisible: !!group?.getObjectByName("Physical record trays")?.visible,
+    raisedTransverseBeamsPresent: !!group?.getObjectByName("Record shelf transverse beams"),
     rowLabels,
     parts: arrayTrayPartNames.map(name => {
       const object = group?.getObjectByName(name);
@@ -1719,13 +1727,22 @@ function arrayTrayStructureSnapshot() {
             textures: textures.map(({ texture, ...value }) => value) };
         });
         let drawnInstances = 0;
+        const submittedBounds = [];
+        child.geometry.computeBoundingBox();
         if (child.isInstancedMesh) for (let index = 0; index < child.count; index++) {
           child.getMatrixAt(index, matrix);
           if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2], matrix.elements[4], matrix.elements[5],
-            matrix.elements[6], matrix.elements[8], matrix.elements[9], matrix.elements[10]) > 1e-12) drawnInstances++;
+            matrix.elements[6], matrix.elements[8], matrix.elements[9], matrix.elements[10]) > 1e-12) {
+            drawnInstances++;
+            if (submittedBounds.length < 4) {
+              const box = child.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(child.matrixWorld);
+              submittedBounds.push({ index, min: box.min.toArray(), max: box.max.toArray() });
+            }
+          }
         }
         meshes.push({ name: child.name || name, visible: child.visible, instances: child.isInstancedMesh ? child.count : 1,
-          drawnInstances, materials });
+          drawnInstances, submittedBounds,
+          localBounds: { min: child.geometry.boundingBox.min.toArray(), max: child.geometry.boundingBox.max.toArray() }, materials });
       });
       return { name, present: true, visible: object.visible, instances: meshes.reduce((sum, value) => sum + value.instances, 0),
         drawnInstances: meshes.reduce((sum, value) => sum + value.drawnInstances, 0), meshes };
@@ -1744,8 +1761,10 @@ async function prepareArrayTray(design, theme, floor, layout = "shelf") {
   stepArchiveScene(120); archiveScene.composer.render();
   return arrayTrayStructureSnapshot();
 }
-function captureEmptyArrayTray(zoomFactor = 2.25) {
+function captureEmptyArrayTray(zoomFactor = 2.25, focus = "browse") {
   const scene = archiveScene, oldZoom = scene.camera.zoom;
+  const oldPosition = scene.camera.position.clone(), oldQuaternion = scene.camera.quaternion.clone();
+  const oldQuality = { ...scene.quality };
   const restore = [];
   const hide = object => {
     if (!object) return;
@@ -1759,17 +1778,116 @@ function captureEmptyArrayTray(zoomFactor = 2.25) {
       scene.rhineInfo?.selectedLabel, scene.rhineInfo?.selectedBadge]) hide(object);
     for (const old of scene.outgoing) hide(old.group);
     scene.sceneResources?.group.traverse(child => {
-      if (child.name.startsWith("Music shelf row label ")) hide(child);
+      if (focus !== "front-end" && child.name.startsWith("Music shelf row label ")) hide(child);
     });
+    let endBounds = null, target = null;
+    if (focus === "front-end") {
+      scene.setQuality({ ...oldQuality, depthOfField: 0 });
+      const base = scene.sceneResources?.group.getObjectByName("Music shelf base");
+      expect(base?.isInstancedMesh, "Front-end capture requires the real finite shelf base.");
+      scene.scene.updateMatrixWorld(true); base.geometry.computeBoundingBox();
+      const matrix = new THREE.Matrix4(), candidates = [];
+      const selectedX = scene.model.getWorldPosition(new THREE.Vector3()).x;
+      for (let index = 0; index < base.count; index++) {
+        base.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        const box = base.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(base.matrixWorld);
+        candidates.push({ box, distance: Math.abs(box.getCenter(new THREE.Vector3()).x - selectedX) });
+      }
+      candidates.sort((left, right) => left.distance - right.distance);
+      expect(candidates.length > 0, "Front-end capture requires a submitted active shelf.");
+      const box = candidates[0].box;
+      const centerX = (box.min.x + box.max.x) / 2;
+      const caps = scene.sceneResources?.group.getObjectByName("Music shelf end caps"), capCandidates = [];
+      expect(caps?.isInstancedMesh, "Front-end capture requires submitted end-cap geometry.");
+      caps.geometry.computeBoundingBox();
+      for (let index = 0; index < caps.count; index++) {
+        caps.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        const capBox = caps.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(caps.matrixWorld);
+        if (Math.abs(capBox.getCenter(new THREE.Vector3()).x - centerX) < (box.max.x - box.min.x) * .2)
+          capCandidates.push(capBox);
+      }
+      capCandidates.sort((left, right) => right.max.z - left.max.z);
+      expect(capCandidates.length >= 2, "The active finite tray requires both real end caps.");
+      const front = capCandidates[0];
+      target = new THREE.Vector3(centerX, (front.min.y + front.max.y) / 2, front.max.z + .03);
+      scene.camera.position.copy(target).add(new THREE.Vector3(6, 2.3, 8));
+      scene.camera.lookAt(target);
+      endBounds = { min: box.min.toArray(), max: box.max.toArray(),
+        frontCapMin: front.min.toArray(), frontCapMax: front.max.toArray() };
+    }
     scene.camera.zoom = oldZoom * zoomFactor; scene.camera.updateProjectionMatrix();
     scene.scene.updateMatrixWorld(true); scene.composer.render();
-    return { image: scene.renderer.domElement.toDataURL("image/png"), cameraZoom: scene.camera.zoom,
+    return { image: scene.renderer.domElement.toDataURL("image/png"), cameraZoom: scene.camera.zoom, focus,
+      cameraType: scene.camera.type, cameraFov: scene.camera.fov ?? null,
+      depthOfField: scene.quality.depthOfField, originalDepthOfField: oldQuality.depthOfField,
+      cameraPosition: scene.camera.position.toArray(), target: target?.toArray() ?? null, endBounds,
       structure: arrayTrayStructureSnapshot() };
   } finally {
+    scene.camera.position.copy(oldPosition); scene.camera.quaternion.copy(oldQuaternion);
     scene.camera.zoom = oldZoom; scene.camera.updateProjectionMatrix();
+    if (focus === "front-end") scene.setQuality(oldQuality);
     for (const [object, visible] of restore) object.visible = visible;
     scene.scene.updateMatrixWorld(true); scene.composer.render();
   }
+}
+
+function arrayTrayClearanceSnapshot() {
+  const scene = archiveScene, group = scene.sceneResources?.group, matrix = new THREE.Matrix4();
+  scene.scene.updateMatrixWorld(true);
+  scene.caseHitProxy.geometry.computeBoundingBox();
+  const cases = scene.cells.flatMap((cell, index) => {
+    if (!musicSpatialEntry(cell, scene.shelfView)) return [];
+    scene.caseHitProxy.getMatrixAt(index, matrix);
+    if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) return [];
+    return [{ index, lane: cell.lane, row: cell.row, box: scene.caseHitProxy.geometry.boundingBox.clone()
+      .applyMatrix4(matrix).applyMatrix4(scene.caseHitProxy.matrixWorld) }];
+  });
+  if (scene.model.visible && musicSpatialEntry(scene.selectedCell, scene.shelfView)) {
+    cases.push({ index: "selected", lane: scene.selectedCell.lane, row: scene.selectedCell.row,
+      box: new THREE.Box3(new THREE.Vector3(...scene.caseLayout.bounds.min), new THREE.Vector3(...scene.caseLayout.bounds.max))
+        .applyMatrix4(scene.model.matrixWorld) });
+  }
+  const colliders = [];
+  for (const name of arrayTrayPartNames) {
+    const object = group?.getObjectByName(name);
+    object?.traverse(child => {
+      if (!child.isMesh || !child.visible) return;
+      child.geometry.computeBoundingBox();
+      for (let index = 0; index < (child.isInstancedMesh ? child.count : 1); index++) {
+        if (child.isInstancedMesh) {
+          child.getMatrixAt(index, matrix);
+          if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        } else matrix.identity();
+        colliders.push({ name: child.name || name, index, box: child.geometry.boundingBox.clone()
+          .applyMatrix4(matrix).applyMatrix4(child.matrixWorld) });
+      }
+    });
+  }
+  const intersections = [], footprintClearances = [];
+  for (const item of cases) for (const collider of colliders) {
+    const overlap = ["x", "y", "z"].map(axis => Math.min(item.box.max[axis], collider.box.max[axis]) -
+      Math.max(item.box.min[axis], collider.box.min[axis]));
+    if (overlap[0] > .001 && overlap[2] > .001 && collider.box.max.y <= item.box.max.y) {
+      footprintClearances.push({ caseIndex: item.index, lane: item.lane, row: item.row, part: collider.name,
+        partInstance: collider.index, clearance: item.box.min.y - collider.box.max.y });
+    }
+    if (overlap.every(value => value > .001)) intersections.push({ caseIndex: item.index, lane: item.lane, row: item.row,
+      part: collider.name, partInstance: collider.index, overlap });
+  }
+  footprintClearances.sort((left, right) => left.clearance - right.clearance);
+  return { method: "Submitted case proxies, selected model actual bounds and each submitted tray part world AABB; overlap above 0.001 on every axis is a collision candidate.",
+    caseCount: cases.length, colliderCount: colliders.length, intersections,
+    minimumStructuralClearance: footprintClearances[0]?.clearance ?? null, nearestSupports: footprintClearances.slice(0, 12),
+    support: unifiedSnapshot().support };
+}
+
+function settleArrayTrayLane(lane, slot) {
+  const scene = archiveScene;
+  scene.setReduced(true); arrayMotionSelect(lane, slot); stepArchiveScene(1); scene.setReduced(false);
+  stepArchiveScene(240); scene.composer.render();
+  return { structure: arrayTrayStructureSnapshot(), composition: arrayCompositionRenderSnapshot(), clearance: arrayTrayClearanceSnapshot() };
 }
 
 async function exercisePunkArrayMotion(screenshotsOnly = false) {
@@ -3065,6 +3183,8 @@ window.caseCheck = {
   prepareArrayTray,
   arrayTrayStructureSnapshot,
   captureEmptyArrayTray,
+  arrayTrayClearanceSnapshot,
+  settleArrayTrayLane,
   get arrayTrayTextureDisposals() { return arrayTrayTextureDisposals.slice(); },
   arrayHoverSnapshot,
   arraySurfaceVariant,
@@ -6338,7 +6458,7 @@ async function main() {
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
     if (isArrayTray) {
       const motionOutput = arrayTrayOutput;
-      const combinations = process.argv.includes("--baseline-only")
+      const combinations = process.argv.includes("--baseline-only") || process.argv.includes("--structure-preview")
         ? [["archive", "day", "plain"]]
         : ["archive", "rhine"].flatMap(design => ["day", "night"].flatMap(theme => ["plain", "deck"].map(floor => [design, theme, floor])));
       const captures = [];
@@ -6356,6 +6476,42 @@ async function main() {
           return !part?.present || !part.visible || part.drawnInstances === 0;
         });
         assert.deepEqual(missing, [], "The live ARRAY Scene must submit the bed, tray and both side rails: " + JSON.stringify(missing));
+        if (isArrayTrayStructure) {
+          const part = name => visibleState.parts.find(value => value.name === name);
+          const lanes = part("Music shelf base").drawnInstances;
+          assert.equal(part("Music shelf end safety stripes").drawnInstances, lanes,
+            "Each finite tray must submit exactly one front safety-stripe face.");
+          assert.equal(part("Music shelf support feet").drawnInstances, lanes * 4,
+            "Each finite tray must submit four support feet.");
+          assert.equal(part("Music shelf foot pins").drawnInstances, lanes * 4,
+            "Each finite tray must submit four silver foot pins.");
+          assert.equal(part("Music shelf end platforms").drawnInstances, lanes * 2,
+            "Each finite tray must submit two empty end landing platforms.");
+          assert.equal(part("Record shelf tick").drawnInstances, part("Record shelf tray").drawnInstances,
+            "Each physical pitch must submit exactly one flush separator line.");
+          assert.equal(visibleState.raisedTransverseBeamsPresent, false,
+            "The central record bed must contain no raised transverse supporting ribs.");
+          const bedBounds = part("Record shelf recessed bed").meshes[0].submittedBounds;
+          const tickBounds = part("Record shelf tick").meshes[0].submittedBounds;
+          assert.ok(tickBounds.length > 0 && tickBounds.every(tick => {
+            const bed = bedBounds.find(value => value.index === tick.index);
+            return bed && tick.max[1] <= bed.max[1] + .003001 && tick.max[1] - tick.min[1] <= .003001;
+          }), "Separator lines must stay within 0.003 of the flat recessed bed surface.");
+          const stripe = part("Music shelf end safety stripes").meshes[0].submittedBounds[0];
+          assert.ok(stripe && stripe.max[1] - stripe.min[1] > .08 && stripe.max[2] - stripe.min[2] < .02,
+            "Safety stripes must occupy a vertical front XY face.");
+          const base = part("Music shelf base").meshes[0].submittedBounds[0];
+          const plate = part("Music shelf front number plates").meshes[0].submittedBounds[0];
+          assert.ok(plate && (plate.min[0] + plate.max[0]) / 2 > (base.min[0] + base.max[0]) / 2,
+            "The number plate must sit to the right of the tray center.");
+        }
+        const clearance = isArrayTrayStructure ? await evaluate("window.caseCheck.arrayTrayClearanceSnapshot()") : null;
+        if (clearance) {
+          assert.ok(clearance.caseCount > 0 && clearance.colliderCount > 0, "Structural clearance must inspect submitted case and tray bounds.");
+          assert.deepEqual(clearance.intersections, [], "No tray structure may overlap an occupied case bound: " + JSON.stringify(clearance.intersections));
+          assert.ok(clearance.support.length > 0 && clearance.support.every(item => item.clearance >= -.001),
+            "Every occupied case must clear its physical tray floor.");
+        }
         const browseScreen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
         const browseName = `array-tray-${design}-${theme}-${floor}-browse.png`;
         await writeFile(path.join(motionOutput, browseName), Buffer.from(browseScreen.data, "base64"));
@@ -6369,8 +6525,30 @@ async function main() {
         assert.deepEqual(emptyMissing, [], "The empty-tray capture must keep the real ARRAY bed/rims/rails visible.");
         assert.ok(empty.structure.rowLabels.every(label => !label.visible),
           "The empty-tray close-up must hide shelf row labels so the tray details stay clear.");
-        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, visibleState,
+        let endName = null, endTray = null;
+        if (isArrayTrayStructure) {
+          const tail = await evaluate("window.caseCheck.settleArrayTrayLane(4,4)");
+          assert.deepEqual(tail.clearance.intersections, [], "Final-five shelf cases must clear every structural tray part.");
+          const end = await evaluate('window.caseCheck.captureEmptyArrayTray(.65,"front-end")');
+          endName = `array-tray-${design}-${theme}-${floor}-front-end-closeup.png`;
+          await writeFile(path.join(motionOutput, endName), pngBuffer(end.image, "Front vertical end, sidewall, flat bed and feet"));
+          endTray = { cameraZoom: end.cameraZoom, cameraType: end.cameraType, cameraFov: end.cameraFov,
+            depthOfField: end.depthOfField, originalDepthOfField: end.originalDepthOfField,
+            cameraPosition: end.cameraPosition, target: end.target,
+            endBounds: end.endBounds, structure: end.structure, finalFiveClearance: tail.clearance };
+        }
+        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, endName, visibleState, clearance,
+          endTray,
           emptyTray: { cameraZoom: empty.cameraZoom, structure: empty.structure } });
+      }
+      let hiddenRightGuard = null;
+      if (isArrayTrayStructure) {
+        await evaluate('window.caseCheck.prepareArrayTray("archive","day","plain")');
+        hiddenRightGuard = await evaluate("window.caseCheck.settleArrayTrayLane(1,9)");
+        const hiddenRight = hiddenRightGuard.composition.lanes.find(value => value.lane === 0);
+        assert.ok(hiddenRight.appearance.alpha < .0001 && hiddenRight.meshes.every(mesh =>
+          mesh.instances.length === 0 || mesh.instances.every(instance => !instance.drawn)),
+        "The fully faded right lane must submit no cases, artwork, labels or tray geometry.");
       }
       const currentState = await evaluate("window.caseCheck.arrayTrayStructureSnapshot()");
       const activeTextureIds = new Set(currentState.parts.flatMap(part => part.meshes.flatMap(mesh =>
@@ -6389,13 +6567,16 @@ async function main() {
       assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
       assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
       assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
-      const report = { ok: true, phase: arrayTrayPhase, combinations, captures, matrixTrayGuard,
+      const report = { ok: true, phase: arrayTrayPhase, structuralFocus: isArrayTrayStructure,
+        captureNotes: isArrayTrayStructure ? "Browse and empty close-up retain high preset effects. Front-end inspection alone temporarily disables depth of field, keeps real geometry/materials/composer, retains the number label, then restores camera/quality/visibility." : null,
+        combinations, captures, matrixTrayGuard, hiddenRightGuard,
         trayTextureDisposals: { watched: currentState.parts.flatMap(part => part.meshes.flatMap(mesh =>
           mesh.materials.flatMap(material => material.textures.map(texture => texture.uuid)))), disposedTextureIds,
           activeDisposedTextureIds }, runtimeErrors, shaderErrors, blockedRoutes };
       await writeFile(path.join(motionOutput, "array-tray-report.json"), JSON.stringify(report, null, 2));
       console.log(JSON.stringify({ ok: true, phase: arrayTrayPhase, combinations: captures.map(value => `${value.design}/${value.theme}/${value.requestedFloor} (effective ${value.effectiveFloor})`),
-        report: `.tools/array-tray/${arrayTrayPhase}/array-tray-report.json`, screenshots: captures.flatMap(value => [value.browseName, value.emptyName]) }, null, 2));
+        report: path.relative(project, path.join(motionOutput, "array-tray-report.json")),
+        screenshots: captures.flatMap(value => [value.browseName, value.emptyName, ...(value.endName ? [value.endName] : [])]) }, null, 2));
       return;
     }
     if (isArrayBump) {

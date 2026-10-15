@@ -84,35 +84,36 @@ export class MusicShelf {
     this.dimensions = next;
 
     const trayWidth = next.width + .22;
-    const trayDepth = Math.max(next.spacing * .98, next.depth + .08);
+    const trayDepth = Math.max(next.spacing * .99, next.depth + .08);
     const halfWidth = trayWidth / 2;
     const base = this.parts[0]!;
-    base.size.set(trayWidth, .035, trayDepth);
-    base.offsets[0]!.set(0, -.0595, 0);
+    base.size.set(trayWidth, .13, trayDepth);
+    base.offsets[0]!.set(0, -.145, 0);
 
     const rims = this.parts[1]!;
-    rims.size.set(.044, .018, trayDepth);
-    rims.offsets[0]!.set(-halfWidth + .015, -.026, 0);
-    rims.offsets[1]!.set(halfWidth - .015, -.026, 0);
+    rims.size.set(.05, .028, trayDepth);
+    rims.offsets[0]!.set(-halfWidth + .08, -.005, 0);
+    rims.offsets[1]!.set(halfWidth - .08, -.005, 0);
 
     const inset = this.parts[2]!;
-    inset.size.set(Math.max(.1, trayWidth - .11), .008, Math.max(.1, trayDepth - .024));
-    inset.offsets[0]!.set(0, -.036, 0);
+    inset.size.set(Math.max(.1, trayWidth - .5), .055, Math.max(.1, trayDepth - .014));
+    inset.offsets[0]!.set(0, -.0525, 0);
 
     const grooves = this.parts[3]!;
-    // A pair of transverse dark sockets sits below the silver slot dividers.
-    grooves.size.set(Math.max(.1, trayWidth - .12), .003, .038);
-    const socketZ = Math.min(trayDepth * .35, next.depth / 2 + .025);
-    grooves.offsets[0]!.set(0, -.030, -socketZ);
-    grooves.offsets[1]!.set(0, -.030, socketZ);
+    // Only the two longitudinal channel mouths are dark in the reference.
+    grooves.size.set(.025, .004, trayDepth);
+    grooves.offsets[0]!.set(-halfWidth + .255, -.024, 0);
+    grooves.offsets[1]!.set(halfWidth - .255, -.024, 0);
 
     const index = this.parts[4]!;
-    index.size.set(.014, .007, .06);
-    index.offsets[0]!.set(-halfWidth + .015, -.012, trayDepth * .42);
+    index.size.set(.012, .004, .035);
+    index.offsets[0]!.set(-halfWidth + .08, .011, trayDepth * .46);
 
     const tick = this.parts[5]!;
-    tick.size.set(Math.max(.1, trayWidth - .11), .007, .012);
-    tick.offsets[0]!.set(0, -.025, trayDepth * .49);
+    // Adjacent source sprites cover their end faces: the assembled deck is
+    // flat. These are flush silver separators, never raised transverse ribs.
+    tick.size.set(Math.max(.1, trayWidth - .14), .0015, .018);
+    tick.offsets[0]!.set(0, -.02375, trayDepth * .49);
 
     for (const part of this.parts) this.updateGeometry(part);
     if (!this.boxDisposed) {
@@ -152,8 +153,8 @@ export class MusicShelf {
     }
     const finish = musicShelfFinish(night, design, palette);
     this.base.color.copy(finish.base);
-    this.base.metalness = archive ? .64 : .42;
-    this.base.roughness = archive ? .38 : .46;
+    this.base.metalness = archive ? .3 : .24;
+    this.base.roughness = .55;
     this.rim.color.copy(finish.rail);
     this.rim.metalness = archive ? .68 : .52;
     this.rim.roughness = archive ? .31 : .27;
@@ -197,9 +198,9 @@ export function musicShelfFinish(night: boolean, design: "rhine" | "archive", pa
   const tint = new THREE.Color(palette?.surface ?? (night ? "#162234" : "#efede7"));
   const metal = (day: string, dark: string) => new THREE.Color(night ? dark : day).lerp(tint, .06);
   return {
-    base: metal(archive ? "#a5adb1" : "#b9c1c4", "#4d5a68"),
+    base: archive && !night ? new THREE.Color("#4b5b72") : metal("#b9c1c4", "#4d5a68"),
     rail: metal(archive ? "#d1d7db" : "#dce2e5", "#8e9faf"),
-    bed: metal(archive ? "#707679" : "#8b969b", "#303d4b"),
+    bed: metal(archive ? "#a3a7aa" : "#b4bec3", "#404d5a"),
     channel: metal("#282e33", "#101923"),
   };
 }
