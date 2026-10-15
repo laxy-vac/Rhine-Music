@@ -1254,6 +1254,8 @@ export class ArchiveScene {
       : { lane: canonical.lane, row: canonical.row };
     const changed = !sameCell(cell, this.selectedCell) || (this.catalogView && cell.foobarEntryKey !== this.selectedCell.foobarEntryKey);
     if (musicLibrary && changed) this.musicPresentation.selectionChanged();
+    if (this.shelfView && changed && this.musicArchiveInteractive && !this.musicPresentation.holdsDetail && cell.foobarEntryKey)
+      this.arrayCaseMotion.selectionChanged(cell.foobarEntryKey, cell.lane, cell.row);
     if (this.looping && changed && this.loaded && this.lift.value > 0.0001) {
       const group = this.model.clone(true);
       this.rhineInfo?.snapshot(group);
@@ -1757,9 +1759,9 @@ export class ArchiveScene {
         .filter(cell => cell.foobarEntryKey && this.recordAtCell(cell) >= 0)
         .map(cell => ({ key: cell.foobarEntryKey!, lane: cell.lane, row: cell.row }));
       const hoverSelected = this.hoveredEntryKey !== undefined && this.hoveredEntryKey === this.selectedCell.foobarEntryKey &&
-        this.musicPresentation.phase === "archive" && !this.targetDetail && !this.dragging;
+        this.musicArchiveInteractive && !this.targetDetail && !this.dragging;
       this.arrayCaseMotion.step(motionCells, this.selectedCell.foobarEntryKey ?? "", selectedLane, selectedRow,
-        this.quality.wave, hoverSelected, dt, this.reduced);
+        this.quality.wave, hoverSelected, dt, this.reduced, this.musicArchiveInteractive && !this.targetDetail);
     }
     this.pulses = this.pulses.filter((p) => time - p.time < 3.2);
     const aligningCopy = this.outgoing.some((o) => o.returnY !== null);
@@ -1979,7 +1981,7 @@ export class ArchiveScene {
       const { row, lane } = this.cells[i];
       const rowAppearance = laneAppearance(lane);
       if (this.recordAtCell(this.cells[i]) >= 0) lastRenderable = i;
-      const slope = field(row + 0.5, lane) - field(row - 0.5, lane);
+      const slope = localArray ? 0 : field(row + 0.5, lane) - field(row - 0.5, lane);
       this.dummy.position.set(
         p.x - trackX,
         p.y + field(row, lane),

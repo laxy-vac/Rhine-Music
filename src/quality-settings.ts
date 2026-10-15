@@ -1,4 +1,5 @@
-import { trUi, ui } from "./i18n";
+import { trUi, ui, uiLanguage } from "./i18n";
+import type { MusicLayout } from "./music-view-settings";
 import {
   matchingPreset,
   presetLabels,
@@ -25,9 +26,36 @@ function range(
 ) {
   return `<label class="quality-control quality-range"><span>${label}<small>${hint}</small></span><div><input type="range" data-quality="${key}" aria-label="${label}" min="${min}" max="${max}" step="5" value="${quality[key]}"/><output data-quality-output="${key}">${quality[key]}%</output></div></label>`;
 }
-export function qualityMarkup(quality: RenderQuality, design?: "rhine" | "archive") {
+export function qualityMarkup(
+  quality: RenderQuality,
+  design?: "rhine" | "archive",
+  layout?: MusicLayout,
+) {
   const preset = matchingPreset(quality);
   const archiveWave = design === "archive";
+  const shelfArray = layout === "shelf";
+  const english = uiLanguage() === "en";
+  const waveLabel = shelfArray
+    ? trUi("水波强度")
+    : trUi(archiveWave ? "水波强度" : "波动效果");
+  const waveHint = shelfArray
+    ? english
+      ? "Only the current column ripples; the strongest setting adds echoes from both ends."
+      : "仅当前列起伏；强烈档包含首尾回波。"
+    : trUi(archiveWave ? "阵列仅当前排起伏，矩阵保留连续波动。" : "调整唱片的传播和待机起伏");
+  const waveChoices: (readonly [string, string])[] = shelfArray
+    ? [
+        ["off", english ? "Selected only" : "仅抬起"],
+        ["basic", trUi("轻柔")],
+        ["reduced", trUi("适中")],
+        ["full", english ? "Strong · Echo" : "强烈 · 回波"],
+      ]
+    : [
+        ["off", trUi("关闭")],
+        ["basic", trUi(archiveWave ? "轻柔" : "近邻")],
+        ["reduced", trUi(archiveWave ? "适中" : "平衡")],
+        ["full", trUi(archiveWave ? "强烈" : "完整")],
+      ];
   return ui`<section class="quality-settings" aria-label="画质设置">
     <div class="quality-heading"><h3>RENDER QUALITY <span>渲染画质</span></h3><select id="quality-preset" aria-label="画质预设">${(Object.keys(presetLabels) as QualityPreset[]).map((key) => `<option value="${key}" ${preset === key ? "selected" : ""}>${presetLabels[key]}</option>`).join("")}<option value="custom" disabled ${preset === "custom" ? "selected" : ""}>自定义</option></select></div>
     <p class="quality-summary" id="quality-summary" aria-live="polite"></p>
@@ -36,14 +64,9 @@ export function qualityMarkup(quality: RenderQuality, design?: "rhine" | "archiv
     ${select(
       quality,
       "wave",
-      trUi(archiveWave ? "水波强度" : "波动效果"),
-      trUi(archiveWave ? "阵列仅当前排起伏，矩阵保留连续波动。" : "调整唱片的传播和待机起伏"),
-      [
-        ["off", trUi("关闭")],
-        ["basic", trUi(archiveWave ? "轻柔" : "近邻")],
-        ["reduced", trUi(archiveWave ? "适中" : "平衡")],
-        ["full", trUi(archiveWave ? "强烈" : "完整")],
-      ],
+      waveLabel,
+      waveHint,
+      waveChoices,
     )}
     ${select(
       quality,

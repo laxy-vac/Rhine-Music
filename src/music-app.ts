@@ -1848,7 +1848,7 @@ function renderThemePage() {
   caseEditor = undefined;
   content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme);
   content.querySelector(".music-style-heading")?.insertAdjacentHTML("afterend", windowAspectMarkup(preferences.windowAspect));
-  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design));
+  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design, musicApplication.view.layout));
   cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#theme-quality-slot")!, {
     getStyle: () => preferences.style,
     getTheme: () => preferences.theme === "night" ? "night" : "day",
