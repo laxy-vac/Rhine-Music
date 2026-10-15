@@ -471,6 +471,14 @@ try {
         show:field('show'),group:field('group'),sort:field('sort'),pageSizeButtons:root.querySelectorAll('[data-music-grid-size]').length,
         pageSizeVisible:!!size&&size.getClientRects().length>0&&getComputedStyle(size).display!=='none',pagerVisible:!!pager&&pager.getClientRects().length>0,
         track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey};})()`);
+    const punkLayoutMarkers=()=>evaluate(`(()=>{
+      const toolbar=document.querySelector('.foobar-catalog-toolbar'),buttons=[...toolbar.querySelectorAll('[data-music-layout]')];
+      const transparent=color=>color==='transparent'||/\\,\\s*0(?:\\.0+)?\\)$|\\/\\s*0(?:\\.0+)?\\s*\\)$/.test(color);
+      const markers=buttons.map(button=>{const marker=button.querySelector('.foobar-layout-mark');if(!marker)return null;const style=getComputedStyle(marker);
+        return{layout:button.dataset.musicLayout,selected:button.getAttribute('aria-pressed')==='true',ariaHidden:marker.getAttribute('aria-hidden'),background:style.backgroundColor,borderColor:style.borderColor,borderWidth:style.borderWidth,hollow:transparent(style.backgroundColor)&&parseFloat(style.borderWidth)>0};});
+      return{buttonCount:buttons.length,markerCount:toolbar.querySelectorAll('.foobar-layout-mark').length,allPresent:markers.every(Boolean),markers,
+        selected:markers.find(marker=>marker?.selected),inactive:markers.filter(marker=>marker&&!marker.selected),
+        otherButtonsUnmarked:[...toolbar.querySelectorAll('button:not([data-music-layout])')].every(button=>!button.querySelector('.foobar-layout-mark'))};})()`);
     const controlSnapshots=[];
     for(const design of ['rhine','archive']) {
       await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
@@ -485,10 +493,24 @@ try {
         assert.equal(state.pageSizeVisible,layout==='grid',`${design}: per-page options are visible only in Grid.`);
         assert.equal(state.pagerVisible,layout==='grid',`${design}: page navigation is visible only in Grid.`);
         assert.equal(state.track,'fixture-flac');assert.equal(state.entry,'track|fixture-album|fixture-flac');
-        controlSnapshots.push({design,layout,...state});
+        let layoutMarkers;
+        if(design==='archive') {
+          layoutMarkers=await punkLayoutMarkers();
+          assert.equal(layoutMarkers.buttonCount,3);assert.equal(layoutMarkers.markerCount,3);assert.equal(layoutMarkers.allPresent,true);
+          assert.equal(layoutMarkers.selected?.layout,layout);assert.equal(layoutMarkers.selected?.ariaHidden,'true');
+          assert.equal(layoutMarkers.selected?.background,'rgb(255, 138, 0)',`Punk ${layout} marker fills with orange.`);
+          assert.equal(layoutMarkers.selected?.borderColor,'rgb(255, 138, 0)');
+          assert.equal(layoutMarkers.inactive.length,2);assert.ok(layoutMarkers.inactive.every(marker=>marker.ariaHidden==='true'&&marker.hollow),
+            `Punk unselected layout markers remain hollow squares: ${JSON.stringify(layoutMarkers.inactive)}`);
+          assert.equal(layoutMarkers.otherButtonsUnmarked,true,'Only Punk LAYOUT buttons carry the marker.');
+        }
+        controlSnapshots.push({design,layout,...state,...(layoutMarkers?{layoutMarkers}:{})});
       }
     }
 
+    const layoutClip=await evaluate(`(()=>{const r=document.querySelector('.foobar-catalog-toolbar [data-field="layout"]').getBoundingClientRect();return{x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.right)-Math.floor(r.x),height:Math.ceil(r.bottom)-Math.floor(r.y),scale:2};})()`);
+    const layoutImage=await command('Page.captureScreenshot',{format:'png',clip:layoutClip});
+    await writeFile(path.join(output,'punk-layout-indicator.png'),Buffer.from(layoutImage.data,'base64'));
     const browseFieldSnapshots=[];
     for(const [design,values] of [['rhine',{show:'tracks',group:'artist',sort:'title'}],['archive',{show:'albums',group:'decade',sort:'added'}]]) {
       await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
@@ -516,31 +538,37 @@ try {
       assert.equal(state.sort,'added',`${design}: SORT state follows theme changes.`);assert.equal(state.layout,'grid',`${design}: LAYOUT state follows theme changes.`);
     }
 
+    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const futureInlineFilter=await evaluate(`(()=>{const tools=document.querySelector('.music-browse-tools');return{
+      searchInput:!!tools.querySelector('input[type="search"]'),catalogQueryInput:!!tools.querySelector('input[data-music-catalog-query]'),
+      legacyFilterLabel:!!tools.querySelector('label.music-browse-tools__filter'),gridTotal:!!tools.querySelector('.music-grid-total[data-music-grid-total]')};})()`);
+    assert.equal(futureInlineFilter.searchInput,false,'Future browse tools have no dedicated search input.');
+    assert.equal(futureInlineFilter.catalogQueryInput,false,'Future browse tools have no dedicated catalog-query input.');
+    assert.equal(futureInlineFilter.legacyFilterLabel,false,'Future browse tools have no removed filter label.');
+    assert.equal(futureInlineFilter.gridTotal,true,'Future GRID keeps its third-row total.');
+
     const filterSnapshots=[];
-    for(const design of ['rhine','archive']) {
-      await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
-      const selector=design==='rhine'?'.music-browse-tools__filter input[data-music-catalog-query]':'.foobar-header-search';
-      const inputSelector=JSON.stringify(selector);
-      await evaluate(`(()=>{const input=document.querySelector(${inputSelector});if(!input)throw new Error('${design} filter control is missing');input.value='no-match';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-      await new Promise(resolve=>setTimeout(resolve,240));
-      const empty=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
-        track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
-      assert.equal(empty.query,'no-match',`${design}: filter input applies the query.`);assert.equal(empty.cards,0,`${design}: an empty filter produces no grid cards.`);
-      assert.equal(empty.track,'fixture-flac');assert.equal(empty.entry,'track|fixture-album|fixture-flac');
-      await evaluate(`(()=>{const input=document.querySelector(${inputSelector});input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-      await new Promise(resolve=>setTimeout(resolve,240));
-      const restored=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
-        track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
-      assert.equal(restored.query,'');assert.ok(restored.cards>0,`${design}: clearing an empty filter restores catalog cards.`);
-      assert.equal(restored.track,'fixture-flac');assert.equal(restored.entry,'track|fixture-album|fixture-flac');
-      filterSnapshots.push({design,empty,restored});
-    }
-    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();const input=document.querySelector('.music-browse-tools__filter input[data-music-catalog-query]');input.value='Needle';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await evaluate(`(()=>{fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const punkFilterSelector=JSON.stringify('.foobar-header-search');
+    await evaluate(`(()=>{const input=document.querySelector(${punkFilterSelector});if(!input)throw new Error('Punk header filter control is missing');input.value='no-match';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await new Promise(resolve=>setTimeout(resolve,240));
-    const escapeFilter=await evaluate(`(()=>{const input=document.querySelector('.music-browse-tools__filter input[data-music-catalog-query]'),routeBefore=fixture.coverInspection?.at(-1),event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});input.dispatchEvent(event);
+    const empty=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
+      track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
+    assert.equal(empty.query,'no-match','Punk header search applies the shared catalog query.');assert.equal(empty.cards,0,'An empty filter produces no grid cards.');
+    assert.equal(empty.track,'fixture-flac');assert.equal(empty.entry,'track|fixture-album|fixture-flac');
+    await evaluate(`(()=>{const input=document.querySelector(${punkFilterSelector});input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(resolve=>setTimeout(resolve,240));
+    const restored=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
+      track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
+    assert.equal(restored.query,'');assert.ok(restored.cards>0,'Clearing an empty filter restores catalog cards.');
+    assert.equal(restored.track,'fixture-flac');assert.equal(restored.entry,'track|fixture-album|fixture-flac');
+    filterSnapshots.push({design:'archive',empty,restored});
+    await evaluate(`(()=>{const input=document.querySelector(${punkFilterSelector});input.value='Needle';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(resolve=>setTimeout(resolve,240));
+    const escapeFilter=await evaluate(`(()=>{const input=document.querySelector(${punkFilterSelector}),routeBefore=fixture.coverInspection?.at(-1),event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});input.dispatchEvent(event);
       return {mode:fixture.musicApplication.mode,query:fixture.musicApplication.query,value:input.value,prevented:event.defaultPrevented,routeBefore,routeAfter:fixture.coverInspection?.at(-1)};})()`);
-    assert.equal(escapeFilter.mode,'archive');assert.equal(escapeFilter.query,'');assert.equal(escapeFilter.value,'');assert.equal(escapeFilter.prevented,true);
-    assert.equal(escapeFilter.routeAfter,escapeFilter.routeBefore,'Clearing a browse query must not trigger archive navigation.');
+    assert.equal(escapeFilter.mode,'archive');assert.equal(escapeFilter.query,'');assert.equal(escapeFilter.value,'');
+    assert.equal(escapeFilter.routeAfter,escapeFilter.routeBefore,'Clearing Punk header search must not trigger archive navigation.');
 
     const sortAliases=[];
     for(const [value,group,sort] of [['album','none','title'],['genre','genre','artist'],['artist','artist','title']]) {
@@ -637,12 +665,17 @@ try {
         const rowGroupRights=groupsByRow.map(groups=>Math.max(0,...groups.map(group=>group.right)));
         const controls=[...tools.querySelectorAll('button,input')].map(control=>{const b=control.getBoundingClientRect();return{tag:control.tagName,field:control.closest('[data-field]')?.dataset.field||control.dataset.musicBrowseField||control.dataset.foobarCatalog||control.dataset.musicLayout,
           x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height,visible:getComputedStyle(control).display!=='none'&&b.width>0&&b.height>0};});
-        const filter=future?tools.querySelector('input[data-music-catalog-query]'):document.querySelector('.foobar-header-search'),fr=filter?.getBoundingClientRect();
+        const total=future?tools.querySelector('.music-grid-total[data-music-grid-total]'):null,tr=total?.getBoundingClientRect(),grid=document.querySelector('.music-catalog-grid-host'),gr=grid?.getBoundingClientRect();
         return {design:fixture.stage.dataset.design,visible:getComputedStyle(tools).display!=='none'&&r.width>0&&r.height>0,
           rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height},rows,
           rowFields:[fields(rowElements[0],'show')&&fields(rowElements[0],'pageSize')&&fields(rowElements[0],'layout')&&layoutInFirstRow===3&&pageSizeInFirstRow===6,fields(rowElements[1],'group')&&fields(rowElements[1],'sort')],
           groupsByRow,rowGroupRights,controls,allControlsVisible:controls.length>0&&controls.every(control=>control.visible&&control.x>=-1&&control.right<=innerWidth+1),
-          filterVisible:!!filter&&getComputedStyle(filter).display!=='none'&&!!fr&&fr.width>0&&fr.height>0,
+          punkHeaderFilterVisible:!future&&(()=>{const input=document.querySelector('.foobar-header-search'),b=input?.getBoundingClientRect();return !!input&&getComputedStyle(input).display!=='none'&&!!b&&b.width>0&&b.height>0;})(),
+          futureInlineSearch:future&&!!tools.querySelector('input[type="search"]'),futureCatalogQuery:future&&!!tools.querySelector('input[data-music-catalog-query]'),
+          futureLegacyFilterLabel:future&&!!tools.querySelector('label.music-browse-tools__filter'),
+          futureGridTotal:future&&total?{visible:getComputedStyle(total).display!=='none'&&!!tr&&tr.width>0&&tr.height>0,
+            rect:{x:tr.x,y:tr.y,right:tr.right,bottom:tr.bottom,width:tr.width,height:tr.height},position:getComputedStyle(total).position,
+            gridTop:gr?.top}:null,
           layoutCount,layoutInFirstRow,pageSizeCount,pageSizeInFirstRow,infoRect:{x:ir.x,y:ir.y,right:ir.right,bottom:ir.bottom,width:ir.width,height:ir.height},
           groupOverlapsInfo:groupRects.some(group=>overlap({x:group.x,right:group.right,y:group.y,bottom:group.bottom},{x:ir.x,right:ir.right,y:ir.y,bottom:ir.bottom})),
           randomRect:rr?{x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height}:null,
@@ -657,7 +690,15 @@ try {
       assert.deepEqual(geometry.rowFields,[true,true],`${design}: SHOW/LAYOUT and GROUP/SORT occupy the two prescribed rows.`);
       assert.equal(geometry.rows.length,2);assert.ok(geometry.rows[1].y>=geometry.rows[0].bottom-1,`${design}: toolbar rows must not overlap.`);
       assert.equal(geometry.allControlsVisible,true,`${design}: every visible toolbar control remains inside the viewport: ${JSON.stringify(geometry.controls)}`);
-      assert.equal(geometry.filterVisible,true,`${design}: the active theme exposes its catalog filter.`);
+      if(design==='rhine') {
+        assert.equal(geometry.futureInlineSearch,false,'Future browse tools have no dedicated search input.');
+        assert.equal(geometry.futureCatalogQuery,false,'Future browse tools have no dedicated catalog-query input.');
+        assert.equal(geometry.futureLegacyFilterLabel,false,'Future browse tools have no removed filter label.');
+        assert.ok(geometry.futureGridTotal?.visible,`Future grid subtotal is visible: ${JSON.stringify(geometry.futureGridTotal)}`);
+        assert.ok(geometry.futureGridTotal.rect.y>=geometry.rows[1].bottom-1,`Future grid subtotal sits below row two: ${JSON.stringify(geometry.futureGridTotal)}`);
+        assert.ok(geometry.futureGridTotal.rect.bottom<=geometry.futureGridTotal.gridTop+1,`Future grid subtotal does not cover the catalog: ${JSON.stringify(geometry.futureGridTotal)}`);
+        assert.notEqual(geometry.futureGridTotal.position,'absolute','Future grid subtotal stays in normal layout flow.');
+      } else assert.equal(geometry.punkHeaderFilterVisible,true,'Punk keeps the actual header search control.');
       for(const group of geometry.groupsByRow.flat())assert.equal(group.visible,true,`${design}: ${group.field} group must be visible: ${JSON.stringify(group)}`);
       if(design==='rhine')assert.equal(geometry.futureLeft,true,`Future toolbar stays in the upper-left: ${JSON.stringify(geometry.rect)}`);
       else {
@@ -898,7 +939,7 @@ try {
     const paginationScreenshotPaths={punkFirstPage:firstGridScreenshot,futureFirstPage:futureGridScreenshot,
       punkFirstPageDay:punkDayGridScreenshot,futureFirstPageDay:futureDayGridScreenshot,punkSelectedPage:selectedGridScreenshot};
     await writeFile(path.join(output,'display-controls.json'),JSON.stringify({viewport:{width:1920,height:1080},stylePageChecks,layoutControls:controlSnapshots,
-      browseFields:browseFieldSnapshots,filters:filterSnapshots,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots,
+      browseFields:browseFieldSnapshots,filters:filterSnapshots,futureInlineFilter,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots,
       gridPagination:{fixture:gridPagination,punkDefault:punkGridStart,punkFirstCover:firstSelectedCover,punkCrossing:crossingPage,nextFocusAfterPaging,lastPageFocus,
         punkSelected:selectedLaterTrack,punkSelectedCover:selectedLaterCover,pageSizeClicks,pageSizeSync:{future:futureSync,punk:punkSizeSync},futureFirst:futureGridFirst,futureSelectedCard,
         show:{albums:albumShow,tracks:trackShow},filtered:filteredGrid,cleared:clearedGrid,detail:selectedDetail,screenshots:paginationScreenshotPaths}},null,2));

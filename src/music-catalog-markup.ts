@@ -34,7 +34,7 @@ export function musicCatalogToolsMarkup(): string {
     ["group", "GROUP", choices.group],
     ["sort", "SORT", choices.sort],
   ] as const).map(([field, heading, options]) => `<div class="foobar-tool-group foobar-catalog-control" data-field="${field}" role="group" aria-label="${heading}"><small>${heading}</small><div>${options.map(([value, label]) =>
-    `<button type="button" ${field === "layout" ? `data-music-layout="${value}"` : `data-foobar-catalog="${field}" data-value="${value}"`} aria-pressed="${view[field] === value}">${label}</button>`
+    `<button type="button" ${field === "layout" ? `data-music-layout="${value}"` : `data-foobar-catalog="${field}" data-value="${value}"`} aria-pressed="${view[field] === value}">${field === "layout" ? '<span class="foobar-layout-mark" aria-hidden="true"></span>' : ""}${label}</button>`
   ).join("")}</div></div>`);
   return `<div class="foobar-catalog-total">${page.total} ${unit}</div><button type="button" class="foobar-random" data-action="foobar-random" aria-keyshortcuts="R"><svg viewBox="0 0 10 10" aria-hidden="true"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor"/><path d="M2 2h2v2H2zM4 4h2v2H4zM6 6h2v2H6z" fill="var(--accent)"/></svg><span>RANDOM PICK</span><kbd>R</kbd></button><div class="foobar-catalog-toolbar"><div class="foobar-catalog-toolbar__row">${controls[0]}${perPage}${controls[1]}</div><div class="foobar-catalog-toolbar__row">${controls[2]}${controls[3]}</div></div>`;
 }

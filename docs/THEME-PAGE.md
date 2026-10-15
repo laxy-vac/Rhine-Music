@@ -45,7 +45,7 @@ Archive从EQ/歌词/信号/主题等同窗口页面返回原唱片上下文，�
 | SORT | ARTIST / TITLE / YEAR / ADDED |
 | PER PAGE（仅GRID） | 10 / 36 / 50 / 75 / 100 / 200；默认36 |
 
-Punk浏览页右上角按SHOW+LAYOUT、GROUP+SORT分两行；Future浏览页左上角提供相同两行，并在下方提供紧凑查询输入。GRID时Punk改为SHOW+PER PAGE+LAYOUT第一行、GROUP+SORT第二行，RANDOM位于第二行，左上角显示当前目录结果总数；Future GRID保留自己的左上布局，同时提供PER PAGE、当前结果总数和查询。离开GRID时两主题都隐藏PER PAGE。Punk查询复用顶栏SEARCH ARCHIVE。两主题调用同一公共view/query，切换主题保留当前状态；设置 → 音乐库的旧排列入口继续作为公共view别名，文案指向浏览工具栏。STYLE不再显示“视图与浏览”区，只集中外观、盒体和画质设置。
+Punk浏览页右上角按SHOW+LAYOUT、GROUP+SORT分两行；LAYOUT选中显示固定橙色点、未选为空心框。Future浏览页左上角提供相同两行。GRID时Punk改为SHOW+PER PAGE+LAYOUT第一行、GROUP+SORT第二行，RANDOM位于第二行，左上角显示当前目录结果总数；Future GRID保留自己的左上布局，同时提供PER PAGE及当前结果总数。离开GRID时两主题都隐藏PER PAGE。Punk查询复用顶栏SEARCH ARCHIVE。两主题调用同一公共view/query，切换主题保留当前状态；设置 → 音乐库的旧排列入口继续作为公共view别名，文案指向浏览工具栏。STYLE不再显示“视图与浏览”区，只集中外观、盒体和画质设置。
 
 Punk GRID呈现纯106px方形封面墙，间距约26px；选中项为黑色细框与accent四角。标题和资料仅在右栏、卡片无障碍名称及hover信息中提供，不落在封面墙卡片上。
 
@@ -68,8 +68,8 @@ Punk SETTINGS紧跟时钟，不auto margin推到最右；顶栏保留溢出访�
 正面操作终端用层级高度/阴影、高光、透明、磨砂和细腻色变形成悬浮感；光向跟唱片场景，自发光可用有限局部光影响邻近部件。当前是屏幕空间/局部光近似，不是全局光线追踪。背景不新增墙板、隔断或无含义立体物件。
 
 - 胶囊播放条、轻透导航/时钟、清晰PROFILE层级。
-- 唱片资料直接以悬浮文字和细规则线呈现，移除右侧整块圆角玻璃底；ACCESS ALBUM保留小号文字/箭头及原打开操作与无障碍名称，不画外框或悬停底板。左上浏览工具栏分两行提供SHOW+LAYOUT、GROUP+SORT，下方为紧凑查询输入。借上游版式/揭示语言，保留专辑名、歌手、音质徽标、PROFILE、歌单和介绍等现有音乐内容。
-- GRID保留Future原136px圆角文字卡片与原主题皮肤；左上工具栏在GRID提供PER PAGE、总数和查询，非GRID隐藏PER PAGE。
+- 唱片资料直接以悬浮文字和细规则线呈现，移除右侧整块圆角玻璃底；ACCESS ALBUM保留小号文字/箭头及原打开操作与无障碍名称，不画外框或悬停底板。左上浏览工具栏分两行提供SHOW+LAYOUT、GROUP+SORT，不设置额外筛选输入框。借上游版式/揭示语言，保留专辑名、歌手、音质徽标、PROFILE、歌单和介绍等现有音乐内容。
+- GRID保留Future原136px圆角文字卡片与原主题皮肤；左上工具栏在GRID提供PER PAGE和总数，非GRID隐藏PER PAGE。
 - 歌词共同三栏，中央独立阅读面、两侧开放。
 - EQ浮起模块、旋钮/推子/读数，不复制Punk硬黑块。
 - 信号保留大环/既有尺寸，不加厚重外围框。

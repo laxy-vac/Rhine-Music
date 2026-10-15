@@ -579,7 +579,7 @@ stage.addEventListener("lyrics-settings-updated", () => {
   settingsSelectControls?.destroy();
   settingsSelectControls = enhanceSettingsSelectControls($("#settings-page-content"));
 });
-$("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view, musicApplication.query));
+$("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view));
 $(".open-album").setAttribute("aria-label", uiLanguage() === "en" ? "Open album" : "打开专辑");
 const titleMotion = setupMusicTitleLayout(stage);
 const albumPanel = setupAlbumPanel(stage, () => preferences.reduced);
@@ -3575,7 +3575,6 @@ function refreshFoobarSceneForLayoutChange() {
   scene?.setMusicStyle(preferences.style);
   void scene?.setCaseSettings(caseProfiles[preferences.style.design]).catch(error => notify((error as Error).message));
 }
-let musicFilterTimer: ReturnType<typeof setTimeout> | undefined;
 function syncMusicCatalogView() {
   const view = musicApplication.view;
   const code = preferences.style.design === "archive" ? "SHELF"
@@ -3597,7 +3596,7 @@ function syncMusicCatalogView() {
   stage.dataset.musicLayout = scene?.musicDisplayLayout.effective ?? view.layout;
   catalogGrid?.setDesign(preferences.style.design);
   catalogGrid?.update(view.layout, musicApplication.selectedIndex, musicApplication.mode === "detail");
-  syncMusicViewControls(stage, view, musicApplication.query, getMusicGridPage().total);
+  syncMusicViewControls(stage, view, getMusicGridPage().total);
   settingsSelectControls?.sync();
 }
 function musicArrangementPreset(): MusicSortMode | "custom" {
@@ -3947,11 +3946,6 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("input", (e) => {
   const el = e.target as HTMLInputElement;
-  if (el.hasAttribute("data-music-catalog-query")) {
-    clearTimeout(musicFilterTimer);
-    musicFilterTimer = setTimeout(() => applyMusicView({}, el.value), 180);
-    return;
-  }
   if (el.dataset.processingField && el.type === "range") {
     updateProcessingField(el);
   }
@@ -3993,11 +3987,6 @@ document.addEventListener("keydown", event => {
 });
 document.addEventListener("change", (e) => {
   const control = e.target as HTMLInputElement | HTMLSelectElement;
-  if (control.hasAttribute("data-music-catalog-query")) {
-    clearTimeout(musicFilterTimer);
-    applyMusicView({}, control.value);
-    return;
-  }
   if (control.hasAttribute("data-processing-rate-choice")) {
     if (control.disabled) return;
     if (control.value === "custom") {
@@ -4146,13 +4135,6 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     if (e.key === "Delete") { e.preventDefault(); adjustLibraryRoots("library-remove-folder"); return; }
-  }
-  if (!panel && page === "music" && !e.ctrlKey && !e.metaKey && !e.altKey &&
-      (e.key === "Enter" || e.key === "Escape") && (e.target as HTMLElement).hasAttribute("data-music-catalog-query")) {
-    e.preventDefault();
-    const input = e.target as HTMLInputElement;
-    if (e.key === "Escape") input.value = "";
-    clearTimeout(musicFilterTimer);applyMusicView({}, input.value);return;
   }
   if (e.key === "Escape") {
     e.preventDefault();

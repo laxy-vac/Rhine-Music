@@ -51,9 +51,6 @@
 }
 
 .music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools .music-grid-total {
-  position: absolute;
-  bottom: 6px;
-  left: 0;
   display: block;
   color: var(--muted);
   font-size: 8px;
@@ -148,38 +145,7 @@
   content: "";
 }
 
-.music-browse-tools__filter {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 190px);
-  justify-self: end;
-  align-items: center;
-  gap: 9px;
-  width: min(100%, 300px);
-  color: var(--muted);
-}
-
-.music-browse-tools__filter > small {
-  font-size: 8px;
-  letter-spacing: 0.08em;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.music-browse-tools__filter input {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  min-height: 27px;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-  border-radius: 2px;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--surface) 58%, transparent);
-  font: inherit;
-  font-size: 10px;
-}
-
-.music-browse-tools :is(button, input):focus-visible {
+.music-browse-tools button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -217,9 +183,4 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .music-browse-tools__filter {
-    justify-self: stretch;
-    grid-template-columns: max-content minmax(0, 1fr);
-    width: 100%;
-  }
 }

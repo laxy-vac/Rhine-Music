@@ -345,5 +345,5 @@
   .music-app[data-design="archive"] .foobar-home-navigation #album-ticks { --tick-gap:4px; }
 }
 .music-app[data-design="archive"] .foobar-layout-mark { display:inline-block;width:7px;height:7px;margin-right:7px;border:1px solid currentColor;vertical-align:1px; }
-.music-app[data-design="archive"] [data-foobar-catalog="layout"][aria-pressed="true"] .foobar-layout-mark { border-color:var(--accent);background:var(--accent); }
+.music-app[data-design="archive"] [data-music-layout][aria-pressed="true"] .foobar-layout-mark { border-color:#ff8a00;background:#ff8a00; }
 .music-app[data-design="archive"] .foobar-cover-image { display:block;width:100%;height:100%;max-width:100%;object-fit:cover; }
