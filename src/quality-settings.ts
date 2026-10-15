@@ -40,15 +40,15 @@ export function qualityMarkup(
     : trUi(archiveWave ? "水波强度" : "波动效果");
   const waveHint = shelfArray
     ? english
-      ? "Only the current column ripples; the strongest setting adds echoes from both ends."
-      : "仅当前列起伏；强烈档包含首尾回波。"
+      ? "One local rise; higher settings lift more neighboring albums in the current column."
+      : "单凸起；档位越高，同列带起的前后专辑越多。"
     : trUi(archiveWave ? "阵列仅当前排起伏，矩阵保留连续波动。" : "调整唱片的传播和待机起伏");
   const waveChoices: (readonly [string, string])[] = shelfArray
     ? [
         ["off", english ? "Selected only" : "仅抬起"],
         ["basic", trUi("轻柔")],
         ["reduced", trUi("适中")],
-        ["full", english ? "Strong · Echo" : "强烈 · 回波"],
+        ["full", trUi("强烈")],
       ]
     : [
         ["off", trUi("关闭")],

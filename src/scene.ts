@@ -1254,8 +1254,6 @@ export class ArchiveScene {
       : { lane: canonical.lane, row: canonical.row };
     const changed = !sameCell(cell, this.selectedCell) || (this.catalogView && cell.foobarEntryKey !== this.selectedCell.foobarEntryKey);
     if (musicLibrary && changed) this.musicPresentation.selectionChanged();
-    if (this.shelfView && changed && this.musicArchiveInteractive && !this.musicPresentation.holdsDetail && cell.foobarEntryKey)
-      this.arrayCaseMotion.selectionChanged(cell.foobarEntryKey, cell.lane, cell.row);
     if (this.looping && changed && this.loaded && this.lift.value > 0.0001) {
       const group = this.model.clone(true);
       this.rhineInfo?.snapshot(group);
@@ -1761,7 +1759,7 @@ export class ArchiveScene {
       const hoverSelected = this.hoveredEntryKey !== undefined && this.hoveredEntryKey === this.selectedCell.foobarEntryKey &&
         this.musicArchiveInteractive && !this.targetDetail && !this.dragging;
       this.arrayCaseMotion.step(motionCells, this.selectedCell.foobarEntryKey ?? "", selectedLane, selectedRow,
-        this.quality.wave, hoverSelected, dt, this.reduced, this.musicArchiveInteractive && !this.targetDetail);
+        this.quality.wave, hoverSelected, dt, this.reduced);
     }
     this.pulses = this.pulses.filter((p) => time - p.time < 3.2);
     const aligningCopy = this.outgoing.some((o) => o.returnY !== null);

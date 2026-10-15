@@ -6,14 +6,14 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const output = path.join(project, ".tools", "array-echo");
+const output = path.join(project, ".tools", "array-bump");
 const bundled = await build({
   stdin: { contents: 'export * from "./src/music-array-motion.ts";',
     resolveDir: project, sourcefile: "punk-array-motion-check.ts" },
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
 });
 const { MusicArrayMotion: PunkArrayMotion, MusicArrayCaseMotion, ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT,
-  ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance, arrayRackWave } = await import("data:text/javascript;base64," + Buffer.from(bundled.outputFiles[0].text).toString("base64"));
+  ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } = await import("data:text/javascript;base64," + Buffer.from(bundled.outputFiles[0].text).toString("base64"));
 const first = 12;
 const motion = new PunkArrayMotion(first);
 const keys = ["shelf-a", "shelf-b", "shelf-c", "shelf-d"];
@@ -79,174 +79,144 @@ for (const expected of expectedAppearance) {
 assert.equal(arrayLaneAppearance(4, 0).alpha, 0, "The former column on the right is fully hidden.");
 assert.equal(arrayLaneAppearance(1, 1).alpha, 1, "Changing focus carries the tint/fade window with the selected column.");
 
-assert.ok(Math.abs(ARRAY_SELECTED_EXTRA_LIFT + ARRAY_SELECTED_BELL_LIFT - 2.098) < 1e-12, "Selection keeps the original persistent bell and extra lift.");
-assert.equal(ARRAY_SELECTED_BELL_LIFT, arrayNeighborLift(0));
+assert.ok(Math.abs(ARRAY_SELECTED_EXTRA_LIFT + ARRAY_SELECTED_BELL_LIFT - 2.098) < 1e-12,
+  "The original global selected lift stays unchanged.");
+assert.ok(Math.abs(ARRAY_SELECTED_BELL_LIFT - .748) < 1e-12, "The local selected-case bump stays fixed at 0.748.");
+assert.equal(arrayNeighborLift(0, "off"), ARRAY_SELECTED_BELL_LIFT, "The selected center remains full height at every quality level.");
 assert.equal(ARRAY_HOVER_LIFT, .5);
 const cells = [0, 1].flatMap(lane => Array.from({ length: 20 }, (_, slot) => ({ key: lane + ":" + slot, lane, row: 12 + slot })));
 const dt = 1 / 60;
-const snapshot = (caseMotion, lane = 0) => cells.filter(cell => cell.lane === lane)
+const levels = [
+  { level: "off", radius: 0 }, { level: "basic", radius: 1 },
+  { level: "reduced", radius: 2 }, { level: "full", radius: 4 },
+];
+const laneProfile = (caseMotion, lane = 0) => cells.filter(cell => cell.lane === lane)
   .map(cell => ({ row: cell.row, height: caseMotion.sample(cell.lane, cell.row) }));
-const staticShapes = ["off", "basic", "reduced", "full"].map(level => {
-  const caseMotion = new MusicArrayCaseMotion();
-  const update = (hover = false, reduced = false, lane = 0, row = 20) =>
-    caseMotion.step(cells, lane + ":" + (row - 12), lane, row, level, hover, dt, reduced, false);
-  update();
-  const resting = snapshot(caseMotion);
-  assert.equal(caseMotion.sample(0, 20), ARRAY_SELECTED_BELL_LIFT, "The selected case keeps its persistent static bell.");
-  assert.equal(caseMotion.sample(1, 20), 0, "Another column receives no selection shape or wave.");
-  for (let frame = 0; frame < 300; frame++) update();
-  assert.deepEqual(snapshot(caseMotion), resting, "Persistent selected/neighbor shape settles and remains stable without interaction.");
-  update(true, true);
-  assert.equal(caseMotion.sample(0, 20), ARRAY_SELECTED_BELL_LIFT + ARRAY_HOVER_LIFT,
-    level + " hover adds exactly 0.5 to the selected static bell.");
-  update(false, true);
-  assert.equal(caseMotion.sample(0, 20), ARRAY_SELECTED_BELL_LIFT, "Pointer leave removes the hover lift.");
-  update(false, true, 1, 18);
-  assert.equal(caseMotion.sample(0, 20), 0, "Changing lanes clears the former column immediately.");
-  assert.equal(caseMotion.sample(1, 18), ARRAY_SELECTED_BELL_LIFT);
-  const neighbor = resting.find(value => value.row === 21).height;
-  return { level, neighbor, resting };
-});
-const staticNeighborStrengths = staticShapes.map(value => value.neighbor);
-assert.ok(staticNeighborStrengths[0] === 0 && staticNeighborStrengths[1] > 0 &&
-  staticNeighborStrengths[1] < staticNeighborStrengths[2] && staticNeighborStrengths[2] < staticNeighborStrengths[3],
-"Static quality-dependent neighbor shoulders retain their established 0/.35/.65/1 quality ordering.");
-assert.ok(Math.abs(staticNeighborStrengths[3] - arrayNeighborLift(1)) < 1e-12);
-
-function dynamicPeak(level, useNotification = true) {
-  const baseline = new MusicArrayCaseMotion(), active = new MusicArrayCaseMotion();
-  baseline.step(cells, "0:8", 0, 20, level, false, dt, false, false);
-  active.step(cells, "0:8", 0, 20, level, false, dt, false, false);
-  let peak = 0, frameOfPeak = 0;
-  for (let frame = 1; frame <= 90; frame++) {
-    if (frame === 1 && useNotification) active.selectionChanged("0:9", 0, 21);
-    baseline.step(cells, "0:9", 0, 21, level, false, dt, false, false);
-    // Omitting selectionChanged exercises the optional-argument legacy fallback.
-    active.step(cells, "0:9", 0, 21, level, false, dt, false);
-    const delta = Math.max(0, ...cells.filter(cell => cell.lane === 0)
-      .map(cell => Math.abs(active.sample(0, cell.row) - baseline.sample(0, cell.row))));
-    if (delta > peak) { peak = delta; frameOfPeak = frame; }
+const settledMotion = (motion, motionCells, key, lane, row, level, hover = false, frames = 240, reduced = false) => {
+  for (let frame = 0; frame < frames; frame++) motion.step(motionCells, key, lane, row, level, hover, dt, reduced);
+  return motion;
+};
+const staticProfiles = [];
+for (const { level, radius } of levels) {
+  const caseMotion = settledMotion(new MusicArrayCaseMotion(), cells, "0:8", 0, 20, level);
+  const profile = laneProfile(caseMotion), at = row => profile.find(value => value.row === row).height;
+  const activeNeighbors = profile.filter(value => value.row !== 20 && value.height > 1e-10);
+  assert.equal(at(20), ARRAY_SELECTED_BELL_LIFT, level + " preserves the fixed selected-case height.");
+  assert.equal(activeNeighbors.length, radius * 2, level + " raises exactly the configured number of neighbors in a full column.");
+  for (let distance = 0; distance <= 5; distance++) {
+    const expected = arrayNeighborLift(distance, level);
+    assert.ok(Math.abs(at(20 - distance) - expected) < 1e-12 && Math.abs(at(20 + distance) - expected) < 1e-12,
+      level + " has a symmetric single bump at distance " + distance + ".");
+    if (distance > 0 && distance <= radius)
+      assert.ok(expected > 0 && expected < at(20 - distance + 1), level + " bump falls with distance at " + distance + ".");
+    if (distance > radius) assert.equal(expected, 0, level + " has no shoulder beyond its configured radius.");
   }
-  return { level, peak, frameOfPeak };
+  assert.deepEqual(laneProfile(caseMotion, 1).map(value => value.height), Array(20).fill(0),
+    level + " cannot lift any cell in a different column.");
+  const resting = laneProfile(caseMotion);
+  for (let frame = 0; frame < 240; frame++) caseMotion.step(cells, "0:8", 0, 20, level, false, dt, false);
+  assert.deepEqual(laneProfile(caseMotion), resting, level + " holds one static profile without late rebound or oscillation.");
+  staticProfiles.push({ level, radius, activeNeighbors: activeNeighbors.map(value => value.row), profile });
+
+  const hover = settledMotion(new MusicArrayCaseMotion(), cells, "0:8", 0, 20, level);
+  const baseline = laneProfile(hover);
+  for (let frame = 0; frame < 240; frame++) hover.step(cells, "0:8", 0, 20, level, true, dt, false);
+  assert.ok(Math.abs(hover.sample(0, 20) - (ARRAY_SELECTED_BELL_LIFT + ARRAY_HOVER_LIFT)) < 1e-10,
+    level + " hover adds 0.5 without changing the selected bump target.");
+  assert.deepEqual(laneProfile(hover).filter(value => value.row !== 20), baseline.filter(value => value.row !== 20),
+    level + " hover does not enlarge the neighboring bump.");
+  for (let frame = 0; frame < 240; frame++) hover.step(cells, "0:8", 0, 20, level, false, dt, false);
+  assert.ok(laneProfile(hover).every((value, index) => Math.abs(value.height - baseline[index].height) < 1e-10),
+    level + " restores the static bump after pointer leave.");
 }
-const dynamicPeaks = ["off", "basic", "reduced", "full"].map(level => dynamicPeak(level, level !== "full"));
-assert.equal(dynamicPeaks[0].peak, 0, "OFF produces no dynamic neighbor displacement.");
-assert.ok(dynamicPeaks[1].peak > 0 && dynamicPeaks[1].peak < dynamicPeaks[2].peak && dynamicPeaks[2].peak < dynamicPeaks[3].peak,
-  "Selection-triggered dynamic peak grows distinctly from basic through reduced to full.");
-const notifiedFullPeak = dynamicPeak("full", true);
-assert.ok(notifiedFullPeak.peak > 0 && notifiedFullPeak.frameOfPeak > 1,
-  "An explicit selectionChanged notification drives a delayed full-quality packet.");
 
-const nearArrival = arrayRackWave("full", 7, 5, 0, 20, .23);
-const beforeFarArrival = arrayRackWave("full", 11, 5, 0, 20, .45);
-const afterFarArrival = arrayRackWave("full", 11, 5, 0, 20, .57);
-assert.ok(nearArrival > 0 && beforeFarArrival === 0 && afterFarArrival > 0,
-  "The full wave reaches farther occupied rows later instead of applying a constant rack-wide wobble.");
-const reflectedDelta = age => arrayRackWave("full", 2, 1, 0, 10, age) - arrayRackWave("full", 2, 1, -100, 100, age);
-assert.equal(reflectedDelta(.2), 0, "A boundary reflection cannot arrive before its round-trip path.");
-assert.ok(reflectedDelta(.32) > 0 && reflectedDelta(.5) < 0,
-  "The reflected packet has its own traveling phase after reaching the physical rack end.");
-const returnBefore = arrayRackWave("full", 21, 21, 12, 31, 1.2);
-const returnAfter = arrayRackWave("full", 21, 21, 12, 31, 1.6);
-const unboundedAtReturn = arrayRackWave("full", 21, 21, -100, 100, 1.6);
-assert.equal(returnBefore, 0, "The direct packet at its source has dissipated by the return test window.");
-assert.ok(returnAfter > 0 && unboundedAtReturn === 0,
-  "A physical-end return remains visible after the direct source packet has dissipated.");
-const waveTiming = { nearArrival, beforeFarArrival, afterFarArrival,
-  reflectedDelta: [.2, .32, .5, 1.2, 1.6].map(age => ({ age, value: age >= 1.2
-    ? arrayRackWave("full", 21, 21, 12, 31, age) - arrayRackWave("full", 21, 21, -100, 100, age)
-    : reflectedDelta(age) })), returnBefore, returnAfter };
-
-const sequenceBase = new MusicArrayCaseMotion(), sequenceActive = new MusicArrayCaseMotion();
-sequenceBase.step(cells, "0:8", 0, 20, "full", false, dt, false, false);
-sequenceActive.step(cells, "0:8", 0, 20, "full", false, dt, false, false);
-let selectedKey = "0:8", selectedRow = 20;
-const rapidPeakByFrame = [];
-for (let frame = 1; frame <= 300; frame++) {
-  if (frame <= 4) {
-    selectedKey = "0:" + (8 + frame); selectedRow = 20 + frame;
-    sequenceActive.selectionChanged(selectedKey, 0, selectedRow);
+const edgeProfiles = [];
+for (const { level, radius } of levels) for (const count of [1, 5, 20]) {
+  const slots = [...new Set([0, Math.floor((count - 1) / 2), count - 1])];
+  for (const selectedSlot of slots) {
+    const edgeCells = [
+      ...Array.from({ length: count }, (_, slot) => ({ key: "edge:" + slot, lane: 0, row: 12 + slot })),
+      ...Array.from({ length: 20 }, (_, slot) => ({ key: "other:" + slot, lane: 1, row: 12 + slot })),
+    ];
+    const selectedRow = 12 + selectedSlot, selectedKey = "edge:" + selectedSlot;
+    const edge = settledMotion(new MusicArrayCaseMotion(), edgeCells, selectedKey, 0, selectedRow, level, false, 240, true);
+    const actual = edgeCells.filter(cell => cell.lane === 0).map(cell => ({ row: cell.row, height: edge.sample(0, cell.row) }));
+    const actualNeighbors = actual.filter(value => value.row !== selectedRow && value.height > 1e-10);
+    const expectedCount = Math.min(radius, selectedSlot) + Math.min(radius, count - selectedSlot - 1);
+    assert.equal(actualNeighbors.length, expectedCount,
+      level + " respects physical occupied-row boundaries for " + count + " slots at row " + selectedRow + ".");
+    for (const cell of edgeCells) {
+      const value = edge.sample(cell.lane, cell.row);
+      assert.ok(Number.isFinite(value), "Every single/final-five/full-column sample remains finite.");
+      assert.ok(Number.isFinite(edge.sample(cell.lane, cell.row + .5)), "Fractional samples interpolate finitely at rack ends.");
+      if (cell.lane === 0) {
+        const expected = cell.row === selectedRow ? ARRAY_SELECTED_BELL_LIFT : arrayNeighborLift(cell.row - selectedRow, level);
+        assert.ok(Math.abs(value - expected) < 1e-12, "Boundary profile matches only physically occupied slots.");
+      } else assert.equal(value, 0, "Edge fixtures cannot affect another column.");
+    }
+    edgeProfiles.push({ level, count, selectedRow, expectedCount, actualNeighbors: actualNeighbors.map(value => value.row) });
   }
-  sequenceBase.step(cells, selectedKey, 0, selectedRow, "full", false, dt, false, false);
-  sequenceActive.step(cells, selectedKey, 0, selectedRow, "full", false, dt, false, true);
-  const displacement = Math.max(0, ...cells.filter(cell => cell.lane === 0)
-    .map(cell => Math.abs(sequenceActive.sample(0, cell.row) - sequenceBase.sample(0, cell.row))));
-  rapidPeakByFrame.push({ frame, time: frame * dt, displacement });
 }
-const rapidPeak = Math.max(...rapidPeakByFrame.map(value => value.displacement));
-const rapidTail = Math.max(...rapidPeakByFrame.slice(-24).map(value => value.displacement));
-assert.ok(rapidPeak > 0 && rapidPeak <= .75 + 1e-12, "Rapid selections add bounded, overlapping echoes at the rack's documented cap.");
-assert.ok(rapidTail < 1e-10 && rapidTail < rapidPeak / 100,
-  "The overlapping wave train naturally decays after inputs stop.");
+
+const reducedMotionProfiles = [];
+for (const { level } of levels) {
+  const reducedMotion = new MusicArrayCaseMotion();
+  reducedMotion.step(cells, "0:8", 0, 20, level, false, dt, true);
+  reducedMotion.step(cells, "0:9", 0, 21, level, false, dt, true);
+  const settled = laneProfile(reducedMotion);
+  for (let frame = 0; frame < 120; frame++) reducedMotion.step(cells, "0:9", 0, 21, level, false, dt, true);
+  assert.deepEqual(laneProfile(reducedMotion), settled, level + " reduced motion snaps to one static profile with no animation.");
+  assert.equal(reducedMotion.sample(0, 21), ARRAY_SELECTED_BELL_LIFT);
+  assert.equal(reducedMotion.sample(1, 21), 0);
+  reducedMotionProfiles.push({ level, selected: 21, profile: settled });
+}
 
 const continuity = new MusicArrayCaseMotion();
-continuity.step(cells, "0:7", 0, 19, "full", false, dt, false, false);
-continuity.selectionChanged("0:8", 0, 20);
-for (let frame = 0; frame < 20; frame++) continuity.step(cells, "0:8", 0, 20, "full", false, dt, false, true);
-const caughtBefore = continuity.sample(0, 22);
-assert.ok(caughtBefore > arrayNeighborLift(2), "The continuity fixture must catch a positive crest on the next selected case.");
-continuity.selectionChanged("0:10", 0, 22);
-continuity.step(cells, "0:10", 0, 22, "full", false, 0, false, true);
-const caughtAfter = continuity.sample(0, 22);
-assert.ok(Math.abs(caughtAfter - caughtBefore) < 1e-10,
-  "Selecting a case caught by the previous crest carries its visible lift into the selection spring without a one-frame drop.");
+continuity.step(cells, "0:7", 0, 19, "full", false, dt, false);
+for (let frame = 0; frame < 20; frame++) continuity.step(cells, "0:7", 0, 19, "full", false, dt, false);
+const beforeSelection = continuity.sample(0, 20);
+assert.ok(beforeSelection > 0 && beforeSelection < ARRAY_SELECTED_BELL_LIFT);
+continuity.step(cells, "0:8", 0, 20, "full", false, 0, false);
+const afterZeroDtSelection = continuity.sample(0, 20);
+assert.equal(afterZeroDtSelection, beforeSelection,
+  "A neighbor already rising into selection inherits its spring height without a dt=0 jump.");
+for (let frame = 0; frame < 120; frame++) continuity.step(cells, "0:8", 0, 20, "full", false, dt, false);
+assert.ok(Math.abs(continuity.sample(0, 20) - ARRAY_SELECTED_BELL_LIFT) < 1e-9,
+  "The selected-case spring then settles to the fixed selected target.");
 
-const edgeReports = [];
-for (const count of [1, 5, 20]) {
-  const edgeCells = [
-    ...Array.from({ length: count }, (_, slot) => ({ key: "edge:" + slot, lane: 0, row: 12 + slot })),
-    ...Array.from({ length: 20 }, (_, slot) => ({ key: "other:" + slot, lane: 1, row: 12 + slot })),
-  ];
-  const edge = new MusicArrayCaseMotion();
-  const initialSlot = count - 1, initialKey = "edge:" + initialSlot, initialRow = 12 + initialSlot;
-  edge.step(edgeCells, initialKey, 0, initialRow, "full", false, dt, false, false);
-  if (count > 1) {
-    const nextKey = "edge:0";
-    edge.selectionChanged(nextKey, 0, 12);
-    edge.step(edgeCells, nextKey, 0, 12, "full", false, dt, false, true);
-  } else {
-    edge.selectionChanged(initialKey, 0, initialRow);
-    edge.step(edgeCells, initialKey, 0, initialRow, "full", false, dt, false, true);
-  }
-  const samples = [
-    ...edgeCells.flatMap(cell => [edge.sample(cell.lane, cell.row), edge.sample(cell.lane, cell.row + .5)]),
-    ...[-1, 11, 32].map(row => edge.sample(0, row)),
-    arrayRackWave("full", 11, 12, 12, 12, .5), arrayRackWave("full", 13, 12, 12, 20, .5),
-    arrayRackWave("full", NaN, 12, 12, 20, .5),
-  ];
-  assert.ok(samples.every(Number.isFinite), "A " + count + "-slot active rack keeps every boundary/interpolated sample finite.");
-  assert.equal(edge.sample(1, 18), 0, "A selected lane's wave never enters the neighboring column.");
-  edgeReports.push({ count, initialRow, samplesFinite: true, otherLane: edge.sample(1, 18) });
+const rapid = new MusicArrayCaseMotion(), navigation = [];
+let rapidRow = 21;
+rapid.step(cells, "0:9", 0, rapidRow, "full", false, dt, false);
+for (const direction of [1, 1, 1, -1, -1, -1]) {
+  rapidRow += direction; navigation.push({ direction, row: rapidRow });
+  rapid.step(cells, "0:" + (rapidRow - 12), 0, rapidRow, "full", false, dt, false);
+  assert.ok(Math.max(...laneProfile(rapid).map(value => value.height)) <= ARRAY_SELECTED_BELL_LIFT + 1e-12,
+    "Rapid reversals cannot accumulate into a second wave or exceed the fixed bump peak.");
 }
-
-const reducedMotion = new MusicArrayCaseMotion();
-reducedMotion.step(cells, "0:8", 0, 20, "full", false, dt, true, false);
-reducedMotion.selectionChanged("0:9", 0, 21);
-reducedMotion.step(cells, "0:9", 0, 21, "full", false, dt, true, true);
-const reducedMotionRest = snapshot(reducedMotion);
-for (let frame = 0; frame < 120; frame++) reducedMotion.step(cells, "0:9", 0, 21, "full", false, dt, true, true);
-assert.deepEqual(snapshot(reducedMotion), reducedMotionRest, "Reduced motion snaps to static targets and suppresses all wave animation.");
-assert.equal(reducedMotion.sample(0, 21), ARRAY_SELECTED_BELL_LIFT);
-assert.equal(reducedMotion.sample(1, 21), 0);
-
-const clearedMotion = new MusicArrayCaseMotion();
-clearedMotion.step(cells, "0:8", 0, 20, "full", false, dt, false, false);
-clearedMotion.selectionChanged("0:9", 0, 21);
-clearedMotion.step(cells, "0:9", 0, 21, "full", false, dt, false, true);
-clearedMotion.step(cells, "0:9", 0, 21, "full", false, dt, true, false);
-assert.equal(clearedMotion.sample(0, 23), arrayNeighborLift(2),
-  "Turning off interaction clears dynamic packets while preserving the static neighbor shape.");
+assert.equal(rapidRow, 21, "The forward/reverse navigation sequence returns to its starting selected row.");
+const stoppedTarget = Array.from({ length: 20 }, (_, slot) => ({ row: 12 + slot,
+  height: slot + 12 === rapidRow ? ARRAY_SELECTED_BELL_LIFT : arrayNeighborLift(slot + 12 - rapidRow, "full") }));
+const stoppedSeries = [];
+for (let frame = 1; frame <= 300; frame++) {
+  rapid.step(cells, "0:9", 0, rapidRow, "full", false, dt, false);
+  if (frame % 30 === 0) stoppedSeries.push({ frame, time: frame * dt, profile: laneProfile(rapid) });
+}
+const stopProfile = laneProfile(rapid);
+assert.ok(stopProfile.every((value, index) => Math.abs(value.height - stoppedTarget[index].height) < 1e-9),
+  "After several seconds the final selection has exactly one static bump and no delayed return motion.");
+for (let frame = 0; frame < 120; frame++) rapid.step(cells, "0:9", 0, rapidRow, "full", false, dt, false);
+assert.ok(laneProfile(rapid).every((value, index) => Math.abs(value.height - stopProfile[index].height) < 1e-12),
+  "The stopped profile remains unchanged instead of pulsing periodically.");
 
 await mkdir(output, { recursive: true });
 const report = { ok: true,
-  scope: "Pure ARRAY lane anchor, stable-key memory, legacy persistent bell/quality shoulders, selection-triggered bounded packets, physical-end return echoes, hover, and reduced-motion contracts; real transforms are audited separately.",
+  scope: "Pure ARRAY lane anchor, stable-key memory, fixed selected bell, level-controlled local single bump, hover/reduced-motion, occupied-boundary profiles, and rapid spring continuity; MATRIX global wave behavior is guarded by the Scene compatibility check.",
   initial, interrupted, rowsBeforeReorder, remembered, finalRows: [0, 1, 2, 3].map(lane => motion.row(lane)), expectedAppearance,
-  staticNeighborStrengths, staticShapes, dynamicPeaks, notifiedFullPeak, waveTiming, rapidPeak, rapidTail, rapidPeakByFrame,
-  selectionContinuity: { caughtBefore, caughtAfter },
-  edgeReports, reducedMotionRest, clearedInactiveSample: clearedMotion.sample(0, 23) };
+  staticProfiles, edgeProfiles, reducedMotionProfiles, selectionContinuity: { beforeSelection, afterZeroDtSelection, afterSettle: continuity.sample(0, 20) },
+  rapidNavigation: navigation, stoppedSeries, stopProfile };
 await writeFile(path.join(output, "pure-motion-audit.json"), JSON.stringify(report, null, 2));
 console.log(JSON.stringify({ ok: true, checks: ["shared first-card anchor", "first-five-card no-scroll", "visible-slot clamping", "active-only damping",
-  "immediate old-lane freeze", "stable-key reorder and return memory", "lane appearance", "persistent static selection and quality shoulders",
-  "four distinct selection-wave peaks", "selectionChanged and legacy fallback", "direct propagation and physical-boundary reflection",
-  "bounded overlapping rapid selection train and decay", "wave-to-selection continuity", "first/final/partial/single-slot rack boundaries", "hover plus/minus 0.5", "reduced-motion snap", "interaction and inactive-column guards"],
-  report: ".tools/array-echo/pure-motion-audit.json" }, null, 2));
+  "immediate old-lane freeze", "stable-key reorder and return memory", "lane appearance", "fixed selected bell and unchanged global lift",
+  "exact OFF/basic/reduced/full neighbor counts", "symmetric cosine bump taper", "actual occupied-row boundary clipping", "hover plus/minus 0.5",
+  "reduced-motion snap", "one-step dt=0 selection continuity", "rapid forward/reverse input without added energy", "seconds-later static profile without rebound"],
+  report: ".tools/array-bump/pure-motion-audit.json" }, null, 2));

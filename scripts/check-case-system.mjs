@@ -13,13 +13,13 @@ const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
-const isArrayEcho = process.argv.includes("--array-echo");
+const isArrayBump = process.argv.includes("--array-bump");
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
 const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayEcho;
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump;
 const unifiedOutput = path.join(project, ".tools", "array-composition");
-const arrayEchoOutput = path.join(project, ".tools", "array-echo");
+const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
@@ -174,6 +174,7 @@ import { getMusicCatalogShelves, getMusicEntryLocation, navigateMusicEntry } fro
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
 import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
 import { damp } from "./src/motion.ts";
+import { qualityMarkup } from "./src/quality-settings.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
 import { normalizeCaseUserPresets } from "./src/case-user-presets.ts";
 import { createAlbumInsert } from "./src/album-insert.ts";
@@ -1494,7 +1495,7 @@ function arrayPointerTarget(lane, row) {
     activeHitIndex: activeHit?.instanceId ?? null, hitObject: hit?.object?.name ?? "" };
 }
 
-function arrayEchoSelectedPointerTarget() {
+function arrayBumpSelectedPointerTarget() {
   const scene = archiveScene, point = new THREE.Vector3();
   scene.scene.updateMatrixWorld(true);
   point.copy(scene.caseLayout.center).applyMatrix4(scene.model.matrixWorld).project(scene.camera);
@@ -1568,53 +1569,57 @@ async function prepareArrayPointer(design) {
     "The hover exclusion target must be another TRACKS entry from the same parent album.");
   return { baseline, selected, other };
 }
-let arrayEchoFrame = 0;
-function arrayEchoSnapshot() {
+let arrayBumpFrame = 0;
+function arrayBumpSnapshot() {
   const scene = archiveScene, snapshot = punkArrayMotionSnapshot();
   const values = snapshot.values.filter(value => value.lane === scene.selectedCell.lane).map(value => ({
     ...value, motionHeight: scene.arrayCaseMotion.sample(value.lane, value.row),
   }));
-  return { frame: arrayEchoFrame, phase: scene.musicPresentationPhase, interactive: scene.musicArchiveInteractive,
+  return { frame: arrayBumpFrame, phase: scene.musicPresentationPhase, interactive: scene.musicArchiveInteractive,
     quality: scene.quality.wave, selected: { ...scene.selectedCell }, input: arrayMotionInputSnapshot(),
     catalog: getMusicCatalogShelves().map(shelf => shelf.entryKeys.length),
     hoveredEntryKey: scene.hoveredEntryKey ?? "", clicks: unifiedClicks.length, opens: unifiedOpens.length, values };
 }
-async function prepareArrayEcho(design = "archive", level = "full") {
+async function prepareArrayBump(design = "archive", level = "full", slot = 9) {
   if (!arrayMotionPrepare) await exercisePunkArrayMotion(true);
   await arrayMotionPrepare(design, "shelf", level);
-  // Start every theme from the same settled, middle-of-column source row.
-  archiveScene.setReduced(true); arrayMotionSelect(0, 9); stepArchiveScene(1); archiveScene.setReduced(false);
-  stepArchiveScene(120); arrayEchoFrame = 0;
-  const snapshot = arrayEchoSnapshot();
-  expect(snapshot.phase === "archive" && snapshot.selected.lane === 0 && snapshot.selected.row === 21 &&
-    snapshot.quality === level, "ARRAY echo fixture must settle to the shared row-21 source: " + JSON.stringify(snapshot.selected));
+  archiveScene.setReduced(true); arrayMotionSelect(0, slot); stepArchiveScene(1); archiveScene.setReduced(false);
+  stepArchiveScene(120); arrayBumpFrame = 0;
+  const snapshot = arrayBumpSnapshot();
+  expect(snapshot.phase === "archive" && snapshot.selected.lane === 0 && snapshot.selected.row === 12 + slot &&
+    snapshot.quality === level, "ARRAY bump fixture must settle at the requested occupied row and quality: " + JSON.stringify(snapshot.selected));
   return snapshot;
 }
-function arrayEchoSettleSelection(slot) {
+function arrayBumpSetQuality(level, frames = 120) {
+  archiveScene.setQuality({ ...archiveScene.quality, wave: level });
+  stepArchiveScene(frames); arrayBumpFrame = 0;
+  return arrayBumpSnapshot();
+}
+function arrayBumpSettleSelection(slot) {
   archiveScene.setReduced(true); arrayMotionSelect(0, slot); stepArchiveScene(1); archiveScene.setReduced(false);
-  return arrayEchoSnapshot();
+  return arrayBumpSnapshot();
 }
-function arrayEchoNavigate(direction) {
+function arrayBumpNavigate(direction) {
   archiveScene.onNavigate("row", direction);
-  return arrayEchoSnapshot();
+  return arrayBumpSnapshot();
 }
-function arrayEchoAdvance(frames, sampleEvery = 3) {
+function arrayBumpAdvance(frames, sampleEvery = 3) {
   const samples = [];
   for (let index = 0; index < frames; index++) {
-    stepArchiveScene(1); arrayEchoFrame++;
-    if (arrayEchoFrame % sampleEvery === 0 || index === frames - 1) samples.push(arrayEchoSnapshot());
+    stepArchiveScene(1); arrayBumpFrame++;
+    if (arrayBumpFrame % sampleEvery === 0 || index === frames - 1) samples.push(arrayBumpSnapshot());
   }
   return samples;
 }
-async function prepareArrayEchoHover(design = "archive") {
-  await prepareArrayEcho(design, "full");
-  arrayEchoSettleSelection(8); // row 20; reduced-motion setup clears the previous impulse.
-  arrayEchoFrame = 0;
-  archiveScene.onNavigate("row", 1); // A real Scene navigation callback starts returning-array.
-  stepArchiveScene(1); arrayEchoFrame++;
-  // Let the newly selected spring consume its first carried-lift frame before taking the no-hover prediction.
-  stepArchiveScene(1); arrayEchoFrame++;
-  const snapshot = arrayEchoSnapshot(), selectedTarget = arrayEchoSelectedPointerTarget();
+async function prepareArrayBumpHover(design = "archive") {
+  await prepareArrayBump(design, "full", 9);
+  arrayBumpSettleSelection(8); // row 20; the reduced snap leaves a clean, static start.
+  arrayBumpFrame = 0;
+  archiveScene.onNavigate("row", 1);
+  stepArchiveScene(1); arrayBumpFrame++;
+  // Consume the selection handoff before predicting the same spring's no-hover step.
+  stepArchiveScene(1); arrayBumpFrame++;
+  const snapshot = arrayBumpSnapshot(), selectedTarget = arrayBumpSelectedPointerTarget();
   const other = unifiedPointerTarget(false, true);
   const selectedEntry = musicSpatialEntry(archiveScene.selectedCell, true);
   const otherEntry = getMusicDisplayEntries().find(entry => entry.key === other?.key);
@@ -1622,7 +1627,7 @@ async function prepareArrayEchoHover(design = "archive") {
   const noHoverSpring = selectedSpring ? { ...selectedSpring } : null;
   if (noHoverSpring) damp(noHoverSpring, ARRAY_SELECTED_BELL_LIFT, 13, 1 / 60);
   expect(snapshot.phase === "returning-array" && snapshot.interactive && snapshot.selected.row === 21,
-    "Hover acceptance must begin in interactive returning-array without waiting for archiveReady: " +
+    "Bump hover acceptance must begin in interactive returning-array without waiting for archiveReady: " +
       JSON.stringify({ phase: snapshot.phase, interactive: snapshot.interactive, selected: snapshot.selected }));
   expect(selectedTarget?.key === snapshot.selected.foobarEntryKey && other && other.key !== selectedTarget.key &&
     selectedEntry && otherEntry?.recordIndex === selectedEntry.recordIndex,
@@ -1865,8 +1870,8 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
   // Reduce motion preserves the same selected/neighbor shape, snapping former inactive cases to rest.
   stepArchiveScene(1); const reducedSettled = punkArrayMotionSnapshot();
   const reducedInactive = [0, 1, 3, 4].map(lane => compare(reduced, reducedSettled, lane, false));
-  // Selection keeps the original persistent bell, with quality changing only neighbors.
-  const waveLevels = [];
+  // Selection keeps the original persistent bell; quality changes only the local bump radius.
+  const bumpLevels = [];
   for (const wave of ["off", "basic", "reduced", "full"]) {
     const baseline = await prepare("archive", "shelf", wave);
     select(0, 12); scene.setReduced(true); stepArchiveScene(1); scene.setReduced(false);
@@ -1875,29 +1880,79 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
       stepArchiveScene(1);
       const snapshot = punkArrayMotionSnapshot(); aligned(snapshot);
       const neighbor = snapshot.values.find(value => value.lane === 0 && value.row === 25);
-      const distanceTwo = snapshot.values.find(value => value.lane === 0 && value.row === 26);
-      const distant = snapshot.values.find(value => value.lane === 0 && value.row === 31);
+      const distant = snapshot.values.find(value => value.lane === 0 && value.row === 29);
       const selectedHeight = snapshot.selectedModel.y - distant.y;
       expect(Math.abs(selectedHeight - 2.098) < 2e-5,
-        "All wave qualities retain the original 2.098 selected lift: " + wave + "/" + selectedHeight);
-      if (wave !== "off") expect(neighbor.y > distant.y && distanceTwo.y > distant.y,
-        "Both first and second neighbors form a persistent raised shoulder: " + wave);
+        "All bump qualities retain the original 2.098 selected lift: " + wave + "/" + selectedHeight);
+      const profile = [];
+      for (let distance = 0; distance <= 5; distance++) {
+        const value = snapshot.values.find(item => item.lane === 0 && item.row === 24 + distance);
+        const expected = arrayNeighborLift(distance, wave);
+        expect(value && Math.abs(value.y - distant.y - expected) < 2e-5,
+          "The submitted row " + (24 + distance) + " must match the single-bump " + wave + " profile: " + JSON.stringify({ value, expected, distantY: distant?.y }));
+        if (distance > 0 && expected > 0) profile.push(value.row);
+      }
+      const expectedNeighborCount = { off: 0, basic: 1, reduced: 2, full: 4 }[wave];
+      expect(profile.length === expectedNeighborCount,
+        "Actual Scene matrices raise exactly the occupied local neighbors for " + wave + ": " + JSON.stringify(profile));
       const inactive = snapshot.values.filter(value => value.lane !== 0);
       expect(inactive.every(value => value.rotX === null || value.rotX === 0), "Every inactive submitted cell stays upright for " + wave);
       if ([1, 6, 18, 60, 200, 300].includes(frame)) samples.push({ frame, snapshot });
       samples.push({ frame, neighborY: neighbor.y, neighborRotationX: neighbor.rotX });
     }
-    waveLevels.push({ wave, baseline, samples });
+    bumpLevels.push({ wave, baseline, samples });
   }
-  const off = waveLevels[0].samples.filter(value => value.neighborY !== undefined);
-  const strengths = waveLevels.map(level => {
+  const off = bumpLevels[0].samples.filter(value => value.neighborY !== undefined);
+  const strengths = bumpLevels.map(level => {
     const samples = level.samples.filter(value => value.neighborY !== undefined);
     return { wave: level.wave, maxNeighborYDeltaFromOff: Math.max(...samples.map((value, index) => Math.abs(value.neighborY - off[index].neighborY))) };
   });
   expect(strengths[0].maxNeighborYDeltaFromOff === 0 && strengths[1].maxNeighborYDeltaFromOff > 1e-5 &&
     strengths[1].maxNeighborYDeltaFromOff < strengths[2].maxNeighborYDeltaFromOff &&
     strengths[2].maxNeighborYDeltaFromOff < strengths[3].maxNeighborYDeltaFromOff,
-    "Actual neighboring Scene matrices retain off/light/medium/strong selection amplitudes: " + JSON.stringify(strengths));
+    "Actual neighboring Scene matrices retain off/light/medium/strong local bump amplitudes: " + JSON.stringify(strengths));
+  const matrixWaveRuns = [];
+  for (const wave of ["off", "full"]) {
+    const baseline = await prepare("archive", "array", wave);
+    const source = baseline.values.find(value => value.selected);
+    expect(source, "MATRIX global-wave baseline must expose its selected cell.");
+    const baseByKey = new Map(baseline.values.map(value => [value.key, value.y]));
+    const sameLaneProbe = baseline.values.find(value => value.lane === source.lane && value.row === source.row + 4);
+    const crossLaneProbe = baseline.values.find(value => value.lane === source.lane + 1 && value.row === source.row + 3);
+    expect(source && sameLaneProbe && crossLaneProbe,
+      "The MATRIX global-wave guard needs forward and adjacent-lane probes: " + JSON.stringify({ source, sameLaneProbe, crossLaneProbe }));
+    archiveScene.onNavigate("row", 1); stepArchiveScene(1);
+    const samples = [];
+    for (let frame = 1; frame <= 150; frame++) {
+      stepArchiveScene(1);
+      const snapshot = punkArrayMotionSnapshot();
+      const probe = key => {
+        const value = snapshot.values.find(item => item.key === key);
+        return value && baseByKey.has(key) ? { y: value.y, deltaFromStart: value.y - baseByKey.get(key) } : null;
+      };
+      samples.push({ frame, selected: snapshot.selected, phase: snapshot.presentation, selectionPhase: archiveScene.getStats().selectionPhase,
+        sameLane: probe(sameLaneProbe.key), crossLane: probe(crossLaneProbe.key),
+        globalMaxDelta: Math.max(0, ...snapshot.values.filter(value => baseByKey.has(value.key))
+          .map(value => Math.abs(value.y - baseByKey.get(value.key)))) });
+    }
+    matrixWaveRuns.push({ wave, source: { lane: source.lane, row: source.row },
+      sameLaneProbe: { lane: sameLaneProbe.lane, row: sameLaneProbe.row, key: sameLaneProbe.key },
+      crossLaneProbe: { lane: crossLaneProbe.lane, row: crossLaneProbe.row, key: crossLaneProbe.key }, samples });
+  }
+  const matrixOffByFrame = new Map(matrixWaveRuns[0].samples.map(value => [value.frame, value]));
+  const matrixFullWaveEmitted = matrixWaveRuns[1].samples.some(value => value.selectionPhase === "wave");
+  const sameLanePropagation = Math.max(...matrixWaveRuns[1].samples.map(value => {
+    const off = matrixOffByFrame.get(value.frame);
+    return Math.abs((value.sameLane?.deltaFromStart ?? 0) - (off?.sameLane?.deltaFromStart ?? 0));
+  }));
+  const crossLanePropagation = Math.max(...matrixWaveRuns[1].samples.map(value => {
+    const off = matrixOffByFrame.get(value.frame);
+    return Math.abs((value.crossLane?.deltaFromStart ?? 0) - (off?.crossLane?.deltaFromStart ?? 0));
+  }));
+  expect(matrixFullWaveEmitted && sameLanePropagation > 1e-5 && crossLanePropagation > 1e-5,
+    "MATRIX must still emit its quality-limited global wave across rows and adjacent columns after its pending pulse resolves: " +
+      JSON.stringify({ matrixFullWaveEmitted, sameLanePropagation, crossLanePropagation,
+        phases: [...new Set(matrixWaveRuns[1].samples.map(value => value.selectionPhase))] }));
   await prepare("archive", "shelf", "full"); stepArchiveScene(240);
   const idleBefore = punkArrayMotionSnapshot(); stepArchiveScene(60);
   const idleAfter = punkArrayMotionSnapshot();
@@ -1956,10 +2011,11 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
       "Returning restores the complete raised browsing case: " + JSON.stringify({ design, bounds: returned.selectedScreenBounds }));
     detailChecks.push({ design, detail, returned });
   }
-  return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four full synthetic lanes plus final five entries, deterministic 1/60 updates; no audio/player/real library.",
+  return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four full synthetic lanes plus final five entries, persistent single-bump profiles and legacy MATRIX global-wave/rail guards; no audio/player/real library.",
     before, during, switched, afterSwitch, laneChecks, frozen, nextLane, reduced, reducedInactive,
     noScrollFirstFive, directoryReturn, composition, rearTintChecks, hiddenVoid,
-    strengths, waveLevels, idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards, tail, tailSlots, detailChecks };
+    strengths, bumpLevels, matrixWaveRuns, matrixWavePropagation: { sameLanePropagation, crossLanePropagation },
+    idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards, tail, tailSlots, detailChecks };
 }
 
 async function prepareArrayCompositionInteraction() {
@@ -2903,12 +2959,14 @@ window.caseCheck = {
   prepareArrayCompositionInteraction,
   prepareArrayCompositionScreenshot,
   prepareArrayPointer,
-  prepareArrayEcho,
-  prepareArrayEchoHover,
-  arrayEchoSettleSelection,
-  arrayEchoNavigate,
-  arrayEchoSnapshot,
-  arrayEchoAdvance,
+  prepareArrayBump,
+  prepareArrayBumpHover,
+  arrayBumpSetQuality,
+  arrayBumpSettleSelection,
+  arrayBumpNavigate,
+  arrayBumpSnapshot,
+  arrayBumpAdvance,
+  arrayBumpQualityMarkup(design, layout) { return qualityMarkup(qualityPresets.high, design, layout); },
   arrayHoverSnapshot,
   arraySurfaceVariant,
   unifiedRenderVariant,
@@ -5795,7 +5853,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isArrayEcho ? arrayEchoOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -6177,98 +6235,157 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : isArrayEcho ? arrayEchoOutput : unifiedOutput, { recursive: true });
+    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
-    if (isArrayEcho) {
-      const motionOutput = arrayEchoOutput;
-      const frameMarks = [15, 30, 39, 60, 90, 150, 240, 300];
-      const keyframes = [], themeRuns = [];
-      const runTheme = async design => {
-        const baseline = await evaluate("window.caseCheck.prepareArrayEcho(" + JSON.stringify(design) + ",\"full\")");
-        const source = await evaluate("window.caseCheck.arrayEchoSettleSelection(8)");
-        assert.equal(source.phase, "archive"); assert.equal(source.selected.row, 20);
-        await evaluate("window.caseCheck.arrayEchoNavigate(1)");
-        const afterSelect = await evaluate("window.caseCheck.arrayEchoSnapshot()");
-        assert.equal(afterSelect.selected.row, 21, "Continuous row navigation must commit the next real catalog entry.");
-        assert.equal(afterSelect.phase, "returning-array", "A fast selection starts the returning-array phase.");
-        assert.equal(afterSelect.interactive, true, "The array remains interactive during the returning-array phase.");
-        assert.equal(afterSelect.input.navigations.at(-1)?.axis, "row");
-        assert.equal(afterSelect.input.navigations.at(-1)?.direction, 1);
-        assert.notEqual(afterSelect.input.selectedKey, source.input.selectedKey);
-
-        const samples = [];
-        let previousFrame = 0;
-        for (const frame of frameMarks) {
-          const part = await evaluate("window.caseCheck.arrayEchoAdvance(" + (frame - previousFrame) + ",3)");
-          samples.push(...part); previousFrame = frame;
-          const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
-          const name = `array-echo-${design}-frame-${String(frame).padStart(3, "0")}.png`;
-          await writeFile(path.join(motionOutput, name), Buffer.from(screen.data, "base64"));
-          keyframes.push({ design, frame, seconds: frame / 60, name });
-        }
-        const baselineByRow = new Map(baseline.values.map(value => [value.row, value]));
-        const series = samples.map(sample => ({ frame: sample.frame, seconds: sample.frame / 60, phase: sample.phase,
-          interactive: sample.interactive, selected: sample.selected, rows: sample.values.map(value => {
-            const before = baselineByRow.get(value.row);
-            return { row: value.row, key: value.key, motionDelta: value.motionHeight - before.motionHeight,
-              transformYDelta: value.y - before.y, motionHeight: value.motionHeight, worldY: value.y };
-          }) }));
-        const at = frame => series.find(sample => sample.frame === frame);
-        const rowAt = (frame, row) => at(frame)?.rows.find(value => value.row === row);
-        const beforeFar = rowAt(24, 26), firstArrival = rowAt(30, 26), returned = rowAt(90, 20);
-        assert.ok(beforeFar && Math.abs(beforeFar.motionDelta) < .05,
-          "A row five slots away must remain near its static baseline before the wavefront arrives: " + JSON.stringify(beforeFar));
-        assert.ok(firstArrival && firstArrival.motionDelta > .04,
-          "The full-quality wave must reach the distant row after roughly 12 slots/second: " + JSON.stringify(firstArrival));
-        assert.ok(returned && returned.motionDelta > .04,
-          "A return from the actual row-12 boundary must remain visible after the direct packet has passed: " + JSON.stringify(returned));
-        assert.ok(Math.abs(firstArrival.transformYDelta - firstArrival.motionDelta) < .003 &&
-          Math.abs(returned.transformYDelta - returned.motionDelta) < .003,
-        "The measured wave must reach the submitted Scene transforms, not only the helper sample.");
-        const result = { design, quality: baseline.quality, baseline, source, afterSelect,
-          forwardProbe: { beforeFar, firstArrival }, returnedProbe: returned, series,
-          screenshots: frameMarks.map(frame => keyframes.find(item => item.design === design && item.frame === frame).name) };
-        await writeFile(path.join(motionOutput, `array-echo-${design}-series.json`), JSON.stringify(result, null, 2));
-        return result;
+    if (isArrayBump) {
+      const motionOutput = arrayBumpOutput;
+      const radii = { off: 0, basic: 1, reduced: 2, full: 4 };
+      const levels = ["off", "basic", "reduced", "full"];
+      const keyframes = [];
+      const expectedHeight = (row, selectedRow, level) => {
+        const distance = Math.abs(row - selectedRow);
+        if (distance === 0) return .748;
+        const radius = radii[level];
+        return distance > radius ? 0 : .748 * (1 + Math.cos(Math.PI * distance / (radius + 1))) / 2;
       };
+      const capture = async (name, design, level, frame) => {
+        const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+        await writeFile(path.join(motionOutput, name), Buffer.from(screen.data, "base64"));
+        keyframes.push({ design, level, frame, name });
+      };
+      const runTheme = async design => {
+        const off = await evaluate("window.caseCheck.prepareArrayBump(" + JSON.stringify(design) + ",\"off\",9)");
+        const offByRow = new Map(off.values.map(value => [value.row, value.y]));
+        const levelRuns = [];
+        for (const level of levels) {
+          const state = level === "off" ? off : await evaluate("window.caseCheck.arrayBumpSetQuality(" + JSON.stringify(level) + ",120)");
+          assert.equal(state.phase, "archive"); assert.equal(state.interactive, true);
+          assert.equal(state.selected.lane, 0); assert.equal(state.selected.row, 21);
+          assert.equal(state.quality, level);
+          const positive = state.values.filter(value => value.row !== 21 && value.motionHeight > 1e-8);
+          assert.equal(positive.length, radii[level] * 2,
+            design + " " + level + " must lift exactly its occupied neighbors.");
+          const rows = state.values.map(value => {
+            const expected = expectedHeight(value.row, 21, level);
+            const expectedDelta = expected - expectedHeight(value.row, 21, "off");
+            const worldDelta = value.y - offByRow.get(value.row);
+            assert.ok(Math.abs(value.motionHeight - expected) < 2e-5,
+              design + " " + level + " sample must match the bounded cosine bump at row " + value.row + ".");
+            assert.ok(Math.abs(worldDelta - expectedDelta) < .003,
+              design + " " + level + " submitted matrix must carry the expected bump at row " + value.row + ".");
+            return { row: value.row, expected, motionHeight: value.motionHeight, worldY: value.y, worldDelta };
+          });
+          const run = { design, level, radius: radii[level], selectedRow: 21, positiveNeighborRows: positive.map(value => value.row), rows };
+          levelRuns.push(run);
+          if (design === "archive" || level === "full")
+            await capture(`array-bump-${design}-${level}.png`, design, level, "settled-quality-profile");
+        }
+
+        const rapidStart = await evaluate("window.caseCheck.prepareArrayBump(" + JSON.stringify(design) + ",\"full\",9)");
+        let selectedRow = rapidStart.selected.row;
+        const inputs = [], rapidFrames = [];
+        for (const direction of [1, 1, 1, -1, -1, -1]) {
+          const state = await evaluate("window.caseCheck.arrayBumpNavigate(" + direction + ")");
+          selectedRow += direction;
+          assert.equal(state.selected.row, selectedRow, "Rapid onNavigate commits each actual forward/reverse catalog choice.");
+          const sample = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
+          assert.equal(sample.selected.row, selectedRow);
+          assert.ok(Math.max(...sample.values.map(value => value.motionHeight)) <= .748 + 1e-12,
+            "Continuous selection cannot accumulate beyond the one selected bump.");
+          inputs.push({ direction, row: selectedRow, key: sample.selected.foobarEntryKey,
+            selectedHeight: sample.values.find(value => value.key === sample.selected.foobarEntryKey)?.motionHeight });
+          rapidFrames.push(sample);
+        }
+        assert.equal(selectedRow, rapidStart.selected.row, "The rapid forward/reverse sequence returns to its starting row.");
+        assert.equal(rapidFrames.at(-1).input.navigations.length - rapidStart.input.navigations.length, 6);
+
+        const stopSeries = [];
+        let previousFrame = 6;
+        for (const frame of [12, 30, 60, 120, 240, 300]) {
+          const part = await evaluate("window.caseCheck.arrayBumpAdvance(" + (frame - previousFrame) + ",6)");
+          stopSeries.push(...part); previousFrame = frame;
+        }
+        const expectedStop = rapidStart.values.map(value => ({ row: value.row, height: expectedHeight(value.row, selectedRow, "full"), worldY: value.y }));
+        const quietTail = stopSeries.filter(sample => sample.frame >= 180);
+        const maxTailError = Math.max(0, ...quietTail.flatMap(sample => sample.values.map(value =>
+          Math.abs(value.motionHeight - expectedHeight(value.row, selectedRow, "full")))));
+        let maxTailFrameChange = 0;
+        for (let index = 1; index < quietTail.length; index++) {
+          const previous = new Map(quietTail[index - 1].values.map(value => [value.row, value.motionHeight]));
+          maxTailFrameChange = Math.max(maxTailFrameChange, ...quietTail[index].values.map(value =>
+            Math.abs(value.motionHeight - previous.get(value.row))));
+        }
+        assert.ok(maxTailError < 1e-9 && maxTailFrameChange < 1e-9,
+          design + " rapid input settles to the same single static profile and has no delayed rebound: " +
+            JSON.stringify({ maxTailError, maxTailFrameChange }));
+        assert.ok(stopSeries.every(sample => Math.max(...sample.values.map(value => value.motionHeight)) <= .748 + 1e-12),
+          "Stopped Scene matrices never develop a delayed second peak.");
+        await capture(`array-bump-${design}-rapid-stop.png`, design, "full", "5s-after-input");
+        const rapid = { design, fromRow: rapidStart.selected.row, toRow: selectedRow, inputs, stopSeries, quietTail,
+          maxTailError, maxTailFrameChange, stopProfile: stopSeries.at(-1).values.map(value => ({ row: value.row,
+            motionHeight: value.motionHeight, worldY: value.y,
+            expected: expectedHeight(value.row, selectedRow, "full") })) };
+        await writeFile(path.join(motionOutput, `array-bump-${design}-rapid.json`), JSON.stringify(rapid, null, 2));
+        return { design, levels: levelRuns, rapid };
+      };
+
+      const waveControl = markup => {
+        const selectAt = markup.indexOf('<select data-quality="wave"');
+        if (selectAt < 0) return "";
+        const start = markup.lastIndexOf('<label class="quality-control"', selectAt);
+        const end = markup.indexOf("</label>", selectAt);
+        return start < 0 || end < 0 ? "" : markup.slice(start, end + 8);
+      };
+      const shelfMarkup = await evaluate('window.caseCheck.arrayBumpQualityMarkup("archive","shelf")');
+      const matrixMarkup = await evaluate('window.caseCheck.arrayBumpQualityMarkup("archive","grid")');
+      const shelfWaveControl = waveControl(shelfMarkup), matrixWaveControl = waveControl(matrixMarkup);
+      const shelfBumpHint = shelfWaveControl.match(/<small>([\s\S]*?)<\/small>/)?.[1] ?? "";
+      assert.ok(shelfBumpHint && /单凸起|One local rise/i.test(shelfBumpHint),
+        "Shelf quality markup explains the single local bump.");
+      assert.ok(!matrixWaveControl.includes(shelfBumpHint),
+        "Non-shelf quality controls do not show the shelf-only bump hint.");
+      assert.ok(/矩阵保留连续波动|matrix retains continuous waves/i.test(matrixWaveControl),
+        "The non-shelf MATRIX control retains its established global-wave explanation.");
+      assert.ok(!/回波|echo/i.test(shelfWaveControl), "ARRAY bump quality controls do not advertise echoes.");
+      const uiGuard = { shelfWaveControl, matrixWaveControl, shelfOnlyHintAbsentOutsideShelf: true,
+        matrixContinuousWaveCopyRetained: true };
+
       const archiveRun = await runTheme("archive");
       const rhineRun = await runTheme("rhine");
-      assert.ok(Math.abs(archiveRun.forwardProbe.firstArrival.motionDelta - rhineRun.forwardProbe.firstArrival.motionDelta) < .02 &&
-        Math.abs(archiveRun.returnedProbe.motionDelta - rhineRun.returnedProbe.motionDelta) < .02,
-      "The same full-quality rack impulse has comparable propagation and return strength in both themes.");
-
+      for (const level of levels) {
+        const archiveLevel = archiveRun.levels.find(value => value.level === level);
+        const rhineLevel = rhineRun.levels.find(value => value.level === level);
+        for (let index = 0; index < archiveLevel.rows.length; index++) {
+          assert.ok(Math.abs(archiveLevel.rows[index].motionHeight - rhineLevel.rows[index].motionHeight) < 1e-12 &&
+            Math.abs(archiveLevel.rows[index].worldDelta - rhineLevel.rows[index].worldDelta) < .003,
+          "Both themes use the same " + level + " ARRAY bump profile at row " + archiveLevel.rows[index].row + ".");
+        }
+      }
       const hoverChecks = [];
       for (const design of ["archive", "rhine"]) {
-        const fixture = await evaluate("window.caseCheck.prepareArrayEchoHover(" + JSON.stringify(design) + ")");
+        const fixture = await evaluate("window.caseCheck.prepareArrayBumpHover(" + JSON.stringify(design) + ")");
         const before = fixture.snapshot;
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: fixture.selectedTarget.x, y: fixture.selectedTarget.y });
-        const hovered = (await evaluate("window.caseCheck.arrayEchoAdvance(1,1)"))[0];
+        const hovered = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
         const selectedValue = state => state.values.find(value => value.key === state.selected.foobarEntryKey);
         const beforeSelected = selectedValue(before), hoveredSelected = selectedValue(hovered);
-        const earlyMotionLift = hoveredSelected.motionHeight - beforeSelected.motionHeight;
         const earlyWorldLift = hoveredSelected.y - beforeSelected.y;
         const counterfactualLift = hoveredSelected.motionHeight - fixture.noHoverPrediction;
         assert.equal(hovered.phase, "returning-array"); assert.equal(hovered.interactive, true);
         assert.equal(hovered.hoveredEntryKey, before.selected.foobarEntryKey,
-          "The actual CDP pointer must resolve to the newly selected entry during returning-array.");
+          "CDP hover resolves the selected card during interactive returning-array.");
         assert.ok(counterfactualLift > 1e-8 && counterfactualLift < .5 && earlyWorldLift > .003,
-          "A real pointer move lifts the selected case during interactive returning-array before full archive readiness: " +
-            JSON.stringify({ design, earlyMotionLift, earlyWorldLift, counterfactualLift, noHoverPrediction: fixture.noHoverPrediction,
-              target: fixture.selectedTarget, hoveredEntryKey: hovered.hoveredEntryKey, phase: hovered.phase }));
-        const hoverScreen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
-        const hoverName = `array-echo-${design}-hover-returning-array.png`;
-        await writeFile(path.join(motionOutput, hoverName), Buffer.from(hoverScreen.data, "base64"));
-
+          "The early real hover adds lift beyond the same spring's no-hover step before archiveReady: " +
+            JSON.stringify({ design, counterfactualLift, noHoverPrediction: fixture.noHoverPrediction, target: fixture.selectedTarget }));
+        const hoverName = `array-bump-${design}-hover-returning-array.png`;
+        await capture(hoverName, design, "full", "returning-array-hover");
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: fixture.otherTarget.x, y: fixture.otherTarget.y });
-        const sameParentOther = (await evaluate("window.caseCheck.arrayEchoAdvance(1,1)"))[0];
-        const otherDelta = selectedValue(sameParentOther).motionHeight - beforeSelected.motionHeight;
+        const sameParentOther = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
         assert.ok(sameParentOther.hoveredEntryKey !== before.selected.foobarEntryKey,
-          "A different track from the same parent album cannot masquerade as selected hover.");
+          "A different entry from the same parent cannot masquerade as selected hover.");
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
-        const left = (await evaluate("window.caseCheck.arrayEchoAdvance(1,1)"))[0];
-        const leftDelta = selectedValue(left).motionHeight - beforeSelected.motionHeight;
-        assert.ok(left.hoveredEntryKey !== before.selected.foobarEntryKey,
-          "Pointer leave clears the selected entry's hover state.");
+        const left = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
+        assert.ok(left.hoveredEntryKey !== before.selected.foobarEntryKey, "Pointer leave clears selected hover.");
         for (const state of [hovered, sameParentOther, left]) {
           assert.equal(state.input.selectedKey, before.input.selectedKey);
           assert.equal(state.input.focusedKey, before.input.focusedKey);
@@ -6280,50 +6397,19 @@ async function main() {
         }
         hoverChecks.push({ design, selectedTarget: fixture.selectedTarget, otherTarget: fixture.otherTarget,
           selectedRecordIndex: fixture.selectedRecordIndex, otherRecordIndex: fixture.otherRecordIndex,
-          earlyMotionLift, earlyWorldLift, noHoverPrediction: fixture.noHoverPrediction, counterfactualLift,
-          otherDelta, leftDelta, hoverScreenshot: hoverName,
-          selectionAndFocusUnchanged: true });
+          noHoverPrediction: fixture.noHoverPrediction, counterfactualLift, earlyWorldLift,
+          selectionFocusCatalogUnchanged: true, hoverScreenshot: hoverName });
       }
-
-      const trajectory = [];
-      const allSeries = [archiveRun, rhineRun];
-      const maxMagnitude = Math.max(1e-8, ...allSeries.flatMap(run => run.series.flatMap(sample =>
-        sample.rows.map(value => Math.abs(value.motionDelta)))));
-      const chart = { x: 94, y: 78, width: 1030, height: 210 };
-      const panelGap = 74, rowCount = 20, cellWidth = chart.width / Math.max(...allSeries.map(run => run.series.length));
-      for (let panel = 0; panel < allSeries.length; panel++) {
-        const run = allSeries[panel], y0 = chart.y + panel * (chart.height + panelGap), cellHeight = chart.height / rowCount;
-        trajectory.push(`<text x="${chart.x}" y="${y0 - 18}" font-family="Segoe UI, sans-serif" font-size="18" fill="#f5eee3">${run.design} · full quality</text>`);
-        trajectory.push(`<rect x="${chart.x}" y="${y0}" width="${chart.width}" height="${chart.height}" fill="#111722" stroke="#667488"/>`);
-        for (let index = 0; index < run.series.length; index++) for (const value of run.series[index].rows) {
-          const intensity = Math.min(.95, Math.abs(value.motionDelta) / maxMagnitude);
-          if (intensity < .015) continue;
-          const rowIndex = value.row - 12, fill = value.motionDelta >= 0 ? "#ff9b57" : "#66adff";
-          trajectory.push(`<rect x="${(chart.x + index * cellWidth).toFixed(2)}" y="${(y0 + (rowCount - 1 - rowIndex) * cellHeight).toFixed(2)}" width="${(cellWidth + .4).toFixed(2)}" height="${(cellHeight + .4).toFixed(2)}" fill="${fill}" opacity="${intensity.toFixed(3)}"/>`);
-        }
-        for (let tick = 0; tick <= 5; tick++) {
-          const x = chart.x + chart.width * tick / 5;
-          trajectory.push(`<path d="M${x.toFixed(2)} ${y0}v${chart.height}" stroke="#536173" stroke-width="1" opacity=".48"/>`);
-          trajectory.push(`<text x="${x.toFixed(2)}" y="${y0 + chart.height + 21}" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="12" fill="#c9d3df">${tick}s</text>`);
-        }
-        for (let row = 12; row <= 31; row += 3) {
-          const y = y0 + (rowCount - 1 - (row - 12)) * cellHeight + cellHeight / 2;
-          trajectory.push(`<text x="${chart.x - 12}" y="${y.toFixed(2)}" text-anchor="end" dominant-baseline="middle" font-family="Segoe UI, sans-serif" font-size="11" fill="#c9d3df">${row}</text>`);
-        }
-      }
-      trajectory.unshift(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640"><rect width="100%" height="100%" fill="#090d14"/><text x="94" y="30" font-family="Segoe UI, sans-serif" font-size="21" fill="#f5eee3">ARRAY rack echo · displacement by row and time</text><text x="94" y="52" font-family="Segoe UI, sans-serif" font-size="12" fill="#b9c5d4">Orange = upward motion · blue = trough · event via continuous row navigation · observed from Scene samples</text>`);
-      trajectory.push("</svg>");
-      await writeFile(path.join(motionOutput, "array-echo-trajectory.svg"), trajectory.join("\n"));
       assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
       assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
       assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
-      const report = { ok: true, scope: "Real ArchiveScene current-column propagation and physical-end return, fast navigation, early interactive returning-array hover, both UI themes, submitted transforms, and keyframes.",
-        themes: [archiveRun, rhineRun], hoverChecks, keyframes, trajectory: "array-echo-trajectory.svg",
-        runtimeErrors, shaderErrors, blockedRoutes };
-      await writeFile(path.join(motionOutput, "array-echo-report.json"), JSON.stringify(report, null, 2));
-      console.log(JSON.stringify({ ok: true, checks: ["continuous row navigation triggers the current-column wave", "forward arrival time", "physical-end return after direct pass", "Scene transform matches motion samples", "both themes share the same quality response", "CDP hover during interactive returning-array", "same-parent other entry and pointer leave restore without focus changes"],
-        report: ".tools/array-echo/array-echo-report.json", trajectory: ".tools/array-echo/array-echo-trajectory.svg",
-        screenshots: keyframes.map(item => item.name).concat(hoverChecks.map(item => item.hoverScreenshot)) }, null, 2));
+      const report = { ok: true,
+        scope: "Real ArchiveScene single-bump profiles at all quality levels, rapid forward/reverse spring settling, early CDP hover in interactive returning-array, matching themes, and retained MATRIX global-wave UI.",
+        themes: [archiveRun, rhineRun], hoverChecks, uiGuard, keyframes, runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(motionOutput, "array-bump-report.json"), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: true, checks: ["four exact current-column bump profiles on submitted matrices", "shelf-only bump hint and retained MATRIX wave copy", "both themes share the same levels", "rapid forward/reverse onNavigate then 5 seconds static", "no late rebound or second peak", "CDP hover during interactive returning-array", "same-parent target and pointer leave preserve catalog/focus/selection"],
+        report: ".tools/array-bump/array-bump-report.json",
+        screenshots: keyframes.map(item => item.name) }, null, 2));
       return;
     }
     if (isArrayComposition) {
@@ -7507,7 +7593,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayEcho ? arrayEchoOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({
