@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { MusicStyle, StylePalette } from "./music-style";
 import { MusicShelf } from "./music-shelf";
+import { createMusicSurfaceTextures, disposeMusicSurfaceTextures } from "./music-surface-textures";
 
 export type MusicSceneSlot = {
   x: number;
@@ -36,8 +38,10 @@ export class MusicSceneResources {
   private readonly capacity: number;
   private readonly trays: MusicShelf;
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
+  private readonly roundedBox = new RoundedBoxGeometry(1, 1, 1, 1, .025);
   private readonly plane = new THREE.PlaneGeometry(1, 1);
   private readonly wood = createWoodTexture();
+  private readonly surfaceTextures = createMusicSurfaceTextures();
   private readonly frameMaterial = new THREE.MeshStandardMaterial({ color: "#b9beb8", roughness: .52, metalness: .08 });
   private readonly edgeMaterial = new THREE.MeshPhysicalMaterial({
     color: "#d4d9d4", roughness: .32, metalness: .04, transmission: .12,
@@ -50,15 +54,15 @@ export class MusicSceneResources {
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
   private readonly floorLineMaterial = new THREE.MeshStandardMaterial({
-    color: "#d2d5cd", roughness: .72, metalness: .22, transparent: true,
-    opacity: .48, depthWrite: false,
+    color: "#d2d5cd", roughness: .82, metalness: .04, transparent: true,
+    opacity: .14, depthWrite: false,
   });
-  private readonly laneBase: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>;
-  private readonly laneSides: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>;
-  private readonly lanePlates: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>;
-  private readonly plateMarks: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>;
+  private readonly laneBase: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneSides: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly lanePlates: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly plateMarks: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly floorPanels: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material>;
-  private readonly floorTicks: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>;
+  private readonly floorTicks: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly rowLabels: RowLabel[] = [];
   private readonly matrix = new THREE.Matrix4();
   private readonly position = new THREE.Vector3();
@@ -71,8 +75,9 @@ export class MusicSceneResources {
   constructor(count: number) {
     this.capacity = Math.max(1, Math.floor(count));
     this.trays = new MusicShelf(this.capacity);
-    const makeBoxes = (name: string, material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial, amount = this.capacity) => {
-      const mesh = new THREE.InstancedMesh(this.box, material, amount);
+    const makeBoxes = (name: string, material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
+      amount = this.capacity, geometry: THREE.BufferGeometry = this.box) => {
+      const mesh = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>(geometry, material, amount);
       mesh.name = name;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
@@ -81,10 +86,10 @@ export class MusicSceneResources {
       this.group.add(mesh);
       return mesh;
     };
-    this.laneBase = makeBoxes("Music shelf base", this.frameMaterial);
-    this.laneSides = makeBoxes("Music shelf side rails", this.edgeMaterial, this.capacity * 2);
-    this.lanePlates = makeBoxes("Music shelf front number plates", this.plateMaterial);
-    this.plateMarks = makeBoxes("Music shelf plate markers", this.accentMaterial);
+    this.laneBase = makeBoxes("Music shelf base", this.frameMaterial, this.capacity, this.roundedBox);
+    this.laneSides = makeBoxes("Music shelf side rails", this.edgeMaterial, this.capacity * 2, this.roundedBox);
+    this.lanePlates = makeBoxes("Music shelf front number plates", this.plateMaterial, this.capacity, this.roundedBox);
+    this.plateMarks = makeBoxes("Music shelf plate markers", this.accentMaterial, this.capacity, this.roundedBox);
     this.floorPanels = new THREE.InstancedMesh(this.plane, this.floorMaterial, this.capacity);
     this.floorPanels.name = "Local music floor finish";
     this.floorPanels.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -122,11 +127,34 @@ export class MusicSceneResources {
 
     this.floorMaterial.map = style.floor === "real" ? this.wood : null;
     this.floorMaterial.color.set(style.floor === "real" ? "#ffffff" : style.floor === "deck" ? palette.well : palette.bg);
-    this.floorMaterial.metalness = style.floor === "deck" ? (archive ? .72 : .42) : .035;
-    this.floorMaterial.roughness = style.floor === "real" ? .78 : style.floor === "deck" ? .62 : .94;
+    this.floorMaterial.metalness = .035;
+    this.floorMaterial.roughness = .78;
     this.floorMaterial.needsUpdate = true;
-    this.floorLineMaterial.color.set(style.floor === "real" ? palette.accent : palette.line);
-    this.floorLineMaterial.opacity = style.floor === "plain" ? .28 : style.floor === "deck" ? .58 : .34;
+    this.floorLineMaterial.color.set(palette.line);
+    this.floorLineMaterial.opacity = .14;
+  }
+
+  /** Apply the selected finish to the large, stationary scene floor. */
+  applyGroundFinish(material: THREE.MeshStandardMaterial): void {
+    const floor = this.style?.floor ?? "plain";
+    material.map = floor === "real" ? null : floor === "deck"
+      ? this.surfaceTextures.deckColor : this.surfaceTextures.plainColor;
+    material.roughnessMap = floor === "real" ? null : this.surfaceTextures.roughness;
+    material.normalMap = floor === "real" ? null : this.surfaceTextures.normal;
+    if (floor === "real") {
+      material.normalScale.set(0, 0);
+      material.roughness = .95;
+      material.metalness = 0;
+    } else if (floor === "deck") {
+      material.normalScale.set(.12, .12);
+      material.roughness = .76;
+      material.metalness = .12;
+    } else {
+      material.normalScale.set(.1, .1);
+      material.roughness = .94;
+      material.metalness = .025;
+    }
+    material.needsUpdate = true;
   }
 
   update(options: MusicSceneResourceUpdate): void {
@@ -151,9 +179,9 @@ export class MusicSceneResources {
       const slot = options.slots[index];
       const valid = Boolean(slot?.visible && finiteSlot(slot));
       this.trays.setSlot(index, valid ? slot!.x : 0, floorY, valid ? slot!.z : 0, valid && rackVisible);
-      const tickVisible = valid && (style.floor === "deck" || style.floor === "real" || slot!.row % 5 === 0);
-      this.writeBox(this.floorTicks, index, slot?.x ?? 0, floorY - .215, slot?.z ?? 0,
-        [style.floor === "deck" ? width * .82 : .18, .004, .012], tickVisible);
+      const tickVisible = valid && slot!.row % 5 === 0;
+      this.writeBox(this.floorTicks, index, slot?.x ?? 0, floorY - .22 + .0005, slot?.z ?? 0,
+        [.12, .001, .006], tickVisible);
       if (!valid) continue;
       const lane = lanes.get(slot!.lane);
       if (lane) {
@@ -171,9 +199,10 @@ export class MusicSceneResources {
     this.laneSides.count = laneCount * 2;
     this.lanePlates.count = laneCount;
     this.plateMarks.count = laneCount;
-    this.floorPanels.count = laneCount;
+    const floorHasPanel = style.floor === "real";
+    this.floorPanels.visible = floorHasPanel;
+    this.floorPanels.count = floorHasPanel ? laneCount : 0;
     const panelFloor = floorY - .218;
-    const floorHasPanel = style.floor !== "plain";
 
     laneList.forEach(([, lane], laneIndex) => {
       const span = Math.max(rowSpacing, lane.maxZ - lane.minZ + rowSpacing + depth);
@@ -221,8 +250,10 @@ export class MusicSceneResources {
     this.trays.dispose();
     for (const mesh of [this.laneBase, this.laneSides, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks]) mesh.dispose();
     this.box.dispose();
+    this.roundedBox.dispose();
     this.plane.dispose();
     this.wood.dispose();
+    disposeMusicSurfaceTextures(this.surfaceTextures);
     for (const label of this.rowLabels) {
       label.mesh.removeFromParent();
       label.material.dispose();
@@ -271,7 +302,7 @@ export class MusicSceneResources {
     label.texture.needsUpdate = true;
   }
 
-  private writeBox(mesh: THREE.InstancedMesh<THREE.BoxGeometry, THREE.Material>, index: number,
+  private writeBox(mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>, index: number,
     x: number, y: number, z: number, dimensions: readonly [number, number, number], visible: boolean) {
     this.position.set(x, y, z);
     this.scale.set(dimensions[0], dimensions[1], dimensions[2]);

@@ -8,7 +8,7 @@
 
 另从同一本地包 `assets/intro/<10skin>/` 复制至 `src/assets/style/intro/`：每皮肤intro.json+144JPG，1450文件、151,658,971bytes（144.63MiB），逐文件SHA-256全部匹配。未重绘/转码、未下载或执行原安装器。曾有本轮145个aurora副本落到新目标根，已核对后仅移动这些新副本归位，原目录未动，最终10×145结构与源完全对应。`foobar-intro.ts`按metadata fps/res/tracked points播放原片，原overlay/cue在Canvas适配，按需加载、14帧前瞻/6并发；动画不能冒充音频或硬件检测。现有Audio Archive MIT原文继续覆盖所复制资产/改编代码。
 
-盒型、货架和地面资源来自本机 `../RhinE-1.4.0-portable/audio-archive-1.4.0`（RhinE 1.4.0 主题包），逐字节复制到 `src/assets/style/`，目录对应关系为：`assets/render/case/` → `case/`，`assets/render/rail/` → `rail/`，`assets/render/floor/` → `floor/`。配色 token 使用固定官方提交 `cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0` 的 [`tokens.json`](https://raw.githubusercontent.com/ericzhang12111-cell/RhinE/cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0/theme/tokens/tokens.json)，源于 RhinE 官方主题目录。资源集包含 10 个盒型皮肤、盒体/封面投影元数据、货架、三种地面外观和全部配色；没有读取 foobar 的 profile、曲库、缓存或数据库，也没有复制安装包、可执行文件和组件二进制。
+盒型、货架和地面资源来自本机只读参考目录 `D:\CodexLocalWorkContent\PersonalMusicPlayer\references\RhinE-1.4.0-portable\audio-archive-1.4.0`（RhinE 1.4.0 主题包），逐字节复制到 `src/assets/style/`，目录对应关系为：`assets/render/case/` → `case/`，`assets/render/rail/` → `rail/`，`assets/render/floor/` → `floor/`。配色 token 使用固定官方提交 `cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0` 的 [`tokens.json`](https://raw.githubusercontent.com/ericzhang12111-cell/RhinE/cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0/theme/tokens/tokens.json)，源于 RhinE 官方主题目录。资源集包含 10 个盒型皮肤、盒体/封面投影元数据、货架、三种地面外观和全部配色；没有读取 foobar 的 profile、曲库、缓存或数据库，也没有复制安装包、可执行文件和组件二进制。
 
 ## 参考入口与可复用资源
 
@@ -44,7 +44,9 @@ foobar独立构建20槽货架，按原buildShelves把当前曲库分组依序填
 
 第三阶段建立、当前保留的两主题货架、阵列与网格详情由同一`ArchiveScene`/Three.js renderer、实例池、封面图集和后期覆盖绘制，不再调用上述Canvas2D适配器。`music-spatial-layout`使用稳定entry身份及有限20槽分页；列沿负X、槽沿负Z，camera yaw -38°、elevation 35°，货架间距依据变换后的盒体bounds拓展。Punk场景仍裁切到右侧信息栏边界。第四阶段已清退旧目录链并把可见SHOW/GROUP/SORT/Grid markup统一到公共entryKeys处理。
 
-`src/music-shelf.ts`与`src/music-scene-resources.ts`以程序几何建立按主题着色的托盘、货架边框、前牌`ROW 001`和局部地面细节；`MusicCaseTitles`使用纸面图集绘制Punk顶边标题。plain采用浅刻线/定位标，deck采用金属拼缝/刻度，real使用程序生成木纹且不含烘焙阴影。现有`src/assets/style/rail/`与`floor/`中的PNG和JSON是旧预渲染投影资产，不作为新实时地板的直接贴图。
+`src/music-shelf.ts`与`src/music-scene-resources.ts`以程序几何建立两主题共用的逐排托盘、货架边框、前牌`ROW 001`和局部地面细节；托盘带倒角、内凹床面和导向槽，`MusicCaseTitles`使用纸面图集绘制Punk顶边标题。plain采用浅刻线/定位标，deck采用金属拼缝/刻度。plain/deck的大型静态地面使用缓存的4张256×256程序纹理：plain与deck各一张color，共用roughness与normal；real主地面不挂纹理，局部托盘仍保留原程序木纹。现有`src/assets/style/rail/`与`floor/`中的PNG和JSON是旧预渲染投影资产，不作为新实时地板的直接贴图。
+
+2026-10-15 ARRAY交互细化：本机只读参考目录中的`js/archive.js` `caseTargets`与`js/lib/motion.js`提供bell轮廓和弹簧行为来源；当前实现为`src/music-array-motion.ts`。实体ARRAY选中盒的bell抬升为`.748`，额外选中抬升`1.35`，基础总抬升`2.098`并保留净空。邻近bell先按`1.1*(exp(-d²/4.5)-.32*exp(-d²/18))`计算，再将负值截为0以保留托盘净空；仅选中entry悬停增加`.5`且不改变selection，TRACKS按entryKey定位。两主题共享每排rail与case bell，不产生跨排新wave；旧排的盒体Y位移可自然回落，Z位置冻结。`off/basic/reduced/full`控制邻近bell强度`0/.35/.65/1`，选中抬升不受`off`影响；reduced motion保留静态target。MATRIX原动作不变。相关纯helper及Scene/CDP、完整unified验证已通过，详细报告见`.tools/array-surface-refinement/pure-motion-audit.json`、`scene-motion-audit.json`与`unified-render-audit.json`；使用synthetic Scene，不构成个人播放器、音频硬件或设备FPS验收。
 
 已核实上游1.4.0资源没有原始货架/地面3D网格或建模脚本。当前程序几何按现有资料估算，不是原作者网格或像素复刻；本阶段未改GLB/PNG。复制来的Audio Archive主题代码/资源许可见下文原MIT及`public/licenses/audio-archive-style-mit.txt`。
 

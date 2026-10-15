@@ -14,7 +14,7 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 // Retain the old command as an explicit alias of the current common renderer audit.
 const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view");
-const unifiedOutput = path.join(project, ".tools", "unified-architecture-stage4");
+const unifiedOutput = path.join(project, ".tools", "array-surface-refinement");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -166,6 +166,7 @@ import { archiveMusicStyle, defaultMusicStyle, musicStyleMarkup, stylePalette } 
 import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries } from "./src/music-catalog.ts";
 import { getMusicCatalogShelves } from "./src/music-catalog-shelves.ts";
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
+import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift } from "./src/music-array-motion.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
 import { normalizeCaseUserPresets } from "./src/case-user-presets.ts";
 import { createAlbumInsert } from "./src/album-insert.ts";
@@ -963,7 +964,12 @@ function unifiedSnapshot() {
   const scene = archiveScene;
   const matrix = new THREE.Matrix4();
   const projectCell = cell => {
-    const point = scene.cellPosition(cell).add(new THREE.Vector3(-scene.columnCamera.value, 0, scene.rail.value)).project(scene.camera);
+    const index = scene.cells.findIndex(value => value.lane === cell.lane && value.row === cell.row);
+    let point;
+    if (index >= 0 && scene.shelfView) {
+      scene.caseHitProxy.getMatrixAt(index, matrix);
+      point = new THREE.Vector3(matrix.elements[12], matrix.elements[13], matrix.elements[14]).project(scene.camera);
+    } else point = scene.cellPosition(cell).add(new THREE.Vector3(-scene.columnCamera.value, 0, scene.rail.value)).project(scene.camera);
     return { x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2 };
   };
   const valid = scene.cells.flatMap((cell, index) => {
@@ -1014,7 +1020,7 @@ function unifiedSnapshot() {
     physicalTraysVisible: !!tray?.parent.visible,
     styleError: archiveStyleError };
 }
-function unifiedPointerTarget(selected = false) {
+function unifiedPointerTarget(selected = false, sameParent = false) {
   if (selected) {
     for (let frame = 0; frame < 90 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
     expect(archiveScene.musicArchiveReady, "The real selection animation must settle before accepting album-open input.");
@@ -1032,6 +1038,7 @@ function unifiedPointerTarget(selected = false) {
   for (let index = 0; index < archiveScene.cells.length; index++) {
     const entry = musicSpatialEntry(archiveScene.cells[index], true);
     if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey) continue;
+    if (sameParent && entry.recordIndex !== musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex) continue;
     archiveScene.caseHitProxy.getMatrixAt(index, matrix);
     if (matrix.elements[0] === 0 && matrix.elements[5] === 0 && matrix.elements[10] === 0) continue;
     point.copy(archiveScene.caseLayout.center).applyMatrix4(matrix).project(archiveScene.camera);
@@ -1041,6 +1048,16 @@ function unifiedPointerTarget(selected = false) {
     const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
     if (hit?.instanceId !== index) continue;
     return { x, y, index: entry.recordIndex, key: entry.key };
+  }
+  // A lifted selection can cover case centers while a neighboring spine remains visible.
+  for (let y = 35; y < archiveHost.clientHeight - 35; y += 12) for (let x = 35; x < archiveScene.displayViewportWidth - 35; x += 12) {
+    ray.setFromCamera(new THREE.Vector2(x * 2 / archiveHost.clientWidth - 1, 1 - y * 2 / archiveHost.clientHeight), archiveScene.camera);
+    const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
+    if (hit?.instanceId === undefined) continue;
+    const entry = musicSpatialEntry(archiveScene.cells[hit.instanceId], true);
+    if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey ||
+      (sameParent && entry.recordIndex !== musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex)) continue;
+    return { x, y, index: entry.recordIndex, key: entry.key, sample: "visible raycast spine" };
   }
   throw new Error("No unselected finite shelf case has a visible production raycast target.");
 }
@@ -1226,6 +1243,67 @@ function punkArrayMotionSnapshot() {
     returnY: scene.returnY, outgoing: scene.outgoing.length, values };
 }
 
+let arrayMotionPrepare;
+let arrayMotionSelect;
+function arrayHoverSnapshot() {
+  stepArchiveScene(100);
+  const scene = archiveScene;
+  return { y: scene.model.position.y, selected: { ...scene.selectedCell }, phase: scene.musicPresentationPhase,
+    catalog: getMusicCatalogShelves().map(value => value.entryKeys.length), clicks: unifiedClicks.length, opens: unifiedOpens.length,
+    bounds: unifiedSnapshot().selectedScreenBounds };
+}
+async function prepareArrayPointer(design) {
+  await arrayMotionPrepare(design, "shelf", "full");
+  arrayMotionSelect(0, 12); archiveScene.setReduced(true); stepArchiveScene(1); archiveScene.setReduced(false);
+  for (let frame = 0; frame < 300 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
+  const selected = unifiedPointerTarget(true);
+  const baseline = arrayHoverSnapshot(), other = unifiedPointerTarget(false, true);
+  expect(baseline.phase === "archive", "Capture the hover baseline only after the real archive return has settled.");
+  expect(other.index === musicSpatialEntry(archiveScene.selectedCell, true).recordIndex && other.key !== selected.key,
+    "The hover exclusion target must be another TRACKS entry from the same parent album.");
+  return { baseline, selected, other };
+}
+const arraySurfaceDisposed = [];
+const arraySurfaceWatched = new Set();
+async function arraySurfaceVariant(design, floor) {
+  const scene = archiveScene;
+  scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor });
+  stepArchiveScene(100);
+  const material = scene.floor.material, resources = scene.sceneResources;
+  for (const texture of [material.map, material.roughnessMap, material.normalMap]) if (texture && !arraySurfaceWatched.has(texture.uuid)) {
+    arraySurfaceWatched.add(texture.uuid); texture.addEventListener("dispose", () => arraySurfaceDisposed.push(texture.uuid));
+  }
+  const effectiveFloor = scene.musicStyle.floor;
+  const detail = { design, floor, effectiveFloor, map: !!material.map, roughnessMap: !!material.roughnessMap, normalMap: !!material.normalMap,
+    normalScale: material.normalScale?.toArray(), roughness: material.roughness, metalness: material.metalness,
+    recessedBed: !!resources.group.getObjectByName("Record shelf recessed bed"), guides: !!resources.group.getObjectByName("Record shelf guide grooves"),
+    floorPanelsVisible: resources.floorPanels?.visible, textures: [material.map?.uuid, material.roughnessMap?.uuid, material.normalMap?.uuid] };
+  if (design === "rhine") expect(effectiveFloor === "plain", "Future retains its established normalized plain floor.");
+  if (effectiveFloor === "plain" || effectiveFloor === "deck") {
+    expect(detail.map && detail.roughnessMap && detail.normalMap, "Plain/deck floor uses its local color, roughness and normal textures: " + JSON.stringify(detail));
+    const expected = effectiveFloor === "plain" ? [.1, .94, .025] : [.12, .76, .12];
+    expect(Math.abs(detail.normalScale[0] - expected[0]) < 1e-12 && Math.abs(detail.roughness - expected[1]) < 1e-12 &&
+      Math.abs(detail.metalness - expected[2]) < 1e-12, "Physical floor finish retains restrained surface parameters: " + JSON.stringify(detail));
+    expect(detail.recessedBed && detail.guides && detail.floorPanelsVisible === false,
+      "Common finite trays include their bed/guides while plain/deck avoid duplicate local floor panels: " + JSON.stringify(detail));
+  } else expect(detail.floorPanelsVisible === true && !detail.map && !detail.normalMap && !detail.roughnessMap,
+    "The real floor retains its existing wood panel layer and original background.");
+  expect(arraySurfaceDisposed.length === 0, "Changing surface styles cannot dispose shared floor textures still owned by this Scene.");
+  const oldQuality = { ...scene.quality }, oldZoom = scene.camera.zoom;
+  let standard, closeup;
+  try {
+    scene.setQuality({ ...qualityPresets.high, scale: 100, pixelRatio: 1, modelDetail: "medium" });
+    stepArchiveScene(2);
+    standard = scene.renderer.domElement.toDataURL("image/png");
+    scene.camera.zoom = oldZoom * 1.8; scene.camera.updateProjectionMatrix();
+    scene.composer.render();
+    closeup = scene.renderer.domElement.toDataURL("image/png");
+  } finally {
+    scene.camera.zoom = oldZoom; scene.camera.updateProjectionMatrix(); scene.setQuality(oldQuality); stepArchiveScene(1);
+  }
+  return { detail, standard, closeup };
+}
+
 async function exercisePunkArrayMotion() {
   if (!archiveScene) {
     await setupArchiveScene(); window.caseCheck.editor.destroy(); document.body.replaceChildren(archiveHost);
@@ -1234,13 +1312,13 @@ async function exercisePunkArrayMotion() {
   }
   const scene = archiveScene;
   const albums = records.slice(0, 2).map((record, index) => ({ ...record.album,
-    tracks: Array.from({ length: 40 }, (_, slot) => ({ id: "motion-" + index + "-" + slot, albumId: record.id,
+    tracks: Array.from({ length: index === 0 ? 40 : 45 }, (_, slot) => ({ id: "motion-" + index + "-" + slot, albumId: record.id,
       title: "Motion Fixture " + index + " / " + slot, trackNumber: slot + 1, artist: record.album.artist,
       format: "FLAC", audioUrl: "", relativePath: "", duration: 120 })) }));
   setMusicAlbums(albums, [{ id: "fixture-a", name: "Fixture A" }, { id: "fixture-b", name: "Fixture B" }], "genre");
   configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
   const entries = getMusicDisplayEntries();
-  expect(entries.length === 80 && getMusicCatalogShelves().length === 4, "Motion acceptance requires four independent full physical lanes.");
+  expect(entries.length === 85 && getMusicCatalogShelves().length === 5, "Motion acceptance requires four full lanes and a final five-entry lane.");
   await scene.refreshLibrary(0);
   const select = (lane, slot) => {
     const key = getMusicCatalogShelves()[lane].entryKeys[slot], entry = entries.find(value => value.key === key);
@@ -1261,6 +1339,7 @@ async function exercisePunkArrayMotion() {
       "Motion fixture must be settled archive browsing, without cinematic/detail/return ownership: " + JSON.stringify(snapshot));
     return snapshot;
   };
+  arrayMotionPrepare = prepare; arrayMotionSelect = select;
   const compare = (before, after, lane, active) => {
     const byKey = new Map(before.values.map(value => [value.key, value]));
     const shared = after.values.filter(value => value.lane === lane && byKey.has(value.key));
@@ -1272,7 +1351,7 @@ async function exercisePunkArrayMotion() {
     const result = { lane, matched: shared.length, maxZDelta: Math.max(...z), maxYDelta: Math.max(0, ...y), maxAbsRotationX: Math.max(0, ...rotation) };
     expect(active ? result.maxZDelta > .01 : result.maxZDelta === 0,
       (active ? "Active" : "Inactive") + " lane Z ownership failed: " + JSON.stringify(result));
-    if (!active) expect(result.maxYDelta === 0 && result.maxAbsRotationX === 0,
+    if (!active) expect(result.maxYDelta < 2e-5 && result.maxAbsRotationX < 2e-5,
       "An inactive lane must have stable Y and zero X rotation: " + JSON.stringify(result));
     return result;
   };
@@ -1293,37 +1372,46 @@ async function exercisePunkArrayMotion() {
   const during = punkArrayMotionSnapshot(); aligned(during);
   const laneChecks = [0, 1, 2, 3].map(lane => compare(before, during, lane, lane === 0));
   select(1, 9); stepArchiveScene(1);
-  const switched = punkArrayMotionSnapshot(); stepArchiveScene(44);
+  const switched = punkArrayMotionSnapshot(); stepArchiveScene(240);
   const afterSwitch = punkArrayMotionSnapshot(); aligned(afterSwitch);
-  const frozen = compare(switched, afterSwitch, 0, false);
+  const switchedZ = switched.values.filter(value => value.lane === 0);
+  expect(switchedZ.every(value => afterSwitch.values.find(next => next.key === value.key)?.z === value.z),
+    "Former lane Z freezes immediately while its selection wave naturally lowers.");
+  stepArchiveScene(60);
+  const beforeReduced = punkArrayMotionSnapshot();
+  const frozen = compare(afterSwitch, beforeReduced, 0, false);
   const nextLane = compare(switched, afterSwitch, 1, true);
   scene.setReduced(true); select(2, 14); stepArchiveScene(1);
   const reduced = punkArrayMotionSnapshot();
   const reducedSelected = reduced.values.find(value => value.selected);
   expect(Math.abs(reducedSelected.z + 2.17) < 2e-6, "Reduced motion places the new active lane on the inspection Z in one update.");
   for (const value of reduced.values.filter(value => value.lane !== 2)) {
-    const previous = afterSwitch.values.find(old => old.key === value.key);
+    const previous = beforeReduced.values.find(old => old.key === value.key);
     expect(previous && previous.z === value.z, "Reduced selection cannot move another lane's rail.");
   }
-  // The former active wave drops to its resting plane at deactivation; measure stability after that boundary.
+  // Reduce motion preserves the same selected/neighbor shape, snapping former inactive cases to rest.
   stepArchiveScene(1); const reducedSettled = punkArrayMotionSnapshot();
   const reducedInactive = [0, 1, 3].map(lane => compare(reduced, reducedSettled, lane, false));
-  // Old selected/outgoing boxes may lower; regular nonselected slots must never inherit their old pulse.
+  // Selection keeps the original persistent bell, with quality changing only neighbors.
   const waveLevels = [];
   for (const wave of ["off", "basic", "reduced", "full"]) {
     const baseline = await prepare("archive", "shelf", wave);
-    const restingSelectedY = baseline.values.find(value => value.selected).y;
-    select(0, 12);
+    select(0, 12); scene.setReduced(true); stepArchiveScene(1); scene.setReduced(false);
     const samples = [];
-    for (let frame = 1; frame <= 90; frame++) {
+    for (let frame = 1; frame <= 300; frame++) {
       stepArchiveScene(1);
       const snapshot = punkArrayMotionSnapshot(); aligned(snapshot);
-      const neighbor = snapshot.values.find(value => value.lane === 0 && value.row === 26);
-      expect(snapshot.values.find(value => value.selected).y === restingSelectedY,
-        "The selected slot retains its distance-zero ease gate rather than receiving its own pulse: " + wave);
+      const neighbor = snapshot.values.find(value => value.lane === 0 && value.row === 25);
+      const distanceTwo = snapshot.values.find(value => value.lane === 0 && value.row === 26);
+      const distant = snapshot.values.find(value => value.lane === 0 && value.row === 31);
+      const selectedHeight = snapshot.selectedModel.y - distant.y;
+      expect(Math.abs(selectedHeight - 2.098) < 2e-5,
+        "All wave qualities retain the original 2.098 selected lift: " + wave + "/" + selectedHeight);
+      if (wave !== "off") expect(neighbor.y > distant.y && distanceTwo.y > distant.y,
+        "Both first and second neighbors form a persistent raised shoulder: " + wave);
       const inactive = snapshot.values.filter(value => value.lane !== 0);
       expect(inactive.every(value => value.rotX === null || value.rotX === 0), "Every inactive submitted cell stays upright for " + wave);
-      if ([1, 6, 12, 18, 30, 45, 60, 90].includes(frame)) samples.push({ frame, snapshot });
+      if ([1, 6, 18, 60, 200, 300].includes(frame)) samples.push({ frame, snapshot });
       samples.push({ frame, neighborY: neighbor.y, neighborRotationX: neighbor.rotX });
     }
     waveLevels.push({ wave, baseline, samples });
@@ -1344,21 +1432,57 @@ async function exercisePunkArrayMotion() {
   const idleOld = new Map(idleBefore.values.map(value => [value.key, value]));
   const idleActiveYDelta = Math.max(...idleAfter.values.filter(value => value.lane === 0 && value.drawn)
     .map(value => Math.abs(value.y - idleOld.get(value.key).y)));
-  expect(idleActiveYDelta > 1e-5, "The selected lane still visibly receives its existing idle wave.");
-  // Existing shared rail behavior must remain in the non-target theme and MATRIX layout.
+  expect(idleActiveYDelta < 2e-5, "Persistent ARRAY shoulders stay at their target beyond the old pulse lifetime.");
+  // Future shares common ARRAY rail/shape; both themes retain the existing MATRIX rail.
   const guards = [];
-  for (const [design, layout] of [["rhine", "shelf"], ["archive", "array"]]) {
+  for (const [design, layout] of [["rhine", "shelf"], ["archive", "array"], ["rhine", "array"]]) {
     const start = await prepare(design, layout, "full"); select(0, 12); stepArchiveScene(18);
     const finish = punkArrayMotionSnapshot();
     const old = start.values.find(value => value.lane === 1 && value.row === 16 && value.drawn);
     const next = finish.values.find(value => value.lane === old?.lane && value.row === old?.row);
-    expect(old && next && Math.abs(next.z - old.z) > .01,
-      "Non-target Future ARRAY / Punk MATRIX preserve their shared rail: " + JSON.stringify({ design, layout, old, next }));
+    expect(old && next && (layout === "shelf" ? next.z === old.z : Math.abs(next.z - old.z) > .01),
+      "Future ARRAY shares independent rails; both MATRIX themes retain the shared rail: " + JSON.stringify({ design, layout, old, next }));
+    if (layout === "shelf") {
+      scene.setReduced(true); stepArchiveScene(1); scene.setReduced(false);
+      const shared = punkArrayMotionSnapshot(), far = shared.values.find(value => value.lane === 0 && value.row === 31);
+      expect(Math.abs(shared.selectedModel.y - far.y - 2.098) < 2e-5, "Future ARRAY uses the same selected height.");
+      expect(shared.values.find(value => value.lane === 0 && value.row === 25).y > far.y, "Future ARRAY has the same neighboring shoulder.");
+    }
     guards.push({ design, layout, inactiveLaneZDelta: next.z - old.z, start, finish });
   }
-  return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four synthetic lanes, deterministic 1/60 updates; no audio/player/real library.",
+  await prepare("archive", "shelf", "full"); select(4, 0); scene.setReduced(true); stepArchiveScene(1); scene.setReduced(false); stepArchiveScene(100);
+  const tail = punkArrayMotionSnapshot(); aligned(tail);
+  const tray = scene.sceneResources.group.getObjectByName("Record shelf tray"), trayMatrix = new THREE.Matrix4();
+  const tailSlots = scene.cells.flatMap((cell, index) => {
+    if (cell.lane !== 4) return [];
+    tray.getMatrixAt(index, trayMatrix);
+    return [{ row: cell.row, occupied: !!musicSpatialEntry(cell, true), drawn: trayMatrix.elements[0] !== 0,
+      z: trayMatrix.elements[14] }];
+  });
+  expect(tailSlots.length === 20 && tailSlots.filter(value => value.occupied).length === 5 && tailSlots.every(value => value.drawn),
+    "The final five entries retain the complete twenty-slot physical tray: " + JSON.stringify(tailSlots));
+  expect(tailSlots.every((value, index) => index === 0 || Math.abs(value.z - tailSlots[index - 1].z) > .9),
+    "Empty final tray slots retain their physical pitch.");
+  const detailChecks = [];
+  for (const design of ["archive", "rhine"]) {
+    await prepare(design, "shelf", "full");
+    scene.setMode("detail");
+    for (let frame = 0; frame < 300 && !scene.musicPresentationReady; frame++) stepArchiveScene(1);
+    const detail = unifiedSnapshot();
+    expect(detail.stats.musicPresentationPhase === "presented", "Both shared ARRAY themes open normally: " + JSON.stringify({ design, stats: detail.stats }));
+    expect(detail.selectedScreenBounds.minX >= 0 && detail.selectedScreenBounds.maxX <= detail.selectedScreenBounds.availableWidth &&
+      detail.selectedScreenBounds.minY >= 0 && detail.selectedScreenBounds.maxY <= archiveHost.clientHeight,
+      "The whole opened case remains within the stage: " + JSON.stringify({ design, bounds: detail.selectedScreenBounds }));
+    scene.setMode("archive");
+    for (let frame = 0; frame < 300 && !scene.musicArchiveReady; frame++) stepArchiveScene(1);
+    const returned = unifiedSnapshot(), rest = punkArrayMotionSnapshot(); aligned(rest);
+    expect(rest.presentation === "archive" && returned.selectedScreenBounds.minY >= 0 && returned.selectedScreenBounds.maxY <= archiveHost.clientHeight,
+      "Returning restores the complete raised browsing case: " + JSON.stringify({ design, bounds: returned.selectedScreenBounds }));
+    detailChecks.push({ design, detail, returned });
+  }
+  return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four full synthetic lanes plus final five entries, deterministic 1/60 updates; no audio/player/real library.",
     before, during, switched, afterSwitch, laneChecks, frozen, nextLane, reduced, reducedInactive,
-    strengths, waveLevels, idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards };
+    strengths, waveLevels, idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards, tail, tailSlots, detailChecks };
 }
 
 async function captureRhineInsetAlbum() {
@@ -2237,6 +2361,9 @@ window.caseCheck = {
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
   exercisePunkArrayMotion,
+  prepareArrayPointer,
+  arrayHoverSnapshot,
+  arraySurfaceVariant,
   unifiedRenderVariant,
   unifiedPointerTarget,
   unifiedRenderResult() { return { clicks: unifiedClicks, opens: unifiedOpens, snapshot: unifiedSnapshot() }; },
@@ -5505,14 +5632,50 @@ async function main() {
     await mkdir(unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
     if (process.argv.includes("--punk-array-motion")) {
-      const motionOutput = path.join(project, ".tools", "punk-array-motion");
+      const motionOutput = path.join(project, ".tools", "array-surface-refinement");
       await mkdir(motionOutput, { recursive: true });
       const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
+      const hoverChecks = [], surfaceChecks = [];
+      for (const design of ["archive", "rhine"]) {
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1440, y: 830 });
+        const targets = await evaluate("window.caseCheck.prepareArrayPointer(" + JSON.stringify(design) + ")");
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.selected.x, y: targets.selected.y });
+        const hovered = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.ok(Math.abs(hovered.y - targets.baseline.y - .5) < 2e-5,
+          "Pointer move alone adds exactly the selected hover lift: " + JSON.stringify({ design, baseline: targets.baseline, hovered }));
+        assert.deepEqual(hovered.selected, targets.baseline.selected);
+        assert.deepEqual(hovered.catalog, targets.baseline.catalog);
+        assert.equal(hovered.phase, targets.baseline.phase); assert.equal(hovered.phase, "archive");
+        assert.equal(hovered.clicks, targets.baseline.clicks); assert.equal(hovered.opens, targets.baseline.opens);
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.other.x, y: targets.other.y });
+        const other = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.ok(Math.abs(other.y - targets.baseline.y) < 2e-5, "Another track from the same album cannot masquerade as selected hover.");
+        assert.deepEqual(other.selected, targets.baseline.selected);
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.selected.x, y: targets.selected.y });
+        await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
+        const left = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.ok(Math.abs(left.y - targets.baseline.y) < 2e-5, "Pointer leave restores the selected browsing lift.");
+        hoverChecks.push({ design, targets, hovered, other, left });
+        const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+        await writeFile(path.join(motionOutput, "array-" + design + "-selection.png"), Buffer.from(screen.data, "base64"));
+        const variants = [];
+        for (const floor of design === "archive" ? ["plain", "deck", "real", "plain"] : ["plain", "deck"]) {
+          const surface = await evaluate("window.caseCheck.arraySurfaceVariant(" + [design, floor].map(JSON.stringify).join(",") + ")");
+          if ((floor === "plain" && variants.length === 0) || (design === "archive" && floor === "deck")) {
+            await writeFile(path.join(motionOutput, "array-" + design + "-" + floor + ".png"), pngBuffer(surface.standard, "Array floor screenshot"));
+            await writeFile(path.join(motionOutput, "array-" + design + "-" + floor + "-closeup.png"), pngBuffer(surface.closeup, "Array floor closeup"));
+          }
+          variants.push(surface.detail);
+        }
+        assert.deepEqual(variants[0].textures, variants.at(-1).textures, "Returning to a floor style reuses its retained surface textures.");
+        surfaceChecks.push({ design, variants });
+      }
       assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
-      await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion,
+      await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion, hoverChecks, surfaceChecks,
         runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
-      console.log(JSON.stringify({ ok: true, checks: ["Punk ARRAY active-lane rail", "inactive-lane stability", "wave strengths", "idle", "Future and MATRIX guards"],
-        report: ".tools/punk-array-motion/scene-motion-audit.json" }, null, 2));
+      console.log(JSON.stringify({ ok: true, checks: ["Common ARRAY independent rails", "persistent selection and neighbor lift", "real selected-only pointer hover", "off/reduced shape", "twenty-slot final partial tray", "detail/return bounds", "both MATRIX guards"],
+        report: ".tools/array-surface-refinement/scene-motion-audit.json" }, null, 2));
       return;
     }
     const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
@@ -5554,10 +5717,10 @@ async function main() {
         assert.deepEqual(pixel, [...rgb, 255], "Punk's clipped right region preserves its theme background.");
       }
     }
-    const motionOutput = path.join(project, ".tools", "punk-array-motion");
+    const motionOutput = path.join(project, ".tools", "array-surface-refinement");
     await mkdir(motionOutput, { recursive: true });
     const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
-    await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion,
+    await writeFile(path.join(motionOutput, "scene-motion-unified-audit.json"), JSON.stringify({ ok: true, ...motion,
       runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
     await writeFile(path.join(unifiedOutput, "unified-render-audit.json"), JSON.stringify({ ok: true,
@@ -5565,7 +5728,7 @@ async function main() {
       ...result, pointerResult: opened, screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     console.log(JSON.stringify({ ok: true, checks: ["Both physical shelves", "sole WebGL canvas", "finite TRACKS identity/paging",
       "query recovery", "detail/layout continuity", "transformed spacing", "real raycast and double click", "Punk clipping"],
-      report: ".tools/unified-architecture-stage4/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+      report: ".tools/array-surface-refinement/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
     return;
   }
   const fixture = await evaluate("window.caseCheck.run()");
