@@ -1,7 +1,7 @@
 // Offline browser acceptance for editable case models, shared ArchiveScene rendering and the editor.
 // The fixture serves only the four local GLBs explicitly used by this system.
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
@@ -14,6 +14,13 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 const isArrayBump = process.argv.includes("--array-bump");
+const isCoverFlicker = process.argv.includes("--cover-flicker");
+const coverFlickerAssertMode = process.argv.includes("--cover-flicker-assert");
+const coverLegacyGapControl = process.argv.includes("--cover-legacy-gap");
+const coverFlickerLayout = process.argv.includes("--cover-layout=array") ? "array" : "shelf";
+const coverFlickerQualityMode = process.argv.find(argument => argument.startsWith("--cover-quality="))?.slice(16) === "balanced" ? "balanced" : "diagnostic";
+const coverFlickerFramesArg = Number(process.argv.find(argument => argument.startsWith("--cover-flicker-frames="))?.slice(23) ?? 30);
+const coverFlickerFrames = Number.isFinite(coverFlickerFramesArg) ? Math.max(4, Math.min(120, Math.floor(coverFlickerFramesArg))) : 30;
 const isShelfColors = process.argv.includes("--shelf-colors");
 const isArrayRailProfile = process.argv.includes("--array-rail-profile") || isShelfColors;
 const isRailRegression = process.argv.includes("--rail-regression");
@@ -39,8 +46,9 @@ const shelfColorOutput = shelfColorPatchLabel
 const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
   : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile || isFloorGuideRegression;
-const unifiedOutput = isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile || isFloorGuideRegression || isCoverFlicker;
+const coverFlickerOutput = path.join(project, ".tools", "flicker-fix", "probe");
+const unifiedOutput = isCoverFlicker ? coverFlickerOutput : isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
   : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
@@ -211,6 +219,7 @@ import { getMusicCatalogShelves, getMusicEntryLocation, navigateMusicEntry } fro
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
 import { MUSIC_ARRAY_VIEW } from "./src/music-display-layout.ts";
 import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
+import { qualityIdleGain } from "./src/quality-motion.ts";
 import { damp } from "./src/motion.ts";
 import { qualityMarkup } from "./src/quality-settings.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
@@ -225,6 +234,10 @@ import { CaseAlbumInfo, RhineAlbumInfo } from "./src/rhine-album-info.ts";
 const LEGACY_PUNK_PRESET_FIXTURE = ${JSON.stringify(legacyPunkPresetFixture)};
 const REVISION_TWO_AURORA_FIXTURE = ${JSON.stringify(revisionTwoAuroraFixture)};
 const REVISION_THREE_AURORA_FIXTURE = ${JSON.stringify(revisionThreeAuroraFixture)};
+const coverFlickerFixtureMode = ${JSON.stringify(isCoverFlicker)};
+const coverFlickerAssertMode = ${JSON.stringify(coverFlickerAssertMode)};
+const coverLegacyGapControl = ${JSON.stringify(coverLegacyGapControl)};
+const coverFlickerQualityMode = ${JSON.stringify(coverFlickerQualityMode)};
 const quality = { ...qualityPresets.high, scale: 100, pixelRatio: 1, antialias: "off", shadows: 2048, aoSamples: 0, depthOfField: 0 };
 let editorDesign = "rhine";
 let settings = defaultCaseSettings("archive");
@@ -403,6 +416,32 @@ function createSyntheticTestCover(size = 584) {
   context.font = "700 " + Math.round(size * 0.045) + "px sans-serif";
   context.fillText("LOCAL AUDIO", size * 0.1, size * 0.85);
   return canvas;
+}
+function createCoverFlickerArt(size = 1024) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas 2D is unavailable for the cover-flicker fixture.");
+  context.fillStyle = "#fff"; context.fillRect(0, 0, size, size);
+  context.save(); context.beginPath(); context.rect(0, 0, size, size); context.clip();
+  for (let x = -size; x < size * 2; x += 8) {
+    context.strokeStyle = (Math.floor((x + size) / 8) & 1) ? "#050505" : "#fff";
+    context.lineWidth = 4;
+    context.beginPath(); context.moveTo(x, 0); context.lineTo(x + size, size); context.stroke();
+  }
+  context.restore();
+  context.fillStyle = "#050505";
+  context.beginPath(); context.ellipse(size * .52, size * .46, size * .28, size * .34, -.08, 0, Math.PI * 2); context.fill();
+  context.fillStyle = "#fff";
+  context.beginPath(); context.ellipse(size * .54, size * .48, size * .17, size * .24, -.08, 0, Math.PI * 2); context.fill();
+  context.fillStyle = "#050505";
+  context.fillRect(size * .42, size * .43, size * .035, size * .018);
+  context.fillRect(size * .59, size * .42, size * .035, size * .018);
+  context.beginPath(); context.moveTo(size * .47, size * .57); context.lineTo(size * .56, size * .58); context.lineTo(size * .51, size * .61); context.fill();
+  context.fillStyle = "#fff"; context.fillRect(size * .02, size * .02, size * .18, size * .08);
+  context.fillStyle = "#050505"; context.font = "700 " + Math.round(size * .045) + "px sans-serif";
+  context.fillText("CONTRAST / 01", size * .035, size * .075);
+  return canvas.toDataURL("image/png");
 }
 function materialSnapshot(root) {
   const values = [];
@@ -4313,6 +4352,475 @@ async function capturePunkAlbumInfo() {
   }
 }
 
+let coverFlickerProbeReady = false;
+let coverFlickerArtUrl = "";
+async function prepareCoverFlickerScene(design, layout) {
+  if (!archiveScene) await setupArchiveScene();
+  if (!coverFlickerProbeReady) {
+    window.caseCheck.editor.destroy();
+    document.body.replaceChildren(archiveHost);
+    document.body.style.cssText = "margin:0;padding:0;overflow:hidden";
+    archiveHost.style.margin = "0";
+    archiveHost.dataset.mode = "archive";
+    coverFlickerProbeReady = true;
+  }
+  coverFlickerArtUrl ||= createCoverFlickerArt(1024);
+  const scene = archiveScene;
+  const sourceAlbums = records.slice(0, 2).map(record => record.album);
+  const albums = sourceAlbums.map((album, albumIndex) => ({
+    ...album,
+    id: "cover-flicker-" + design + "-" + albumIndex,
+    title: "Cover Flicker Fixture " + (albumIndex + 1),
+    coverUrl: coverFlickerArtUrl,
+    tracks: Array.from({ length: 20 }, (_, slot) => ({
+      id: "cover-flicker-" + design + "-" + albumIndex + "-track-" + slot,
+      albumId: "cover-flicker-" + design + "-" + albumIndex,
+      title: "Cover Flicker Fixture Track " + String(slot + 1).padStart(2, "0"),
+      trackNumber: slot + 1,
+      artist: album.artist,
+      format: "FLAC",
+      audioUrl: "",
+      relativePath: "",
+      duration: 120,
+    })),
+  }));
+  setMusicAlbums(albums, [{ id: "cover-flicker-fixture", name: "Cover Flicker Fixture" }], "genre");
+  configureMusicCatalog({ layout, show: "tracks", group: "none", sort: "added" }, "");
+  await scene.refreshLibrary(0);
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  archiveHost.dataset.design = design;
+  archiveHost.dataset.foobarLayout = "array";
+  archiveHost.style.cssText = "position:relative;width:1450px;height:840px;background:#07111f;margin:0";
+  scene.setMusicStyle(style);
+  scene.setTheme("day");
+  const structure = design === "rhine" ? "rhine" : "punk";
+  const settings = sceneCaseSettings(structure);
+  await scene.setCaseSettings(settings);
+  const requestedQuality = coverFlickerQualityMode === "balanced"
+    ? { ...qualityPresets.original }
+    : { ...qualityPresets.original, wave: "full", modelDetail: "medium", lighting: "high",
+      scale: 100, pixelRatio: 1, aoSamples: 0, depthOfField: 0 };
+  scene.setQuality(requestedQuality);
+  await scene.setCaseSettings(settings);
+  await scene.rhineInfo?.ready;
+  const entries = getMusicDisplayEntries();
+  const entry = entries.find(value => value.recordIndex === 0 && value.track) ?? entries[0];
+  if (!entry) throw new Error("Cover-flicker fixture has no synthetic catalog entry.");
+  focusMusicEntry(entry.key);
+  await scene.covers.loadImage(coverFlickerArtUrl);
+  scene.setReduced(true);
+  scene.select(entry.recordIndex);
+  scene.showMusicArchiveImmediately(archiveTime);
+  stepArchiveScene(100);
+  scene.setReduced(false);
+  scene.pulses = [];
+  scene.pendingPulse = null;
+  scene.scanBlend = 0;
+  scene.idleGain = qualityIdleGain(scene.quality.wave);
+  scene.lastInteraction = archiveTime - 10;
+  await scene.covers.select(records[entry.recordIndex]);
+  scene.covers.flushUploads(scene.renderer);
+  await scene.warmup();
+  scene.composer.render();
+  return { design, layout, structure, selectedEntry: entry.key };
+}
+
+function coverFlickerSnapshot() {
+  const scene = archiveScene, canvas = scene.renderer.domElement, cover = scene.covers.selected, insert = scene.covers.selectedInsert;
+  scene.model.updateMatrixWorld(true); scene.camera.updateMatrixWorld(true);
+  cover.geometry.computeBoundingBox(); insert.geometry.computeBoundingBox(); scene.covers.arrayInsert.geometry.computeBoundingBox();
+  const coverBox = cover.geometry.boundingBox, insertBox = insert.geometry.boundingBox,
+    arrayInsertBox = scene.covers.arrayInsert.geometry.boundingBox;
+  const corners = [
+    [coverBox.min.x, coverBox.min.y, coverBox.min.z], [coverBox.max.x, coverBox.min.y, coverBox.min.z],
+    [coverBox.max.x, coverBox.max.y, coverBox.max.z], [coverBox.min.x, coverBox.max.y, coverBox.max.z],
+  ].map(values => {
+    const point = new THREE.Vector3(...values).applyMatrix4(cover.matrixWorld).project(scene.camera);
+    return { x: (point.x + 1) * canvas.width / 2, y: (1 - point.y) * canvas.height / 2 };
+  });
+  const minX = Math.min(...corners.map(point => point.x)), maxX = Math.max(...corners.map(point => point.x));
+  const minY = Math.min(...corners.map(point => point.y)), maxY = Math.max(...corners.map(point => point.y));
+  const padX = (maxX - minX) * .15, padY = (maxY - minY) * .15;
+  const roi = {
+    x: Math.max(0, Math.floor(minX + padX)), y: Math.max(0, Math.floor(minY + padY)),
+    width: Math.max(1, Math.min(canvas.width, Math.ceil(maxX - padX)) - Math.max(0, Math.floor(minX + padX))),
+    height: Math.max(1, Math.min(canvas.height, Math.ceil(maxY - padY)) - Math.max(0, Math.floor(minY + padY))),
+  };
+  const rect = scene.covers.layout;
+  const printWorld = new THREE.Vector3(rect.x, rect.y, rect.z).applyMatrix4(scene.model.matrixWorld);
+  const paperWorld = new THREE.Vector3(rect.x, rect.y, insertBox.max.z).applyMatrix4(scene.model.matrixWorld);
+  const viewDirection = scene.camera.getWorldDirection(new THREE.Vector3());
+  const gl = scene.renderer.getContext();
+  let debugInfo = null;
+  try {
+    const extension = gl.getExtension("WEBGL_debug_renderer_info");
+    debugInfo = extension ? {
+      vendor: gl.getParameter(extension.UNMASKED_VENDOR_WEBGL),
+      renderer: gl.getParameter(extension.UNMASKED_RENDERER_WEBGL),
+    } : null;
+  } catch {}
+  const selectedCell = { lane: scene.selectedCell.lane, row: scene.selectedCell.row,
+    foobarEntryKey: scene.selectedCell.foobarEntryKey ?? null };
+  const selectedCellKey = selectedCell.lane + ":" + selectedCell.row;
+  const selectedIndex = scene.cells.findIndex(cell => cell.lane + ":" + cell.row === selectedCellKey);
+  const selectedSlotCell = selectedIndex >= 0 ? { lane: scene.cells[selectedIndex].lane, row: scene.cells[selectedIndex].row,
+    foobarEntryKey: scene.cells[selectedIndex].foobarEntryKey ?? null } : null;
+  const selectedMatrix = new THREE.Matrix4(), selectedArrayInsertMatrix = new THREE.Matrix4();
+  if (selectedIndex >= 0) {
+    scene.covers.array.getMatrixAt(selectedIndex, selectedMatrix);
+    scene.covers.arrayInsert.getMatrixAt(selectedIndex, selectedArrayInsertMatrix);
+  }
+  const glassMeshes = [];
+  scene.model.traverse(child => {
+    if (!(child instanceof THREE.Mesh) || child.userData.casePart !== "cover") return;
+    child.geometry.computeBoundingBox();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    glassMeshes.push({ name: child.name, surface: child.userData.surface ?? "", boundsZ: child.geometry.boundingBox
+      ? [child.geometry.boundingBox.min.z, child.geometry.boundingBox.max.z] : null,
+      materials: materials.map(material => ({ type: material.type, transmission: material.transmission ?? 0,
+        side: material.side, transparent: material.transparent, depthWrite: material.depthWrite })) });
+  });
+  const contextAttributes = gl.getContextAttributes();
+  return {
+    design: scene.musicStyle.design,
+    structure: scene.caseSettings.structure,
+    layout: scene.musicDisplayLayout,
+    quality: { ...scene.quality, aoSamples: scene.quality.aoSamples, depthOfField: scene.quality.depthOfField,
+      shadows: scene.quality.shadows, transmission: scene.quality.transmission },
+    canvas: { width: canvas.width, height: canvas.height },
+    roi,
+    projectedCover: corners,
+    camera: { near: scene.camera.near, far: scene.camera.far, position: scene.camera.position.toArray(),
+      distanceToPrint: scene.camera.position.distanceTo(printWorld),
+      paperBehindPrintWorld: paperWorld.distanceTo(printWorld),
+      paperBehindPrintAlongView: new THREE.Vector3().subVectors(paperWorld, printWorld).dot(viewDirection) },
+    cover: { visible: cover.visible, receiveShadow: cover.receiveShadow, z: rect.z,
+      boundsZ: [coverBox.min.z, coverBox.max.z], texture: cover.material.map ? {
+        width: cover.material.map.image?.width ?? 0, height: cover.material.map.image?.height ?? 0,
+        generateMipmaps: cover.material.map.generateMipmaps, minFilter: cover.material.map.minFilter,
+        anisotropy: cover.material.map.anisotropy,
+      } : null },
+    atlas: { visible: scene.covers.array.visible, receiveShadow: scene.covers.array.receiveShadow,
+      tileWidth: scene.covers.tileWidth, tileHeight: scene.covers.tileHeight,
+      generateMipmaps: scene.covers.atlas.generateMipmaps, minFilter: scene.covers.atlas.minFilter,
+      selectedCell, selectedCellKey, selectedSlotCell, selectedSlotIndex: selectedIndex,
+      selectedSlotMatrix: selectedMatrix.elements,
+      selectedSlotMatrixDiagonal: selectedMatrix.elements.filter((_, index) => [0, 5, 10, 15].includes(index)),
+      selectedArrayInsertMatrix: selectedArrayInsertMatrix.elements },
+    paper: { visible: insert.visible, arrayVisible: scene.covers.arrayInsert.visible,
+      thickness: scene.covers.insertThickness, selectedRenderOrder: insert.renderOrder,
+      arrayRenderOrder: scene.covers.arrayInsert.renderOrder,
+      frontZ: insertBox.max.z, frontMinusPrintZ: insertBox.max.z - rect.z,
+      arrayFrontZ: arrayInsertBox.max.z, arrayFrontMinusPrintZ: arrayInsertBox.max.z - rect.z,
+      castShadow: insert.castShadow, receiveShadow: insert.receiveShadow },
+    glassMeshes,
+    renderer: { vendor: gl.getParameter(gl.VENDOR), renderer: gl.getParameter(gl.RENDERER), debugInfo,
+      depthBits: gl.getParameter(gl.DEPTH_BITS), webgl2: scene.renderer.capabilities.isWebGL2,
+      contextAttributes: contextAttributes ? { alpha: contextAttributes.alpha, depth: contextAttributes.depth,
+        antialias: contextAttributes.antialias, preserveDrawingBuffer: contextAttributes.preserveDrawingBuffer } : null,
+      softwareRendererSuspected: /swiftshader|llvmpipe|software/i.test(String(debugInfo?.renderer ?? gl.getParameter(gl.RENDERER))) },
+    arrayFadeEnabled: scene.arrayFade?.enabled ?? false,
+    composerPasses: scene.composer.passes.filter(pass => pass.enabled).map(pass => pass.constructor.name),
+  };
+}
+
+function coverFlickerDiff(before, after) {
+  let total = 0, above24 = 0, max = 0;
+  const pixels = before.length / 4;
+  const heat = new Uint8ClampedArray(before.length);
+  for (let pixel = 0; pixel < pixels; pixel++) {
+    const offset = pixel * 4;
+    const delta = Math.max(Math.abs(before[offset] - after[offset]), Math.abs(before[offset + 1] - after[offset + 1]),
+      Math.abs(before[offset + 2] - after[offset + 2]));
+    total += Math.abs(before[offset] - after[offset]) + Math.abs(before[offset + 1] - after[offset + 1]) + Math.abs(before[offset + 2] - after[offset + 2]);
+    if (delta > 24) above24++;
+    max = Math.max(max, delta);
+    heat[offset] = Math.min(255, delta * 4); heat[offset + 1] = 0; heat[offset + 2] = 0; heat[offset + 3] = 255;
+  }
+  return { meanAbsChannelDelta255: total / Math.max(1, pixels * 3), fractionPixelsOver24: above24 / Math.max(1, pixels),
+    maxChannelDelta: max, heat };
+}
+
+function coverFlickerGrayLeak(data, state) {
+  const scene = archiveScene, image = scene.covers.selected.material.map?.image;
+  if (!image?.getContext) return { available: false, reason: "selected cover map has no readable canvas image" };
+  const width = image.width, height = image.height;
+  const source = image.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, width, height).data;
+  const roi = state.roi, canvas = scene.renderer.domElement, raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let maskedPixels = 0, eligibleBlack = 0, eligibleWhite = 0, grayFromBlack = 0, grayFromWhite = 0;
+  const luma = (r, g, b) => .2126 * r + .7152 * g + .0722 * b;
+  for (let y = 0; y < roi.height; y++) for (let x = 0; x < roi.width; x++) {
+    const px = roi.x + x + .5, py = roi.y + y + .5;
+    ndc.set(px * 2 / canvas.width - 1, 1 - py * 2 / canvas.height);
+    raycaster.setFromCamera(ndc, scene.camera);
+    const hit = raycaster.intersectObject(scene.covers.selected, false)[0];
+    if (!hit?.uv) continue;
+    maskedPixels++;
+    const sx = Math.max(0, Math.min(width - 1, Math.floor(hit.uv.x * width)));
+    const sy = Math.max(0, Math.min(height - 1, Math.floor((1 - hit.uv.y) * height)));
+    const sourceOffset = (sy * width + sx) * 4, outputOffset = (y * roi.width + x) * 4;
+    if (source[sourceOffset + 3] < 240) continue;
+    const sourceLuma = luma(source[sourceOffset], source[sourceOffset + 1], source[sourceOffset + 2]);
+    const r = data[outputOffset], g = data[outputOffset + 1], b = data[outputOffset + 2];
+    const outputLuma = luma(r, g, b), chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    if (sourceLuma < 35) {
+      eligibleBlack++;
+      if (outputLuma > 75 && outputLuma < 210 && chroma < 24) grayFromBlack++;
+    } else if (sourceLuma > 220) {
+      eligibleWhite++;
+      if (outputLuma > 110 && outputLuma < 225 && chroma < 24) grayFromWhite++;
+    }
+  }
+  return { available: true, mask: "raycast pixels inside selected cover plane only", roiPixels: roi.width * roi.height,
+    maskedPixels, eligibleBlack, eligibleWhite, grayFromBlack, grayFromWhite,
+    blackGrayFraction: eligibleBlack ? grayFromBlack / eligibleBlack : 0,
+    whiteGrayFraction: eligibleWhite ? grayFromWhite / eligibleWhite : 0,
+    thresholds: { blackSourceMax: 35, whiteSourceMin: 220, blackGray: [75, 210], whiteGray: [110, 225], maxChroma: 24 } };
+}
+
+function coverFlickerCropDataUrl(data, width, height) {
+  const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+  canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+async function coverFlickerRenderSeries(frameCount = 30, updateScene = false) {
+  const scene = archiveScene, rendererCanvas = scene.renderer.domElement, state = coverFlickerSnapshot();
+  const scratch = document.createElement("canvas"); scratch.width = rendererCanvas.width; scratch.height = rendererCanvas.height;
+  const context = scratch.getContext("2d", { willReadFrequently: true });
+  scene.composer.render();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  let previous = null, first = null, last = null, worst = null, worstMetric = null, firstGrayLeak = null;
+  const adjacent = [];
+  for (let frame = 0; frame < frameCount; frame++) {
+    if (updateScene) stepArchiveScene(1);
+    else scene.composer.render();
+    context.clearRect(0, 0, scratch.width, scratch.height);
+    context.drawImage(rendererCanvas, 0, 0);
+    const current = new Uint8ClampedArray(context.getImageData(state.roi.x, state.roi.y, state.roi.width, state.roi.height).data);
+    if (!first) { first = current; firstGrayLeak = coverFlickerGrayLeak(current, state); }
+    last = current;
+    if (previous) {
+      const comparison = coverFlickerDiff(previous, current);
+      const metric = { frame, meanAbsChannelDelta255: comparison.meanAbsChannelDelta255,
+        fractionPixelsOver24: comparison.fractionPixelsOver24, maxChannelDelta: comparison.maxChannelDelta };
+      adjacent.push(metric);
+      if (!worstMetric || metric.meanAbsChannelDelta255 > worstMetric.meanAbsChannelDelta255) {
+        worstMetric = metric;
+        worst = { before: previous, after: current, heat: comparison.heat };
+      }
+    }
+    previous = current;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  }
+  const summarize = values => values.length ? {
+    maxMeanAbsChannelDelta255: Math.max(...values.map(value => value.meanAbsChannelDelta255)),
+    maxFractionPixelsOver24: Math.max(...values.map(value => value.fractionPixelsOver24)),
+    maxChannelDelta: Math.max(...values.map(value => value.maxChannelDelta)),
+  } : { maxMeanAbsChannelDelta255: 0, maxFractionPixelsOver24: 0, maxChannelDelta: 0 };
+  const endState = coverFlickerSnapshot();
+  return { state, endState, frameCount, updateScene, adjacentSummary: summarize(adjacent),
+    firstAdjacentSummary: summarize(adjacent.slice(0, 10)), tailAdjacentSummary: summarize(adjacent.slice(-10)),
+    firstGrayLeak, adjacent, worstPair: worstMetric,
+    first, last, worstBefore: worst?.before ?? first, worstAfter: worst?.after ?? last, worstHeat: worst?.heat ?? new Uint8ClampedArray(first.length) };
+}
+
+async function coverFlickerCameraMicroScan(offsets = [0, .0003, .0006, 0, -.0003, -.0006, 0]) {
+  const scene = archiveScene, state = coverFlickerSnapshot(), canvas = scene.renderer.domElement;
+  const basePosition = scene.camera.position.clone(), baseAim = scene.cameraAim.clone();
+  const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(scene.camera.quaternion).normalize();
+  const scratch = document.createElement("canvas"); scratch.width = canvas.width; scratch.height = canvas.height;
+  const context = scratch.getContext("2d", { willReadFrequently: true });
+  const readFrame = () => {
+    scene.composer.render(); context.clearRect(0, 0, scratch.width, scratch.height); context.drawImage(canvas, 0, 0);
+    return new Uint8ClampedArray(context.getImageData(state.roi.x, state.roi.y, state.roi.width, state.roi.height).data);
+  };
+  let reference = null, previous = null;
+  const steps = [];
+  try {
+    for (const offset of offsets) {
+      scene.camera.position.copy(basePosition).addScaledVector(cameraRight, offset);
+      scene.cameraAim.copy(baseAim).addScaledVector(cameraRight, offset);
+      scene.camera.lookAt(scene.cameraAim); scene.camera.updateMatrixWorld(true);
+      const data = readFrame();
+      if (!reference) reference = data;
+      const fromZero = coverFlickerDiff(reference, data);
+      const fromPrevious = previous ? coverFlickerDiff(previous, data) : null;
+      steps.push({ offsetWorld: offset, cameraPosition: scene.camera.position.toArray(),
+        fromZero: { meanAbsChannelDelta255: fromZero.meanAbsChannelDelta255,
+          fractionPixelsOver24: fromZero.fractionPixelsOver24, maxChannelDelta: fromZero.maxChannelDelta,
+          heat: coverFlickerCropDataUrl(fromZero.heat, state.roi.width, state.roi.height) },
+        fromPrevious: fromPrevious ? { meanAbsChannelDelta255: fromPrevious.meanAbsChannelDelta255,
+          fractionPixelsOver24: fromPrevious.fractionPixelsOver24, maxChannelDelta: fromPrevious.maxChannelDelta } : null,
+        grayPaperLeak: coverFlickerGrayLeak(data, state),
+        image: coverFlickerCropDataUrl(data, state.roi.width, state.roi.height) });
+      previous = data;
+    }
+  } finally {
+    scene.camera.position.copy(basePosition); scene.cameraAim.copy(baseAim);
+    scene.camera.lookAt(scene.cameraAim); scene.camera.updateMatrixWorld(true); scene.composer.render();
+  }
+  return { mode: "camera position and target translated together; no Scene.update", axis: "camera-right",
+    stepOffsetsWorld: offsets, roi: state.roi, steps };
+}
+
+async function coverFlickerProbe(design = "archive", layout = "shelf", frameCount = 30) {
+  if (!coverFlickerFixtureMode) throw new Error("Run this helper through the --cover-flicker fixture entry.");
+  const prepared = await prepareCoverFlickerScene(design, layout);
+  const scene = archiveScene, covers = scene.covers;
+  const baseline = await coverFlickerRenderSeries(frameCount, false);
+  const baselineCameraMicroScan = await coverFlickerCameraMicroScan();
+  const controls = [];
+  const saveControl = async (name, run) => {
+    await prepareCoverFlickerScene(design, layout);
+    await run.before();
+    try {
+      const result = await coverFlickerRenderSeries(frameCount, false);
+      const cameraMicroScan = await coverFlickerCameraMicroScan();
+      const compare = coverFlickerDiff(baseline.first, result.first);
+      controls.push({ name, note: run.note ?? "", stableFrameDiff: result.adjacentSummary,
+        ...(run.details ? { details: run.details() } : {}),
+        grayPaperLeak: result.firstGrayLeak,
+        againstBaseline: { meanAbsChannelDelta255: compare.meanAbsChannelDelta255,
+          fractionPixelsOver24: compare.fractionPixelsOver24, maxChannelDelta: compare.maxChannelDelta,
+          heat: coverFlickerCropDataUrl(compare.heat, baseline.state.roi.width, baseline.state.roi.height) },
+        cameraMicroScan,
+        images: { first: coverFlickerCropDataUrl(result.first, baseline.state.roi.width, baseline.state.roi.height),
+          last: coverFlickerCropDataUrl(result.last, baseline.state.roi.width, baseline.state.roi.height),
+          worstBefore: coverFlickerCropDataUrl(result.worstBefore, baseline.state.roi.width, baseline.state.roi.height),
+          worstAfter: coverFlickerCropDataUrl(result.worstAfter, baseline.state.roi.width, baseline.state.roi.height),
+          worstHeat: coverFlickerCropDataUrl(result.worstHeat, baseline.state.roi.width, baseline.state.roi.height) } });
+    } finally { run.after(); }
+  };
+  await saveControl("paper-hidden", {
+    note: "Selected and instanced paper meshes are hidden; syncCaseAlbumOcclusion also disables the matching indirect insert-presence mask.",
+    before: () => { covers.selectedInsert.visible = false; covers.arrayInsert.visible = false; scene.syncCaseAlbumOcclusion(); },
+    after: () => { covers.setVisibility(covers.array.visible, covers.selected.visible); scene.syncCaseAlbumOcclusion(); },
+  });
+  const originalSelectedOrder = covers.selectedInsert.renderOrder, originalArrayOrder = covers.arrayInsert.renderOrder;
+  await saveControl("paper-renderOrder-minus-100", {
+    note: "Only the two paper meshes' renderOrder changes; geometry and AO state remain at baseline.",
+    before: () => { covers.selectedInsert.renderOrder = -100; covers.arrayInsert.renderOrder = -100; },
+    after: () => { covers.selectedInsert.renderOrder = originalSelectedOrder; covers.arrayInsert.renderOrder = originalArrayOrder; },
+  });
+  const originalSelectedGeometry = covers.selectedInsert.geometry, originalArrayGeometry = covers.arrayInsert.geometry;
+  originalSelectedGeometry.computeBoundingBox(); originalArrayGeometry.computeBoundingBox();
+  const targetPaperGap = -.002;
+  const selectedGeometryShift = targetPaperGap - (originalSelectedGeometry.boundingBox.max.z - covers.layout.z);
+  const arrayGeometryShift = targetPaperGap - (originalArrayGeometry.boundingBox.max.z - covers.layout.z);
+  const deeperSelectedGeometry = originalSelectedGeometry.clone(), deeperArrayGeometry = originalArrayGeometry.clone();
+  deeperSelectedGeometry.translate(0, 0, selectedGeometryShift); deeperSelectedGeometry.computeBoundingBox(); deeperSelectedGeometry.computeBoundingSphere();
+  deeperArrayGeometry.translate(0, 0, arrayGeometryShift); deeperArrayGeometry.computeBoundingBox(); deeperArrayGeometry.computeBoundingSphere();
+  await saveControl("paper-gap-0.002", {
+    note: "Paper front is moved to 0.002 world units behind the print plane; indirect occlusion stays referenced to the unchanged print plane.",
+    details: () => ({ targetFrontMinusPrintZ: targetPaperGap, selectedGeometryShift, arrayGeometryShift }),
+    before: () => {
+      covers.selectedInsert.geometry = deeperSelectedGeometry; covers.arrayInsert.geometry = deeperArrayGeometry;
+    },
+    after: () => {
+      covers.selectedInsert.geometry = originalSelectedGeometry; covers.arrayInsert.geometry = originalArrayGeometry;
+      deeperSelectedGeometry.dispose(); deeperArrayGeometry.dispose();
+    },
+  });
+  if (coverLegacyGapControl) {
+    let legacySelectedOriginal, legacyArrayOriginal, legacySelectedClone, legacyArrayClone;
+    let legacySelectedOrder, legacyArrayOrder, legacySelectedShift = 0, legacyArrayShift = 0;
+    const legacyGap = -.0002;
+    await saveControl("legacy-gap-0.0002-order-0", {
+      note: "Positive control: restore the pre-fix 0.0002 paper/print gap and renderOrder 0; AO remains on the print plane.",
+      before: () => {
+        legacySelectedOriginal = covers.selectedInsert.geometry; legacyArrayOriginal = covers.arrayInsert.geometry;
+        legacySelectedOrder = covers.selectedInsert.renderOrder; legacyArrayOrder = covers.arrayInsert.renderOrder;
+        legacySelectedOriginal.computeBoundingBox(); legacyArrayOriginal.computeBoundingBox();
+        legacySelectedShift = legacyGap - (legacySelectedOriginal.boundingBox.max.z - covers.layout.z);
+        legacyArrayShift = legacyGap - (legacyArrayOriginal.boundingBox.max.z - covers.layout.z);
+        legacySelectedClone = legacySelectedOriginal.clone(); legacyArrayClone = legacyArrayOriginal.clone();
+        legacySelectedClone.translate(0, 0, legacySelectedShift); legacySelectedClone.computeBoundingBox(); legacySelectedClone.computeBoundingSphere();
+        legacyArrayClone.translate(0, 0, legacyArrayShift); legacyArrayClone.computeBoundingBox(); legacyArrayClone.computeBoundingSphere();
+        covers.selectedInsert.geometry = legacySelectedClone; covers.arrayInsert.geometry = legacyArrayClone;
+        covers.selectedInsert.renderOrder = 0; covers.arrayInsert.renderOrder = 0;
+      },
+      after: () => {
+        covers.selectedInsert.geometry = legacySelectedOriginal; covers.arrayInsert.geometry = legacyArrayOriginal;
+        covers.selectedInsert.renderOrder = legacySelectedOrder; covers.arrayInsert.renderOrder = legacyArrayOrder;
+        legacySelectedClone.dispose(); legacyArrayClone.dispose();
+      },
+      details: () => ({ targetFrontMinusPrintZ: legacyGap, selectedGeometryShift: legacySelectedShift,
+        arrayGeometryShift: legacyArrayShift, selectedRenderOrder: 0, arrayRenderOrder: 0 }),
+    });
+  }
+  const originalFadeEnabled = scene.arrayFade?.enabled ?? false;
+  await saveControl("array-fade-disabled", {
+    note: "Only the existing ARRAY fade pass is disabled; geometry and paper are unchanged.",
+    before: () => { if (scene.arrayFade) scene.arrayFade.enabled = false; },
+    after: () => { if (scene.arrayFade) scene.arrayFade.enabled = originalFadeEnabled; },
+  });
+  const updated = await coverFlickerRenderSeries(frameCount, true);
+  const updatedCompare = coverFlickerDiff(baseline.first, updated.first);
+  const movingSteps = baselineCameraMicroScan.steps.filter(step => step.offsetWorld !== 0);
+  const maxMicroMean = Math.max(0, ...movingSteps.map(step => step.fromZero.meanAbsChannelDelta255));
+  const maxMicroFraction = Math.max(0, ...movingSteps.map(step => step.fromZero.fractionPixelsOver24));
+  const legacyControl = controls.find(control => control.name === "legacy-gap-0.0002-order-0");
+  const legacyTriggered = legacyControl?.cameraMicroScan.steps.some(step => step.offsetWorld !== 0 &&
+    step.fromZero.meanAbsChannelDelta255 > 1 && step.fromZero.fractionPixelsOver24 > .01) ?? null;
+  const selectedSlotMatrixDelta = Math.max(0, ...baseline.state.atlas.selectedSlotMatrix.map((value, index) =>
+    Math.abs(value - baseline.state.atlas.selectedArrayInsertMatrix[index])));
+  const selectedSlotCollapsed = baseline.state.atlas.selectedSlotMatrixDiagonal.slice(0, 3)
+    .every(value => Math.abs(value) < 1e-8);
+  const assertions = {
+    enabled: coverFlickerAssertMode,
+    sourceInsertGapAndOrder: { pass: Math.abs(baseline.state.paper.frontMinusPrintZ + .002) <= .000001 &&
+      Math.abs(baseline.state.paper.arrayFrontMinusPrintZ + .002) <= .000001 &&
+      baseline.state.paper.selectedRenderOrder === -100 && baseline.state.paper.arrayRenderOrder === -100,
+      selectedMeasuredGap: baseline.state.paper.frontMinusPrintZ,
+      arrayMeasuredGap: baseline.state.paper.arrayFrontMinusPrintZ, targetGap: -.002,
+      selectedRenderOrder: baseline.state.paper.selectedRenderOrder, arrayRenderOrder: baseline.state.paper.arrayRenderOrder },
+    selectedAtlasCoverAndPaperInstanceMatch: baseline.state.atlas.selectedSlotIndex >= 0 && selectedSlotMatrixDelta <= 1e-8,
+    selectedAtlasSlotMatchesSceneSelection: baseline.state.atlas.selectedSlotIndex >= 0 &&
+      baseline.state.atlas.selectedCellKey === baseline.state.atlas.selectedSlotCell?.lane + ":" + baseline.state.atlas.selectedSlotCell?.row,
+    selectedAtlasSlotCollapsed: selectedSlotCollapsed,
+    selectedAtlasCoverPaperMatrixMaxDelta: selectedSlotMatrixDelta,
+    fixedFrameStable: baseline.adjacentSummary.maxMeanAbsChannelDelta255 <= .01 && baseline.adjacentSummary.maxFractionPixelsOver24 === 0,
+    microMoveWithinThreshold: maxMicroMean <= 1 && maxMicroFraction <= .01,
+    microMoveMaxMeanAbsChannelDelta255: maxMicroMean,
+    microMoveMaxFractionPixelsOver24: maxMicroFraction,
+    legacyControlTriggered: legacyTriggered,
+    legacyControlRequired: coverFlickerAssertMode && coverLegacyGapControl,
+  };
+  if (coverFlickerAssertMode) {
+    if (!assertions.sourceInsertGapAndOrder.pass) throw new Error("Source insert gap/order does not match the shared flicker fix: " + JSON.stringify(assertions.sourceInsertGapAndOrder));
+    if (!assertions.selectedAtlasCoverAndPaperInstanceMatch)
+      throw new Error("The selected cover and corresponding paper atlas instance no longer share a transform.");
+    if (!assertions.selectedAtlasSlotMatchesSceneSelection)
+      throw new Error("The measured cover atlas slot does not match scene.selectedCell.");
+    if (!assertions.selectedAtlasSlotCollapsed)
+      throw new Error("The selected cover is still submitted by the array instance pool.");
+    if (!assertions.fixedFrameStable) throw new Error("Repeated fixed-pose composer renders are not pixel-stable: " + JSON.stringify(baseline.adjacentSummary));
+    if (!assertions.microMoveWithinThreshold) throw new Error("The cover ROI changes above the micro-move threshold: " + JSON.stringify(assertions));
+    if (coverLegacyGapControl && !legacyTriggered) throw new Error("The legacy 0.0002-gap/order-0 positive control did not reproduce a visible micro-move anomaly.");
+  }
+  return {
+    prepared,
+    grayPaperLeakNote: "Absolute gray counts are diagnostic only: transmission, lighting and texture filtering can gray the source image; compare matched controls and micro-move deltas before attributing paper leakage.",
+    baseline: { frameCount: baseline.frameCount, updateScene: false, stableFrameDiff: baseline.adjacentSummary,
+      grayPaperLeak: baseline.firstGrayLeak, cameraMicroScan: baselineCameraMicroScan, worstPair: baseline.worstPair,
+      images: { first: coverFlickerCropDataUrl(baseline.first, baseline.state.roi.width, baseline.state.roi.height),
+        last: coverFlickerCropDataUrl(baseline.last, baseline.state.roi.width, baseline.state.roi.height),
+        worstBefore: coverFlickerCropDataUrl(baseline.worstBefore, baseline.state.roi.width, baseline.state.roi.height),
+        worstAfter: coverFlickerCropDataUrl(baseline.worstAfter, baseline.state.roi.width, baseline.state.roi.height),
+        worstHeat: coverFlickerCropDataUrl(baseline.worstHeat, baseline.state.roi.width, baseline.state.roi.height) } },
+    controls,
+    assertions,
+    sceneUpdates: { frameCount: updated.frameCount, updateScene: true, stableFrameDiff: updated.adjacentSummary,
+      againstBaseline: { meanAbsChannelDelta255: updatedCompare.meanAbsChannelDelta255,
+        fractionPixelsOver24: updatedCompare.fractionPixelsOver24, maxChannelDelta: updatedCompare.maxChannelDelta },
+      cameraDistanceStart: updated.state.camera.distanceToPrint,
+      cameraDistanceEnd: updated.endState.camera.distanceToPrint },
+    metadata: baseline.state,
+  };
+}
+
 window.caseCheck = {
   editor,
   get settings() { return serializeSettings(settings); },
@@ -4355,6 +4863,7 @@ window.caseCheck = {
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
   prepareArrayCoverVisibility,
+  coverFlickerProbe,
   restoreArrayCoverVisibilityTint,
   exercisePunkArrayMotion,
   get arrayCompositionPreviewScreenshot() { return arrayCompositionPreviewScreenshot; },
@@ -7664,6 +8173,60 @@ async function main() {
   if (isUnifiedRender) {
     await mkdir(isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isCoverFlicker) {
+      const design = shelfColorDesign;
+      const layoutName = coverFlickerLayout === "shelf" ? "array" : "matrix";
+      const runLabel = "run-" + design + "-" + layoutName + "-" + coverFlickerQualityMode + "-" +
+        (coverLegacyGapControl ? "legacy-control-" : "") + new Date().toISOString().replace(/[:.]/gu, "-");
+      const runDirectory = path.join(coverFlickerOutput, runLabel);
+      await mkdir(runDirectory, { recursive: true });
+      const result = await evaluate("window.caseCheck.coverFlickerProbe(" +
+        [design, coverFlickerLayout, coverFlickerFrames].map(JSON.stringify).join(",") + ")");
+      const saveImage = async (name, dataUrl) => {
+        assert.ok(typeof dataUrl === "string" && dataUrl.startsWith("data:image/png;base64,"), "Expected a cover ROI PNG for " + name);
+        await writeFile(path.join(runDirectory, name), pngBuffer(dataUrl, name));
+        return name;
+      };
+      const saveCameraMicroScan = async (label, scan) => {
+        for (let index = 0; index < scan.steps.length; index++) {
+          const step = scan.steps[index];
+          const stem = label + "-micro-" + String(index).padStart(2, "0");
+          step.image = await saveImage(stem + ".png", step.image);
+          step.fromZero.heat = await saveImage(stem + "-heat.png", step.fromZero.heat);
+        }
+        return scan;
+      };
+      const baselineImages = {};
+      for (const [key, dataUrl] of Object.entries(result.baseline.images))
+        baselineImages[key] = await saveImage("baseline-" + key + ".png", dataUrl);
+      result.baseline.images = baselineImages;
+      result.baseline.cameraMicroScan = await saveCameraMicroScan("baseline", result.baseline.cameraMicroScan);
+      for (const control of result.controls) {
+        const images = {};
+        for (const [key, dataUrl] of Object.entries(control.images))
+          images[key] = await saveImage(control.name + "-" + key + ".png", dataUrl);
+        control.images = images;
+        control.againstBaseline.heat = await saveImage(control.name + "-ab-heat.png", control.againstBaseline.heat);
+        control.cameraMicroScan = await saveCameraMicroScan(control.name, control.cameraMicroScan);
+      }
+      assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
+      assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
+      assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
+      const reportPath = path.join(runDirectory, "report.json");
+      await writeFile(reportPath, JSON.stringify({ ok: true, createdAt: new Date().toISOString(), ...result,
+        runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+      console.log(JSON.stringify({ ok: true, report: path.relative(project, reportPath), design,
+        layout: layoutName, quality: coverFlickerQualityMode, frames: coverFlickerFrames, assertions: result.assertions,
+        baseline: result.baseline.stableFrameDiff,
+        baselineGrayPaperLeak: result.baseline.grayPaperLeak,
+        cameraMicroScan: result.baseline.cameraMicroScan.steps.map(step => ({ offsetWorld: step.offsetWorld,
+          fromZero: step.fromZero, fromPrevious: step.fromPrevious, grayPaperLeak: step.grayPaperLeak })),
+        controls: result.controls.map(control => ({ name: control.name, stableFrameDiff: control.stableFrameDiff,
+          grayPaperLeak: control.grayPaperLeak, againstBaseline: control.againstBaseline,
+          microScan: control.cameraMicroScan.steps.map(step => ({ offsetWorld: step.offsetWorld,
+            fromZero: step.fromZero, fromPrevious: step.fromPrevious, grayPaperLeak: step.grayPaperLeak })) })) }, null, 2));
+      return;
+    }
     if (isFloorGuideRegression) {
       const captures = [];
       const visualIssues = [];
@@ -9472,10 +10035,32 @@ try {
   process.exitCode = 1;
 } finally {
   for (const { timer } of pending.values()) clearTimeout(timer);
-  if (socket?.readyState === WebSocket.OPEN) await send("Browser.close").catch(() => browser.kill());
+  if (isCoverFlicker) {
+    const isBrowserExited = () => browser.exitCode !== null || browser.signalCode !== null;
+    if (socket?.readyState === WebSocket.OPEN) await send("Browser.close").catch(() => {});
+    const waitForBrowserExit = () => isBrowserExited() ? Promise.resolve() : new Promise(resolve => browser.once("exit", resolve));
+    const wait = waitForBrowserExit();
+    const timedOut = await Promise.race([wait.then(() => false), new Promise(resolve => setTimeout(() => resolve(true), 5000))]);
+    if (timedOut && !isBrowserExited()) {
+      const killedExit = waitForBrowserExit();
+      browser.kill();
+      await killedExit;
+    }
+  } else if (socket?.readyState === WebSocket.OPEN) await send("Browser.close").catch(() => browser.kill());
   else browser.kill();
   socket?.close();
   await new Promise(resolve => server.close(resolve));
+  if (isCoverFlicker) {
+    const profileRoot = path.resolve(coverFlickerOutput);
+    const profilePath = path.resolve(profile);
+    const expectedNamePrefix = "profile-" + process.pid + "-";
+    if (profilePath.startsWith(profileRoot + path.sep) && path.basename(profilePath).startsWith(expectedNamePrefix))
+      await rm(profilePath, { recursive: true, force: true });
+    else {
+      console.error("Refusing to clean a fixture profile outside its task-owned probe path:", profilePath);
+      process.exitCode = 1;
+    }
+  }
   if (isReference) {
     console.log("Reference shader errors:", JSON.stringify(shaderErrors));
     console.log("Reference runtime errors:", JSON.stringify(runtimeErrors));

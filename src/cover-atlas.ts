@@ -225,6 +225,7 @@ export class CoverAtlas {
     this.arrayInsert.userData.albumInsert = true;
     this.arrayInsert.castShadow = true;
     this.arrayInsert.receiveShadow = true;
+    this.arrayInsert.renderOrder = this.selectedInsert.renderOrder;
     this.selectedInsert.material.userData.albumInsertTemplate = true;
   }
 

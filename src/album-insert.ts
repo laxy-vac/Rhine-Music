@@ -1,11 +1,14 @@
 import * as THREE from "three";
 import type { CaseRect } from "./case-layout";
 
+// At the archive camera's 140-unit distance, .0002 can round to the same
+// 24-bit depth as the print. Leave several depth steps even at an oblique view.
+const PRINT_CLEARANCE = .002;
+
 /** A closed, matte paper card behind the independently textured front print. */
 export function albumInsertGeometry(rect: CaseRect, thickness: number) {
   const geometry = new THREE.BoxGeometry(rect.width, rect.height, Math.max(.001, thickness));
-  // Keep the card just behind the print plane, preventing coincident faces.
-  geometry.translate(rect.x, rect.y, rect.z - thickness / 2 - .0002);
+  geometry.translate(rect.x, rect.y, rect.z - thickness / 2 - PRINT_CLEARANCE);
   return geometry;
 }
 
@@ -17,8 +20,8 @@ export function createAlbumInsert(rect: CaseRect, thickness: number, depthOnly =
   mesh.userData.albumInsert = true;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  // For cached foreground layers the card writes depth before the shell,
-  // so the hidden backing never contributes colour to the artwork window.
-  if (depthOnly) mesh.renderOrder = -100;
+  // Draw the backing first so depth ties never replace already drawn artwork.
+  // Keep its colour and physical shadows; depthOnly remains a separate option.
+  mesh.renderOrder = -100;
   return mesh;
 }

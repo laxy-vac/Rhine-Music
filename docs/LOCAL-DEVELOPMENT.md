@@ -1,6 +1,6 @@
 # 本地构建、启动与排查
 
-更新：2026-10-15。状态见 [PROJECT-STATUS](PROJECT-STATUS.md)，权限见 [AGENTS](../AGENTS.md)。命令索引不构成安装、音乐扫描或设备测试授权。
+更新：2026-10-16。状态见 [PROJECT-STATUS](PROJECT-STATUS.md)，权限见 [AGENTS](../AGENTS.md)。命令索引不构成安装、音乐扫描或设备测试授权。
 
 ## 工作目录与入口
 
@@ -121,6 +121,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-music-spatial.mjs` | 第三阶段有限20槽映射、TRACKS稳定身份、越界/空过滤及阵列委托；纯合成 |
 | `scripts/check-quality-detection.mjs` | 完整四档/双场景、样本门槛、最高稳定推荐及低帧档回退；纯计算 |
 | `scripts/check-case-system.mjs --unified-render` | 真实Scene/GLB、两主题货架、分页/命中/开盒/裁切/非对称变换支撑与详情可见；隔离图形 |
+| `node scripts/check-cover-flicker.mjs --design=archive --cover-flicker-assert --cover-flicker-frames=4` | 本轮封面闪烁专项；真实Scene/GLB、合成封面、固定姿态和微移逐帧对照。`--design=rhine`切Future；默认ARRAY，`--cover-layout=array`检查MATRIX；`--cover-quality=balanced`使用完整均衡参数；`--cover-legacy-gap`主动恢复旧间距/顺序作正对照，仅在已知可复现场景要求触发。报告和图在`.tools/flicker-fix/probe`，不访问个人数据/音频设备；细节见[修复报告](COVER-FLICKER-FIX-2026-10-16.md) |
 | `scripts/check-quality-benchmark.mjs` | 先构建源码预览；生产检测UI+编译iframe，固定960×540/DPR1、Future简单款合成曲库、四档结果/取消/采用/键盘/独立存储和父状态；独立Chrome profile，不是Electron或设备FPS保证 |
 | `scripts/check-case-system.mjs` | 当前模型、真实编辑器、预设、纸卡/铭牌、查看器与退场材质/纹理生命周期；退役sprite专属实现断言已移除，产品保护迁到真实Scene/GLB |
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
