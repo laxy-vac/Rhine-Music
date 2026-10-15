@@ -4,11 +4,11 @@
 
 ## 工作目录与入口
 
-唯一活动Git仓库是 `Rhine-Music-Demo-AudioEnhanced`；它同时用于本地开发和用户自行发布到GitHub。所有命令都在该仓库根目录执行，先检查Git状态并保留用户改动。日常开发不导出或同步第二份源码；第三阶段独立版本是用户明确要求的冻结交付快照，不是第二个活动源码仓库。
+唯一活动Git仓库是 `Rhine-Music-Demo-AudioEnhanced`；它同时用于本地开发和用户自行发布到GitHub。所有命令都在该仓库根目录执行，先检查Git状态并保留用户改动。日常开发与验证均在 `main` 源码上进行。
 
 main从干净基线提交 `167d140` 建立，基线包含4062个源码文件。本机 `node_modules/`、`.tools/`、`dist/`、`release/` 和运行数据留在原位并由Git忽略；新克隆需在用户批准后自行准备依赖与桌面工具。旧主线在本地历史分支 `archive/pre-github-main-2026-10-15`，旧 `local/development` 停在 `052bf9a`，原有标签保留为本地历史。用户自行设置远程并只推送 `main`；不推历史分支或标签，不使用 `--all`、`--mirror` 或强推。
 
-当前main入口 **启动源码验证.cmd** 或 `npm run desktop` 打开“Rhine Music · 源码验证”Electron窗口，运行当前第四阶段源码。Stage3独立App与测试顺序见[阶段版本](STAGE-VERSIONS.md)；朋友品尝版采用独立NSIS安装包，旧 `release/Rhine Music.exe` 是历史自解压产物。
+当前 `main` 入口 **启动源码验证.cmd** 或 `npm run desktop` 打开“Rhine Music · 源码验证”Electron窗口，使用原源码验证profile进行日常开发与验证。朋友品尝版采用独立NSIS安装包，旧 `release/Rhine Music.exe` 是历史自解压产物。
 
 - 启动器不自动构建、安装、下载或扫描曲库。
 - desktop/服务来自源码，界面优先 `.tools/source-preview-interface`；来源清单不一致会拒绝启动。
@@ -37,9 +37,9 @@ node scripts/build-source-preview.mjs --interface-only
 .启动源码验证.cmd
 ```
 
-阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。用户于2026-10-15要求将第三、四阶段记录为基本完成，后续按反馈逐步修复细节；两阶段实现、必要自动验证与独立交付均已完成。冻结版本和Stage3→Stage4对比测试顺序见[阶段版本](STAGE-VERSIONS.md)。当前源码窗口运行第四阶段及后续细节修复；基本完成不追加逐项人工或硬件验收结论。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变，Stage3/Stage4 App及源码ZIP分别保存。
+阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。用户于2026-10-15要求将第三、四阶段记录为基本完成，后续按反馈逐步修复细节；实现及必要自动验证均已完成。当前在 `main` 源码上继续按反馈修复；基本完成不追加逐项人工或硬件验收结论。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变。
 
-第三阶段公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。staged Stage3 App的隐藏mock GUI检查12项通过、全量文件哈希核验通过；这些结果不等于个人播放器、Electron整窗、60FPS硬件验收或用户阶段通过。历史/独立快照报告分别位于`.tools/unified-architecture-stage3`和`.tools/unified-architecture-stage4/stage3-independent-*`；第四阶段目标与验收见[统一架构](UNIFIED-ARCHITECTURE.md)。
+第三阶段公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。历史隐藏mock GUI检查12项、阶段文件哈希核验通过；这些结果不等于个人播放器、Electron整窗、60FPS硬件验收或用户阶段通过。阶段报告分别位于`.tools/unified-architecture-stage3`和`.tools/unified-architecture-stage4/stage3-independent-*`；第四阶段目标与验收见[统一架构](UNIFIED-ARCHITECTURE.md)。
 
 ## 模型更新与缓存
 
@@ -91,7 +91,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | 验证索引/封面/音频缓存 | 仓库旁 `music-data-source-preview/music-data`，不自动扫描/迁移/删除 |
 | 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接 |
 
-Stage3与Stage4独立App分别使用各自`App/data`与`App/presets`，首次启动前为空；原Stage4源码预览仍使用源码验证profile。两版不自动复制或迁移偏好、曲库、主题/EQ预设；新版本库为空时由用户自行选择音乐目录并扫描。完整位置及顺序测试见[阶段版本](STAGE-VERSIONS.md)。
+退役阶段运行包的测试数据保留在工作区相对路径 `packaging/retired-stage-data`，仅作留存，不是运行入口；日常开发仅使用上表的源码验证profile。
 
 音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词换缓存目录不自动迁移旧内容。标签写回需用户主动选择。
 
@@ -103,7 +103,7 @@ Stage3与Stage4独立App分别使用各自`App/data`与`App/presets`，首次启
 
 打包不会自动执行 npm ci 或下载缺项。NSIS 3.13经用户批准，仅解压在 `.tools/installer-tools/nsis/3.13/nsis-3.13`，ZIP来自官方SourceForge，SHA-256为 `ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8`；不改系统PATH、注册表或权限。构建产物位于 `.tools/preview-release/<版本>-<时间>/`，交付副本放外层packaging目录。安装器实际运行才会在HKCU登记应用和生成卸载器，不能把编译通过当作安装/卸载通过。
 
-`npm run export:source` 是可选交付步骤，输出当前main的源码ZIP到 `.tools/preview-release/source`；不包含Git历史、安装依赖、构建工具、个人数据或机器验证JSON，也不用于GitHub同步。第三阶段的特例快照见[阶段版本](STAGE-VERSIONS.md)。本地开发与用户自行发布共用当前仓库的 `main`；这不授权自动推送。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细品尝版边界见[品尝版说明](PREVIEW-RELEASE.md)。
+`npm run export:source` 是可选交付步骤，输出当前main的源码ZIP到 `.tools/preview-release/source`；不包含Git历史、安装依赖、构建工具、个人数据或机器验证JSON，也不用于GitHub同步。本地开发与用户自行发布共用当前仓库的 `main`；这不授权自动推送。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细品尝版边界见[品尝版说明](PREVIEW-RELEASE.md)。
 
 ## 检查索引与边界
 
@@ -139,4 +139,4 @@ Stage3与Stage4独立App分别使用各自`App/data`与`App/presets`，首次启
 
 明确暂存相关文件，本地提交，不推送，不改全局Git身份。回滚前检查用户改动/运行进程并保留必要备份；审阅后 `git revert <commit>`，按对应版本重建并重新启动。Git不恢复个人配置、曲库或忽略的构建。
 
-仅在明确LSP退役任务中审查 `--retire-lsp-plugin-runtime`，它处理清单/哈希匹配的生成副本；普通整理不执行。第三、四阶段独立交付与顺序测试见[阶段版本](STAGE-VERSIONS.md)。本轮只生成无需安装的App目录和源码ZIP，不运行安装器、不改全局环境或个人数据。其余历史EXE/上游发行记录见WINDOWS、DESIGN、verification和RELEASE文档，正式发行或远程发布仍待用户决定。
+仅在明确LSP退役任务中审查 `--retire-lsp-plugin-runtime`，它处理清单/哈希匹配的生成副本；普通整理不执行。其余历史EXE/上游发行记录见WINDOWS、DESIGN、verification和RELEASE文档，正式发行或远程发布仍待用户决定。

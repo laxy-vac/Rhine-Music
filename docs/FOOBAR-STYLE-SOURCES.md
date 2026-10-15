@@ -2,7 +2,7 @@
 
 > 本文保留原始资产、许可及移植阶段溯源，不作为当前UI布局说明。现行两主题/可调盒体/字体/歌词/信号以 [THEME-PAGE](THEME-PAGE.md) 与 [PROJECT-STATUS](PROJECT-STATUS.md) 为准；旧阶段授权不自动延续。
 
-第四阶段已清退迁移前的Canvas/sprite/foobar目录生产链。下文坐标、投影与旧renderer只说明历史来源，不是当前可切换外观；Stage3历史版本另见[阶段版本](STAGE-VERSIONS.md)。
+第四阶段已清退迁移前的Canvas/sprite/foobar目录生产链。下文坐标、投影与旧renderer只说明历史来源，不是当前可切换外观。
 
 2026-10-12完整操作界面阶段补充：header/transport/frame/stage/style/signal及lib/emblem/nowplaying/lyrics/archive交互按本机主题源码移植到foobar专属DOM和控制分支。顶栏操作与本播放器一一映射，02为EQ，无Playlists；05Style与主题同页。源码依原MIT适配，不加载foobar组件或读取其profile。源几何header73、transport64、status32，Archive右信息栏456、20槽分架、Style左右62%/预览结构；宿主系统菜单/Preferences映射到本项目对应页面，官方LSP窗口保持原生。
 
@@ -34,7 +34,7 @@
 
 ## 迁移前：独立foobar货架投影（历史）
 
-以下坐标与绘制顺序描述迁移前Canvas2D货架路径，不代表当前公共场景。低视角Blender模型/素材属于被否定方案的历史留存。第四阶段已删除`archive-case-renderer.ts`及关联sprite/foobar目录生产链；冻结Stage3快照保留这段代码以复现当时版本，但当前源码不提供回切开关。
+以下坐标与绘制顺序描述迁移前Canvas2D货架路径，不代表当前公共场景。低视角Blender模型/素材属于被否定方案的历史留存。第四阶段已删除`archive-case-renderer.ts`及关联sprite/foobar目录生产链；当前源码不提供回切开关。
 
 foobar独立构建20槽货架，按原buildShelves把当前曲库分组依序填满，末架仍保留20槽。它不读取普通Three Scene的循环cell、相机或选中屏幕位置；点击以原record索引映射回播放器。源轴向、槽距1、层距4.7、sprite比例0.54、`clamp(min(arrayWidth/936,height/731),1,1.6)`及 `[round(arrayWidth*.37),height-87]` 原点保留。arrayWidth适配本播放器的信息栏边界，未声称整个宿主窗口与foobar2000像素一致。每架按实际Spring位置淡入/淡化、后架到前架绘制，架内按源y/z深度交错盒体与托架；原地面与托架分别绘制。
 
@@ -52,7 +52,7 @@ foobar独立构建20槽货架，按原buildShelves把当前曲库分组依序填
 
 用户明确接受按本节已列的原始多视角图重建，并要求标明差异。已核对本机1.4.0资源与官方仓库v1.4提交 `86dedfb3a8d8215c899debab6bf292fafc654cf8` 的资源结构，未发现原始三维模型或建模脚本；`case.json`是投影数据，不包含物理材质值。新增的 `art/build_punk_reference_case.py`、`art/punk-reference-case.blend`、`public/assets/punk-reference-case.glb` 为本项目根据这些图重建，沿用来源许可和署名；并非原作者发布的网格。
 
-模型保留一个共用盒体，分14部件；十套外观用可组合的材质参数和程序纹理复现。封面窗与铭牌平面由白色hero投影反求，螺钉/槽/徽记/倒角依原图可见轮廓建立。未拍到的内侧、深度、精确截面及原贴图/烘焙光照无法从PNG唯一还原。透光与不透光的材质类别明确区分，IOR、粗糙度、厚度、膜层数值均为估计；不宣称物理参数或像素完全一致。保留的原始/预渲染资产仅作为许可、来源或其他已说明用途的素材，不构成当前旧外观切换入口；查看Stage3旧版请使用单独冻结的Stage3快照。
+模型保留一个共用盒体，分14部件；十套外观用可组合的材质参数和程序纹理复现。封面窗与铭牌平面由白色hero投影反求，螺钉/槽/徽记/倒角依原图可见轮廓建立。未拍到的内侧、深度、精确截面及原贴图/烘焙光照无法从PNG唯一还原。透光与不透光的材质类别明确区分，IOR、粗糙度、厚度、膜层数值均为估计；不宣称物理参数或像素完全一致。保留的原始/预渲染资产仅作为许可、来源或其他已说明用途的素材，不构成当前旧外观切换入口。
 
 ## 许可（原资源）
 

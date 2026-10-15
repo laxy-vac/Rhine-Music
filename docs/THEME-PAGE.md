@@ -1,6 +1,6 @@
 # 当前主题与唱片系统
 
-更新：2026-10-15。当前进度/验收见 [状态](PROJECT-STATUS.md)，运行见 [本地开发](LOCAL-DEVELOPMENT.md)，素材见 [来源](FOOBAR-STYLE-SOURCES.md)，Stage3独立版本见[阶段版本](STAGE-VERSIONS.md)。本文记录稳定主题设计，不把迁移前renderer作为当前回退承诺。
+更新：2026-10-15。当前进度/验收见 [状态](PROJECT-STATUS.md)，运行见 [本地开发](LOCAL-DEVELOPMENT.md)，素材见 [来源](FOOBAR-STYLE-SOURCES.md)。本文记录稳定主题设计，不把迁移前renderer作为当前回退承诺。
 
 ## 两套主题
 
@@ -19,7 +19,7 @@ Future参考《莱茵生命：访问》和现有唱片页，融合现代工业�
 - windowAspect全局：16:9默认、16:10、4:3、3:2、21:9、自由；固定模式等比缩放，最大化/全屏留边。
 - styleProfiles保存各主题陈列/配色；caseProfiles保存各主题结构/材质/部件。
 - 公共布局/目录设置由view保存（shelf/array/grid及show/group/sort），foobarArchive兼容投影；新字段逐项优先，旧ARRAY→shelf、FUTURE→array、GRID→grid。主题外观档不拥有全局视图，播放顺序不再按主题切换。
-- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询和view。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示。第四阶段已清退迁移前Canvas货架文件及重复目录链；Stage3冻结快照保留旧版本，当前源码不提供旧Canvas回退入口，清退范围见[统一架构](UNIFIED-ARCHITECTURE.md)。
+- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询和view。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示。第四阶段已清退迁移前Canvas货架文件及重复目录链；当前源码不提供旧Canvas回退入口，清退范围见[统一架构](UNIFIED-ARCHITECTURE.md)。
 - 切主题不重置质量/比例/音频。质量预设不换盒体或外观；传输渲染分辨率不等于材质透过率。
 - 设计基准1920×1080及以上，保留工作区DIP容纳和既有触控，不另做低分辨率适配。
 
