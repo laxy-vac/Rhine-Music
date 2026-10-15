@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { MUSIC_MODEL } from "./music-model";
 import { ROW_SPACING } from "./archive-loop";
+import { MusicArrayAppearance } from "./music-array-appearance";
 import type { StylePalette } from "./music-style";
 
 type ShelfPart = {
@@ -22,6 +23,9 @@ export class MusicShelf {
   private readonly scale = new THREE.Vector3();
   private readonly rotation = new THREE.Quaternion();
   private readonly slotCapacity: number;
+  private readonly appearance: MusicArrayAppearance;
+  private readonly ownsAppearance: boolean;
+  private readonly appearanceBackground = new THREE.Color("#e8e5e1");
   private readonly base = new THREE.MeshStandardMaterial({ color: "#b3b7b3", roughness: .46, metalness: .42 });
   private readonly rim = new THREE.MeshStandardMaterial({ color: "#e1e4dc", roughness: .28, metalness: .52 });
   private readonly inset = new THREE.MeshStandardMaterial({ color: "#d7d9d3", roughness: .74, metalness: .12 });
@@ -30,9 +34,11 @@ export class MusicShelf {
   private readonly tick = new THREE.MeshStandardMaterial({ color: "#e4e7df", roughness: .56, metalness: .18 });
   private dimensions = { width: 0, depth: 0, spacing: 0 };
 
-  constructor(count: number) {
+  constructor(count: number, appearance?: MusicArrayAppearance) {
     const capacity = Math.max(1, Math.floor(count));
     this.slotCapacity = capacity;
+    this.ownsAppearance = !appearance;
+    this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
     const makePart = (name: string, material: THREE.Material, multiplier = 1, radius = .003) => {
       const mesh = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>(this.box, material, capacity * multiplier);
       mesh.name = name;
@@ -105,7 +111,7 @@ export class MusicShelf {
     }
   }
 
-  setSlot(index: number, x: number, y: number, z: number, visible = true) {
+  setSlot(index: number, x: number, y: number, z: number, visible = true, alpha = 1, tint = 0) {
     if (index < 0 || index >= this.slotCapacity) return;
     for (const part of this.parts) {
       this.scale.copy(part.size);
@@ -114,17 +120,26 @@ export class MusicShelf {
         const offset = part.offsets[copy]!;
         this.position.set(x + offset.x, y + offset.y, z + offset.z);
         this.matrix.compose(this.position, this.rotation, this.scale);
-        part.mesh.setMatrixAt(index + this.slotCapacity * copy, this.matrix);
+        const instanceIndex = index + this.slotCapacity * copy;
+        part.mesh.setMatrixAt(instanceIndex, this.matrix);
+        this.appearance.write(part.mesh, instanceIndex, alpha, tint);
       }
     }
   }
 
   finish() {
-    for (const part of this.parts) part.mesh.instanceMatrix.needsUpdate = true;
+    for (const part of this.parts) {
+      part.mesh.instanceMatrix.needsUpdate = true;
+      this.appearance.finish(part.mesh);
+    }
   }
 
   setMode(night: boolean, accent: string, design: "rhine" | "archive" = "rhine", palette?: StylePalette) {
     const archive = design === "archive";
+    if (this.ownsAppearance && palette?.bg) {
+      this.appearanceBackground.set(palette.bg);
+      this.appearance.setBackground(this.appearanceBackground);
+    }
     this.base.color.set(palette?.surface ?? (night ? "#667078" : archive ? "#acb1ac" : "#c1c4bb"));
     this.base.metalness = archive ? .64 : .42;
     this.base.roughness = archive ? .38 : .46;
@@ -151,6 +166,7 @@ export class MusicShelf {
     for (const geometry of geometries) geometry.dispose();
     if (!this.boxDisposed) this.box.dispose();
     for (const material of [this.base, this.rim, this.inset, this.groove, this.accent, this.tick]) material.dispose();
+    if (this.ownsAppearance) this.appearance.dispose();
     this.parts.length = 0;
     this.group.clear();
   }

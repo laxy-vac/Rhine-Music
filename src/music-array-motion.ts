@@ -1,5 +1,16 @@
 import { damp, type Spring } from "./motion";
 import { qualityIdleGain, type WaveQuality } from "./quality-motion";
+import { MUSIC_SHELF_VIEW } from "./music-display-layout";
+
+/** Columns ahead of the active shelf fade away; later shelves recede into the page. */
+export function arrayLaneAppearance(lane: number, focus: number) {
+  const pos = lane - focus;
+  const clamp = (value: number, max = 1) => Math.max(0, Math.min(max, value));
+  return {
+    alpha: clamp(1 + pos) * clamp((4 - pos) / .8),
+    tint: Math.round(clamp(.38 * clamp(pos) + .14 * Math.max(0, pos), .8) * 10) / 10,
+  };
+}
 
 // Adapted from RhinE 1.4.0 js/archive.js caseTargets (MIT).
 export function arrayNeighborLift(distance: number) {
@@ -60,13 +71,13 @@ export class MusicArrayMotion {
     this.firstRow = Number.isFinite(firstRow) ? firstRow : 12;
   }
 
-  bind(keys: readonly string[], lane: number, row: number, snap = false) {
+  bind(keys: readonly string[], lane: number, row: number, snap = false, visibleSlots = 6) {
     this.keys = [...keys];
     const present = new Set(keys);
     for (const key of this.rows.keys()) if (!present.has(key)) this.rows.delete(key);
     const state = this.activate(lane);
     if (state && snap && Number.isFinite(row)) {
-      state.value = row;
+      state.value = this.targetRow(row, visibleSlots);
       state.velocity = 0;
     }
   }
@@ -87,12 +98,19 @@ export class MusicArrayMotion {
     return state;
   }
 
-  step(lane: number, row: number, rate: number, dt: number, reduced: boolean) {
+  targetRow(row: number, visibleSlots = 6) {
+    const visible = Number.isFinite(visibleSlots) ? Math.max(6, Math.min(MUSIC_SHELF_VIEW.slots, visibleSlots)) : 6;
+    return this.firstRow + Math.max(0, Math.min(MUSIC_SHELF_VIEW.slots - visible,
+      row - this.firstRow - MUSIC_SHELF_VIEW.previewSlot));
+  }
+
+  step(lane: number, row: number, rate: number, dt: number, reduced: boolean, visibleSlots = 6) {
     if (![row, rate, dt].every(Number.isFinite) || rate <= 0 || dt < 0) return;
     const state = this.activate(lane);
     if (!state) return;
-    if (reduced) { state.value = row; state.velocity = 0; }
-    else damp(state, row, rate, dt);
+    const target = this.targetRow(row, visibleSlots);
+    if (reduced) { state.value = target; state.velocity = 0; }
+    else damp(state, target, rate, dt);
   }
 
   row(lane: number) { return this.rows.get(this.keys[lane])?.value ?? this.firstRow; }

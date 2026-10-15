@@ -11,6 +11,7 @@ export const MUSIC_ARRAY_VIEW = {
 /** Shared finite shelf contract; the same entries and spacing serve both themes. */
 export const MUSIC_SHELF_VIEW = {
   slots: 20, rowSpacing: 1, columnSpacing: 4.7, originX: 0.37, bottomInset: 87,
+  referenceWidth: 936, referenceHeight: 731, pixelsPerUnit: .54 * 98, previewSlot: 4,
 } as const;
 
 export interface MusicDisplayLayout {

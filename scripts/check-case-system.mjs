@@ -12,9 +12,10 @@ import ts from "typescript";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
+const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view");
-const unifiedOutput = path.join(project, ".tools", "array-surface-refinement");
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition;
+const unifiedOutput = path.join(project, ".tools", "array-composition");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -163,10 +164,10 @@ import { getCaseLayout } from "./src/case-layout.ts";
 import { ArchiveScene } from "./src/scene.ts";
 import { records, setMusicAlbums } from "./src/data.ts";
 import { archiveMusicStyle, defaultMusicStyle, musicStyleMarkup, stylePalette } from "./src/music-style.ts";
-import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries } from "./src/music-catalog.ts";
-import { getMusicCatalogShelves } from "./src/music-catalog-shelves.ts";
+import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries, getMusicFocusedEntry } from "./src/music-catalog.ts";
+import { getMusicCatalogShelves, getMusicEntryLocation, navigateMusicEntry } from "./src/music-catalog-shelves.ts";
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
-import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift } from "./src/music-array-motion.ts";
+import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
 import { ViewerAlbumCover } from "./src/viewer-album-cover.ts";
 import { normalizeCaseUserPresets } from "./src/case-user-presets.ts";
 import { createAlbumInsert } from "./src/album-insert.ts";
@@ -1036,8 +1037,9 @@ function unifiedPointerTarget(selected = false, sameParent = false) {
       index: unifiedClicks.at(-1)?.index ?? 0, key: archiveScene.selectedCell.foobarEntryKey };
   }
   for (let index = 0; index < archiveScene.cells.length; index++) {
-    const entry = musicSpatialEntry(archiveScene.cells[index], true);
+    const cell = archiveScene.cells[index], entry = musicSpatialEntry(cell, true);
     if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey) continue;
+    if (cell.lane !== archiveScene.selectedCell.lane) continue;
     if (sameParent && entry.recordIndex !== musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex) continue;
     archiveScene.caseHitProxy.getMatrixAt(index, matrix);
     if (matrix.elements[0] === 0 && matrix.elements[5] === 0 && matrix.elements[10] === 0) continue;
@@ -1219,9 +1221,13 @@ function punkArrayMotionSnapshot() {
     const cell = scene.cells[index], entry = musicSpatialEntry(cell, scene.shelfView);
     if (!entry) continue;
     scene.caseHitProxy.getMatrixAt(index, matrix);
+    const basis = matrix.elements;
+    const drawn = Math.hypot(basis[0], basis[1], basis[2], basis[4], basis[5], basis[6], basis[8], basis[9], basis[10]) > 1e-12;
     matrix.decompose(position, quaternion, scale); euler.setFromQuaternion(quaternion);
     const item = { index, key: entry.key, lane: cell.lane, row: cell.row, x: position.x, y: position.y, z: position.z,
-      rotX: scale.x ? euler.x : null, drawn: scale.x !== 0, selected: entry.key === scene.selectedCell.foobarEntryKey };
+      rotX: drawn ? euler.x : null, drawn, selected: entry.key === scene.selectedCell.foobarEntryKey,
+      anchorRow: scene.shelfView ? scene.arrayMotion.row(cell.lane) : null,
+      targetAnchorRow: scene.shelfView ? scene.arrayMotion.targetRow(cell.row, scene.arraySlotsInView) : null };
     scene.covers.array.getMatrixAt(index, matrix);
     item.coverZ = matrix.elements[14];
     scene.covers.arrayInsert.getMatrixAt(index, matrix);
@@ -1236,6 +1242,8 @@ function punkArrayMotionSnapshot() {
   }
   return { time: archiveTime, design: scene.musicStyle.design, layout: scene.displayLayout.effective,
     quality: scene.quality.wave, reduced: scene.reduced, selected: { ...scene.selectedCell },
+    visibleSlots: scene.arraySlotsInView, arrayComposition: scene.arrayComposition?.() ?? null,
+    selectedAnchorRow: scene.shelfView ? scene.arrayMotion.row(scene.selectedCell.lane) : null,
     selectedModel: { x: scene.model.position.x, y: scene.model.position.y, z: scene.model.position.z,
       coverZ: scene.covers.selected.getWorldPosition(new THREE.Vector3()).z,
       insertZ: scene.covers.selectedInsert.getWorldPosition(new THREE.Vector3()).z },
@@ -1243,14 +1251,119 @@ function punkArrayMotionSnapshot() {
     returnY: scene.returnY, outgoing: scene.outgoing.length, values };
 }
 
+function arrayCompositionRenderSnapshot() {
+  const scene = archiveScene, matrix = new THREE.Matrix4();
+  const focusLane = scene.columnCamera.value / scene.spatialSpacing.column + 2;
+  scene.scene.updateMatrixWorld(true);
+  const shelfMeshes = [];
+  scene.sceneResources?.group.traverse(object => { if (object.isInstancedMesh) shelfMeshes.push(object); });
+  const meshes = [
+    ...scene.instances.map((mesh, index) => ({ kind: mesh.userData.casePart || "case-instance-" + index, mesh })),
+    { kind: "cover", mesh: scene.covers.array },
+    { kind: "paper", mesh: scene.covers.arrayInsert },
+    ...(scene.caseTitles ? [{ kind: "title", mesh: scene.caseTitles.array }] : []),
+    ...shelfMeshes.map(mesh => ({ kind: mesh.name || "shelf-part", mesh })),
+  ];
+  const instance = (mesh, index) => {
+    mesh.getMatrixAt(index, matrix);
+    const e = matrix.elements;
+    const scale = [Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10])];
+    const color = mesh.instanceColor && index < mesh.instanceColor.count
+      ? [mesh.instanceColor.getX(index), mesh.instanceColor.getY(index), mesh.instanceColor.getZ(index)] : null;
+    return { index, drawn: scale.some(value => value > 1e-12), scale, color };
+  };
+  return {
+    selectedLane: scene.selectedCell.lane, focusLane,
+    style: { design: scene.musicStyle.design, shelf: scene.musicStyle.shelf, topTitles: scene.musicStyle.topTitles,
+      layout: scene.displayLayout.effective, modelVisible: scene.model.visible },
+    titlesVisible: !!scene.caseTitles?.array.visible,
+    traysVisible: !!scene.sceneResources?.group.visible,
+    lanes: [0, 1, 2, 3, 4].map(lane => {
+      const slotIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12 && musicSpatialEntry(cell, true));
+      const entry = slotIndex >= 0 ? musicSpatialEntry(scene.cells[slotIndex], true) : undefined;
+      const appearance = arrayLaneAppearance(lane, focusLane);
+      const laneIndex = [0, 1, 2, 3, 4].filter(value => arrayLaneAppearance(value, focusLane).alpha > 0).indexOf(lane);
+      return { lane, key: entry?.key, appearance,
+        meshes: meshes.map(({ kind, mesh }) => {
+          let indices = [];
+          if (slotIndex >= 0) {
+            if (["Music shelf base", "Music shelf front number plates", "Music shelf plate markers", "Local music floor finish"].includes(kind))
+              indices = laneIndex >= 0 ? [laneIndex] : [];
+            else if (kind === "Music shelf side rails") indices = laneIndex >= 0 ? [laneIndex * 2, laneIndex * 2 + 1] : [];
+            else if (kind === "Music floor seams and locator marks") indices = [slotIndex];
+            else if (kind.startsWith("Record shelf")) indices = [slotIndex,
+              ...(mesh.count >= scene.positions.length * 2 ? [slotIndex + scene.positions.length] : [])];
+            else indices = [slotIndex];
+          }
+          return { kind, visible: mesh.visible, instances: indices.map(index => instance(mesh, index)) };
+        }) };
+    }),
+  };
+}
+
+function arrayPointerTarget(lane, row) {
+  const scene = archiveScene, matrix = new THREE.Matrix4(), point = new THREE.Vector3();
+  const index = scene.cells.findIndex(cell => cell.lane === lane && cell.row === row && musicSpatialEntry(cell, true));
+  if (index < 0) return null;
+  scene.caseHitProxy.getMatrixAt(index, matrix);
+  const cell = scene.cells[index], entry = musicSpatialEntry(cell, true);
+  point.copy(scene.caseLayout.center).applyMatrix4(matrix).project(scene.camera);
+  const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(point.x, point.y), scene.camera);
+  const hits = ray.intersectObjects([scene.caseHitProxy, scene.model], true);
+  const hit = hits[0], activeHit = hits.find(candidate => candidate.instanceId === undefined ||
+    scene.cells[candidate.instanceId]?.lane === scene.selectedCell.lane);
+  return { x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2,
+    index, lane, row, key: entry.key, hasHit: !!hit, hitIndex: hit?.instanceId ?? null,
+    activeHitIndex: activeHit?.instanceId ?? null, hitObject: hit?.object?.name ?? "" };
+}
+
+function findArrayPointerTarget(lane) {
+  for (let row = 12; row < 32; row++) {
+    const target = arrayPointerTarget(lane, row);
+    if (target && target.hitIndex === target.index && target.x >= 35 && target.x < archiveHost.clientWidth - 35 &&
+      target.y >= 35 && target.y < archiveHost.clientHeight - 35) return target;
+  }
+  return null;
+}
+
+function findArrayPointerProbe(lane) {
+  for (let row = 12; row < 32; row++) {
+    const target = arrayPointerTarget(lane, row);
+    if (target && target.x >= 35 && target.x < archiveHost.clientWidth - 35 &&
+      target.y >= 35 && target.y < archiveHost.clientHeight - 35) return target;
+  }
+  return null;
+}
+
+function findArrayPointerVoid(lane) {
+  for (let row = 12; row < 32; row++) {
+    const target = arrayPointerTarget(lane, row);
+    if (!target || target.activeHitIndex !== null || target.x < 35 || target.x >= archiveHost.clientWidth - 35 ||
+      target.y < 35 || target.y >= archiveHost.clientHeight - 35) continue;
+    return target;
+  }
+  return null;
+}
+
 let arrayMotionPrepare;
 let arrayMotionSelect;
+let arrayMotionInputCallbacks;
+let arrayCompositionPreviewScreenshot = "";
+let arrayCompositionRightLaneScreenshot = "";
+function arrayMotionInputSnapshot() {
+  const scene = archiveScene;
+  const selected = getMusicDisplayEntries().find(entry => entry.key === scene.selectedCell.foobarEntryKey);
+  return { selectedKey: scene.selectedCell.foobarEntryKey ?? "", selectedLane: scene.selectedCell.lane,
+    focusedKey: selected ? getMusicFocusedEntry(selected.recordIndex)?.key ?? "" : "",
+    selects: arrayMotionInputCallbacks?.selects.slice() ?? [],
+    navigations: arrayMotionInputCallbacks?.navigations.slice() ?? [] };
+}
 function arrayHoverSnapshot() {
   stepArchiveScene(100);
   const scene = archiveScene;
   return { y: scene.model.position.y, selected: { ...scene.selectedCell }, phase: scene.musicPresentationPhase,
     catalog: getMusicCatalogShelves().map(value => value.entryKeys.length), clicks: unifiedClicks.length, opens: unifiedOpens.length,
-    bounds: unifiedSnapshot().selectedScreenBounds };
+    bounds: unifiedSnapshot().selectedScreenBounds, input: arrayMotionInputSnapshot() };
 }
 async function prepareArrayPointer(design) {
   await arrayMotionPrepare(design, "shelf", "full");
@@ -1304,7 +1417,7 @@ async function arraySurfaceVariant(design, floor) {
   return { detail, standard, closeup };
 }
 
-async function exercisePunkArrayMotion() {
+async function exercisePunkArrayMotion(screenshotsOnly = false) {
   if (!archiveScene) {
     await setupArchiveScene(); window.caseCheck.editor.destroy(); document.body.replaceChildren(archiveHost);
     document.body.style.cssText = "margin:0;padding:0;overflow:hidden"; archiveHost.style.margin = "0";
@@ -1326,7 +1439,7 @@ async function exercisePunkArrayMotion() {
   };
   const prepare = async (design = "archive", layout = "shelf", wave = "full") => {
     configureMusicCatalog({ layout, show: "tracks", group: "none", sort: "added" }, "");
-    scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" });
+    scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true });
     archiveHost.dataset.design = design;
     await scene.setCaseSettings(sceneCaseSettings("punk"));
     scene.setQuality({ ...qualityPresets.original, wave, modelDetail: "medium", lighting: "high", scale: 80,
@@ -1340,10 +1453,28 @@ async function exercisePunkArrayMotion() {
     return snapshot;
   };
   arrayMotionPrepare = prepare; arrayMotionSelect = select;
+  const inputCallbacks = { selects: [], navigations: [] };
+  arrayMotionInputCallbacks = inputCallbacks;
+  scene.onSelect = (index, cell) => {
+    inputCallbacks.selects.push({ index, key: cell?.foobarEntryKey ?? "", cell: cell ? { ...cell } : null });
+    if (cell?.foobarEntryKey) focusMusicEntry(cell.foobarEntryKey);
+    scene.select(index, cell ? { cell } : undefined);
+  };
+  scene.onNavigate = (axis, direction) => {
+    inputCallbacks.navigations.push({ axis, direction });
+    const current = entries.find(value => value.key === scene.selectedCell.foobarEntryKey);
+    const next = current && navigateMusicEntry(current.recordIndex, axis, direction);
+    if (!next) return;
+    focusMusicEntry(next.key);
+    const location = getMusicEntryLocation(next.key);
+    if (location) scene.select(next.recordIndex, { cell: { lane: location.shelf, row: 12 + location.slot, foobarEntryKey: next.key } });
+  };
   const compare = (before, after, lane, active) => {
     const byKey = new Map(before.values.map(value => [value.key, value]));
     const shared = after.values.filter(value => value.lane === lane && byKey.has(value.key));
-    expect(shared.length >= 18, "Each measured lane must retain at least eighteen actual submitted cells.");
+    if (!active && shared.length === 0) return { lane, matched: 0, notSubmitted: true };
+    expect(active ? shared.length >= 18 : shared.length > 0,
+      "A measured lane must retain submitted entries for comparison: " + JSON.stringify({ lane, active, matched: shared.length }));
     const z = shared.map(value => Math.abs(value.z - byKey.get(value.key).z));
     const regular = shared.filter(value => value.drawn && byKey.get(value.key).drawn);
     const y = regular.map(value => Math.abs(value.y - byKey.get(value.key).y));
@@ -1367,13 +1498,69 @@ async function exercisePunkArrayMotion() {
         "The physical tray must follow its own lane Z: " + JSON.stringify(value));
     }
   };
-  const before = await prepare();
+  let before = await prepare();
+  if (!arrayCompositionPreviewScreenshot) {
+    const previousQuality = { ...scene.quality };
+    scene.setReduced(true); select(0, 0); stepArchiveScene(1); scene.setReduced(false);
+    scene.setQuality({ ...qualityPresets.high, scale: 100, pixelRatio: 1 });
+    await scene.setCaseSettings(sceneCaseSettings("punk"));
+    stepArchiveScene(6); scene.composer.render();
+    arrayCompositionPreviewScreenshot = scene.renderer.domElement.toDataURL("image/png");
+    scene.setQuality(previousQuality); await scene.setCaseSettings(sceneCaseSettings("punk"));
+    before = await prepare();
+  }
+  expect(Number.isInteger(before.visibleSlots) && before.visibleSlots >= 6 && before.visibleSlots <= 20 &&
+    before.arrayComposition.visibleSlots === before.visibleSlots,
+  "The rack scroll window must match the camera's finite visible-slot calculation: " + JSON.stringify(before.arrayComposition));
+  const firstCards = before.values.filter(value => value.row === 12);
+  expect(firstCards.length === 5 && firstCards.every(value => value.anchorRow === 12),
+    "Every new shelf column must retain the same first-card anchor: " + JSON.stringify(firstCards.map(value => ({ lane: value.lane, z: value.z, anchorRow: value.anchorRow }))));
+  const firstCardZ = firstCards.map(value => value.z);
+  expect(Math.max(...firstCardZ) - Math.min(...firstCardZ) < 2e-6,
+    "Default first cards across all columns must share the same world Z: " + JSON.stringify(firstCards.map(value => ({ lane: value.lane, z: value.z }))));
+  if (screenshotsOnly) return { screenshotsOnly: true, visibleSlots: before.visibleSlots, firstCards: firstCards.map(value => ({ lane: value.lane, z: value.z })) };
+  const noScrollFirstFive = [];
+  scene.setReduced(true);
+  for (let slot = 0; slot < 5; slot++) {
+    select(0, slot); stepArchiveScene(1);
+    const snapshot = punkArrayMotionSnapshot();
+    expect(snapshot.selectedAnchorRow === 12, "Selecting slot " + slot + " must not scroll the selected column.");
+    noScrollFirstFive.push({ slot, anchorRow: snapshot.selectedAnchorRow });
+  }
+  scene.setReduced(false);
+  scene.setReduced(true); select(0, 12); stepArchiveScene(1);
+  const rememberedLaneAnchor = punkArrayMotionSnapshot().selectedAnchorRow;
+  const expectedRememberedLaneAnchor = scene.arrayMotion.targetRow(24, scene.arraySlotsInView);
+  expect(rememberedLaneAnchor === expectedRememberedLaneAnchor,
+    "Selecting a later card clamps its scroll anchor to the live visible-slot window: " +
+      JSON.stringify({ rememberedLaneAnchor, expectedRememberedLaneAnchor, visibleSlots: scene.arraySlotsInView }));
+  const rememberedEntry = entries.find(value => value.key === scene.selectedCell.foobarEntryKey);
+  getMusicEntryLocation(rememberedEntry.key);
+  scene.onNavigate("lane", 1); stepArchiveScene(1);
+  const directoryEntry = entries.find(value => value.key === scene.selectedCell.foobarEntryKey);
+  expect(directoryEntry && scene.selectedCell.lane === 1, "The input navigation callback must move focus into the adjacent catalog directory.");
+  scene.onNavigate("lane", -1); stepArchiveScene(1);
+  expect(scene.selectedCell.foobarEntryKey === rememberedEntry.key && scene.selectedCell.lane === 0,
+    "Returning through catalog navigation restores the prior directory entry identity.");
+  const directoryReturnAnchor = punkArrayMotionSnapshot().selectedAnchorRow;
+  expect(directoryReturnAnchor === rememberedLaneAnchor, "Returning to a previously scrolled directory preserves its column anchor.");
+  scene.setReduced(false);
+  const directoryReturn = { from: rememberedEntry.key, via: directoryEntry.key, returned: scene.selectedCell.foobarEntryKey,
+    rememberedLaneAnchor, expectedRememberedLaneAnchor, visibleSlots: scene.arraySlotsInView,
+    directoryReturnAnchor, navigations: inputCallbacks.navigations.slice(-2) };
+  before = await prepare();
+  select(0, 2); stepArchiveScene(1);
   select(0, 12); stepArchiveScene(18);
   const during = punkArrayMotionSnapshot(); aligned(during);
-  const laneChecks = [0, 1, 2, 3].map(lane => compare(before, during, lane, lane === 0));
+  const laneChecks = [0, 1, 2, 3, 4].map(lane => compare(before, during, lane, lane === 0));
   select(1, 9); stepArchiveScene(1);
   const switched = punkArrayMotionSnapshot(); stepArchiveScene(240);
+  scene.setReduced(true); stepArchiveScene(1); scene.setReduced(false); stepArchiveScene(1);
   const afterSwitch = punkArrayMotionSnapshot(); aligned(afterSwitch);
+  if (!arrayCompositionRightLaneScreenshot) {
+    scene.composer.render();
+    arrayCompositionRightLaneScreenshot = scene.renderer.domElement.toDataURL("image/png");
+  }
   const switchedZ = switched.values.filter(value => value.lane === 0);
   expect(switchedZ.every(value => afterSwitch.values.find(next => next.key === value.key)?.z === value.z),
     "Former lane Z freezes immediately while its selection wave naturally lowers.");
@@ -1381,17 +1568,48 @@ async function exercisePunkArrayMotion() {
   const beforeReduced = punkArrayMotionSnapshot();
   const frozen = compare(afterSwitch, beforeReduced, 0, false);
   const nextLane = compare(switched, afterSwitch, 1, true);
+  const composition = arrayCompositionRenderSnapshot();
+  expect(Math.abs(composition.focusLane - 1) < 1e-3 && composition.titlesVisible && composition.traysVisible,
+    "The composition snapshot must include active title and physical tray rendering: " + JSON.stringify({
+      selectedLane: composition.selectedLane, focusLane: composition.focusLane, style: composition.style,
+      titlesVisible: composition.titlesVisible, traysVisible: composition.traysVisible,
+    }));
+  const hiddenRight = composition.lanes.find(value => value.lane === 0);
+  expect(hiddenRight.appearance.alpha < .0001 && hiddenRight.meshes.every(mesh => mesh.instances.length === 0 || mesh.instances.every(instance => !instance.drawn)),
+    "The previous right column must be fully removed from submitted case, cover, card, title and tray geometry: " + JSON.stringify(hiddenRight));
+  const hiddenKinds = new Set(hiddenRight.meshes.map(mesh => mesh.kind.toLowerCase()));
+  expect(hiddenKinds.has("cover") && hiddenKinds.has("paper") && hiddenKinds.has("title") &&
+    [...hiddenKinds].some(kind => kind.includes("frame")) && [...hiddenKinds].some(kind => kind.includes("record shelf tray")),
+  "The render audit must include the frame, cover, physical card, title and tray mesh families: " + JSON.stringify([...hiddenKinds]));
+  const colorMatches = (mesh, appearance) => mesh.instances.every(instance => instance.color &&
+    Math.abs(instance.color[0] - (1 + appearance.alpha)) < 2e-5 &&
+    Math.abs(instance.color[1] - (1 + appearance.tint)) < 2e-5 && Math.abs(instance.color[2] - 1) < 2e-5);
+  const activeLane = composition.lanes.find(value => value.lane === 1);
+  expect(activeLane.meshes.every(mesh => colorMatches(mesh, activeLane.appearance)),
+    "The active frame, covers, paper, titles and trays must share the encoded lane appearance.");
+  const rearTintChecks = [
+    { lane: 2, tint: .5 }, { lane: 3, tint: .7 }, { lane: 4, tint: .8 },
+  ].map(({ lane, tint }) => {
+    const value = composition.lanes.find(item => item.lane === lane);
+    expect(value.appearance.alpha === 1 && value.appearance.tint === tint && value.meshes.every(mesh => colorMatches(mesh, value.appearance)),
+      "Rear columns keep their specified tint on every rendered component: " + JSON.stringify({ lane, value }));
+    return { lane, tint, meshFamilies: value.meshes.map(mesh => mesh.kind) };
+  });
+  const hiddenVoid = findArrayPointerVoid(0);
+  expect(hiddenVoid && hiddenVoid.hitIndex !== hiddenVoid.index,
+    "The disappeared right column must have no pointer target: " + JSON.stringify(hiddenVoid));
   scene.setReduced(true); select(2, 14); stepArchiveScene(1);
   const reduced = punkArrayMotionSnapshot();
   const reducedSelected = reduced.values.find(value => value.selected);
-  expect(Math.abs(reducedSelected.z + 2.17) < 2e-6, "Reduced motion places the new active lane on the inspection Z in one update.");
+  expect(reduced.selectedAnchorRow === reducedSelected.targetAnchorRow,
+    "Reduced motion immediately clamps the selected column's anchor to its visible window.");
   for (const value of reduced.values.filter(value => value.lane !== 2)) {
     const previous = beforeReduced.values.find(old => old.key === value.key);
     expect(previous && previous.z === value.z, "Reduced selection cannot move another lane's rail.");
   }
   // Reduce motion preserves the same selected/neighbor shape, snapping former inactive cases to rest.
   stepArchiveScene(1); const reducedSettled = punkArrayMotionSnapshot();
-  const reducedInactive = [0, 1, 3].map(lane => compare(reduced, reducedSettled, lane, false));
+  const reducedInactive = [0, 1, 3, 4].map(lane => compare(reduced, reducedSettled, lane, false));
   // Selection keeps the original persistent bell, with quality changing only neighbors.
   const waveLevels = [];
   for (const wave of ["off", "basic", "reduced", "full"]) {
@@ -1470,6 +1688,9 @@ async function exercisePunkArrayMotion() {
     for (let frame = 0; frame < 300 && !scene.musicPresentationReady; frame++) stepArchiveScene(1);
     const detail = unifiedSnapshot();
     expect(detail.stats.musicPresentationPhase === "presented", "Both shared ARRAY themes open normally: " + JSON.stringify({ design, stats: detail.stats }));
+    const detailMotion = punkArrayMotionSnapshot();
+    expect(Math.abs(detailMotion.selectedModel.z + 2.17) < 2e-6,
+      "The legacy inspection-Z alignment remains specific to the opened detail pose: " + JSON.stringify(detailMotion.selectedModel));
     expect(detail.selectedScreenBounds.minX >= 0 && detail.selectedScreenBounds.maxX <= detail.selectedScreenBounds.availableWidth &&
       detail.selectedScreenBounds.minY >= 0 && detail.selectedScreenBounds.maxY <= archiveHost.clientHeight,
       "The whole opened case remains within the stage: " + JSON.stringify({ design, bounds: detail.selectedScreenBounds }));
@@ -1482,7 +1703,60 @@ async function exercisePunkArrayMotion() {
   }
   return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four full synthetic lanes plus final five entries, deterministic 1/60 updates; no audio/player/real library.",
     before, during, switched, afterSwitch, laneChecks, frozen, nextLane, reduced, reducedInactive,
+    noScrollFirstFive, directoryReturn, composition, rearTintChecks, hiddenVoid,
     strengths, waveLevels, idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards, tail, tailSlots, detailChecks };
+}
+
+async function prepareArrayCompositionInteraction() {
+  await arrayMotionPrepare("archive", "shelf", "full");
+  archiveScene.setReduced(true); arrayMotionSelect(1, 12); stepArchiveScene(1); archiveScene.setReduced(false); stepArchiveScene(120);
+  const composition = arrayCompositionRenderSnapshot();
+  const hiddenVoid = findArrayPointerVoid(0);
+  const activeTarget = findArrayPointerTarget(1);
+  const rearProbe = findArrayPointerProbe(2);
+  expect(hiddenVoid && activeTarget && rearProbe,
+    "The interaction fixture needs an empty hidden-right hit point, an active-column target and a visible tinted-left probe: " +
+      JSON.stringify({ hiddenVoid, activeTarget, rearProbe }));
+  return { composition, hiddenVoid, activeTarget, rearProbe, input: arrayMotionInputSnapshot() };
+}
+
+async function prepareArrayCompositionScreenshot(design, width, height) {
+  const scene = archiveScene;
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  archiveHost.dataset.design = design; archiveHost.dataset.foobarLayout = "array";
+  archiveHost.style.width = width + "px"; archiveHost.style.height = height + "px"; archiveHost.style.margin = "0";
+  archiveHost.style.background = design === "archive" ? stylePalette(style, "day").bg : "#eae5e1";
+  let pane = archiveHost.querySelector(".album-callout");
+  if (!pane) { pane = document.createElement("aside"); pane.className = "album-callout"; archiveHost.append(pane); }
+  const archiveBoundary = Math.round(width * .65);
+  pane.style.cssText = "position:absolute;left:" + (archiveBoundary + 24) + "px;top:0;width:" +
+    Math.max(1, width - archiveBoundary - 24) + "px;height:" + height + "px;pointer-events:none;background:transparent";
+  scene.setMusicStyle(style); scene.setTheme("day");
+  const settings = sceneCaseSettings(design === "archive" ? "punk" : "rhine");
+  await scene.setCaseSettings(settings); await scene.rhineInfo?.ready;
+  scene.setQuality({ ...qualityPresets.high, scale: 100, pixelRatio: 1 });
+  await scene.setCaseSettings(settings);
+  scene.resize();
+  let paneFallbackComposition = null;
+  if (design === "archive") {
+    const paneStyle = pane.style.cssText;
+    pane.style.display = "none";
+    scene.resize(); stepArchiveScene(1);
+    paneFallbackComposition = scene.arrayComposition();
+    pane.style.cssText = paneStyle;
+    scene.resize(); stepArchiveScene(1);
+  }
+  scene.setReduced(true); arrayMotionSelect(1, 0); stepArchiveScene(1); scene.setReduced(false);
+  stepArchiveScene(8); scene.composer.render();
+  const passes = scene.composer.passes.map(pass => pass.constructor.name);
+  const selectedBounds = unifiedSnapshot().selectedScreenBounds;
+  return { design, width, height, host: { width: archiveHost.clientWidth, height: archiveHost.clientHeight },
+    canvas: { width: scene.renderer.domElement.width, height: scene.renderer.domElement.height },
+    quality: { wave: scene.quality.wave, modelDetail: scene.quality.modelDetail, lighting: scene.quality.lighting,
+      aoSamples: scene.quality.aoSamples, depthOfField: scene.quality.depthOfField, antialias: scene.quality.antialias },
+    composerPasses: passes, selected: { ...scene.selectedCell }, selectedBounds,
+    composition: arrayCompositionRenderSnapshot(), paneFallbackComposition,
+    cameraComposition: scene.arrayComposition?.() ?? null };
 }
 
 async function captureRhineInsetAlbum() {
@@ -2361,6 +2635,16 @@ window.caseCheck = {
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
   exercisePunkArrayMotion,
+  get arrayCompositionPreviewScreenshot() { return arrayCompositionPreviewScreenshot; },
+  get arrayCompositionRightLaneScreenshot() { return arrayCompositionRightLaneScreenshot; },
+  arrayCompositionRenderSnapshot,
+  arrayPointerTarget,
+  findArrayPointerTarget,
+  findArrayPointerProbe,
+  findArrayPointerVoid,
+  arrayMotionInputSnapshot,
+  prepareArrayCompositionInteraction,
+  prepareArrayCompositionScreenshot,
   prepareArrayPointer,
   arrayHoverSnapshot,
   arraySurfaceVariant,
@@ -5248,7 +5532,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const profile = path.join(output, `profile-${process.pid}-${Date.now()}`);
+const profile = path.join(isUnifiedRender ? unifiedOutput : output, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
   "--headless=new",
@@ -5631,10 +5915,80 @@ async function main() {
   if (isUnifiedRender) {
     await mkdir(unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
-    if (process.argv.includes("--punk-array-motion")) {
-      const motionOutput = path.join(project, ".tools", "array-surface-refinement");
+    if (isArrayComposition) {
+      const motionOutput = unifiedOutput;
       await mkdir(motionOutput, { recursive: true });
-      const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
+      const screenshotsOnly = process.argv.includes("--screenshots-only");
+      let motion;
+      try {
+        motion = await evaluate("window.caseCheck.exercisePunkArrayMotion(" + JSON.stringify(screenshotsOnly) + ")");
+      } catch (error) {
+        const preview = await evaluate("window.caseCheck.arrayCompositionPreviewScreenshot").catch(() => "");
+        if (preview.startsWith("data:image/png;base64,"))
+          await writeFile(path.join(motionOutput, "array-composition-archive-1450x840-preview.png"),
+            pngBuffer(preview, "Early composer ARRAY preview"));
+        const rightPreview = await evaluate("window.caseCheck.arrayCompositionRightLaneScreenshot").catch(() => "");
+        if (rightPreview.startsWith("data:image/png;base64,"))
+          await writeFile(path.join(motionOutput, "array-composition-archive-focus1-1450x840-preview.png"),
+            pngBuffer(rightPreview, "ARRAY right-column disappearance preview"));
+        throw error;
+      }
+      const earlyPreview = await evaluate("window.caseCheck.arrayCompositionPreviewScreenshot");
+      if (earlyPreview.startsWith("data:image/png;base64,"))
+        await writeFile(path.join(motionOutput, "array-composition-archive-1450x840-preview.png"),
+          pngBuffer(earlyPreview, "Early composer ARRAY preview"));
+      const rightPreview = await evaluate("window.caseCheck.arrayCompositionRightLaneScreenshot");
+      if (rightPreview.startsWith("data:image/png;base64,"))
+        await writeFile(path.join(motionOutput, "array-composition-archive-focus1-1450x840-preview.png"),
+          pngBuffer(rightPreview, "ARRAY right-column disappearance preview"));
+      const captureCompositionScreenshots = async () => {
+        const screenshots = [];
+        for (const [width, height] of [[1600, 900], [1920, 1080], [2560, 1440]]) {
+          await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+          for (const design of ["rhine", "archive"]) {
+            const composition = await evaluate("window.caseCheck.prepareArrayCompositionScreenshot(" +
+              [design, width, height].map(JSON.stringify).join(",") + ")");
+            assert.deepEqual(composition.host, { width, height },
+              "The Scene host must follow the browser's current viewport: " + JSON.stringify(composition.host));
+            assert.deepEqual(composition.canvas, { width, height },
+              "The high-quality ARRAY scene must render at the requested full-scene resolution: " + JSON.stringify(composition));
+            const expectedAvailableWidth = design === "archive" ? width * .65 : width;
+            assert.ok(Math.abs(composition.cameraComposition.availableWidth - expectedAvailableWidth) < 1,
+              "The archive pane boundary must scale with the live viewport width: " + JSON.stringify({
+                design, width, expectedAvailableWidth, actual: composition.cameraComposition,
+              }));
+            if (design === "archive") assert.ok(Math.abs(composition.paneFallbackComposition.availableWidth - expectedAvailableWidth) < 1,
+              "A temporarily unmeasurable pane must preserve its proportional width across resize: " +
+                JSON.stringify({ width, expectedAvailableWidth, fallback: composition.paneFallbackComposition }));
+            assert.ok(Math.abs(composition.composition.focusLane - 1) < 1e-3);
+            assert.ok(composition.selectedBounds.minX >= 0 && composition.selectedBounds.maxX <= composition.selectedBounds.availableWidth &&
+              composition.selectedBounds.minY >= 0 && composition.selectedBounds.maxY <= height,
+            "The selected full case must fit the live viewport without clipping: " + JSON.stringify(composition.selectedBounds));
+            assert.ok(composition.quality.aoSamples > 0 && composition.quality.depthOfField > 0 &&
+              composition.quality.antialias === "smaa" && composition.composerPasses.length > 1,
+            "Full-scene screenshots must use the real high-quality composer chain: " + JSON.stringify(composition));
+            const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } });
+            const bytes = Buffer.from(screen.data, "base64");
+            assert.equal(bytes.readUInt32BE(16), width); assert.equal(bytes.readUInt32BE(20), height);
+            const name = `array-composition-${design}-${width}x${height}.png`;
+            await writeFile(path.join(motionOutput, name), bytes);
+            screenshots.push({ name, design, width, height, quality: composition.quality,
+              composerPasses: composition.composerPasses,
+              cameraComposition: composition.cameraComposition,
+              paneFallbackComposition: composition.paneFallbackComposition,
+              laneAppearance: composition.composition.lanes.map(lane => ({ lane: lane.lane, appearance: lane.appearance })) });
+          }
+        }
+        await writeFile(path.join(motionOutput, "array-composition-screenshots.json"), JSON.stringify({ ok: true, screenshots }, null, 2));
+        return screenshots;
+      };
+      if (screenshotsOnly) {
+        const screenshots = await captureCompositionScreenshots();
+        assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
+        console.log(JSON.stringify({ ok: true, screenshotsOnly: true, report: ".tools/array-composition/array-composition-screenshots.json",
+          screenshots: screenshots.map(item => item.name) }, null, 2));
+        return;
+      }
       const hoverChecks = [], surfaceChecks = [];
       for (const design of ["archive", "rhine"]) {
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1440, y: 830 });
@@ -5671,11 +6025,48 @@ async function main() {
         assert.deepEqual(variants[0].textures, variants.at(-1).textures, "Returning to a floor style reuses its retained surface textures.");
         surfaceChecks.push({ design, variants });
       }
+      const interaction = await evaluate("window.caseCheck.prepareArrayCompositionInteraction()");
+      const dispatchMouseClick = async point => {
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
+        await command("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
+        await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+      };
+      const hiddenBefore = interaction.input;
+      await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: interaction.hiddenVoid.x, y: interaction.hiddenVoid.y });
+      const hiddenHovered = await evaluate("window.caseCheck.arrayMotionInputSnapshot()");
+      assert.equal(hiddenHovered.selectedKey, hiddenBefore.selectedKey);
+      assert.equal(hiddenHovered.focusedKey, hiddenBefore.focusedKey);
+      assert.equal(hiddenHovered.selects.length, hiddenBefore.selects.length,
+        "Hovering over a disappeared right column cannot invoke selection or change catalog focus.");
+      await dispatchMouseClick(interaction.hiddenVoid);
+      const hiddenClicked = await evaluate("window.caseCheck.arrayMotionInputSnapshot()");
+      assert.equal(hiddenClicked.selectedKey, hiddenBefore.selectedKey);
+      assert.equal(hiddenClicked.focusedKey, hiddenBefore.focusedKey);
+      assert.equal(hiddenClicked.selects.length, hiddenBefore.selects.length,
+        "A disappeared right column cannot receive a mouse click.");
+      await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: interaction.rearProbe.x, y: interaction.rearProbe.y });
+      const rearHovered = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+      assert.equal(rearHovered.input.selectedKey, hiddenBefore.selectedKey);
+      assert.equal(rearHovered.input.focusedKey, hiddenBefore.focusedKey);
+      assert.equal(rearHovered.input.selects.length, hiddenBefore.selects.length,
+        "Hovering over a tinted rear column cannot steal the current input focus.");
+      await dispatchMouseClick(interaction.activeTarget);
+      const activeClicked = await evaluate("window.caseCheck.arrayMotionInputSnapshot()");
+      assert.equal(activeClicked.selectedKey, interaction.activeTarget.key,
+        "A real click on the active column invokes its selection callback.");
+      assert.equal(activeClicked.focusedKey, interaction.activeTarget.key,
+        "The selection callback commits the clicked track as the catalog focus.");
+      assert.equal(activeClicked.selects.at(-1)?.key, interaction.activeTarget.key);
+
+      const screenshots = await captureCompositionScreenshots();
       assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
-      await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion, hoverChecks, surfaceChecks,
-        runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
-      console.log(JSON.stringify({ ok: true, checks: ["Common ARRAY independent rails", "persistent selection and neighbor lift", "real selected-only pointer hover", "off/reduced shape", "twenty-slot final partial tray", "detail/return bounds", "both MATRIX guards"],
-        report: ".tools/array-surface-refinement/scene-motion-audit.json" }, null, 2));
+      await writeFile(path.join(motionOutput, "array-composition-audit.json"), JSON.stringify({ ok: true, ...motion,
+        interaction: { ...interaction, hiddenHovered, hiddenClicked, rearHovered, activeClicked }, hoverChecks, surfaceChecks,
+        screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+      console.log(JSON.stringify({ ok: true, checks: ["shared first-card alignment", "first-five-card no-scroll", "active-only column motion and memory",
+        "all-mesh right-column removal and rear tint", "real mouse focus plus hover and hit guards", "full-scene composer screenshots at 1600/1920/2560",
+        "persistent selection and neighbor lift", "twenty-slot final partial tray", "detail-only inspection Z", "both MATRIX guards"],
+        report: ".tools/array-composition/array-composition-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
       return;
     }
     const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
@@ -5717,7 +6108,7 @@ async function main() {
         assert.deepEqual(pixel, [...rgb, 255], "Punk's clipped right region preserves its theme background.");
       }
     }
-    const motionOutput = path.join(project, ".tools", "array-surface-refinement");
+    const motionOutput = unifiedOutput;
     await mkdir(motionOutput, { recursive: true });
     const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
     await writeFile(path.join(motionOutput, "scene-motion-unified-audit.json"), JSON.stringify({ ok: true, ...motion,
@@ -5728,7 +6119,7 @@ async function main() {
       ...result, pointerResult: opened, screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     console.log(JSON.stringify({ ok: true, checks: ["Both physical shelves", "sole WebGL canvas", "finite TRACKS identity/paging",
       "query recovery", "detail/layout continuity", "transformed spacing", "real raycast and double click", "Punk clipping"],
-      report: ".tools/array-surface-refinement/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+      report: ".tools/array-composition/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
     return;
   }
   const fixture = await evaluate("window.caseCheck.run()");

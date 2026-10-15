@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { MusicArrayAppearance } from "./music-array-appearance";
 import type { MusicStyle, StylePalette } from "./music-style";
 import { MusicShelf } from "./music-shelf";
 import { createMusicSurfaceTextures, disposeMusicSurfaceTextures } from "./music-surface-textures";
@@ -11,6 +12,8 @@ export type MusicSceneSlot = {
   visible: boolean;
   row: number;
   lane: number;
+  alpha?: number;
+  tint?: number;
 };
 
 export type MusicSceneResourceUpdate = {
@@ -22,7 +25,7 @@ export type MusicSceneResourceUpdate = {
   floorY: number;
 };
 
-type Lane = { x: number; minZ: number; maxZ: number; minRow: number; maxRow: number };
+type Lane = { x: number; minZ: number; maxZ: number; minRow: number; maxRow: number; alpha: number; tint: number };
 type RowLabel = {
   canvas: HTMLCanvasElement;
   context: CanvasRenderingContext2D;
@@ -37,6 +40,9 @@ export class MusicSceneResources {
   readonly group = new THREE.Group();
   private readonly capacity: number;
   private readonly trays: MusicShelf;
+  private readonly appearance: MusicArrayAppearance;
+  private readonly ownsAppearance: boolean;
+  private readonly appearanceBackground = new THREE.Color("#e8e5e1");
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private readonly roundedBox = new RoundedBoxGeometry(1, 1, 1, 1, .025);
   private readonly plane = new THREE.PlaneGeometry(1, 1);
@@ -72,9 +78,11 @@ export class MusicSceneResources {
   private style: MusicStyle | null = null;
   private rowLabelColor = "#283b48";
 
-  constructor(count: number) {
+  constructor(count: number, appearance?: MusicArrayAppearance) {
     this.capacity = Math.max(1, Math.floor(count));
-    this.trays = new MusicShelf(this.capacity);
+    this.ownsAppearance = !appearance;
+    this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
+    this.trays = new MusicShelf(this.capacity, this.appearance);
     const makeBoxes = (name: string, material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
       amount = this.capacity, geometry: THREE.BufferGeometry = this.box) => {
       const mesh = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>(geometry, material, amount);
@@ -107,6 +115,10 @@ export class MusicSceneResources {
   setStyle(style: MusicStyle, night: boolean, palette: StylePalette): void {
     this.style = { ...style };
     const archive = style.design === "archive";
+    if (this.ownsAppearance) {
+      this.appearanceBackground.set(palette.bg);
+      this.appearance.setBackground(this.appearanceBackground);
+    }
     this.trays.setMode(night, palette.accent, style.design, palette);
 
     this.frameMaterial.color.set(archive ? palette.well : palette.surface);
@@ -177,11 +189,16 @@ export class MusicSceneResources {
     const lanes = new Map<number, Lane>();
     for (let index = 0; index < this.capacity; index++) {
       const slot = options.slots[index];
-      const valid = Boolean(slot?.visible && finiteSlot(slot));
-      this.trays.setSlot(index, valid ? slot!.x : 0, floorY, valid ? slot!.z : 0, valid && rackVisible);
+      const alpha = Number.isFinite(slot?.alpha) ? clamp01(slot!.alpha!) : 1;
+      const tint = Number.isFinite(slot?.tint) ? clamp01(slot!.tint!) : 0;
+      const finite = Boolean(slot && finiteSlot(slot));
+      const valid = Boolean(slot?.visible && finite && alpha > 0);
+      this.trays.setSlot(index, finite ? slot!.x : 0, floorY, finite ? slot!.z : 0,
+        valid && rackVisible, valid ? alpha : 0, tint);
       const tickVisible = valid && slot!.row % 5 === 0;
       this.writeBox(this.floorTicks, index, slot?.x ?? 0, floorY - .22 + .0005, slot?.z ?? 0,
         [.12, .001, .006], tickVisible);
+      this.appearance.write(this.floorTicks, index, valid ? alpha : 0, tint);
       if (!valid) continue;
       const lane = lanes.get(slot!.lane);
       if (lane) {
@@ -190,7 +207,7 @@ export class MusicSceneResources {
         lane.minRow = Math.min(lane.minRow, slot!.row);
         lane.maxRow = Math.max(lane.maxRow, slot!.row);
       } else {
-        lanes.set(slot!.lane, { x: slot!.x, minZ: slot!.z, maxZ: slot!.z, minRow: slot!.row, maxRow: slot!.row });
+        lanes.set(slot!.lane, { x: slot!.x, minZ: slot!.z, maxZ: slot!.z, minRow: slot!.row, maxRow: slot!.row, alpha, tint });
       }
     }
     const laneList = [...lanes.entries()].sort(([a], [b]) => a - b).slice(0, this.capacity);
@@ -209,19 +226,25 @@ export class MusicSceneResources {
       const centerZ = (lane.minZ + lane.maxZ) / 2;
       this.writeBox(this.laneBase, laneIndex, lane.x, floorY - .062, centerZ,
         [width + .34, .036, span], rackVisible);
+      this.appearance.write(this.laneBase, laneIndex, lane.alpha, lane.tint);
       const sideX = width / 2 + .17;
       this.writeBox(this.laneSides, laneIndex * 2, lane.x - sideX, floorY - .043, centerZ,
         [.055, .085, span], rackVisible);
+      this.appearance.write(this.laneSides, laneIndex * 2, lane.alpha, lane.tint);
       this.writeBox(this.laneSides, laneIndex * 2 + 1, lane.x + sideX, floorY - .043, centerZ,
         [.055, .085, span], rackVisible);
+      this.appearance.write(this.laneSides, laneIndex * 2 + 1, lane.alpha, lane.tint);
 
       const frontZ = lane.maxZ + depth / 2 + .06;
       const plateY = floorY - .04;
       this.writeBox(this.lanePlates, laneIndex, lane.x, plateY, frontZ, [.82, .075, .055], rackVisible);
+      this.appearance.write(this.lanePlates, laneIndex, lane.alpha, lane.tint);
       this.writeBox(this.plateMarks, laneIndex, lane.x - .29, plateY + .028, frontZ,
         [.09, .008, .012], rackVisible);
+      this.appearance.write(this.plateMarks, laneIndex, lane.alpha, lane.tint);
       this.writePlane(this.floorPanels, laneIndex, lane.x, panelFloor, centerZ,
         [width + .48, span + .18], options.shelf && floorHasPanel);
+      this.appearance.write(this.floorPanels, laneIndex, lane.alpha, lane.tint);
     });
 
     const labelLanes = [...laneList].sort(([, a], [, b]) => Math.abs(a.x) - Math.abs(b.x)).slice(0, this.rowLabels.length);
@@ -239,7 +262,8 @@ export class MusicSceneResources {
       const plateFront = lane.maxZ + depth / 2 + .06 + .028;
       label.mesh.position.set(lane.x, plateY, plateFront);
       label.mesh.scale.set(.76, .053, 1);
-      label.mesh.visible = rackVisible;
+      label.material.opacity = lane.alpha * (1 - lane.tint);
+      label.mesh.visible = rackVisible && lane.alpha > 0;
     }
 
     this.trays.finish();
@@ -248,6 +272,7 @@ export class MusicSceneResources {
 
   dispose(): void {
     this.trays.dispose();
+    if (this.ownsAppearance) this.appearance.dispose();
     for (const mesh of [this.laneBase, this.laneSides, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks]) mesh.dispose();
     this.box.dispose();
     this.roundedBox.dispose();
@@ -321,7 +346,10 @@ export class MusicSceneResources {
   }
 
   private markUpdated(...meshes: THREE.InstancedMesh[]) {
-    for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of meshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      this.appearance.finish(mesh);
+    }
   }
 }
 
@@ -332,6 +360,10 @@ function finiteSlot(slot: MusicSceneSlot): boolean {
 
 function positive(value: number, fallback: number) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function clamp01(value: number) {
+  return THREE.MathUtils.clamp(value, 0, 1);
 }
 
 function createWoodTexture() {

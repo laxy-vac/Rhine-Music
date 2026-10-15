@@ -55,7 +55,8 @@ import { CaseAlbumInfo } from "./rhine-album-info";
 import { paintArchiveLabel } from "./archive-label";
 import { createCaseIllumination } from "./case-illumination";
 import { qualitySelectionWave, qualityIdleGain, qualityWaveLimit, qualityPulseLimit } from "./quality-motion";
-import { MusicArrayMotion, MusicArrayCaseMotion, ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT } from "./music-array-motion";
+import { MusicArrayMotion, MusicArrayCaseMotion, arrayLaneAppearance, ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT } from "./music-array-motion";
+import { MusicArrayAppearance } from "./music-array-appearance";
 import {
   archiveWave,
   extraction,
@@ -113,6 +114,12 @@ export class ArchiveScene {
   private rail = { value: 0, velocity: 0 };
   private arrayMotion = new MusicArrayMotion(MUSIC_ARRAY_VIEW.firstRow);
   private arrayCaseMotion = new MusicArrayCaseMotion();
+  private arrayAppearance = new MusicArrayAppearance(new THREE.Color("#eae5e1"));
+  private arrayInspectionRail = { value: 0, velocity: 0 };
+  private arraySlotsInView = 6;
+  private arrayBrowseWidth = 0;
+  private arrayBrowseViewportWidth = 0;
+  private arrayFrameCache?: { key: string; span: number; availableWidth: number; visibleSlots: number };
   private hoveredEntryKey: string | undefined;
   private shoulder = { value: 12, velocity: 0 };
   private laneFocus = { value: 2, velocity: 0 };
@@ -594,6 +601,43 @@ export class ArchiveScene {
   }
 
   private get shelfView() { return musicLibrary && this.displayLayout.canvas === "shelf"; }
+  /** A fixed front lip anchors all new racks; selection scrolls only its own rack. */
+  private arrayComposition() {
+    const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);
+    if (this.musicStyle.design === "archive" && !this.musicPresentation.holdsDetail && this.detail < .001) {
+      const previousWidth = this.arrayBrowseViewportWidth > 0
+        ? this.arrayBrowseWidth * width / this.arrayBrowseViewportWidth : this.arrayBrowseWidth;
+      this.arrayBrowseWidth = foobarArchiveWidth(this.container, width, 0, previousWidth);
+      this.arrayBrowseViewportWidth = width;
+    }
+    const availableWidth = this.musicStyle.design === "archive" ? this.arrayBrowseWidth || width * .65 : width;
+    const bounds = this.caseLayout.bounds;
+    const key = `${width}|${height}|${availableWidth}|${this.musicStyle.arrayScale}|${bounds.min}|${bounds.max}|${this.spatialSpacing.row}`;
+    if (this.arrayFrameCache?.key === key) return this.arrayFrameCache;
+    const zoom = THREE.MathUtils.clamp(Math.min(availableWidth / MUSIC_SHELF_VIEW.referenceWidth,
+      height / MUSIC_SHELF_VIEW.referenceHeight), 1, 1.6);
+    const pixelScale = MUSIC_SHELF_VIEW.pixelsPerUnit * zoom * this.musicStyle.arrayScale;
+    const yaw = THREE.MathUtils.degToRad(-38), elevation = THREE.MathUtils.degToRad(35);
+    const view = new THREE.Vector3(-Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation), Math.cos(yaw) * Math.cos(elevation));
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), view).normalize();
+    const up = new THREE.Vector3().crossVectors(view, right).normalize();
+    let visibleSlots = 0;
+    for (let slot = 0; slot < MUSIC_SHELF_VIEW.slots; slot++) {
+      let maxX = -Infinity, minY = Infinity;
+      for (const x of [bounds.min[0], bounds.max[0]]) for (const y of [bounds.min[1], bounds.max[1]])
+        for (const z of [bounds.min[2], bounds.max[2]]) {
+          const point = new THREE.Vector3(x - this.caseLayout.center.x,
+            y - bounds.min[1] + ARRAY_SELECTED_EXTRA_LIFT + ARRAY_SELECTED_BELL_LIFT,
+            z - this.caseLayout.center.z + slot * this.spatialSpacing.row);
+          maxX = Math.max(maxX, availableWidth * MUSIC_SHELF_VIEW.originX + point.dot(right) * pixelScale);
+          minY = Math.min(minY, height - MUSIC_SHELF_VIEW.bottomInset - point.dot(up) * pixelScale);
+        }
+      if (maxX > availableWidth || minY < 56) break;
+      visibleSlots++;
+    }
+    return this.arrayFrameCache = { key, span: height / pixelScale, availableWidth,
+      visibleSlots: Math.max(6, visibleSlots) };
+  }
   private get spatialSpacing() {
     return this.shelfView
       ? { column: -Math.max(MUSIC_SHELF_VIEW.columnSpacing, this.caseLayout.width + .5), row: -Math.max(MUSIC_SHELF_VIEW.rowSpacing, this.caseLayout.depth + .2) }
@@ -615,7 +659,8 @@ export class ArchiveScene {
   private syncDisplayViewportClip() {
     const width = this.container.clientWidth;
     const clipToInfo = this.catalogView && this.musicStyle.design === "archive";
-    if (clipToInfo) this.displayViewportWidth = foobarArchiveWidth(this.container, width, this.detail, this.displayViewportWidth);
+    if (clipToInfo) this.displayViewportWidth = this.shelfView && this.detail < .001 && !this.musicPresentation.holdsDetail
+      ? this.arrayComposition().availableWidth : foobarArchiveWidth(this.container, width, this.detail, this.displayViewportWidth);
     // Preserve the existing information panel's clear background while the
     // unchanged Future camera still composes in the full scene coordinates.
     const clip = clipToInfo ? `inset(0 ${Math.max(0, width - this.displayViewportWidth)}px 0 0)` : "";
@@ -641,7 +686,13 @@ export class ArchiveScene {
     this.laneFocus = { value: this.selectedCell.lane, velocity: 0 };
     this.columnCamera = { value: chosen.x, velocity: 0 };
     this.rail = { value: -2.17 - chosen.z, velocity: 0 };
-    if (this.shelfView) this.arrayMotion.bind(getMusicCatalogShelves().map(shelf => shelf.id), this.selectedCell.lane, this.selectedCell.row, true);
+    if (this.shelfView) {
+      this.arraySlotsInView = this.arrayComposition().visibleSlots;
+      this.arrayMotion.bind(getMusicCatalogShelves().map(shelf => shelf.id), this.selectedCell.lane, this.selectedCell.row, true, this.arraySlotsInView);
+      if (!this.musicPresentation.holdsDetail) this.rail.value = this.arrayMotion.rail(this.selectedCell.lane,
+        this.spatialSpacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ);
+      this.arrayInspectionRail = { ...this.rail };
+    }
     const visible = records.length > 0 && (!this.catalogView || getMusicCatalogShelves().length > 0);
     this.model.visible = visible;
     for (const inst of this.instances) inst.visible = visible;
@@ -660,7 +711,7 @@ export class ArchiveScene {
     // All music layouts resolve public entry identities; only the array wraps.
     this.catalogView = musicLibrary;
     if (musicLibrary && this.loaded && !this.sceneResources) {
-      this.sceneResources = new MusicSceneResources(this.positions.length);
+      this.sceneResources = new MusicSceneResources(this.positions.length, this.arrayAppearance);
       this.scene.add(this.sceneResources.group);
     }
     this.sceneResources?.setStyle(this.musicStyle, this.theme === "night", stylePalette(this.musicStyle, this.theme === "night" ? "night" : "day"));
@@ -696,7 +747,8 @@ export class ArchiveScene {
       this.model.userData.caseStructure = settings.structure;
       const oldGeometry = new Set<THREE.BufferGeometry>();
       const oldMaterials = new Set<THREE.Material>();
-      for (const inst of this.instances) { this.scene.remove(inst); oldGeometry.add(inst.geometry); oldMaterials.add(inst.material as THREE.Material); inst.dispose(); }
+      for (const inst of this.instances) { this.scene.remove(inst); this.arrayAppearance.release(inst);
+        oldGeometry.add(inst.geometry); oldMaterials.add(inst.material as THREE.Material); inst.dispose(); }
       this.instances = [];
       for (const child of [...this.model.children]) if (child instanceof THREE.Mesh && child.userData.surface) {
         this.model.remove(child); oldGeometry.add(child.geometry); oldMaterials.add(child.material as THREE.Material);
@@ -761,6 +813,9 @@ export class ArchiveScene {
     if (!this.caseGeometryKey) return;
     const appearance = activeCaseAppearance(this.caseSettings);
     this.caseIllumination.apply(appearance, this.quality);
+    // Let editable optics update their own existing uniforms before restoring row fading.
+    for (const inst of this.instances) for (const material of Array.isArray(inst.material) ? inst.material : [inst.material])
+      this.arrayAppearance.unpatch(material);
     applyCaseAppearance(this.model, appearance, this.quality);
     for (const inst of this.instances) applyCaseAppearance(inst, appearance, this.quality);
     for (const old of this.outgoing) applyCaseAppearance(old.group, appearance, this.quality);
@@ -1343,10 +1398,13 @@ export class ArchiveScene {
         (-(clientY - rect.top) / rect.height) * 2 + 1,
       );
       this.raycaster.setFromCamera(this.cursor, this.camera);
-    const hit = this.raycaster.intersectObjects([this.caseHitProxy ?? this.instances[0], this.model], true)[0];
+      const hit = this.raycaster.intersectObjects([this.caseHitProxy ?? this.instances[0], this.model], true)
+        .find(candidate => candidate.instanceId === undefined || !this.shelfView ||
+          this.cells[candidate.instanceId]?.lane === this.selectedCell.lane);
       if (!hit) return null;
       if (hit.instanceId !== undefined) {
         const cell = { ...this.cells[hit.instanceId] };
+        if (this.shelfView && cell.lane !== this.selectedCell.lane) return null;
         const index = this.recordAtCell(cell);
         return index >= 0 ? { index, cell } : null;
       }
@@ -1573,6 +1631,13 @@ export class ArchiveScene {
       this.syncThemeStars();
     }
     const localArray = this.shelfView && !cinematic;
+    const arrayComposition = localArray ? this.arrayComposition() : undefined;
+    if (arrayComposition) this.arraySlotsInView = arrayComposition.visibleSlots;
+    this.arrayAppearance.setBackground(this.scene.background as THREE.Color);
+    this.arrayAppearance.patchAuxiliary(this.ao.normalMaterial);
+    // The bundled BokehPass uses the underscored name; older typings expose it publicly.
+    const bokehDepth = (this.bokeh as BokehPass & { _materialDepth?: THREE.MeshDepthMaterial })._materialDepth ?? this.bokeh.materialDepth;
+    if (bokehDepth) this.arrayAppearance.patchAuxiliary(bokehDepth);
     const previewLift = musicLibrary ? localArray ? ARRAY_SELECTED_EXTRA_LIFT : MUSIC_PREVIEW_LIFT : 0.4;
     const blend = 1 - Math.exp(-dt * (this.reduced ? 35 : 2.8));
     this.reveal = cinematic
@@ -1616,10 +1681,20 @@ export class ArchiveScene {
     damp(this.shoulder, selectedRow, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 5, dt);
     damp(this.laneFocus, selectedLane, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 4, dt);
     damp(this.columnCamera, chosen.x, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 3.7, dt);
+    if (localArray && this.reduced) {
+      this.shoulder = { value: selectedRow, velocity: 0 };
+      this.laneFocus = { value: selectedLane, velocity: 0 };
+      this.columnCamera = { value: chosen.x, velocity: 0 };
+    }
     if (localArray) {
-      this.arrayMotion.step(selectedLane, selectedRow, detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 3.7, dt, this.reduced);
-      this.rail.value = this.arrayMotion.rail(selectedLane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ);
-      this.rail.velocity = -spacing.row * this.arrayMotion.velocity(selectedLane);
+      this.arrayMotion.step(selectedLane, selectedRow, detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 9, dt, this.reduced, this.arraySlotsInView);
+      const browseRail = this.arrayMotion.rail(selectedLane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ);
+      if (presentationProgress === 0) this.arrayInspectionRail = { value: browseRail, velocity: -spacing.row * this.arrayMotion.velocity(selectedLane) };
+      else if (this.reduced) this.arrayInspectionRail = { value: -2.17 - chosen.z, velocity: 0 };
+      else damp(this.arrayInspectionRail, -2.17 - chosen.z, detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 9, dt);
+      this.rail.value = THREE.MathUtils.lerp(browseRail, this.arrayInspectionRail.value, presentationProgress);
+      this.rail.velocity = -spacing.row * this.arrayMotion.velocity(selectedLane) * (1 - presentationProgress) +
+        this.arrayInspectionRail.velocity * presentationProgress + (this.arrayInspectionRail.value - browseRail) * this.musicPlacement.velocity;
     } else damp(
       this.rail,
       cinematic ? 0 : -2.17 - chosen.z,
@@ -1630,7 +1705,7 @@ export class ArchiveScene {
       this.shoulder = { value: selectedRow, velocity: 0 };
       this.laneFocus = { value: selectedLane, velocity: 0 };
       this.columnCamera = { value: chosen.x, velocity: 0 };
-      this.rail = { value: -2.17 - chosen.z, velocity: 0 };
+      if (!localArray) this.rail = { value: -2.17 - chosen.z, velocity: 0 };
     }
     if (cinematic) {
       this.rail.value = musicIntro ? -2.17 - chosen.z : 0;
@@ -1649,13 +1724,13 @@ export class ArchiveScene {
     // Keep the illuminated set near the origin. Lateral navigation is a track
     // movement of the whole array, just like the existing front/back rail.
     const trackX = cinematic && !musicIntro ? 0 : this.columnCamera.value;
-    const railAt = (lane: number) => localArray
-      ? this.arrayMotion.rail(lane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ)
-      : this.rail.value;
+    const railAt = (lane: number) => localArray && lane !== selectedLane
+      ? this.arrayMotion.rail(lane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ) : this.rail.value;
     const center = {
       lane: this.columnCamera.value / spacing.column + 2,
       row: (-this.rail.value - 2.17) / spacing.row + 15.5,
     };
+    const laneAppearance = (lane: number) => localArray ? arrayLaneAppearance(lane, center.lane) : { alpha: 1, tint: 0 };
     for (let i = 0; i < this.positions.length; i++) {
       this.cells[i] = this.shelfView
         ? i < LOOP_COLUMNS * MUSIC_SHELF_VIEW.slots
@@ -1846,6 +1921,8 @@ export class ArchiveScene {
         baseY + o.lift.value,
         p.z + entryZ + railAt(o.cell.lane),
       );
+      // Returning copies from a retired foreground lane leave with their shelf.
+      o.group.visible = !localArray || o.cell.lane >= selectedLane;
       const quality = ease(o.lift.value / 0.4);
       this.appearance.apply(o.group, quality);
       o.clarity = this.reduced ? 0 : o.clarity * Math.exp(-dt * 9);
@@ -1890,6 +1967,7 @@ export class ArchiveScene {
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i];
       const { row, lane } = this.cells[i];
+      const rowAppearance = laneAppearance(lane);
       if (this.recordAtCell(this.cells[i]) >= 0) lastRenderable = i;
       const slope = field(row + 0.5, lane) - field(row - 0.5, lane);
       this.dummy.position.set(
@@ -1899,7 +1977,7 @@ export class ArchiveScene {
       );
       this.dummy.rotation.set(localArray ? 0 : slope * 0.024 * (1 - detail), 0, 0);
       this.dummy.scale.setScalar(
-        hidden.has(cellKey(this.cells[i])) || (this.catalogView && this.recordAtCell(this.cells[i]) < 0) ||
+        rowAppearance.alpha < .0001 || hidden.has(cellKey(this.cells[i])) || (this.catalogView && this.recordAtCell(this.cells[i]) < 0) ||
           (!musicIntro && (cinematic || !this.looping) && i >= (musicLibrary ? 5 * this.poolRows : 160))
           ? 0
           : 1,
@@ -1908,6 +1986,7 @@ export class ArchiveScene {
       this.caseHitProxy?.setMatrixAt(i, this.dummy.matrix);
       for (const inst of this.instances) {
         inst.setMatrixAt(i, this.dummy.matrix);
+        this.arrayAppearance.write(inst, i, rowAppearance.alpha, rowAppearance.tint);
         if (inst.userData.hiResRail) {
           const flags = inst.geometry.getAttribute("hiResAlbum") as THREE.InstancedBufferAttribute;
           const hiRes = this.hiResAlbums[this.recordAtCell(this.cells[i])] ? 1 : 0;
@@ -1917,20 +1996,29 @@ export class ArchiveScene {
       if (musicLibrary && this.covers) {
         this.covers.array.setMatrixAt(i, this.dummy.matrix);
         this.covers.arrayInsert.setMatrixAt(i, this.dummy.matrix);
+        this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint);
+        this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint);
         this.covers.setSlot(i, records[this.recordAtCell(this.cells[i])]);
         if (this.caseTitles && this.shelfView && this.musicStyle.topTitles) {
           this.caseTitles.array.setMatrixAt(i, this.dummy.matrix);
+          this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint);
           this.caseTitles.setSlot(i, musicSpatialEntry(this.cells[i], this.shelfView)?.record.title ?? "");
         }
         if (this.rhineInfo) {
           const index = this.recordAtCell(this.cells[i]);
           this.rhineInfo.arrayLabel.setMatrixAt(i, this.dummy.matrix);
+          this.arrayAppearance.write(this.rhineInfo.arrayLabel, i, rowAppearance.alpha, rowAppearance.tint);
+          this.arrayAppearance.write(this.rhineInfo.arrayBadge, i, rowAppearance.alpha, rowAppearance.tint);
           if (this.rhineInfo.arrayBadge.visible) this.rhineInfo.arrayBadge.setMatrixAt(i, this.dummy.matrix);
           this.rhineInfo.setSlot(i, records[index], index >= 0 ? index : undefined);
         }
       }
     }
-    for (const inst of this.instances) inst.instanceMatrix.needsUpdate = true;
+    for (const inst of [ ...this.instances, this.covers?.array, this.covers?.arrayInsert, this.caseTitles?.array,
+      this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge ]) if (inst) {
+      inst.instanceMatrix.needsUpdate = true;
+      this.arrayAppearance.finish(inst);
+    }
     // Finite shelves submit only their occupied prefix to the GPU. A zero-scale
     // matrix still runs the entire shell's vertex shader, including depth passes.
     const submitted = this.shelfView ? lastRenderable + 1 : this.positions.length;
@@ -1971,7 +2059,7 @@ export class ArchiveScene {
     // Do not calibrate field of view from the visible fragment of a file.
     const orbit = ease((shot - 22.6) / 1.6);
     const settle = ease((shot - 24.25) / 2.25);
-    const navigationOrbit = musicLibrary && !cinematic
+    const navigationOrbit = musicLibrary && !cinematic && !localArray
       ? this.musicCamera.navigation(this.columnCamera.velocity / spacing.column,
           this.rail.velocity / spacing.row, detail, dt, this.reduced)
       : { yaw: 0, elevation: 0 };
@@ -2113,11 +2201,15 @@ export class ArchiveScene {
     const framing = archiveFraming(width, height, span, detail,
       this.container.closest<HTMLElement>("[data-layout]")?.dataset.layout === "compact");
     if (this.shelfView) framing.span /= THREE.MathUtils.lerp(this.musicStyle.arrayScale, this.musicStyle.inspectScale, detail);
+    if (arrayComposition && !framing.portrait) {
+      const inspectSpan = archiveFraming(width, height, span, 1, false).span / this.musicStyle.inspectScale;
+      framing.span = THREE.MathUtils.lerp(arrayComposition.span, inspectSpan, detail);
+    }
     const right = new THREE.Vector3()
       .crossVectors(new THREE.Vector3(0, 1, 0), viewDirection).normalize();
     const up = new THREE.Vector3().crossVectors(viewDirection, right).normalize();
     const previewShift = new THREE.Vector3();
-    if (musicLibrary) {
+    if (musicLibrary && !localArray) {
       const offset = musicArchiveOffset(width, height);
       previewShift.addScaledVector(right, offset.x * framing.span * width / Math.max(1, height));
       previewShift.addScaledVector(up, offset.y * framing.span);
@@ -2137,13 +2229,11 @@ export class ArchiveScene {
       const pixelScale = height / framing.span;
       const restHeight = localArray ? localArrayBase + ARRAY_SELECTED_BELL_LIFT : settlingWave(0, 26.56);
       if (this.shelfView && !framing.portrait) {
-        const availableWidth = this.musicStyle.design === "archive" ? this.displayViewportWidth : width;
-        // Compose in the available browsing area, then use the same detail slot.
-        // Changing yaw alone otherwise places the chosen case behind the info edge.
-        cameraAim.set(this.caseLayout.center.x, MUSIC_ARRAY_VIEW.floorY + restHeight + previewLift + this.caseLayout.center.y,
+        const availableWidth = arrayComposition?.availableWidth ?? width;
+        cameraAim.set(this.caseLayout.center.x, MUSIC_ARRAY_VIEW.floorY + this.caseLayout.bounds.min[1],
           MUSIC_ARRAY_VIEW.inspectionZ + this.caseLayout.center.z);
         cameraAim.addScaledVector(right, (width / 2 - availableWidth * MUSIC_SHELF_VIEW.originX) / pixelScale);
-        cameraAim.addScaledVector(up, .08 * framing.span);
+        cameraAim.addScaledVector(up, (height / 2 - MUSIC_SHELF_VIEW.bottomInset) / pixelScale);
       }
       if (framing.portrait) {
         // Keep the preview camera independent of the live lift, wave and rail.
@@ -2180,7 +2270,9 @@ export class ArchiveScene {
       const liftTarget = this.musicPresentation.holdsDetail ? this.inspectionLift : previewLift * this.targetReveal;
       const tracksSettled = musicArchiveTracksSettled(
         { rail: this.rail, column: this.columnCamera, shoulder: this.shoulder, lane: this.laneFocus },
-        { rail: -2.17 - chosen.z, column: chosen.x, shoulder: selectedRow, lane: selectedLane });
+        { rail: localArray && !this.musicPresentation.holdsDetail
+          ? MUSIC_ARRAY_VIEW.inspectionZ - (this.arrayMotion.targetRow(selectedRow, this.arraySlotsInView) - MUSIC_ARRAY_VIEW.centerRow) * spacing.row
+          : -2.17 - chosen.z, column: chosen.x, shoulder: selectedRow, lane: selectedLane });
       this.musicPresentation.update(dt,
         this.musicCamera.isSettled(this.camera, this.cameraAim, cameraPosition, cameraAim, framing.span),
         this.musicPlacement.settled && tracksSettled && Math.abs(this.detail - detailTarget) < 0.001 && Math.abs(this.lift.value - liftTarget) < 0.008 &&
@@ -2270,7 +2362,8 @@ export class ArchiveScene {
     this.sceneResources?.update({
       shelf: this.shelfView,
       slots: this.shelfView ? this.positions.map((position, index) => ({ x: position.x - trackX + this.caseLayout.center.x, y: shelfBottom,
-        z: position.z + entryZ + railAt(this.cells[index].lane) + this.caseLayout.center.z, visible: this.cells[index].lane >= 0 &&
+        z: position.z + entryZ + railAt(this.cells[index].lane) + this.caseLayout.center.z,
+        ...laneAppearance(this.cells[index].lane), visible: this.cells[index].lane >= 0 && laneAppearance(this.cells[index].lane).alpha >= .0001 &&
           this.cells[index].lane < getMusicCatalogShelves().length && this.cells[index].row >= MUSIC_ARRAY_VIEW.firstRow &&
           this.cells[index].row < MUSIC_ARRAY_VIEW.firstRow + MUSIC_SHELF_VIEW.slots,
         row: this.cells[index].row - MUSIC_ARRAY_VIEW.firstRow, lane: this.cells[index].lane }))
