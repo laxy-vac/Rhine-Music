@@ -14,6 +14,8 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 const isArrayBump = process.argv.includes("--array-bump");
+const isArrayRailProfile = process.argv.includes("--array-rail-profile");
+const isRailRegression = process.argv.includes("--rail-regression");
 const isArrayTrayStructure = process.argv.includes("--array-tray-structure");
 const isArrayTray = process.argv.includes("--array-tray") || isArrayTrayStructure;
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
@@ -21,11 +23,15 @@ const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" :
 const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
   : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray;
-const unifiedOutput = path.join(project, ".tools", "array-composition");
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile;
+const unifiedOutput = isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
+  : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
-const arrayTrayOutput = path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
+const arrayTrayOutput = isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "structure", arrayTrayPhase)
+  : path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
+const arrayRailPhase = process.argv.includes("--before") ? "before" : "after";
+const arrayRailOutput = path.join(project, ".tools", "array-rail-profile", arrayRailPhase);
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -1441,7 +1447,7 @@ function arrayCompositionRenderSnapshot() {
   const shelfMeshes = [];
   scene.sceneResources?.group.traverse(object => { if (object.isInstancedMesh) shelfMeshes.push(object); });
   const laneIndexedKinds = new Set(["Music shelf side rails", "Music shelf rail highlights",
-    "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps", "Music shelf end platforms"]);
+    "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps", "Music shelf end platforms", "Music shelf underframe"]);
   const meshes = [
     ...scene.instances.map((mesh, index) => ({ kind: mesh.userData.casePart || "case-instance-" + index, mesh })),
     { kind: "cover", mesh: scene.covers.array },
@@ -1473,10 +1479,10 @@ function arrayCompositionRenderSnapshot() {
           let indices = [];
           if (slotIndex >= 0) {
             if (["Music shelf base", "Music shelf front number plates", "Music shelf plate markers", "Music shelf end safety stripes",
-              "Local music floor finish"].includes(kind))
+              "Music shelf left guide", "Music shelf right guide", "Local music floor finish"].includes(kind))
               indices = laneIndex >= 0 ? [laneIndex] : [];
             else if (laneIndexedKinds.has(kind)) indices = laneIndex >= 0 ? [laneIndex * 2, laneIndex * 2 + 1] : [];
-            else if (["Music shelf support feet", "Music shelf foot pins"].includes(kind)) indices = laneIndex >= 0
+            else if (["Music shelf support feet", "Music shelf foot pins", "Music shelf contact shadows"].includes(kind)) indices = laneIndex >= 0
               ? [0, 1, 2, 3].map(offset => laneIndex * 4 + offset) : [];
             else if (kind === "Music floor seams and locator marks") indices = [slotIndex];
             else if (kind.startsWith("Record shelf")) indices = [slotIndex,
@@ -1657,9 +1663,16 @@ async function arraySurfaceVariant(design, floor) {
     arraySurfaceWatched.add(texture.uuid); texture.addEventListener("dispose", () => arraySurfaceDisposed.push(texture.uuid));
   }
   const effectiveFloor = scene.musicStyle.floor;
+  const sideRails = resources.group.getObjectByName("Music shelf side rails");
+  let integratedChannel = false;
+  sideRails?.traverse(mesh => {
+    if (Array.isArray(mesh.material) && mesh.material.length === 3 && mesh.geometry?.groups.some(group => group.materialIndex === 2))
+      integratedChannel = true;
+  });
   const detail = { design, floor, effectiveFloor, map: !!material.map, roughnessMap: !!material.roughnessMap, normalMap: !!material.normalMap,
     normalScale: material.normalScale?.toArray(), roughness: material.roughness, metalness: material.metalness,
-    recessedBed: !!resources.group.getObjectByName("Record shelf recessed bed"), guides: !!resources.group.getObjectByName("Record shelf guide grooves"),
+    recessedBed: !!resources.group.getObjectByName("Record shelf recessed bed"),
+    guides: integratedChannel || !!resources.group.getObjectByName("Record shelf guide grooves"), integratedChannel,
     floorPanelsVisible: resources.floorPanels?.visible, textures: [material.map?.uuid, material.roughnessMap?.uuid, material.normalMap?.uuid] };
   if (design === "rhine") expect(effectiveFloor === "plain", "Future retains its established normalized plain floor.");
   if (effectiveFloor === "plain" || effectiveFloor === "deck") {
@@ -1694,7 +1707,7 @@ const arrayTrayPartNames = ["Music shelf base", "Music shelf side rails", "Music
   "Music shelf end safety stripes", "Record shelf tray", "Record shelf glass rims", "Record shelf recessed bed",
   "Record shelf guide grooves", "Record shelf index strip", "Record shelf tick",
   "Music shelf front number plates", "Music shelf plate markers", "Music shelf support feet",
-  "Music shelf end platforms", "Music shelf foot pins"];
+  "Music shelf end platforms", "Music shelf foot pins", "Music shelf contact shadows", "Music shelf underframe"];
 function arrayTrayStructureSnapshot() {
   const scene = archiveScene, group = scene.sceneResources?.group;
   const matrix = new THREE.Matrix4();
@@ -1710,7 +1723,7 @@ function arrayTrayStructureSnapshot() {
     rowLabels,
     parts: arrayTrayPartNames.map(name => {
       const object = group?.getObjectByName(name);
-      if (!object) return { name, present: false, visible: false, instances: 0, drawnInstances: 0, materials: [] };
+      if (!object) return { name, present: false, visible: false, instances: 0, drawnInstances: 0, materials: [], meshes: [] };
       const meshes = [];
       object.traverse(child => {
         if (!child.isMesh) return;
@@ -1860,8 +1873,18 @@ function arrayTrayClearanceSnapshot() {
           child.getMatrixAt(index, matrix);
           if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
         } else matrix.identity();
-        colliders.push({ name: child.name || name, index, box: child.geometry.boundingBox.clone()
-          .applyMatrix4(matrix).applyMatrix4(child.matrixWorld) });
+        const worldMatrix = matrix.clone().premultiply(child.matrixWorld);
+        let triangles = null;
+        if (name === "Music shelf side rails") {
+          triangles = [];
+          const position = child.geometry.getAttribute("position"), indices = child.geometry.getIndex();
+          for (let offset = 0; offset < (indices?.count ?? position.count); offset += 3) {
+            const vertices = [0, 1, 2].map(corner => new THREE.Vector3().fromBufferAttribute(position,
+              indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(worldMatrix));
+            triangles.push(new THREE.Triangle(...vertices));
+          }
+        }
+        colliders.push({ name: child.name || name, index, box: child.geometry.boundingBox.clone().applyMatrix4(worldMatrix), triangles });
       }
     });
   }
@@ -1869,17 +1892,23 @@ function arrayTrayClearanceSnapshot() {
   for (const item of cases) for (const collider of colliders) {
     const overlap = ["x", "y", "z"].map(axis => Math.min(item.box.max[axis], collider.box.max[axis]) -
       Math.max(item.box.min[axis], collider.box.min[axis]));
-    if (overlap[0] > .001 && overlap[2] > .001 && collider.box.max.y <= item.box.max.y) {
+    if (!collider.triangles && collider.name !== "Music shelf contact shadows" &&
+      overlap[0] > .001 && overlap[2] > .001 && collider.box.max.y <= item.box.max.y) {
       footprintClearances.push({ caseIndex: item.index, lane: item.lane, row: item.row, part: collider.name,
         partInstance: collider.index, clearance: item.box.min.y - collider.box.max.y });
     }
-    if (overlap.every(value => value > .001)) intersections.push({ caseIndex: item.index, lane: item.lane, row: item.row,
-      part: collider.name, partInstance: collider.index, overlap });
+    if (overlap.every(value => value > .001)) {
+      const refinedBox = item.box.clone().expandByScalar(-.001);
+      if (!collider.triangles || collider.triangles.some(triangle => refinedBox.intersectsTriangle(triangle)))
+        intersections.push({ caseIndex: item.index, lane: item.lane, row: item.row,
+          part: collider.name, partInstance: collider.index, overlap, method: collider.triangles ? "World triangle/case-box refinement" : "World AABB" });
+    }
   }
   footprintClearances.sort((left, right) => left.clearance - right.clearance);
-  return { method: "Submitted case proxies, selected model actual bounds and each submitted tray part world AABB; overlap above 0.001 on every axis is a collision candidate.",
+  return { method: "Case proxies/selected actual bounds and tray world AABB broadphase; integrated side rails refined against real world triangles with case bounds inset 0.001. Zero-height contact AO cannot collide.",
     caseCount: cases.length, colliderCount: colliders.length, intersections,
     minimumStructuralClearance: footprintClearances[0]?.clearance ?? null, nearestSupports: footprintClearances.slice(0, 12),
+    clearanceScope: "Under-case bed/base/flush-line supports; excludes composite side-rail envelopes and zero-height ground AO.",
     support: unifiedSnapshot().support };
 }
 
@@ -1888,6 +1917,311 @@ function settleArrayTrayLane(lane, slot) {
   scene.setReduced(true); arrayMotionSelect(lane, slot); stepArchiveScene(1); scene.setReduced(false);
   stepArchiveScene(240); scene.composer.render();
   return { structure: arrayTrayStructureSnapshot(), composition: arrayCompositionRenderSnapshot(), clearance: arrayTrayClearanceSnapshot() };
+}
+
+function arrayTraySupportSnapshot() {
+  const scene = archiveScene, matrix = new THREE.Matrix4(), group = scene.sceneResources.group;
+  scene.scene.updateMatrixWorld(true);
+  const boxes = name => {
+    const mesh = group.getObjectByName(name), result = [];
+    if (!mesh?.isInstancedMesh) return result;
+    mesh.geometry.computeBoundingBox();
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getMatrixAt(index, matrix);
+      if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+      result.push({ index, box: mesh.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(mesh.matrixWorld) });
+    }
+    return result;
+  };
+  const floorY = scene.floor.getWorldPosition(new THREE.Vector3()).y, caps = boxes("Music shelf end caps"), underframe = boxes("Music shelf underframe");
+  const body = boxes("Music shelf base"), footBounds = boxes("Music shelf support feet");
+  const connections = (box, targets) => targets.flatMap(target => {
+    const overlap = ["x", "y", "z"].map(axis => Math.min(box.max[axis], target.box.max[axis]) - Math.max(box.min[axis], target.box.min[axis]));
+    return overlap[0] > .001 && overlap[2] > .001 && overlap[1] >= -.001 ? [{ index: target.index, overlap }] : [];
+  });
+  const feet = footBounds.map(({ index, box }) => ({ index, min: box.min.toArray(), max: box.max.toArray(),
+    groundGap: box.min.y - floorY,
+    capConnections: connections(box, caps), underframeConnections: connections(box, underframe) }));
+  return { floorY, floorPositionY: scene.floor.position.y, feet,
+    allGrounded: feet.length > 0 && feet.every(foot => Math.abs(foot.groundGap) <= .001),
+    allConnectedToEndCaps: feet.length > 0 && feet.every(foot => foot.capConnections.length > 0),
+    allConnectedToUnderframe: feet.length > 0 && feet.every(foot => foot.underframeConnections.length > 0),
+    allUnderframeConnectedToBody: underframe.length > 0 && underframe.every(item => connections(item.box, body).length > 0),
+    allUnderframeConnectedToBothEndLegs: underframe.length > 0 && underframe.every(item => connections(item.box, footBounds).length >= 2),
+    underframe: underframe.map(item => ({ index: item.index, min: item.box.min.toArray(), max: item.box.max.toArray(),
+      bodyConnections: connections(item.box, body), legConnections: connections(item.box, footBounds) })),
+    shadowMapEnabled: scene.renderer.shadowMap.enabled, shadowMapType: scene.renderer.shadowMap.type,
+    feetCastShadow: !!group.getObjectByName("Music shelf support feet")?.castShadow,
+    underframeCastShadow: !!group.getObjectByName("Music shelf underframe")?.castShadow,
+    underframeReceiveShadow: !!group.getObjectByName("Music shelf underframe")?.receiveShadow,
+    baseCastShadow: !!group.getObjectByName("Music shelf base")?.castShadow, floorReceiveShadow: scene.floor.receiveShadow };
+}
+
+function arrayTrayShadowCameraSnapshot() {
+  const cameras = [];
+  archiveScene.scene.traverse(light => {
+    if (!light.isDirectionalLight || !light.castShadow || !light.shadow?.camera) return;
+    const camera = light.shadow.camera;
+    cameras.push({ type: light.type, left: camera.left, right: camera.right, top: camera.top,
+      bottom: camera.bottom, near: camera.near, far: camera.far });
+  });
+  return cameras;
+}
+
+async function captureArrayRailProfile(referenceUrl) {
+  const scene = archiveScene, renderer = scene.renderer, matrix = new THREE.Matrix4();
+  const oldSize = renderer.getSize(new THREE.Vector2()), oldTarget = renderer.getRenderTarget();
+  const oldFog = scene.scene.fog, oldBackground = scene.scene.background, oldAutoClear = renderer.autoClear;
+  const oldShadowNeedsUpdate = renderer.shadowMap.needsUpdate;
+  const shadowCasters = ["Music shelf base", "Music shelf support feet", "Music shelf underframe"].map(name => scene.sceneResources.group.getObjectByName(name))
+    .filter(Boolean).map(object => [object, object.castShadow]);
+  const lightShadowStates = [];
+  scene.scene.traverse(light => { if (light.shadow) lightShadowStates.push([light.shadow, light.shadow.needsUpdate]); });
+  const forceShadowUpdate = () => {
+    renderer.shadowMap.needsUpdate = true;
+    for (const [shadow] of lightShadowStates) shadow.needsUpdate = true;
+  };
+  const visibility = [], instanceData = [], allowed = new Set([...arrayTrayPartNames, "Music shelf left guide", "Music shelf right guide"]);
+  const contactAo = scene.sceneResources.group.getObjectByName("Music shelf contact shadows");
+  const oldContactAoVisible = contactAo?.visible ?? false;
+  const boxes = name => {
+    const object = scene.sceneResources.group.getObjectByName(name), result = [];
+    object?.traverse(mesh => {
+      if (!mesh.isInstancedMesh) return;
+      mesh.geometry.computeBoundingBox();
+      for (let index = 0; index < mesh.count; index++) {
+        mesh.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        result.push({ name: mesh.name, index, box: mesh.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(mesh.matrixWorld) });
+      }
+    });
+    return result;
+  };
+  scene.scene.updateMatrixWorld(true);
+  const base = boxes("Music shelf base").sort((a, b) => Math.abs(a.box.getCenter(new THREE.Vector3()).x - scene.model.position.x) -
+    Math.abs(b.box.getCenter(new THREE.Vector3()).x - scene.model.position.x))[0]?.box;
+  expect(base, "Rail inspection requires a submitted active tray.");
+  const lane = scene.selectedCell.lane, firstIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12);
+  const nextIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 13);
+  const trayBoxes = boxes("Record shelf tray"), bedBoxes = boxes("Record shelf recessed bed");
+  const first = trayBoxes.find(item => item.index === firstIndex)?.box, next = trayBoxes.find(item => item.index === nextIndex)?.box;
+  const bed = bedBoxes.find(item => item.index === firstIndex)?.box;
+  expect(first && next && bed, "Native matching requires the first two actual pitch matrices and recessed bed.");
+  const anchor = first.getCenter(new THREE.Vector3()); anchor.y = bed.max.y + .025;
+  const pitch = Math.abs(next.getCenter(new THREE.Vector3()).z - anchor.z), ppu = 98 / pitch;
+  const right = new THREE.Vector3(79.31, 0, -57.56).normalize();
+  const up = new THREE.Vector3(-36.9, 75.21, -50.85); up.addScaledVector(right, -up.dot(right)).normalize();
+  const normal = new THREE.Vector3().crossVectors(right, up).normalize();
+  const ortho = (width, height, pixelsPerUnit, center) => {
+    const camera = new THREE.OrthographicCamera(-width / pixelsPerUnit / 2, width / pixelsPerUnit / 2,
+      height / pixelsPerUnit / 2, -height / pixelsPerUnit / 2, .1, 150);
+    camera.position.copy(center).addScaledVector(normal, 50); camera.up.copy(up); camera.lookAt(center);
+    camera.updateMatrixWorld(true); camera.updateProjectionMatrix(); return camera;
+  };
+  const render = (camera, width, height) => {
+    renderer.setSize(width, height, false); renderer.setRenderTarget(null); renderer.render(scene.scene, camera);
+    return renderer.domElement.toDataURL("image/png");
+  };
+  try {
+    scene.scene.traverse(object => {
+      if (!object.isMesh) return;
+      visibility.push([object, object.visible]);
+      if (!allowed.has(object.name)) { object.visible = false; return; }
+      if (!object.isInstancedMesh) return;
+      instanceData.push({ object, matrices: object.instanceMatrix.array.slice(), colors: object.instanceColor?.array.slice() ?? null });
+      object.geometry.computeBoundingBox();
+      for (let index = 0; index < object.count; index++) {
+        object.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        const center = object.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(object.matrixWorld).getCenter(new THREE.Vector3());
+        if (center.x < base.min.x - .2 || center.x > base.max.x + .2) object.setMatrixAt(index, new THREE.Matrix4().makeScale(0, 0, 0));
+      }
+      object.instanceMatrix.needsUpdate = true;
+    });
+    scene.scene.fog = null; scene.scene.background = new THREE.Color("#e5e4e2"); renderer.autoClear = true;
+    if (contactAo) contactAo.visible = false;
+    const center = anchor.clone().addScaledVector(right, (1920 / 2 - 320) / ppu).addScaledVector(up, (1300 - 1600 / 2) / ppu);
+    const nativeCamera = ortho(1920, 1600, ppu, center), nativeImage = render(nativeCamera, 1920, 1600);
+    const project = point => {
+      const value = point.clone().project(nativeCamera); return [(value.x + 1) * 960, (1 - value.y) * 800];
+    };
+    const farRail = boxes("Music shelf side rails").filter(item => item.box.getCenter(new THREE.Vector3()).x >= base.min.x - .1 &&
+      item.box.getCenter(new THREE.Vector3()).x <= base.max.x + .1).sort((a, b) => a.box.min.x - b.box.min.x)[0]?.box;
+    expect(farRail, "Rail close-up requires the real inner-side rail.");
+    const railTarget = new THREE.Vector3(farRail.max.x, (farRail.min.y + farRail.max.y) / 2, anchor.z - pitch * 4.5);
+    const innerImage = render(ortho(1000, 850, ppu * 5, railTarget), 1000, 850);
+    const front = boxes("Music shelf end caps").sort((a, b) => b.box.max.z - a.box.max.z)[0]?.box;
+    expect(front, "Three-quarter inspection requires the actual front end cap.");
+    const endTarget = front.getCenter(new THREE.Vector3()), endCamera = new THREE.PerspectiveCamera(35, 1450 / 840, .1, 150);
+    endCamera.position.copy(endTarget).add(new THREE.Vector3(4.5, 3, 5.5)); endCamera.lookAt(endTarget);
+    const endImage = render(endCamera, 1450, 840);
+    scene.floor.visible = visibility.find(([object]) => object === scene.floor)?.[1] ?? true;
+    if (contactAo) contactAo.visible = oldContactAoVisible;
+    scene.scene.fog = oldFog; scene.scene.background = oldBackground;
+    const support = arrayTraySupportSnapshot(), supportTarget = base.getCenter(new THREE.Vector3());
+    supportTarget.y = (support.floorY + base.min.y) / 2;
+    const supportCamera = new THREE.OrthographicCamera(-12, 12, 12 * 800 / 1800, -12 * 800 / 1800, .1, 150);
+    supportCamera.position.copy(supportTarget).add(new THREE.Vector3(50, 12, 18)); supportCamera.lookAt(supportTarget);
+    forceShadowUpdate();
+    const supportImage = render(supportCamera, 1800, 800);
+    const contactTarget = front.getCenter(new THREE.Vector3()); contactTarget.y = (support.floorY + front.min.y) / 2;
+    const contactCamera = new THREE.PerspectiveCamera(35, 1450 / 840, .1, 150);
+    contactCamera.position.copy(contactTarget).add(new THREE.Vector3(3, 1.5, 4.5)); contactCamera.lookAt(contactTarget);
+    forceShadowUpdate();
+    const supportCloseImage = render(contactCamera, 1450, 840), shadowLights = [];
+    const back = boxes("Music shelf end caps").sort((a, b) => a.box.min.z - b.box.min.z)[0].box;
+    const rearTarget = back.getCenter(new THREE.Vector3()); rearTarget.y = (support.floorY + back.min.y) / 2;
+    const rearCamera = new THREE.PerspectiveCamera(35, 1450 / 840, .1, 150);
+    rearCamera.position.copy(rearTarget).add(new THREE.Vector3(-3, 1.5, -4.5)); rearCamera.lookAt(rearTarget);
+    forceShadowUpdate(); const rearSupportImage = render(rearCamera, 1450, 840);
+    for (const [object] of shadowCasters) object.castShadow = false;
+    forceShadowUpdate();
+    const supportShadowOffImage = render(contactCamera, 1450, 840);
+    forceShadowUpdate(); const rearShadowOffImage = render(rearCamera, 1450, 840);
+    forceShadowUpdate(); const sideCasterOffImage = render(supportCamera, 1800, 800);
+    if (contactAo) contactAo.visible = false;
+    forceShadowUpdate(); const supportShadowAllOffImage = render(contactCamera, 1450, 840);
+    forceShadowUpdate(); const rearShadowAllOffImage = render(rearCamera, 1450, 840);
+    forceShadowUpdate(); const sideAllOffImage = render(supportCamera, 1800, 800);
+    if (contactAo) contactAo.visible = oldContactAoVisible;
+    for (const [object, castShadow] of shadowCasters) object.castShadow = castShadow;
+    forceShadowUpdate(); render(contactCamera, 1450, 840);
+    const rightParts = ["Music shelf base", "Music shelf side rails", "Music shelf underframe", "Music shelf support feet"]
+      .flatMap(name => boxes(name).map(item => item.box));
+    const rightZMin = Math.min(...rightParts.map(box => box.min.z)), rightZMax = Math.max(...rightParts.map(box => box.max.z));
+    const rightYMin = Math.min(support.floorY, ...rightParts.map(box => box.min.y)), rightYMax = Math.max(...rightParts.map(box => box.max.y));
+    const rightCenter = new THREE.Vector3((base.min.x + base.max.x) / 2, (rightYMin + rightYMax) / 2, (rightZMin + rightZMax) / 2);
+    const rightWidth = Math.ceil((rightZMax - rightZMin + 1) * 145), rightHeight = 360;
+    const rightCamera = new THREE.OrthographicCamera(-rightWidth / 290, rightWidth / 290, rightHeight / 290, -rightHeight / 290, .1, 150);
+    rightCamera.position.copy(rightCenter).add(new THREE.Vector3(50, 0, 0)); rightCamera.up.set(0, 1, 0); rightCamera.lookAt(rightCenter);
+    forceShadowUpdate(); const rightImage = render(rightCamera, rightWidth, rightHeight);
+    const rightEndTarget = new THREE.Vector3(rightCenter.x, rightCenter.y, front.max.z - .5);
+    const rightEndCamera = new THREE.OrthographicCamera(-1.5, 1.5, 1.05, -1.05, .1, 150);
+    rightEndCamera.position.copy(rightEndTarget).add(new THREE.Vector3(50, 0, 0)); rightEndCamera.up.set(0, 1, 0); rightEndCamera.lookAt(rightEndTarget);
+    forceShadowUpdate(); const rightEndImage = render(rightEndCamera, 1000, 700);
+    scene.scene.traverse(light => {
+      if (!light.isLight || !light.castShadow || !light.shadow?.camera) return;
+      shadowLights.push({ type: light.type, mapPresent: !!light.shadow.map, mapSize: light.shadow.mapSize.toArray(),
+        frustum: { left: light.shadow.camera.left, right: light.shadow.camera.right, top: light.shadow.camera.top,
+          bottom: light.shadow.camera.bottom, near: light.shadow.camera.near, far: light.shadow.camera.far },
+        footFrustumCoverage: support.feet.map(foot => {
+          const point = new THREE.Vector3((foot.min[0] + foot.max[0]) / 2, foot.min[1], (foot.min[2] + foot.max[2]) / 2)
+            .project(light.shadow.camera);
+          return { index: foot.index, ndc: point.toArray(), inside: Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1 && Math.abs(point.z) <= 1 };
+        }) });
+    });
+    const railBounds = boxes("Music shelf side rails").map(item => item.box);
+    const railOuterMinX = Math.min(...railBounds.map(box => box.min.x)), railOuterMaxX = Math.max(...railBounds.map(box => box.max.x));
+    const original = new Image(), current = new Image(); original.src = referenceUrl; current.src = nativeImage;
+    await Promise.all([original.decode(), current.decode()]);
+    const frontZ = Math.max(...support.feet.map(foot => (foot.min[2] + foot.max[2]) / 2));
+    const rayTargets = [];
+    scene.scene.traverse(object => {
+      if (!object.isMesh || !object.visible || object === contactAo) return;
+      for (let parent = object.parent; parent; parent = parent.parent) if (!parent.visible) return;
+      rayTargets.push(object);
+    });
+    const measureGround = async (onUrl, offUrl, camera, width, height, feet) => {
+      const onImage = new Image(), offImage = new Image(); onImage.src = onUrl; offImage.src = offUrl;
+      await Promise.all([onImage.decode(), offImage.decode()]);
+      const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+      const pixels = canvas.getContext("2d", { willReadFrequently: true });
+      return feet.map(foot => {
+        const footZ = (foot.min[2] + foot.max[2]) / 2, endSign = Math.abs(footZ - frontZ) < .001 ? 1 : -1;
+        const floorSample = new THREE.Vector3((foot.min[0] + foot.max[0]) / 2, support.floorY,
+          (endSign > 0 ? foot.max[2] : foot.min[2]) + endSign * .035);
+        const point = floorSample.clone().project(camera);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(point.x, point.y), camera);
+        const hit = ray.intersectObjects(rayTargets, false)[0];
+        const floorVisible = hit?.object === scene.floor && Math.abs(hit.point.y - support.floorY) <= .001;
+        const x = Math.max(0, Math.min(width - 40, Math.round((point.x + 1) * width / 2) - 20));
+        const y = Math.max(0, Math.min(height - 40, Math.round((1 - point.y) * height / 2) - 20));
+        pixels.clearRect(0, 0, width, height); pixels.drawImage(onImage, 0, 0);
+        const on = pixels.getImageData(x, y, 40, 40).data;
+        pixels.clearRect(0, 0, width, height); pixels.drawImage(offImage, 0, 0);
+        const off = pixels.getImageData(x, y, 40, 40).data;
+        let sumAbsoluteRgbDelta = 0, changedPixels = 0, darkenedPixels = 0, signedRgbDelta = 0;
+        for (let offset = 0; offset < on.length; offset += 4) {
+          let delta = 0, signed = 0;
+          for (let channel = 0; channel < 3; channel++) { delta += Math.abs(on[offset + channel] - off[offset + channel]); signed += on[offset + channel] - off[offset + channel]; }
+          sumAbsoluteRgbDelta += delta; signedRgbDelta += signed;
+          if (delta >= 3) changedPixels++;
+          if (signed <= -3) darkenedPixels++;
+        }
+        return { footIndex: foot.index, worldFloorSample: floorSample.toArray(), floorVisible,
+          firstVisibleSurface: hit?.object.name || hit?.object.type || null,
+          roi: { x, y, width: 40, height: 40 }, sumAbsoluteRgbDelta,
+          meanAbsoluteChannelDelta: sumAbsoluteRgbDelta / 4800, meanSignedChannelDelta: signedRgbDelta / 4800, changedPixels, darkenedPixels };
+      });
+    };
+    const frontFeet = support.feet.filter(foot => Math.abs((foot.min[2] + foot.max[2]) / 2 - frontZ) < .001);
+    const rearFeet = support.feet.filter(foot => !frontFeet.includes(foot));
+    const [shadowGroundRegions, combinedCloseRegions, directionalAllFeet, combinedAllFeet, rearDirectionalRegions, rearCombinedRegions] = await Promise.all([
+      measureGround(supportCloseImage, supportShadowOffImage, contactCamera, 1450, 840, frontFeet),
+      measureGround(supportCloseImage, supportShadowAllOffImage, contactCamera, 1450, 840, frontFeet),
+      measureGround(supportImage, sideCasterOffImage, supportCamera, 1800, 800, support.feet),
+      measureGround(supportImage, sideAllOffImage, supportCamera, 1800, 800, support.feet),
+      measureGround(rearSupportImage, rearShadowOffImage, rearCamera, 1450, 840, rearFeet),
+      measureGround(rearSupportImage, rearShadowAllOffImage, rearCamera, 1450, 840, rearFeet),
+    ]);
+    const visibleCombinedFeet = [...combinedCloseRegions, ...rearCombinedRegions], contactAoInstances = [];
+    if (contactAo?.isInstancedMesh) for (let index = 0; index < contactAo.count; index++) {
+      contactAo.getMatrixAt(index, matrix);
+      if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+      contactAoInstances.push({ index, color: contactAo.instanceColor ? [contactAo.instanceColor.getX(index),
+        contactAo.instanceColor.getY(index), contactAo.instanceColor.getZ(index)] : null });
+    }
+    const comparison = document.createElement("canvas"); comparison.width = 3840; comparison.height = 1650;
+    const context = comparison.getContext("2d"); context.fillStyle = "#e5e4e2"; context.fillRect(0, 0, 3840, 1650);
+    context.fillStyle = "#181818"; context.font = "22px sans-serif";
+    context.fillText("Original sprites / 20 slots + front and back", 24, 32);
+    context.fillText("Actual 3D geometry / native axes / inspection only", 1944, 32);
+    context.drawImage(original, 0, 50); context.drawImage(current, 1920, 50);
+    return { nativeImage, innerImage, endImage, supportImage, supportCloseImage, supportShadowOffImage, supportShadowAllOffImage,
+      rearSupportImage, rearShadowOffImage, rearShadowAllOffImage,
+      rightImage, rightEndImage,
+      comparisonImage: comparison.toDataURL("image/png"),
+      inspection: { nativeProjection: "Original axes, first mid-slot anchored at [320,1300], actual world pitch normalized to source pitch=1.",
+        axes: { x: [79.31, 36.9], y: [57.56, -50.85], z: [0, -75.21] }, size: [1920, 1600], sourcePpu: 98,
+        actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), projectedAnchor: project(anchor),
+        projectedNextPitch: project(anchor.clone().add(new THREE.Vector3(0, 0, -pitch))), basis: { right: right.toArray(), up: up.toArray(), normal: normal.toArray() },
+        actualBaseWidth: base.max.x - base.min.x, actualRailOuterWidth: railOuterMaxX - railOuterMinX,
+        actualTrayWidth: Math.max(base.max.x, railOuterMaxX) - Math.min(base.min.x, railOuterMinX),
+        actualCaseWidth: scene.caseLayout.bounds.max[0] - scene.caseLayout.bounds.min[0],
+        referenceTrayWidthApprox: 4.7, referenceCaseWidth: 4.45, widthAdaptation: "None; actual geometry width retained. Equal source pitch/axes/window, not equal tray width.",
+        settings: { fog: false, composer: false, ambientOcclusion: false, proceduralContactAo: false, depthOfField: false, floor: false, cases: false,
+          rowLabels: false, otherLanes: false, background: [229, 228, 226], materialAndLighting: "Unmodified actual Scene", laneFader: "Active-lane encoded attributes retained; no global overlay pass" },
+        innerRailTarget: railTarget.toArray(), frontCap: { min: front.min.toArray(), max: front.max.toArray() },
+        support, shadowLights,
+        rightView: { camera: "Orthographic, world +X looking -X, up=+Y, screen horizontal=-Z; no tilt or perspective.",
+          size: [rightWidth, rightHeight], pixelsPerWorldUnit: 145, worldRange: { z: [rightZMin, rightZMax], y: [rightYMin, rightYMax] },
+          endCrop: "Same exact right projection, front end and runner/leg contour cropped at 1000x700.",
+          floorNote: "Actual horizontal floor/contact-AO planes are edge-on and project to zero area in this exact side view. Ground contact/shadows are verified separately by front/rear contact cameras." },
+        shadowAB: { changedCasters: shadowCasters.map(([object]) => object.name), camera: "Same contactCamera frame and all other render settings",
+          forcedUpdates: "Renderer and each light shadow needsUpdate forced before on/off/restored-on render; shadow renderer clears and redraws maps.",
+          quality: { ...scene.quality }, groundRegions: shadowGroundRegions,
+          groundEffectObserved: shadowGroundRegions.some(region => region.darkenedPixels > 0),
+          directionalAllFeet, combinedCloseRegions, combinedAllFeet, rearDirectionalRegions, rearCombinedRegions, visibleCombinedFeet,
+          allFeetCombinedDarkening: visibleCombinedFeet.length === 4 && visibleCombinedFeet.every(region => region.floorVisible && region.darkenedPixels > 0),
+          proceduralContactAo: { present: !!contactAo, visible: oldContactAoVisible, opacity: contactAo?.material?.opacity ?? null,
+            instances: contactAoInstances,
+            textureSize: [contactAo?.material?.map?.image?.width ?? null, contactAo?.material?.map?.image?.height ?? null],
+            interpretation: "Approximate procedural foot-root ambient darkening; not ray-traced light visibility. A-B leaves this plane on; A-C disables it and directional casters." },
+          note: "Full-side hidden floor samples are diagnostic only. Four-foot acceptance uses adjacent, raycast-confirmed visible floor samples from front/rear contact cameras. Pixel differences apply only to these frames; no FPS claim." },
+        supportObservation: "Actual production renderer, lights/materials, shadow map and procedural approximate contact-AO; real floor/background/fog retained. Composer screen-space AO/DOF bypassed. Directional and combined contributions reported separately.",
+        note: "Inspection images compare geometry only and do not establish application visual acceptance; normal composer browse captured separately." } };
+  } finally {
+    for (const [object, castShadow] of shadowCasters) object.castShadow = castShadow;
+    for (const [shadow, needsUpdate] of lightShadowStates) shadow.needsUpdate = needsUpdate;
+    for (const item of instanceData) {
+      item.object.instanceMatrix.array.set(item.matrices); item.object.instanceMatrix.needsUpdate = true;
+      if (item.colors) { item.object.instanceColor.array.set(item.colors); item.object.instanceColor.needsUpdate = true; }
+    }
+    for (const [object, visible] of visibility) object.visible = visible;
+    scene.scene.fog = oldFog; scene.scene.background = oldBackground; renderer.autoClear = oldAutoClear;
+    renderer.shadowMap.needsUpdate = oldShadowNeedsUpdate;
+    renderer.setSize(oldSize.x, oldSize.y, false); renderer.setRenderTarget(oldTarget); scene.composer.render();
+  }
 }
 
 async function exercisePunkArrayMotion(screenshotsOnly = false) {
@@ -2054,9 +2388,13 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
   expect(hiddenKinds.has("cover") && hiddenKinds.has("paper") && hiddenKinds.has("title") &&
     [...hiddenKinds].some(kind => kind.includes("frame")) && [...hiddenKinds].some(kind => kind.includes("record shelf tray")),
   "The render audit must include the frame, cover, physical card, title and tray mesh families: " + JSON.stringify([...hiddenKinds]));
-  const colorMatches = (mesh, appearance) => mesh.instances.every(instance => instance.color &&
-    Math.abs(instance.color[0] - (1 + appearance.alpha)) < 2e-5 &&
-    Math.abs(instance.color[1] - (1 + appearance.tint)) < 2e-5 && Math.abs(instance.color[2] - 1) < 2e-5);
+  const colorMatches = (mesh, appearance) => mesh.instances.every(instance => {
+    const contact = mesh.kind === "Music shelf contact shadows";
+    const alpha = contact ? appearance.alpha * (1 - appearance.tint) : appearance.alpha;
+    const tint = contact ? 0 : appearance.tint;
+    return instance.color && Math.abs(instance.color[0] - (1 + alpha)) < 2e-5 &&
+      Math.abs(instance.color[1] - (1 + tint)) < 2e-5 && Math.abs(instance.color[2] - 1) < 2e-5;
+  });
   const activeLane = composition.lanes.find(value => value.lane === 1);
   expect(activeLane.meshes.every(mesh => colorMatches(mesh, activeLane.appearance)),
     "The active frame, covers, paper, titles and trays must share the encoded lane appearance.");
@@ -3183,6 +3521,9 @@ window.caseCheck = {
   prepareArrayTray,
   arrayTrayStructureSnapshot,
   captureEmptyArrayTray,
+  captureArrayRailProfile,
+  arrayTraySupportSnapshot,
+  arrayTrayShadowCameraSnapshot,
   arrayTrayClearanceSnapshot,
   settleArrayTrayLane,
   get arrayTrayTextureDisposals() { return arrayTrayTextureDisposals.slice(); },
@@ -6054,6 +6395,7 @@ try {
   });
   bundleJs = built.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "";
   bundleCss = built.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
+  if (isArrayRailProfile) console.log("ARRAY_RAIL_PROFILE_BUNDLE_LOCKED " + arrayRailPhase);
   assert.ok(bundleJs, "esbuild must bundle the local offline fixture in memory.");
   if (!isReference) assert.ok(bundleCss, "esbuild must bundle the real case-editor.css stylesheet.");
 } catch (error) {
@@ -6072,7 +6414,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -6454,18 +6796,77 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
+    await mkdir(isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isArrayRailProfile) {
+      const normal = await evaluate('window.caseCheck.prepareArrayTray("archive","day","plain")');
+      const browse = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+      await writeFile(path.join(arrayRailOutput, "app-browse.png"), Buffer.from(browse.data, "base64"));
+      const active = await evaluate("window.caseCheck.settleArrayTrayLane(4,4)");
+      const referencePath = path.join(project, ".tools", "array-tray-structure", "reference", "original-rail-only-20slots.png");
+      const referenceUrl = "data:image/png;base64," + (await readFile(referencePath)).toString("base64");
+      const inspection = await evaluate("window.caseCheck.captureArrayRailProfile(" + JSON.stringify(referenceUrl) + ")");
+      const files = { nativeImage: "native-full-empty-tray.png", innerImage: "native-inner-rail-closeup.png",
+        endImage: "inspection-end-three-quarter.png", supportImage: "inspection-support-side.png",
+        supportCloseImage: "inspection-support-contact-closeup.png", supportShadowOffImage: "inspection-directional-casters-off.png",
+        supportShadowAllOffImage: "inspection-casters-and-contact-ao-off.png",
+        rearSupportImage: "inspection-rear-support-contact-closeup.png", rearShadowOffImage: "inspection-rear-directional-casters-off.png",
+        rearShadowAllOffImage: "inspection-rear-casters-and-contact-ao-off.png",
+        rightImage: "inspection-right-orthographic-full.png", rightEndImage: "inspection-right-orthographic-end-closeup.png",
+        comparisonImage: "original-vs-current-native.png" };
+      for (const [key, filename] of Object.entries(files))
+        await writeFile(path.join(arrayRailOutput, filename), pngBuffer(inspection[key], filename));
+      let validationError = null;
+      const restored = await evaluate("window.caseCheck.arrayTrayStructureSnapshot()");
+      try {
+      assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
+      if (arrayRailPhase === "after") {
+        const support = inspection.inspection.support;
+        assert.ok(support.allGrounded && support.allConnectedToEndCaps && support.allConnectedToUnderframe &&
+          support.allUnderframeConnectedToBody && support.allUnderframeConnectedToBothEndLegs,
+          "Every actual leg must meet the real floor and overlap/connect to an end beam: " + JSON.stringify(support));
+        assert.ok(support.shadowMapEnabled && support.feetCastShadow && support.baseCastShadow && support.underframeCastShadow &&
+          support.underframeReceiveShadow && support.floorReceiveShadow,
+          "Support observation requires production shadow mapping, real casters and the actual receiving floor.");
+        assert.ok(inspection.inspection.shadowAB.groundEffectObserved,
+          "The caster-on/off same-frame ground ROI must demonstrate actual shadow darkening.");
+        assert.ok(inspection.inspection.shadowAB.allFeetCombinedDarkening,
+          "Each actual foot must show nonzero combined directional/contact-AO ground darkening.");
+        assert.ok(inspection.inspection.shadowAB.proceduralContactAo.instances.length === 4 &&
+          inspection.inspection.shadowAB.proceduralContactAo.instances.every(instance => instance.color &&
+            Math.abs(instance.color[0] - 2) < 1e-5 && Math.abs(instance.color[1] - 1) < 1e-5 && Math.abs(instance.color[2] - 1) < 1e-5),
+        "All four active foot AO patches must retain actual [2,1,1] appearance metadata.");
+        assert.ok(support.feet.every(foot => inspection.inspection.shadowLights.some(light =>
+          light.footFrustumCoverage.some(value => value.index === foot.index && value.inside))),
+        "Every actual foot must fit inside an active production shadow-map frustum.");
+        const railBounds = active.structure.parts.find(part => part.name === "Music shelf side rails").meshes.flatMap(mesh => mesh.submittedBounds)
+          .slice().sort((left, right) => left.min[0] - right.min[0]);
+        assert.ok(railBounds.length === 2 && railBounds[0].max[1] > railBounds[1].max[1] + .001,
+          "The actual left rail must form a higher guard than the right rail.");
+      }
+      assert.deepEqual(restored, active.structure, "Rail inspection must restore all Scene mesh visibility and submitted instance data.");
+      } catch (error) { validationError = error; }
+      const report = { ok: validationError === null, validationError: validationError?.message ?? null,
+        phase: arrayRailPhase, visualAcceptance: "Pending human review; inspection views do not assert app appearance passed.",
+        reference: path.relative(project, referencePath), normalComposerBrowse: "app-browse.png", normal, active,
+        inspection: inspection.inspection, screenshots: Object.values(files), restored,
+        restorationMatches: JSON.stringify(restored) === JSON.stringify(active.structure),
+        runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(arrayRailOutput, "array-rail-profile-report.json"), JSON.stringify(report, null, 2));
+      if (validationError) throw validationError;
+      console.log(JSON.stringify({ ok: true, phase: arrayRailPhase,
+        report: path.relative(project, path.join(arrayRailOutput, "array-rail-profile-report.json")),
+        screenshots: ["app-browse.png", ...Object.values(files)] }, null, 2));
+      return;
+    }
     if (isArrayTray) {
       const motionOutput = arrayTrayOutput;
       const combinations = process.argv.includes("--baseline-only") || process.argv.includes("--structure-preview")
         ? [["archive", "day", "plain"]]
         : ["archive", "rhine"].flatMap(design => ["day", "night"].flatMap(theme => ["plain", "deck"].map(floor => [design, theme, floor])));
       const captures = [];
-      const requiredParts = ["Music shelf base", "Music shelf side rails", "Music shelf rail highlights",
-        "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
-        "Music shelf end safety stripes", "Record shelf tray", "Record shelf glass rims", "Record shelf recessed bed",
-        "Record shelf guide grooves"];
+      const requiredParts = ["Music shelf base", "Music shelf side rails", "Music shelf continuous edge lines", "Music shelf end caps",
+        "Music shelf end safety stripes", "Record shelf tray", "Record shelf recessed bed"];
       for (const [design, theme, floor] of combinations) {
         const visibleState = await evaluate("window.caseCheck.prepareArrayTray(" + [design, theme, floor].map(JSON.stringify).join(",") + ")");
         const effectiveFloor = design === "rhine" ? "plain" : floor;
@@ -6479,12 +6880,23 @@ async function main() {
         if (isArrayTrayStructure) {
           const part = name => visibleState.parts.find(value => value.name === name);
           const lanes = part("Music shelf base").drawnInstances;
+          if (arrayTrayPhase === "after") {
+            const rails = part("Music shelf side rails").meshes;
+            const left = rails.find(mesh => mesh.name === "Music shelf left guide")?.submittedBounds[0];
+            const right = rails.find(mesh => mesh.name === "Music shelf right guide")?.submittedBounds[0];
+            assert.ok(left && right && left.max[1] > right.max[1] + .001,
+              "The real left guide must rise above the right guide.");
+          }
           assert.equal(part("Music shelf end safety stripes").drawnInstances, lanes,
             "Each finite tray must submit exactly one front safety-stripe face.");
           assert.equal(part("Music shelf support feet").drawnInstances, lanes * 4,
             "Each finite tray must submit four support feet.");
           assert.equal(part("Music shelf foot pins").drawnInstances, lanes * 4,
             "Each finite tray must submit four silver foot pins.");
+          assert.equal(part("Music shelf contact shadows").drawnInstances, lanes * 4,
+            "Each finite tray must submit four approximate contact-AO ground patches.");
+          assert.equal(part("Music shelf underframe").drawnInstances, lanes * 2,
+            "Each finite tray must submit two continuous longitudinal support runners.");
           assert.equal(part("Music shelf end platforms").drawnInstances, lanes * 2,
             "Each finite tray must submit two empty end landing platforms.");
           assert.equal(part("Record shelf tick").drawnInstances, part("Record shelf tray").drawnInstances,
@@ -6506,6 +6918,11 @@ async function main() {
             "The number plate must sit to the right of the tray center.");
         }
         const clearance = isArrayTrayStructure ? await evaluate("window.caseCheck.arrayTrayClearanceSnapshot()") : null;
+        const support = isArrayTrayStructure ? await evaluate("window.caseCheck.arrayTraySupportSnapshot()") : null;
+        if (support) assert.ok(support.allGrounded && support.allConnectedToEndCaps && support.allConnectedToUnderframe &&
+          support.allUnderframeConnectedToBody && support.allUnderframeConnectedToBothEndLegs && support.shadowMapEnabled &&
+          support.feetCastShadow && support.baseCastShadow && support.underframeCastShadow && support.underframeReceiveShadow && support.floorReceiveShadow,
+        "Actual tray legs must meet the current main floor and end beams with production shadow support: " + JSON.stringify(support));
         if (clearance) {
           assert.ok(clearance.caseCount > 0 && clearance.colliderCount > 0, "Structural clearance must inspect submitted case and tray bounds.");
           assert.deepEqual(clearance.intersections, [], "No tray structure may overlap an occupied case bound: " + JSON.stringify(clearance.intersections));
@@ -6537,7 +6954,7 @@ async function main() {
             cameraPosition: end.cameraPosition, target: end.target,
             endBounds: end.endBounds, structure: end.structure, finalFiveClearance: tail.clearance };
         }
-        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, endName, visibleState, clearance,
+        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, endName, visibleState, clearance, support,
           endTray,
           emptyTray: { cameraZoom: empty.cameraZoom, structure: empty.structure } });
       }
@@ -6560,9 +6977,16 @@ async function main() {
       if (!process.argv.includes("--baseline-only")) {
         const matrix = await evaluate('window.caseCheck.prepareArrayTray("archive","day","plain","array")');
         matrixTrayGuard = await evaluate("window.caseCheck.arrayTrayStructureSnapshot()");
+        matrixTrayGuard.floorY = await evaluate("window.caseCheck.arrayTraySupportSnapshot().floorY");
+        matrixTrayGuard.shadowCameras = await evaluate("window.caseCheck.arrayTrayShadowCameraSnapshot()");
         assert.equal(matrixTrayGuard.layout, "array");
         assert.equal(matrixTrayGuard.physicalTrayGroupVisible, false,
           "The physical shelf tray assembly must stay hidden in the non-shelf MATRIX layout.");
+        assert.ok(Math.abs(matrixTrayGuard.floorY + 4.63) <= .001, "The legacy MATRIX main floor must retain its established height.");
+        assert.ok(matrixTrayGuard.shadowCameras.length > 0 && matrixTrayGuard.shadowCameras.every(camera =>
+          Math.abs(camera.left + 16) < 1e-6 && Math.abs(camera.right - 16) < 1e-6 &&
+          Math.abs(camera.top - 15) < 1e-6 && Math.abs(camera.bottom + 15) < 1e-6 && Math.abs(camera.far - 45) < 1e-6),
+        "Leaving ARRAY must restore the actual production directional shadow-camera bounds in MATRIX.");
       }
       assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
       assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
@@ -6824,7 +7248,7 @@ async function main() {
       if (screenshotsOnly) {
         const screenshots = await captureCompositionScreenshots();
         assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
-        console.log(JSON.stringify({ ok: true, screenshotsOnly: true, report: ".tools/array-composition/array-composition-screenshots.json",
+        console.log(JSON.stringify({ ok: true, screenshotsOnly: true, report: path.relative(project, path.join(unifiedOutput, "array-composition-screenshots.json")),
           screenshots: screenshots.map(item => item.name) }, null, 2));
         return;
       }
@@ -6905,7 +7329,7 @@ async function main() {
       console.log(JSON.stringify({ ok: true, checks: ["shared first-card alignment", "first-five-card no-scroll", "active-only column motion and memory",
         "all-mesh right-column removal and rear tint", "real mouse focus plus hover and hit guards", "full-scene composer screenshots at 1600/1920/2560",
         "persistent selection and neighbor lift", "twenty-slot final partial tray", "detail-only inspection Z", "both MATRIX guards"],
-        report: ".tools/array-composition/array-composition-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+        report: path.relative(project, path.join(unifiedOutput, "array-composition-audit.json")), screenshots: screenshots.map(item => item.name) }, null, 2));
       return;
     }
     if (isArrayCoverVisibility) {
@@ -7021,7 +7445,7 @@ async function main() {
       ...result, pointerResult: opened, screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     console.log(JSON.stringify({ ok: true, checks: ["Both physical shelves", "sole WebGL canvas", "finite TRACKS identity/paging",
       "query recovery", "detail/layout continuity", "transformed spacing", "real raycast and double click", "Punk clipping"],
-      report: ".tools/array-composition/unified-render-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+      report: path.relative(project, path.join(unifiedOutput, "unified-render-audit.json")), screenshots: screenshots.map(item => item.name) }, null, 2));
     return;
   }
   const fixture = await evaluate("window.caseCheck.run()");
@@ -7935,7 +8359,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

@@ -2368,7 +2368,7 @@ export class ArchiveScene {
     this.selectionLighting?.update(this.model, this.camera, dt, musicLibrary && records.length > 0 && this.model.visible, this.reduced, Boolean(cinematic));
     this.caseIllumination.update(this.model, !!this.caseGeometryKey && records.length > 0 && this.model.visible);
     const shelfBottom = MUSIC_ARRAY_VIEW.floorY + this.caseLayout.bounds.min[1];
-    this.floor.position.y = this.shelfView ? shelfBottom - .22 : -4.63;
+    this.floor.position.y = this.shelfView ? shelfBottom - MUSIC_SHELF_VIEW.floorDrop : -4.63;
     this.sceneResources?.update({
       shelf: this.shelfView,
       slots: this.shelfView ? this.positions.map((position, index) => ({ x: position.x - trackX + this.caseLayout.center.x, y: shelfBottom,
@@ -2380,6 +2380,17 @@ export class ArchiveScene {
         : [],
       width: this.caseLayout.width, depth: this.caseLayout.depth, rowSpacing: Math.abs(spacing.row), floorY: shelfBottom,
     });
+    const shadowCamera = this.light.shadow.camera;
+    const shelfShadowExtent = this.shelfView
+      ? Math.ceil(Math.max(24, Math.abs(spacing.row) * (MUSIC_SHELF_VIEW.slots + 3), Math.abs(spacing.column) * 5)) : 16;
+    const shadowTop = this.shelfView ? shelfShadowExtent : 15;
+    const shadowFar = this.shelfView ? Math.max(45, shelfShadowExtent * 3) : 45;
+    if (shadowCamera.right !== shelfShadowExtent || shadowCamera.top !== shadowTop || shadowCamera.far !== shadowFar) {
+      Object.assign(shadowCamera, { left: -shelfShadowExtent, right: shelfShadowExtent,
+        top: shadowTop, bottom: -shadowTop, far: shadowFar });
+      shadowCamera.updateProjectionMatrix();
+      this.light.shadow.needsUpdate = true;
+    }
     this.container.dataset.renderBackend = "three-webgl";
     // AO normals and bokeh depth render this scene again without moving it.
     // Music frames share the first pass's shadows; the archive reference keeps

@@ -29,10 +29,7 @@ export class MusicShelf {
   private readonly ownsAppearance: boolean;
   private readonly appearanceBackground = new THREE.Color("#e8e5e1");
   private readonly base = new THREE.MeshStandardMaterial({ color: "#b3b7b3", roughness: .46, metalness: .42 });
-  private readonly rim = new THREE.MeshStandardMaterial({ color: "#e1e4dc", roughness: .28, metalness: .52 });
   private readonly inset = new THREE.MeshStandardMaterial({ color: "#d7d9d3", roughness: .74, metalness: .12 });
-  private readonly groove = new THREE.MeshStandardMaterial({ color: "#8c9186", roughness: .82, metalness: .14 });
-  private readonly accent = new THREE.MeshStandardMaterial({ color: "#b56834", roughness: .48, metalness: .18 });
   private readonly tick = new THREE.MeshStandardMaterial({ color: "#e4e7df", roughness: .56, metalness: .18 });
   private dimensions = { width: 0, depth: 0, spacing: 0 };
 
@@ -42,7 +39,7 @@ export class MusicShelf {
     this.ownsAppearance = !appearance;
     this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
     this.inset.map = this.textures.bed;
-    for (const material of [this.base, this.rim, this.inset, this.tick]) {
+    for (const material of [this.base, this.inset, this.tick]) {
       material.roughnessMap = this.textures.roughness;
       material.normalMap = this.textures.normal;
       material.normalScale.set(.16, .16);
@@ -63,10 +60,7 @@ export class MusicShelf {
       });
     };
     makePart("Record shelf tray", this.base, 1, .003);
-    makePart("Record shelf glass rims", this.rim, 2, .0035);
     makePart("Record shelf recessed bed", this.inset, 1, 0);
-    makePart("Record shelf guide grooves", this.groove, 2, 0);
-    makePart("Record shelf index strip", this.accent, 1, 0);
     makePart("Record shelf tick", this.tick, 1, 0);
     this.group.name = "Physical record trays";
     this.setDimensions(MUSIC_MODEL.width, MUSIC_MODEL.depth, ROW_SPACING);
@@ -85,31 +79,15 @@ export class MusicShelf {
 
     const trayWidth = next.width + .22;
     const trayDepth = Math.max(next.spacing * .99, next.depth + .08);
-    const halfWidth = trayWidth / 2;
     const base = this.parts[0]!;
     base.size.set(trayWidth, .13, trayDepth);
     base.offsets[0]!.set(0, -.145, 0);
 
-    const rims = this.parts[1]!;
-    rims.size.set(.05, .028, trayDepth);
-    rims.offsets[0]!.set(-halfWidth + .08, -.005, 0);
-    rims.offsets[1]!.set(halfWidth - .08, -.005, 0);
-
-    const inset = this.parts[2]!;
+    const inset = this.parts[1]!;
     inset.size.set(Math.max(.1, trayWidth - .5), .055, Math.max(.1, trayDepth - .014));
     inset.offsets[0]!.set(0, -.0525, 0);
 
-    const grooves = this.parts[3]!;
-    // Only the two longitudinal channel mouths are dark in the reference.
-    grooves.size.set(.025, .004, trayDepth);
-    grooves.offsets[0]!.set(-halfWidth + .255, -.024, 0);
-    grooves.offsets[1]!.set(halfWidth - .255, -.024, 0);
-
-    const index = this.parts[4]!;
-    index.size.set(.012, .004, .035);
-    index.offsets[0]!.set(-halfWidth + .08, .011, trayDepth * .46);
-
-    const tick = this.parts[5]!;
+    const tick = this.parts[2]!;
     // Adjacent source sprites cover their end faces: the assembled deck is
     // flat. These are flush silver separators, never raised transverse ribs.
     tick.size.set(Math.max(.1, trayWidth - .14), .0015, .018);
@@ -145,7 +123,7 @@ export class MusicShelf {
     }
   }
 
-  setMode(night: boolean, accent: string, design: "rhine" | "archive" = "rhine", palette?: StylePalette) {
+  setMode(night: boolean, _accent: string, design: "rhine" | "archive" = "rhine", palette?: StylePalette) {
     const archive = design === "archive";
     if (this.ownsAppearance && palette?.bg) {
       this.appearanceBackground.set(palette.bg);
@@ -155,17 +133,10 @@ export class MusicShelf {
     this.base.color.copy(finish.base);
     this.base.metalness = archive ? .3 : .24;
     this.base.roughness = .55;
-    this.rim.color.copy(finish.rail);
-    this.rim.metalness = archive ? .68 : .52;
-    this.rim.roughness = archive ? .31 : .27;
-    this.inset.color.copy(finish.bed);
+    // The original mid sprite is darker than the two empty end platforms.
+    this.inset.color.copy(finish.bed).multiplyScalar(.60);
     this.inset.metalness = .12;
     this.inset.roughness = .9;
-    this.groove.color.copy(finish.channel);
-    this.groove.metalness = .12;
-    this.groove.roughness = .82;
-    this.accent.color.set(accent);
-    this.accent.emissive.set(accent).multiplyScalar(night ? .025 : .01);
     this.tick.color.copy(finish.rail);
   }
 
@@ -177,7 +148,7 @@ export class MusicShelf {
     }
     for (const geometry of geometries) geometry.dispose();
     if (!this.boxDisposed) this.box.dispose();
-    for (const material of [this.base, this.rim, this.inset, this.groove, this.accent, this.tick]) material.dispose();
+    for (const material of [this.base, this.inset, this.tick]) material.dispose();
     disposeMusicShelfTextures(this.textures);
     if (this.ownsAppearance) this.appearance.dispose();
     this.parts.length = 0;
