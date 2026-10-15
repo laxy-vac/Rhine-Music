@@ -1,5 +1,7 @@
 import * as THREE from "three";
 
+export const MUSIC_SHELF_TRAY_THICKNESS = .018;
+
 /** Closed folded rail, in world units relative to the tray's resting plane. */
 export function createMusicShelfRailGeometry(highBackstop = false) {
   // Each third value assigns the face from this point to the next:
@@ -113,11 +115,12 @@ export function createMusicShelfBedGeometry(size: THREE.Vector3, grayWidth: numb
 /** A thin silver inlay follows the flat two-finish bed and outer side folds. */
 export function createMusicShelfSeparatorGeometry(width: number) {
   const half = width / 2, bedEdge = half - .045;
+  const trayTop = -.08 + MUSIC_SHELF_TRAY_THICKNESS;
   // Grey and black regions share this flat segment. Only the short ends
   // outside the bed descend to the main plate and its outer folds.
   const path = [
     [-half - .01, -.065], [-half - .003, -.074], [-half + .015, -.078],
-    [-bedEdge, -.0795], [-bedEdge, -.025], [bedEdge, -.025], [bedEdge, -.0795],
+    [-bedEdge, -.0795], [-bedEdge, trayTop], [bedEdge, trayTop], [bedEdge, -.0795],
     [half + .11, -.0795], [half + .11, -.086],
     [half + .125, -.091], [half + .165, -.112], [half + .192, -.125], [half + .20, -.14],
   ].map(([x, y]) => new THREE.Vector2(x, y));

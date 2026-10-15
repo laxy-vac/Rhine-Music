@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { MusicArrayAppearance } from "./music-array-appearance";
 import type { MusicStyle, StylePalette } from "./music-style";
 import { MusicShelf, musicShelfFinish } from "./music-shelf";
-import { createMusicShelfRailGeometry } from "./music-shelf-rail";
+import { createMusicShelfRailGeometry, MUSIC_SHELF_TRAY_THICKNESS } from "./music-shelf-rail";
 import { MUSIC_SHELF_VIEW } from "./music-display-layout";
 import { createMusicSurfaceTextures, disposeMusicSurfaceTextures } from "./music-surface-textures";
 
@@ -57,6 +57,7 @@ export class MusicSceneResources {
   private readonly wood = createWoodTexture();
   private readonly surfaceTextures = createMusicSurfaceTextures();
   private readonly frameMaterial = new THREE.MeshStandardMaterial({ color: "#b9beb8", roughness: .52, metalness: .08 });
+  private readonly supportPlateMaterial = new THREE.MeshStandardMaterial({ roughness: .34, metalness: .8 });
   private readonly edgeMaterial = new THREE.MeshPhysicalMaterial({
     color: "#d4d9d4", roughness: .32, metalness: .04, transmission: .12,
     thickness: .025, ior: 1.46, clearcoat: .2, envMapIntensity: .35,
@@ -65,7 +66,6 @@ export class MusicSceneResources {
   private readonly accentMaterial = new THREE.MeshStandardMaterial({ color: "#b56834", roughness: .48, metalness: .18 });
   private readonly railTopMaterial = new THREE.MeshStandardMaterial({ roughness: .27, metalness: .55 });
   private readonly backstopTopMaterial = new THREE.MeshStandardMaterial({ roughness: .48, metalness: .32 });
-  private readonly endFaceMaterial = new THREE.MeshStandardMaterial({ roughness: .65, metalness: .25 });
   private readonly channelMaterial = new THREE.MeshStandardMaterial({ roughness: .8, metalness: .15 });
   private readonly hazardMaterial = new THREE.MeshStandardMaterial({ roughness: .64, metalness: .12 });
   private readonly endPlatformMaterial = new THREE.MeshStandardMaterial({ roughness: .9, metalness: .12 });
@@ -85,7 +85,7 @@ export class MusicSceneResources {
   private readonly laneLeftGuide: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material[]>;
   private readonly laneRightGuide: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material[]>;
   private readonly laneAccentLines: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
-  private readonly laneEndCaps: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material[]>;
+  private readonly laneEndCaps: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly laneHazards: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material>;
   private readonly laneFeet: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly laneUnderframe: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
@@ -106,13 +106,14 @@ export class MusicSceneResources {
   private style: MusicStyle | null = null;
   private rowLabelColor = "#283b48";
   private silverEnvironmentFactor = 1;
+  private plateEnvironmentFactor = 1;
 
   constructor(count: number, appearance?: MusicArrayAppearance) {
     this.capacity = Math.max(1, Math.floor(count));
     this.ownsAppearance = !appearance;
     this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
     this.trays = new MusicShelf(this.capacity, this.appearance);
-    for (const material of [this.frameMaterial, this.edgeMaterial, this.railTopMaterial, this.backstopTopMaterial]) {
+    for (const material of [this.frameMaterial, this.supportPlateMaterial, this.edgeMaterial, this.railTopMaterial, this.backstopTopMaterial]) {
       material.roughnessMap = this.trays.textures.roughness;
       material.normalMap = this.trays.textures.normal;
       material.normalScale.set(.12, .12);
@@ -135,8 +136,8 @@ export class MusicSceneResources {
       this.group.add(mesh);
       return mesh;
     };
-    this.laneBase = makeBoxes("Music shelf base", this.frameMaterial, this.capacity, this.roundedBox);
-    const guideMaterials = [this.edgeMaterial, this.railTopMaterial, this.channelMaterial];
+    this.laneBase = makeBoxes("Music shelf base", this.supportPlateMaterial, this.capacity, this.roundedBox);
+    const guideMaterials = [this.supportPlateMaterial, this.supportPlateMaterial, this.channelMaterial];
     this.laneLeftGuide = makeBoxes("Music shelf left guide", [this.edgeMaterial, this.backstopTopMaterial, this.channelMaterial], this.capacity, this.backstopSection);
     this.laneRightGuide = makeBoxes("Music shelf right guide", guideMaterials, this.capacity, this.railSection);
     const guides = new THREE.Group();
@@ -144,7 +145,7 @@ export class MusicSceneResources {
     guides.add(this.laneLeftGuide, this.laneRightGuide);
     this.group.add(guides);
     this.laneAccentLines = makeBoxes("Music shelf continuous edge lines", this.accentMaterial, this.capacity * 2);
-    this.laneEndCaps = makeBoxes("Music shelf end caps", Array.from({ length: 6 }, () => this.edgeMaterial), this.capacity * 2);
+    this.laneEndCaps = makeBoxes("Music shelf end caps", this.supportPlateMaterial, this.capacity * 2);
     this.laneFeet = makeBoxes("Music shelf support feet", this.frameMaterial, this.capacity * 4);
     this.laneUnderframe = makeBoxes("Music shelf underframe", this.frameMaterial, this.capacity * 2, this.underframeGeometry);
     this.laneBase.castShadow = this.laneBase.receiveShadow = true;
@@ -190,6 +191,8 @@ export class MusicSceneResources {
     this.frameMaterial.color.copy(finish.base);
     this.frameMaterial.metalness = archive ? .3 : .24;
     this.frameMaterial.roughness = .55;
+    this.supportPlateMaterial.color.copy(finish.supportPlate);
+    this.plateEnvironmentFactor = finish.plateEnvironment;
     this.edgeMaterial.color.copy(finish.wall);
     this.edgeMaterial.metalness = archive ? .32 : .28;
     this.edgeMaterial.roughness = .48;
@@ -199,10 +202,6 @@ export class MusicSceneResources {
     this.backstopTopMaterial.color.copy(finish.backstop);
     this.backstopTopMaterial.metalness = archive ? .32 : .55;
     this.backstopTopMaterial.roughness = archive ? .48 : .27;
-    this.endFaceMaterial.color.copy(finish.endFace);
-    this.laneEndCaps.material = archive
-      ? [this.edgeMaterial, this.edgeMaterial, this.backstopTopMaterial, this.frameMaterial, this.endFaceMaterial, this.endFaceMaterial]
-      : Array.from({ length: 6 }, () => this.edgeMaterial);
     this.silverEnvironmentFactor = finish.railEnvironment;
     this.channelMaterial.color.copy(finish.channel);
     this.channelMaterial.roughness = finish.channelRoughness;
@@ -264,12 +263,19 @@ export class MusicSceneResources {
     const environment = style.design === "archive" ? options.environment ?? null : null;
     const environmentIntensity = Number.isFinite(options.environmentIntensity) ? Math.max(0, options.environmentIntensity!) : 1;
     const silverIntensity = environmentIntensity * this.silverEnvironmentFactor;
+    const plateIntensity = environmentIntensity * this.plateEnvironmentFactor;
     if (this.railTopMaterial.envMap !== environment) {
       this.railTopMaterial.envMap = environment;
       this.railTopMaterial.needsUpdate = true;
     }
     this.railTopMaterial.envMapIntensity = silverIntensity;
     this.trays.setRailEnvironment(environment, silverIntensity);
+    if (this.supportPlateMaterial.envMap !== environment) {
+      this.supportPlateMaterial.envMap = environment;
+      this.supportPlateMaterial.needsUpdate = true;
+    }
+    this.supportPlateMaterial.envMapIntensity = plateIntensity;
+    this.trays.setPlateEnvironment(environment, plateIntensity);
     const rackVisible = style.design === "rhine" || style.shelf;
     this.trays.group.visible = rackVisible;
     const width = positive(options.width, 4.45);
@@ -345,9 +351,9 @@ export class MusicSceneResources {
         const endZ = centerZ + direction * (span / 2 + .018);
         this.writeBox(this.laneEndCaps, index, lane.x, floorY - .1475, endZ,
           [width + .38, .135, .072], rackVisible);
-        this.writeBox(this.laneEndPlatforms, index, lane.x, floorY - .0525,
+        this.writeBox(this.laneEndPlatforms, index, lane.x, floorY - .08 + MUSIC_SHELF_TRAY_THICKNESS / 2,
           side ? lane.maxZ + rowSpacing : lane.minZ - rowSpacing,
-          [Math.max(.1, width - .09), .055, rowSpacing * .99], rackVisible);
+          [Math.max(.1, width - .09), MUSIC_SHELF_TRAY_THICKNESS, rowSpacing * .99], rackVisible);
         // Two round longitudinal rods sit under the tray, just inboard of
         // the bare square posts. They must not form ribs on the record deck.
         this.writeBox(this.laneUnderframe, index, lane.x + direction * (width * .38 - .08),
@@ -434,12 +440,12 @@ export class MusicSceneResources {
       label.texture.dispose();
     }
     this.frameMaterial.dispose();
+    this.supportPlateMaterial.dispose();
     this.edgeMaterial.dispose();
     this.plateMaterial.dispose();
     this.accentMaterial.dispose();
     this.railTopMaterial.dispose();
     this.backstopTopMaterial.dispose();
-    this.endFaceMaterial.dispose();
     this.channelMaterial.dispose();
     this.hazardMaterial.dispose();
     this.endPlatformMaterial.dispose();

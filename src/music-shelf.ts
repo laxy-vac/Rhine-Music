@@ -4,7 +4,7 @@ import { MUSIC_MODEL } from "./music-model";
 import { ROW_SPACING } from "./archive-loop";
 import { MusicArrayAppearance } from "./music-array-appearance";
 import { createMusicShelfTextures, disposeMusicShelfTextures } from "./music-shelf-textures";
-import { createMusicShelfBedGeometry, createMusicShelfSeparatorGeometry } from "./music-shelf-rail";
+import { createMusicShelfBedGeometry, createMusicShelfSeparatorGeometry, MUSIC_SHELF_TRAY_THICKNESS } from "./music-shelf-rail";
 import type { StylePalette } from "./music-style";
 
 type ShelfPart = {
@@ -86,14 +86,14 @@ export class MusicShelf {
     base.offsets[0]!.set(0, -.145, 0);
 
     const inset = this.parts[1]!;
-    inset.size.set(Math.max(.1, next.width - .09), .055, Math.max(.1, trayDepth - .014));
-    inset.offsets[0]!.set(0, -.0525, 0);
+    inset.size.set(Math.max(.1, next.width - .09), MUSIC_SHELF_TRAY_THICKNESS, Math.max(.1, trayDepth - .014));
+    inset.offsets[0]!.set(0, -.08 + MUSIC_SHELF_TRAY_THICKNESS / 2, 0);
 
     const tick = this.parts[2]!;
     // Adjacent source sprites cover their end faces: the assembled deck is
     // flat. These are flush silver separators, never raised transverse ribs.
     tick.size.set(Math.max(.1, trayWidth - .14), .0015, .018);
-    tick.offsets[0]!.set(0, -.02375, trayDepth * .49);
+    tick.offsets[0]!.set(0, -.08 + MUSIC_SHELF_TRAY_THICKNESS + .00125, trayDepth * .49);
 
     for (const part of this.parts) this.updateGeometry(part);
     if (!this.boxDisposed) {
@@ -135,9 +135,12 @@ export class MusicShelf {
       this.appearance.setBackground(this.appearanceBackground);
     }
     const finish = musicShelfFinish(night, design, palette);
-    this.base.color.copy(finish.base);
-    this.base.metalness = archive ? .3 : .24;
-    this.base.roughness = .55;
+    // The large metal base supports a separate grey/black tray. This slot
+    // plate overlaps the continuous lane plate and must use the same finish.
+    this.base.color.copy(finish.supportPlate);
+    this.base.metalness = .8;
+    this.base.roughness = .34;
+    this.base.normalScale.set(.12, .12);
     // The original mid sprite is darker than the two empty end platforms.
     this.inset.color.copy(finish.midBed);
     this.inset.metalness = .12;
@@ -157,6 +160,14 @@ export class MusicShelf {
       this.tick.needsUpdate = true;
     }
     this.tick.envMapIntensity = intensity;
+  }
+
+  setPlateEnvironment(environment: THREE.Texture | null, intensity: number) {
+    if (this.base.envMap !== environment) {
+      this.base.envMap = environment;
+      this.base.needsUpdate = true;
+    }
+    this.base.envMapIntensity = intensity;
   }
 
   dispose() {
@@ -201,12 +212,13 @@ export function musicShelfFinish(night: boolean, design: "rhine" | "archive", pa
       wall: new THREE.Color(night ? "#8d93aa" : "#6f778d"),
       backstop: new THREE.Color(night ? "#9f9c98" : "#797e84"),
       rail: new THREE.Color(night ? "#e9f2ff" : "#dfeaff"),
+      supportPlate: new THREE.Color(night ? "#e9f2ff" : "#dfeaff"),
       bed: new THREE.Color(night ? "#d7d0c8" : "#a9aeb6"),
       midBed: new THREE.Color(night ? "#a9a5a0" : "#878b93"),
       plate: new THREE.Color(night ? "#d2c7ba" : "#d2d5db"),
-      endFace: new THREE.Color(night ? "#87827b" : "#575c68"),
       channel: new THREE.Color(night ? "#101011" : "#101113"),
       railEnvironment: night ? 2.25 : 1.3,
+      plateEnvironment: night ? 2.5 : 1.5,
       channelRoughness: .95,
       channelMetalness: .02,
     };
@@ -217,9 +229,10 @@ export function musicShelfFinish(night: boolean, design: "rhine" | "archive", pa
   const rail = metal("#dce2e5", "#8e9faf");
   const bed = metal("#b4bec3", "#404d5a");
   return {
-    base, wall: base.clone(), backstop: rail.clone(), rail, bed, midBed: bed.clone().multiplyScalar(.60), plate: rail.clone(), endFace: base.clone(),
+    base, wall: base.clone(), backstop: rail.clone(), rail, supportPlate: rail.clone(), bed, midBed: bed.clone().multiplyScalar(.60), plate: rail.clone(),
     channel: metal("#282e33", "#101923"),
     railEnvironment: 1,
+    plateEnvironment: 1,
     channelRoughness: .8,
     channelMetalness: .15,
   };

@@ -45,10 +45,12 @@ const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
 const arrayTrayOutput = isRailRegression
   ? path.join(project, ".tools", isShelfDetailRegression ? "shelf-color-calibration" : "array-rail-profile",
-    "regression", "structure", arrayTrayPhase)
+    "regression", "structure", isShelfDetailRegression && shelfColorCaptureLabel ? shelfColorCaptureLabel : arrayTrayPhase)
   : path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
 const arrayRailPhase = process.argv.includes("--before") ? "before" : "after";
 const arrayRailOutput = isShelfColors ? shelfColorOutput
+  : shelfColorCaptureLabel && process.argv.includes("--array-rail-profile")
+    ? path.join(project, ".tools", "shelf-color-calibration", "profile", shelfColorCaptureLabel)
   : isShelfDetailRegression ? path.join(project, ".tools", "shelf-color-calibration", "profile", arrayRailPhase)
   : path.join(project, ".tools", "array-rail-profile", arrayRailPhase);
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
@@ -1785,6 +1787,7 @@ function arrayTraySurfaceSnapshot() {
     return Math.abs(center.x - base.box.getCenter(new THREE.Vector3()).x) < .1 &&
       item.box.max.z >= base.box.min.z - .1 && item.box.min.z <= base.box.max.z + .1;
   }).map(item => ({ instance: item.index, bounds: { min: item.box.min.toArray(), max: item.box.max.toArray() },
+    thicknessWorldY: item.box.max.y - item.box.min.y,
     materialTopSurfaces: materialTopSurfaceMetrics(item) }));
   const caps = worldInstances("Music shelf end caps").filter(item => {
     const center = item.box.getCenter(new THREE.Vector3());
@@ -1795,37 +1798,79 @@ function arrayTraySurfaceSnapshot() {
   const rightGuide = worldInstances("Music shelf right guide").sort((a, b) =>
     Math.abs(a.box.getCenter(new THREE.Vector3()).x - (base.box.max.x - .1)) -
     Math.abs(b.box.getCenter(new THREE.Vector3()).x - (base.box.max.x - .1)))[0];
-  let rightSilverTop = null;
+  let rightOuterFold = null;
   if (rightGuide) {
     const geometry = rightGuide.mesh.geometry, position = geometry.getAttribute("position"), indices = geometry.getIndex();
-    let highest = null;
+    const insetBaseBox = base.box.clone().expandByScalar(-.0001);
+    const guideBoundsBroadphase = rightGuide.box.intersectsBox(base.box);
+    const triangles = [], baseContactTriangles = [], outerFoldTriangles = [];
+    const vertexKey = vertex => [vertex.x, vertex.y, vertex.z].map(value => Math.round(value * 1e6)).join(",");
+    const edgeKey = (left, right) => left < right ? left + "|" + right : right + "|" + left;
     for (let offset = 0; offset < (indices?.count ?? position.count); offset += 3) {
       const groupIndex = geometry.groups.find(item => offset >= item.start && offset < item.start + item.count)?.materialIndex ?? 0;
-      if (groupIndex !== 1) continue;
-      for (let corner = 0; corner < 3; corner++) {
-        const vertex = new THREE.Vector3().fromBufferAttribute(position,
-          indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(rightGuide.worldMatrix);
-        if (!highest || vertex.y > highest.y) highest = { point: vertex.toArray(), y: vertex.y };
+      const vertices = [0, 1, 2].map(corner => new THREE.Vector3().fromBufferAttribute(position,
+        indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(rightGuide.worldMatrix));
+      const triangle = new THREE.Triangle(vertices[0], vertices[1], vertices[2]);
+      const normal = triangle.getNormal(new THREE.Vector3());
+      const keys = vertices.map(vertexKey), id = triangles.length;
+      const item = { id, materialIndex: groupIndex, edgeKeys: [edgeKey(keys[0], keys[1]), edgeKey(keys[1], keys[2]), edgeKey(keys[2], keys[0])] };
+      triangles.push(item);
+      if (guideBoundsBroadphase && insetBaseBox.intersectsTriangle(triangle)) baseContactTriangles.push(id);
+      if (groupIndex === 1 && normal.x > .5) outerFoldTriangles.push({ id, vertices, normal });
+    }
+    const edgeTriangles = new Map();
+    for (const triangle of triangles) for (const key of triangle.edgeKeys) {
+      if (!edgeTriangles.has(key)) edgeTriangles.set(key, []);
+      edgeTriangles.get(key).push(triangle.id);
+    }
+    const reached = new Set(baseContactTriangles), queue = [...baseContactTriangles];
+    for (let head = 0; head < queue.length; head++) {
+      const current = triangles[queue[head]];
+      for (const key of current.edgeKeys) for (const adjacent of edgeTriangles.get(key) ?? []) {
+        if (reached.has(adjacent)) continue;
+        reached.add(adjacent); queue.push(adjacent);
       }
     }
-    if (highest) rightSilverTop = { ...highest, mesh: rightGuide.mesh.name, instance: rightGuide.index, materialIndex: 1 };
+    const bounds = new THREE.Box3().makeEmpty();
+    for (const triangle of outerFoldTriangles) for (const vertex of triangle.vertices) bounds.expandByPoint(vertex);
+    if (!bounds.isEmpty()) {
+      const reachedOuterFoldTriangleCount = outerFoldTriangles.filter(item => reached.has(item.id)).length;
+      const attachment = { baseContactTriangleCount: baseContactTriangles.length, outerTriangleCount: outerFoldTriangles.length,
+        reachedTriangleCount: reached.size, reachedOuterFoldTriangleCount,
+        allOuterTrianglesReachBase: outerFoldTriangles.length > 0 && reachedOuterFoldTriangleCount === outerFoldTriangles.length,
+        guideBoundsBroadphase, baseInset: .0001, weldedVertexQuantum: 1e-6,
+        attachmentMethod: "BFS over active rightGuide world triangles; seed faces intersect the base box inset by .0001; vertices are welded at 1e-6 and adjacent triangles must share a complete quantized edge." };
+      rightOuterFold = { mesh: rightGuide.mesh.name, instance: rightGuide.index, materialIndex: 1,
+        worldBounds: { min: bounds.min.toArray(), max: bounds.max.toArray() }, maximumTop: bounds.max.y,
+        selection: "materialIndex 1 triangles with world normal.x > .5; outward folded face only", attachment };
+    }
   }
   const baseTop = base.box.max.y, bedBottom = bed?.box.min.y ?? null;
   const bedBottomDelta = bedBottom === null ? null : bedBottom - baseTop;
-  const rightSilverBelowBase = rightSilverTop ? baseTop - rightSilverTop.y : null;
+  const bedThicknessWorldY = bed ? bed.box.max.y - bed.box.min.y : null;
+  const targetPlateThicknessWorldY = .018, plateThicknessTolerance = .001;
+  const upperTrayTop = bed?.box.max.y ?? null;
+  const rightOuterFoldConnectedThroughGuide = rightOuterFold?.attachment?.allOuterTrianglesReachBase === true;
   return { available: true, base: { mesh: base.mesh.name, instance: base.index, bounds: { min: base.box.min.toArray(), max: base.box.max.toArray() }, top: baseTop },
-    bed: bed ? { mesh: bed.mesh.name, instance: bed.index, bottom: bedBottom, top: bed.box.max.y, bottomDeltaFromBaseTop: bedBottomDelta,
+    bed: bed ? { mesh: bed.mesh.name, instance: bed.index, bottom: bedBottom, top: bed.box.max.y, thicknessWorldY: bedThicknessWorldY,
+      bottomDeltaFromBaseTop: bedBottomDelta,
       grayTop: bedTopMaterials?.material0Gray ?? null, blackBandTop: bedTopMaterials?.material1Black ?? null,
       topPartitionMetrics: bedTopMaterials } : null,
     landingTopPartitions: landings,
-    rightSilverFace: rightSilverTop ? { ...rightSilverTop, belowBaseTop: rightSilverBelowBase, excludedMaterialIndex: 2 } : null,
+    expectedThinPlateThicknessWorldY: targetPlateThicknessWorldY, thicknessTolerance: plateThicknessTolerance,
+    rightOuterFold: rightOuterFold ? { ...rightOuterFold, upperTrayTop,
+      excludedMaterialIndices: [0, 2] } : null,
     endCaps: { instances: caps.map(item => item.index), maximumTop: endCapTop, excessAboveBase: endCapTop === null ? null : endCapTop - baseTop },
     checks: { bedBottomApproximatelyBaseTop: bedBottomDelta !== null && Math.abs(bedBottomDelta) <= .001,
       bedGrayAndBlackTopCoplanar: !!bedTopMaterials?.bothMaterialsHaveTopTriangles &&
         bedTopMaterials.bothMaterialTopRangesWithinTolerance && bedTopMaterials.blackAndGrayTopCoplanar,
       landingGrayAndBlackTopsCoplanar: landings.length === 2 && landings.every(item => item.materialTopSurfaces?.bothMaterialsHaveTopTriangles &&
         item.materialTopSurfaces.bothMaterialTopRangesWithinTolerance && item.materialTopSurfaces.blackAndGrayTopCoplanar),
-      rightSilverFaceBelowBaseTop: rightSilverBelowBase !== null && rightSilverBelowBase >= .0049,
+      bedThicknessApproximately018: bedThicknessWorldY !== null && Math.abs(bedThicknessWorldY - targetPlateThicknessWorldY) <= plateThicknessTolerance,
+      landingThicknessesApproximately018: landings.length === 2 && landings.every(item =>
+        Math.abs(item.thicknessWorldY - targetPlateThicknessWorldY) <= plateThicknessTolerance),
+      rightOuterFoldAtOrBelowUpperTrayTop: rightOuterFold !== null && upperTrayTop !== null && rightOuterFold.maximumTop <= upperTrayTop + .001,
+      rightOuterFoldConnectedThroughGuide,
       endCapsAtOrBelowBaseTop: endCapTop !== null && endCapTop <= baseTop + .001 } };
 }
 
@@ -1945,10 +1990,11 @@ function arrayTrayTickSurfaceSnapshot() {
     const tickBottomHit = upRay.intersectObject(tickMesh, false).find(hit => hit.instanceId === instanceIndex &&
       hit.face?.materialIndex === 0 && bottomFaces.has(hit.faceIndex));
     const topOffset = tickTopHit && bedTopHit ? tickTopHit.point.y - bedTopHit.point.y : null;
+    const bottomOffset = tickBottomHit && bedTopHit ? tickBottomHit.point.y - bedTopHit.point.y : null;
     const thickness = tickTopHit && tickBottomHit ? tickTopHit.point.y - tickBottomHit.point.y : null;
     return { sample: ["near-bed-end-a", "center", "near-bed-end-b"][sampleIndex], raycastWorld: [x, bedTopY + .02, z],
       bedTopWorldY: bedTopHit?.point.y ?? null, tickTopWorldY: tickTopHit?.point.y ?? null,
-      tickBottomWorldY: tickBottomHit?.point.y ?? null, topOffsetFromBed: topOffset, thickness,
+      tickBottomWorldY: tickBottomHit?.point.y ?? null, topOffsetFromBed: topOffset, bottomOffsetFromBed: bottomOffset, thickness,
       topFaceIndex: tickTopHit?.faceIndex ?? null, bottomFaceIndex: tickBottomHit?.faceIndex ?? null,
       edgeClearance, edgeClearanceThreshold: .001,
       downRayHit: tickTopHit ? { object: tickTopHit.object.name, instance: tickTopHit.instanceId, materialIndex: tickTopHit.face?.materialIndex } : null,
@@ -1956,19 +2002,25 @@ function arrayTrayTickSurfaceSnapshot() {
       bedRayHit: bedTopHit ? { object: bedTopHit.object.name, instance: bedTopHit.instanceId, materialIndex: bedTopHit.face?.materialIndex } : null };
   });
   const topTolerance = .003001, thicknessTolerance = .003001;
+  const expectedTopOffset = .002, expectedBottomOffset = .0005, expectedThickness = .0015, followsBedTolerance = .0005;
   const allSamplesHitFlatFaces = samples.length === 3 && samples.every(sample => sample.downRayHit && sample.upRayHit && sample.bedRayHit);
   const noStepEdgeSamples = samples.every(sample => sample.edgeClearance > sample.edgeClearanceThreshold);
   const allTopOffsetsWithinTolerance = samples.every(sample => sample.topOffsetFromBed !== null && Math.abs(sample.topOffsetFromBed) <= topTolerance);
   const allThicknessesWithinTolerance = samples.every(sample => sample.thickness !== null && sample.thickness >= 0 && sample.thickness <= thicknessTolerance);
+  const allTickHeightsFollowBed = samples.every(sample => sample.topOffsetFromBed !== null && sample.bottomOffsetFromBed !== null && sample.thickness !== null &&
+    Math.abs(sample.topOffsetFromBed - expectedTopOffset) <= followsBedTolerance &&
+    Math.abs(sample.bottomOffsetFromBed - expectedBottomOffset) <= followsBedTolerance &&
+    Math.abs(sample.thickness - expectedThickness) <= followsBedTolerance);
   return { available: true, instanceIndex, bedBounds: { min: bed.box.min.toArray(), max: bed.box.max.toArray() },
     tickBounds: { min: tick.box.min.toArray(), max: tick.box.max.toArray() },
     flatTopBounds: { min: topBounds.min.toArray(), max: topBounds.max.toArray() },
     flatBottomBounds: { min: bottomBounds.min.toArray(), max: bottomBounds.max.toArray() }, sampleRegion, flatTopFaceCount: flatTop.length,
     flatBottomFaceCount: flatBottom.length, raycastDirections: ["down to tick top and bed top", "up to tick bottom"],
-    thresholds: { topOffset: topTolerance, thickness: thicknessTolerance, minimumStepEdgeClearance: .001 }, samples,
+    thresholds: { topOffset: topTolerance, thickness: thicknessTolerance, minimumStepEdgeClearance: .001,
+      followsBed: { topOffset: expectedTopOffset, bottomOffset: expectedBottomOffset, thickness: expectedThickness, tolerance: followsBedTolerance } }, samples,
     checks: { exactlyThreeSamples: samples.length === 3, allSamplesHitFlatFaces, noStepEdgeSamples,
-      allTopOffsetsWithinTolerance, allThicknessesWithinTolerance,
-      allValid: allSamplesHitFlatFaces && noStepEdgeSamples && allTopOffsetsWithinTolerance && allThicknessesWithinTolerance } };
+      allTopOffsetsWithinTolerance, allThicknessesWithinTolerance, allTickHeightsFollowBed,
+      allValid: allSamplesHitFlatFaces && noStepEdgeSamples && allTopOffsetsWithinTolerance && allThicknessesWithinTolerance && allTickHeightsFollowBed } };
 }
 
 async function prepareArrayTray(design, theme, floor, layout = "shelf") {
@@ -2234,7 +2286,8 @@ async function captureArrayRailProfile(referenceUrl) {
   const first = trayBoxes.find(item => item.index === firstIndex)?.box, next = trayBoxes.find(item => item.index === nextIndex)?.box;
   const bed = bedBoxes.find(item => item.index === firstIndex)?.box;
   expect(first && next && bed, "Native matching requires the first two actual pitch matrices and recessed bed.");
-  const anchor = first.getCenter(new THREE.Vector3()); anchor.y = bed.max.y + .025;
+  const anchor = first.getCenter(new THREE.Vector3()), supportTop = Math.max(base.max.y, first.max.y);
+  anchor.y = supportTop + .08;
   const pitch = Math.abs(next.getCenter(new THREE.Vector3()).z - anchor.z), ppu = 98 / pitch;
   const right = new THREE.Vector3(79.31, 0, -57.56).normalize();
   const up = new THREE.Vector3(-36.9, 75.21, -50.85); up.addScaledVector(right, -up.dot(right)).normalize();
@@ -2442,7 +2495,8 @@ async function captureArrayRailProfile(referenceUrl) {
       comparisonImage: comparison.toDataURL("image/png"),
       inspection: { nativeProjection: "Original axes, first mid-slot anchored at [320,1300], actual world pitch normalized to source pitch=1.",
         axes: { x: [79.31, 36.9], y: [57.56, -50.85], z: [0, -75.21] }, size: [1920, 1600], sourcePpu: 98,
-        actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), projectedAnchor: project(anchor),
+        actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), anchorSupportTop: supportTop,
+        anchorPlane: "Actual main base or slot-base top, whichever is higher, plus 0.08 world units.", projectedAnchor: project(anchor),
         projectedNextPitch: project(anchor.clone().add(new THREE.Vector3(0, 0, -pitch))), basis: { right: right.toArray(), up: up.toArray(), normal: normal.toArray() },
         actualBaseWidth: base.max.x - base.min.x, actualRailOuterWidth: railOuterMaxX - railOuterMinX,
         actualTrayWidth: Math.max(base.max.x, railOuterMaxX) - Math.min(base.min.x, railOuterMinX),
@@ -2523,7 +2577,8 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
   const next = boxes("Record shelf tray").find(item => item.index === nextIndex)?.box;
   const bed = boxes("Record shelf recessed bed").find(item => item.index === firstIndex)?.box;
   expect(first && next && bed, "Shelf color probe requires the actual central tray pitch and bed.");
-  const anchor = first.getCenter(new THREE.Vector3()); anchor.y = bed.max.y + .025;
+  const anchor = first.getCenter(new THREE.Vector3()), supportTop = Math.max(baseEntry.box.max.y, first.max.y);
+  anchor.y = supportTop + .08;
   const pitch = Math.abs(next.getCenter(new THREE.Vector3()).z - anchor.z), ppu = 98 / pitch;
   const right = new THREE.Vector3(79.31, 0, -57.56).normalize();
   const up = new THREE.Vector3(-36.9, 75.21, -50.85); up.addScaledVector(right, -up.dot(right)).normalize();
@@ -2635,7 +2690,7 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
     };
     const findTarget = (name, score) => allInstances(name).sort((a, b) => score(a) - score(b))[0] ?? null;
     const probes = [];
-    const sampleProbe = ({ semantic, name, target, localPoint, materialIndex = 0, uvNote = null }) => {
+    const sampleProbe = ({ semantic, name, target, localPoint, materialIndex = 0, uvNote = null, selection = null }) => {
       if (!target) { probes.push({ semantic, object: name, skipped: true, reason: "active instance not found" }); return; }
       const transform = new THREE.Matrix4(); target.mesh.getMatrixAt(target.index, transform);
       const world = new THREE.Vector3(...localPoint).applyMatrix4(transform).applyMatrix4(target.mesh.matrixWorld);
@@ -2652,7 +2707,7 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
         colorSpace: material?.map?.colorSpace ?? null };
       if (hit?.object !== target.mesh || hit.instanceId !== target.index || hit.face?.materialIndex !== materialIndex) {
         probes.push({ semantic, object: name, instance: target.index, materialIndex, localPoint, world: world.toArray(), screen,
-          materialInput, rayHit: hitSummary, skipped: true, reason: "raycast did not confirm the expected visible mesh face" });
+          materialInput, rayHit: hitSummary, selection, skipped: true, reason: "raycast did not confirm the expected visible mesh face" });
         return;
       }
       const x = Math.max(3, Math.min(1916, Math.round(screen[0]))), y = Math.max(3, Math.min(1596, Math.round(screen[1])));
@@ -2672,11 +2727,47 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
       }
       const median = values => values.length ? values.slice().sort((a, b) => a - b)[Math.floor(values.length / 2)] : null;
       probes.push({ semantic, object: name, instance: target.index, materialIndex, materialInput,
-      localPoint, uvNote, world: world.toArray(), screen, rayHit: hitSummary,
+      localPoint, uvNote, world: world.toArray(), screen, rayHit: hitSummary, selection,
       roi: { x: x - 2, y: y - 2, width: 5, height: 5, opaquePixelCount, raycastMatchedPixelCount,
         raycastMask: "same mesh, instance and materialIndex" }, opaquePixelCount, raycastMatchedPixelCount,
       rgbMedian: channels.map(median), skipped: !raycastMatchedPixelCount,
       ...(!raycastMatchedPixelCount ? { reason: "no opaque ROI pixels raycast to the expected mesh instance and material face" } : {}) });
+    };
+    const sampleVisibleBaseFace = ({ semantic, candidateWorld, allowedNames, validateHit }) => {
+      const ndc = candidateWorld.clone().project(camera), screen = [(ndc.x + 1) * 960, (1 - ndc.y) * 800];
+      const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), camera);
+      const hit = ray.intersectObjects(rayTargets, false)[0] ?? null;
+      let worldNormal = null;
+      if (hit?.face && hit.object.geometry?.getAttribute("position")) {
+        const hitInstance = new THREE.Matrix4();
+        if (hit.object.isInstancedMesh && Number.isInteger(hit.instanceId)) hit.object.getMatrixAt(hit.instanceId, hitInstance);
+        const localToWorld = new THREE.Matrix4().copy(hit.object.matrixWorld).multiply(hitInstance);
+        const position = hit.object.geometry.getAttribute("position");
+        const vertices = [hit.face.a, hit.face.b, hit.face.c].map(index =>
+          new THREE.Vector3().fromBufferAttribute(position, index).applyMatrix4(localToWorld));
+        worldNormal = new THREE.Triangle(vertices[0], vertices[1], vertices[2]).getNormal(new THREE.Vector3()).toArray();
+      }
+      const rayHit = hit ? { object: hit.object.name, instance: hit.instanceId ?? null,
+        materialIndex: hit.face?.materialIndex ?? null, world: hit.point.toArray(), worldNormal } : null;
+      const target = hit && allowedNames.includes(hit.object.name) && Number.isInteger(hit.instanceId)
+        ? allInstances(hit.object.name).find(item => item.mesh === hit.object && item.index === hit.instanceId) ?? null : null;
+      const checks = hit ? validateHit(hit, worldNormal) : { visibleAllowedMesh: false };
+      const selection = { candidateWorld: candidateWorld.toArray(), rayHit, allowedNames, checks };
+      const reason = ndc.z < -1 || ndc.z > 1 || screen[0] < 3 || screen[0] > 1916 || screen[1] < 3 || screen[1] > 1596
+        ? "candidate projects outside the color-capture image"
+        : !hit ? "no visible mesh at the candidate point"
+        : !target ? "first visible hit is not an allowed instanced base mesh"
+        : !Object.values(checks).every(Boolean) ? "first visible hit failed the exposed-base-surface bounds checks"
+        : !Number.isInteger(hit.face?.materialIndex) ? "visible hit has no geometry material index" : null;
+      if (reason) {
+        probes.push({ semantic, object: allowedNames.join(" | "), world: candidateWorld.toArray(), screen, rayHit,
+          selection, skipped: true, reason });
+        return;
+      }
+      const instanceMatrix = new THREE.Matrix4(); target.mesh.getMatrixAt(target.index, instanceMatrix);
+      const localToWorld = new THREE.Matrix4().copy(target.mesh.matrixWorld).multiply(instanceMatrix);
+      const localPoint = hit.point.clone().applyMatrix4(localToWorld.invert()).toArray();
+      sampleProbe({ semantic, name: hit.object.name, target, localPoint, materialIndex: hit.face.materialIndex, selection });
     };
     const frontCap = findTarget("Music shelf end caps", item => -item.box.max.z);
     const frontPlatform = findTarget("Music shelf end platforms", item => -item.box.max.z);
@@ -2690,7 +2781,43 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
     const leg = findTarget("Music shelf support feet", item => Math.abs(item.box.getCenter(new THREE.Vector3()).z - frontZ) * 4 +
       Math.abs(item.box.getCenter(new THREE.Vector3()).x - (baseEntry.box.max.x - .5)));
     sampleProbe({ semantic: "body front end wall", name: "Music shelf end caps", target: frontCap, localPoint: [0, 0, .49] });
-    sampleProbe({ semantic: "outer base wall", name: "Music shelf base", target: base, localPoint: [.49, 0, 0] });
+    sampleProbe({ semantic: "main base +X side wall", name: "Music shelf base", target: base, localPoint: [.49, 0, 0] });
+    const probeMainBaseTop = side => {
+      if (!selectedBed) {
+        probes.push({ semantic: "main exposed metal top " + side, object: "Music shelf base | Record shelf tray",
+          skipped: true, reason: "active upper bed instance not found" });
+        return;
+      }
+      const rightSide = side === "right", bedEdge = rightSide ? selectedBed.box.max.x : selectedBed.box.min.x;
+      const baseEdge = rightSide ? baseEntry.box.max.x : baseEntry.box.min.x;
+      const exposedWidth = rightSide ? baseEdge - bedEdge : bedEdge - baseEdge;
+      const candidateWorld = new THREE.Vector3((bedEdge + baseEdge) / 2, baseEntry.box.max.y, anchor.z);
+      if (!(exposedWidth > .002)) {
+        probes.push({ semantic: "main exposed metal top " + side, object: "Music shelf base | Record shelf tray",
+          world: candidateWorld.toArray(), skipped: true, reason: "no positive-width main-base top strip outside the upper bed" });
+        return;
+      }
+      const allowedNames = ["Music shelf base", "Record shelf tray"];
+      sampleVisibleBaseFace({ semantic: "main exposed metal top " + side, candidateWorld, allowedNames, validateHit: (hit, worldNormal) => {
+        const point = hit.point, expectedInstance = hit.object.name === "Music shelf base" ? baseEntry.index : firstIndex;
+        const outsideUpperBed = rightSide ? point.x > selectedBed.box.max.x : point.x < selectedBed.box.min.x;
+        const insideBase = point.x >= baseEntry.box.min.x && point.x <= baseEntry.box.max.x;
+        return { expectedActiveInstance: hit.instanceId === expectedInstance,
+          outsideUpperBed, insideMainBaseBounds: insideBase,
+          onMainBaseTop: Math.abs(point.y - baseEntry.box.max.y) <= .001,
+          sameUpperSlotDepth: point.z >= first.min.z - .001 && point.z <= first.max.z + .001,
+          upwardTopFace: (worldNormal?.[1] ?? 0) > .99 };
+      } });
+    };
+    probeMainBaseTop("left");
+    probeMainBaseTop("right");
+    const frontWallWorld = new THREE.Vector3((baseEntry.box.min.x + baseEntry.box.max.x) / 2,
+      (baseEntry.box.min.y + baseEntry.box.max.y) / 2, baseEntry.box.max.z);
+    sampleVisibleBaseFace({ semantic: "main base front wall strict", candidateWorld: frontWallWorld,
+      allowedNames: ["Music shelf base"], validateHit: (hit, worldNormal) => ({ expectedActiveInstance: hit.object === baseEntry.mesh && hit.instanceId === baseEntry.index,
+        frontWallBounds: Math.abs(hit.point.z - baseEntry.box.max.z) <= .001 && hit.point.x >= baseEntry.box.min.x &&
+          hit.point.x <= baseEntry.box.max.x && hit.point.y >= baseEntry.box.min.y && hit.point.y <= baseEntry.box.max.y,
+        frontFacingFace: (worldNormal?.[2] ?? 0) > .99 }) });
     sampleProbe({ semantic: "left backstop inner wall", name: "Music shelf left guide", target: leftGuide, localPoint: [-.089, .06, 0], materialIndex: 0 });
     sampleProbe({ semantic: "left backstop outer wall", name: "Music shelf left guide", target: leftGuide, localPoint: [.099, .06, 0], materialIndex: 0 });
     sampleProbe({ semantic: "left backstop silver top", name: "Music shelf left guide", target: leftGuide, localPoint: [.01, .179, 0], materialIndex: 1 });
@@ -2738,7 +2865,8 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
     const railBoxes = boxes("Music shelf side rails").map(item => item.box);
     return { imageUrl, inspection: { projection: "Original axes, 1920x1600 orthographic image; active actual Scene geometry/materials, no fog, contact AO, composer or DOF.",
       axes: { x: [79.31, 36.9], y: [57.56, -50.85], up: [0, -75.21] }, size: [1920, 1600], sourcePpu: 98,
-      actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), projectedAnchor: project(anchor),
+      actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), anchorSupportTop: supportTop,
+      anchorPlane: "Actual main base or slot-base top, whichever is higher, plus 0.08 world units.", projectedAnchor: project(anchor),
       actualCaseWidth: scene.caseLayout.bounds.max[0] - scene.caseLayout.bounds.min[0],
       actualBaseWidth: baseEntry.box.max.x - baseEntry.box.min.x,
       actualRailOuterWidth: railBoxes.length ? Math.max(...railBoxes.map(box => box.max.x)) - Math.min(...railBoxes.map(box => box.min.x)) : null,
@@ -7357,6 +7485,11 @@ async function main() {
         sourceReferenceUrls[file] = "data:image/png;base64," + (await readFile(sourcePath)).toString("base64");
       const inspection = await evaluate("window.caseCheck.captureShelfColorCalibration(" + JSON.stringify(sourceReferenceUrls) + "," +
         JSON.stringify(shelfColorRuntimePatch) + "," + JSON.stringify(shelfColorPhase) + ")");
+      const surfaceRelationships = await evaluate("window.caseCheck.arrayTraySurfaceSnapshot()");
+      assert.ok(surfaceRelationships.available && surfaceRelationships.checks.rightOuterFoldAtOrBelowUpperTrayTop &&
+        surfaceRelationships.checks.rightOuterFoldConnectedThroughGuide,
+      "Color capture requires the actual material-1 outward fold to remain below the upper tray and connect through the active right-guide mesh to the base: " +
+        JSON.stringify(surfaceRelationships.rightOuterFold));
       assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
       const imageName = `native-${shelfColorVariant}.png`;
       await writeFile(path.join(shelfColorOutput, imageName), pngBuffer(inspection.imageUrl, imageName));
@@ -7364,7 +7497,7 @@ async function main() {
         scenePreparation: normal, selectedLane: active.structure.selectedLane ?? null, captureLabel: shelfColorCaptureLabel,
         patchLabel: shelfColorPatchLabel, requestedRuntimePatch: shelfColorRuntimePatch,
         sourceReferencePaths: Object.fromEntries(Object.entries(sourceReferencePaths).map(([file, sourcePath]) =>
-          [file, path.relative(project, sourcePath)])), inspection: inspection.inspection, screenshots: [imageName],
+          [file, path.relative(project, sourcePath)])), surfaceRelationships, inspection: inspection.inspection, screenshots: [imageName],
         runtimeErrors, shaderErrors, blockedRoutes };
       await writeFile(path.join(shelfColorOutput, "shelf-color-calibration-report.json"), JSON.stringify(report, null, 2));
       console.log(JSON.stringify({ ok: true, phase: shelfColorPhase, design: shelfColorDesign, theme: shelfColorTheme,
@@ -7381,6 +7514,7 @@ async function main() {
       const referencePath = path.join(project, ".tools", "array-tray-structure", "reference", "original-rail-only-20slots.png");
       const referenceUrl = "data:image/png;base64," + (await readFile(referencePath)).toString("base64");
       const inspection = await evaluate("window.caseCheck.captureArrayRailProfile(" + JSON.stringify(referenceUrl) + ")");
+      const tickSurface = await evaluate("window.caseCheck.arrayTrayTickSurfaceSnapshot()");
       const files = { nativeImage: "native-full-empty-tray.png", innerImage: "native-inner-rail-closeup.png",
         endImage: "inspection-end-three-quarter.png", supportImage: "inspection-support-side.png",
         supportCloseImage: "inspection-support-contact-closeup.png", supportShadowOffImage: "inspection-directional-casters-off.png",
@@ -7398,6 +7532,16 @@ async function main() {
       try {
       assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
       if (arrayRailPhase === "after") {
+        const surfaces = active.structure.surfaceRelationships;
+        assert.ok(surfaces.available && surfaces.checks.rightOuterFoldAtOrBelowUpperTrayTop &&
+          surfaces.checks.rightOuterFoldConnectedThroughGuide && surfaces.checks.bedBottomApproximatelyBaseTop &&
+          surfaces.checks.bedGrayAndBlackTopCoplanar && surfaces.checks.landingGrayAndBlackTopsCoplanar &&
+          surfaces.checks.bedThicknessApproximately018 && surfaces.checks.landingThicknessesApproximately018,
+        "Profile requires the material-1 outward fold to stay at or below the upper tray and be mesh-connected through the active right guide to the base: " +
+          JSON.stringify(surfaces.rightOuterFold));
+        assert.ok(tickSurface.available && tickSurface.checks.exactlyThreeSamples && tickSurface.checks.allSamplesHitFlatFaces &&
+          tickSurface.checks.noStepEdgeSamples && tickSurface.checks.allTickHeightsFollowBed,
+        "Profile requires the thin separator to follow the upper bed at the current top/bottom offsets: " + JSON.stringify(tickSurface));
         const support = inspection.inspection.support;
         assert.ok(support.allGrounded && support.allConnectedToEndCaps && support.allConnectedToUnderframe &&
           support.allUnderframeConnectedToBody && support.allUnderframeConnectedToBothEndLegs,
@@ -7426,7 +7570,7 @@ async function main() {
       const report = { ok: validationError === null, validationError: validationError?.message ?? null,
         phase: arrayRailPhase, visualAcceptance: "Pending human review; inspection views do not assert app appearance passed.",
         reference: path.relative(project, referencePath), normalComposerBrowse: "app-browse.png", normal, active,
-        inspection: inspection.inspection, screenshots: Object.values(files), restored,
+        inspection: inspection.inspection, tickSurface, screenshots: Object.values(files), restored,
         restorationMatches: JSON.stringify(restored) === JSON.stringify(active.structure),
         runtimeErrors, shaderErrors, blockedRoutes };
       await writeFile(path.join(arrayRailOutput, "array-rail-profile-report.json"), JSON.stringify(report, null, 2));
@@ -7483,14 +7627,16 @@ async function main() {
             "The central record bed must contain no raised transverse supporting ribs.");
           const surfaces = visibleState.surfaceRelationships;
           assert.ok(surfaces.available && surfaces.checks.bedBottomApproximatelyBaseTop && surfaces.checks.bedGrayAndBlackTopCoplanar &&
-            surfaces.checks.landingGrayAndBlackTopsCoplanar && surfaces.checks.rightSilverFaceBelowBaseTop && surfaces.checks.endCapsAtOrBelowBaseTop,
-          "The bed bottom must sit on the base, gray/black bed and landing top triangles must share one level, the material-1 right silver face must remain below the base top, and end caps must not rise above it: " +
+            surfaces.checks.landingGrayAndBlackTopsCoplanar && surfaces.checks.bedThicknessApproximately018 &&
+            surfaces.checks.landingThicknessesApproximately018 && surfaces.checks.rightOuterFoldAtOrBelowUpperTrayTop &&
+            surfaces.checks.rightOuterFoldConnectedThroughGuide && surfaces.checks.endCapsAtOrBelowBaseTop,
+          "The bed bottom must sit on the base, the gray/black bed and landing top triangles must share one level, bed and landing thicknesses must be about .018, the material-1 outward right fold must stay no higher than the upper tray and connect through the active guide mesh to a base-contact triangle, and end caps must not rise above the base: " +
             JSON.stringify(surfaces));
           tickSurface = await evaluate("window.caseCheck.arrayTrayTickSurfaceSnapshot()");
           assert.ok(tickSurface.available && tickSurface.checks.exactlyThreeSamples && tickSurface.checks.allSamplesHitFlatFaces &&
             tickSurface.checks.noStepEdgeSamples && tickSurface.checks.allTopOffsetsWithinTolerance &&
-            tickSurface.checks.allThicknessesWithinTolerance,
-          "The actual tick central flat face must be raycast at center and two inset ends; all three samples must be flush/thin and clear of folded steps: " +
+            tickSurface.checks.allThicknessesWithinTolerance && tickSurface.checks.allTickHeightsFollowBed,
+          "The actual tick central flat face must be raycast at center and two inset ends; all samples must follow the bed with the current .0005/.002 offsets, stay thin, and clear folded steps: " +
             JSON.stringify(tickSurface));
           const stripe = part("Music shelf end safety stripes").meshes[0].submittedBounds[0];
           assert.ok(stripe && stripe.max[1] - stripe.min[1] > .08 && stripe.max[2] - stripe.min[2] < .02,
