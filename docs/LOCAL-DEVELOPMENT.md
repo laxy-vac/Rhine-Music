@@ -108,7 +108,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 ## 检查索引与边界
 
-2026-10-15两主题ARRAY列组合验证通过：TSC与最终interface-only build、pure helper、album pointer及focused真实Scene/CDP均通过；full unified在最后viewport缓存修复前通过，修复后另行通过截图专项`--screenshots-only`。runtime/shader/blockedRoutes为0，selected完整bounds通过。两主题新刷1600×900、1920×1080、2560×1440共6张全屏截图。Archive尺寸回退覆盖1040/1248/1664宽度的65%测量与隐藏pane宽度回退，Future仍用完整scene宽度。报告为`.tools/array-composition/{pure-motion-audit.json,array-composition-audit.json,array-composition-screenshots.json,unified-render-audit.json,scene-motion-unified-audit.json}`；旧source-surface基线保留在`.tools/array-surface-refinement`。检查使用隔离合成Scene，不代表个人播放器、音频设备、完整app界面人工验收或用户通过，也不证明像素复刻。
+2026-10-15本轮实际运行的ARRAY cover rowTint before/after专项、array-composition、full unified、TSC与最终interface-only build均通过；runtime/shader/blockedRoutes为0。ARRAY此路径额外执行一次mask Scene render和一次全屏合成，未验证设备FPS。pure helper与album pointer本轮未重跑、相关实现未改；pure helper沿用上一轮`66589e7`基线`.tools/array-composition/pure-motion-audit.json`（targetRow/列anchor逻辑未变）。旧source-surface目录`.tools/array-surface-refinement`仅保留更早历史，不作为当前motion验证。Build log在`.tools/array-cover-visibility/build.log`；before/after报告为`.tools/array-cover-visibility/{before-report.json,after-report.json,after-*-rowtint-on/off.png}`；本轮composition报告为`.tools/array-composition/{array-composition-audit.json,array-composition-screenshots.json,unified-render-audit.json,scene-motion-unified-audit.json}`。验证使用隔离synthetic Scene，不代表个人播放器、音频设备或完整app页面人工验收，不声称像素复刻或用户通过。
 
 只运行当前任务必要且已授权的检查：
 
@@ -121,8 +121,8 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-case-system.mjs` | 当前模型、真实编辑器、预设、纸卡/铭牌、查看器与退场材质/纹理生命周期；退役sprite专属实现断言已移除，产品保护迁到真实Scene/GLB |
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
 | `scripts/check-music-display.mjs` | 第二阶段真实公共catalog/shelves/array模块，合成专辑/曲目身份、分组/筛选/排序、缓存、导航循环/边界和布局能力回退；纯Node，不启动浏览器或个人播放器 |
-| `scripts/check-punk-array-motion.mjs` | 旧脚本名兼容入口；两主题共享bell纯helper已通过；实现位于`src/music-array-motion.ts`，本轮报告为`.tools/array-composition/pure-motion-audit.json`。旧source-surface基线仍保留于`.tools/array-surface-refinement` |
-| `node scripts/check-case-system.mjs --unified-render --array-composition` | 两主题ARRAY逐列滚动、视口显隐与点击一致性聚焦检查；兼容旧flag`--punk-array-motion`。使用85 TRACKS（四满排加末排5首）与20槽；focused Scene/CDP与full unified已通过，其中full unified先于最后viewport缓存修复，报告在`.tools/array-composition/array-composition-audit.json`和`scene-motion-unified-audit.json` |
+| `scripts/check-punk-array-motion.mjs` | 旧脚本名兼容入口；两主题共享bell纯helper沿用上一轮`66589e7`基线，本轮未重跑；`targetRow`/列anchor逻辑未变，实现位于`src/music-array-motion.ts`，基线报告为`.tools/array-composition/pure-motion-audit.json`。`.tools/array-surface-refinement`仅为更早历史 |
+| `node scripts/check-case-system.mjs --unified-render --array-composition` | 两主题ARRAY逐列滚动、视口显隐与点击一致性聚焦检查；兼容旧flag`--punk-array-motion`。使用85 TRACKS（四满排加末排5首）与20槽；focused Scene/CDP及当前full unified已通过，报告在`.tools/array-composition/array-composition-audit.json`和`scene-motion-unified-audit.json`。cover visibility before为`node scripts/check-case-system.mjs --unified-render --array-cover-visibility`，after为`node scripts/check-case-system.mjs --unified-render --array-cover-visibility --array-cover-after`；报告在`.tools/array-cover-visibility` |
 | `node scripts/check-case-system.mjs --unified-render --array-composition --screenshots-only` | viewport缓存修复后独立刷新截图并通过；截图专项为1600×900、1920×1080、2560×1440全屏尺寸共6张。尺寸回退测试覆盖Archive 1040/1248/1664宽度的65%测量/隐藏pane宽度回退，以及Future完整scene宽度；报告为`.tools/array-composition/array-composition-screenshots.json` |
 | `scripts/check-foobar-tracks.mjs` | 当前公共catalog/shelves及共享markup，TRACKS身份、分组/过滤/导航、卡片和旧配置迁移；文件名保留兼容命令 |
 | `scripts/check-foobar-layout.mjs --display` | 真实浏览工具栏、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查两主题三布局与Punk橙色状态点、字段同步、筛选恢复、右栏/曲目保持、排列别名、STYLE无旧视图区及Future无内嵌筛选框；211条目验证六档页大小、页码边界、全组计数、内容变化重置、主题同步、非首曲详情、分页键盘焦点及DOM上限，生成Punk封面墙/Future卡片和浏览/详情截图；与实际Scene验证分开 |

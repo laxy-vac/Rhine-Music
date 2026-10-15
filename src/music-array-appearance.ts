@@ -9,18 +9,18 @@ type MaterialWrapper = {
   originalCacheKeyMethod: THREE.Material["customProgramCacheKey"];
 };
 
-const VERSION = "music-array-appearance-v1";
-const VERTEX_DECLARATION_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_DECLARATION_V1";
-const VERTEX_VALUE_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_VALUE_V1";
-const VERTEX_COLOR_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_COLOR_V1";
-const FRAGMENT_MARKER = "MUSIC_ARRAY_APPEARANCE_FRAGMENT_V1";
+const VERSION = "music-array-appearance-v3";
+const VERTEX_DECLARATION_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_DECLARATION_V3";
+const VERTEX_VALUE_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_VALUE_V3";
+const VERTEX_COLOR_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_COLOR_V3";
+const FRAGMENT_MARKER = "MUSIC_ARRAY_APPEARANCE_FRAGMENT_V3";
 
 /**
- * Adds per-instance ordered fade and background tinting to standard Three.js
- * materials without changing their blending mode or adding draw calls.
+ * Carries per-instance row styling and shares ordered alpha discard with depth
+ * passes. MusicArrayFadePass applies colour once after glass and output compose.
  */
 export class MusicArrayAppearance {
-  private readonly pageOutputColor = new THREE.Color();
+  private readonly pageColor = new THREE.Color();
   private readonly wrappers = new WeakMap<THREE.Material, MaterialWrapper>();
   private readonly instanceAttributes = new WeakMap<THREE.InstancedMesh, THREE.InstancedBufferAttribute>();
   private readonly assignedDepthMeshes = new Set<THREE.InstancedMesh>();
@@ -31,8 +31,10 @@ export class MusicArrayAppearance {
   }
 
   setBackground(color: THREE.Color): void {
-    this.pageOutputColor.copy(color).convertLinearToSRGB();
+    this.pageColor.copy(color);
   }
+
+  get backgroundColor() { return this.pageColor; }
 
   write(mesh: THREE.InstancedMesh, index: number, alpha: number, tint: number): void {
     const capacity = mesh.instanceMatrix.count;
@@ -192,22 +194,13 @@ export class MusicArrayAppearance {
       return;
     }
 
-    const hasFog = fragmentShader.includes(`#include <fog_fragment>`);
-    const extraUniform = hasFog ? "\nuniform vec3 musicArrayPageOutputColor;" : "";
     shader.fragmentShader = fragmentShader.replace(
       "#include <common>",
-      `#include <common>\nvarying vec2 vMusicArrayAlphaTint;${extraUniform}`,
+      "#include <common>\nvarying vec2 vMusicArrayAlphaTint;",
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <clipping_planes_fragment>",
       `#include <clipping_planes_fragment>\n// ${FRAGMENT_MARKER}\nfloat musicArrayAlpha = clamp(vMusicArrayAlphaTint.x, 0.0, 1.0);\nvec2 musicArrayPixel = mod(floor(gl_FragCoord.xy), 4.0);\nvec2 musicArrayHalfPixel = floor(musicArrayPixel * 0.5);\nfloat musicArrayLowX = mod(musicArrayPixel.x, 2.0);\nfloat musicArrayLowY = mod(musicArrayPixel.y, 2.0);\nfloat musicArrayHighX = mod(musicArrayHalfPixel.x, 2.0);\nfloat musicArrayHighY = mod(musicArrayHalfPixel.y, 2.0);\nfloat musicArrayLowBayer = mod(2.0 * musicArrayLowX + 3.0 * musicArrayLowY - 4.0 * musicArrayLowX * musicArrayLowY, 4.0);\nfloat musicArrayHighBayer = mod(2.0 * musicArrayHighX + 3.0 * musicArrayHighY - 4.0 * musicArrayHighX * musicArrayHighY, 4.0);\nfloat musicArrayBayer = 4.0 * musicArrayLowBayer + musicArrayHighBayer;\nif (musicArrayAlpha <= (musicArrayBayer + 0.5) / 16.0) discard;`,
     );
-    if (hasFog) {
-      shader.uniforms.musicArrayPageOutputColor = { value: this.pageOutputColor };
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <fog_fragment>",
-        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, musicArrayPageOutputColor, clamp(vMusicArrayAlphaTint.y, 0.0, 1.0));`,
-      );
-    }
   }
 }

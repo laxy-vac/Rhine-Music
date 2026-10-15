@@ -13,9 +13,12 @@ const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
+const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
+const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition;
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility;
 const unifiedOutput = path.join(project, ".tools", "array-composition");
+const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -1208,6 +1211,177 @@ async function exerciseUnifiedRender() {
   };
   archiveScene.onOpenAlbum = index => { unifiedOpens.push({ index, key: archiveScene.selectedCell.foobarEntryKey }); };
   return { audit, transformedImage, paperProtection, pointerTarget: unifiedPointerTarget() };
+}
+
+function createArrayCoverVisibilityArt(primary, size = 512) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas 2D is unavailable for the ARRAY cover visibility fixture.");
+  context.fillStyle = primary; context.fillRect(0, 0, size, size);
+  context.fillStyle = "#101010"; context.fillRect(0, 0, size, size * .13);
+  context.fillStyle = "#ffffff"; context.fillRect(0, size * .87, size, size * .13);
+  context.fillStyle = "#ffffff"; context.fillRect(0, size * .13, size * .07, size * .74);
+  context.fillStyle = "#101010"; context.fillRect(size * .93, size * .13, size * .07, size * .74);
+  context.fillStyle = "#101010"; context.fillRect(size * .11, size * .19, size * .2, size * .19);
+  context.fillStyle = "#ffffff"; context.fillRect(size * .69, size * .62, size * .2, size * .19);
+  return canvas.toDataURL("image/png");
+}
+
+let arrayCoverTintRestore = [];
+let arrayCoverVisibilityFixture;
+function restoreArrayCoverVisibilityTint() {
+  for (const item of arrayCoverTintRestore) {
+    item.attribute.array[item.offset + 1] = item.green;
+    item.attribute.needsUpdate = true;
+  }
+  arrayCoverTintRestore = [];
+}
+
+function arrayCoverVisibilityRegions() {
+  const scene = archiveScene, mesh = scene.covers.array, matrix = new THREE.Matrix4();
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox;
+  scene.scene.updateMatrixWorld(true);
+  const project = (index, x, y) => {
+    mesh.getMatrixAt(index, matrix);
+    const world = new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, matrix);
+    const point = new THREE.Vector3(x, y, box.min.z).applyMatrix4(world).project(scene.camera);
+    return { x: (point.x + 1) * archiveHost.clientWidth / 2, y: (1 - point.y) * archiveHost.clientHeight / 2 };
+  };
+  return [1, 2].map(lane => {
+    const index = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12 && musicSpatialEntry(cell, true));
+    const cell = scene.cells[index], entry = index >= 0 ? musicSpatialEntry(cell, true) : undefined;
+    if (index < 0 || !entry) return { lane, missingCell: true };
+    const min = box.min, max = box.max;
+    const polygon = [project(index, min.x, min.y), project(index, max.x, min.y),
+      project(index, max.x, max.y), project(index, min.x, max.y)];
+    const bounds = { minX: Math.min(...polygon.map(point => point.x)), maxX: Math.max(...polygon.map(point => point.x)),
+      minY: Math.min(...polygon.map(point => point.y)), maxY: Math.max(...polygon.map(point => point.y)) };
+    const samplePoints = [];
+    for (const y of [.35, .5, .65]) for (const x of [.35, .5, .65]) {
+      const point = project(index, THREE.MathUtils.lerp(min.x, max.x, x), THREE.MathUtils.lerp(min.y, max.y, y));
+      samplePoints.push({ x, y, screenX: point.x, screenY: point.y });
+    }
+    const colors = mesh.instanceColor;
+    const colorOffset = index * 3;
+    const imageCanvas = scene.covers.atlasCanvas;
+    const tileWidth = scene.covers.tileWidth, tileHeight = scene.covers.tileHeight;
+    const tileX = (index % scene.covers.columns) * tileWidth, tileY = Math.floor(index / scene.covers.columns) * tileHeight;
+    const imageContext = imageCanvas.getContext("2d", { willReadFrequently: true });
+    const atlasSamples = [[.35, .35], [.5, .5], [.65, .65]].map(([x, y]) => ({ x, y,
+      rgb: Array.from(imageContext.getImageData(Math.floor(tileX + x * tileWidth), Math.floor(tileY + y * tileHeight), 1, 1).data).slice(0, 3) }));
+    let atlasIdentity = null;
+    try {
+      const [recordId, coverUrl, title] = JSON.parse(scene.covers.slotKeys[index] ?? "null");
+      atlasIdentity = { recordId, title, hasDataUrlCover: typeof coverUrl === "string" && coverUrl.startsWith("data:image/") };
+    } catch {}
+    mesh.getMatrixAt(index, matrix);
+    return { lane, row: cell.row, index, recordIndex: entry.recordIndex, key: entry.key,
+      albumId: entry.record.album?.id ?? "", title: entry.record.title,
+      drawn: Math.abs(matrix.elements[0]) + Math.abs(matrix.elements[5]) + Math.abs(matrix.elements[10]) > 1e-12,
+      region: { polygon, bounds, projectedWidth: bounds.maxX - bounds.minX, projectedHeight: bounds.maxY - bounds.minY },
+      samplePoints, instanceColor: colors ? [colors.getX(index), colors.getY(index), colors.getZ(index)] : null,
+      decodedAlpha: colors ? colors.getX(index) - 1 : null, decodedRowTint: colors ? colors.getY(index) - 1 : null,
+      atlasSlot: index, atlasIdentity, atlasSamples };
+  });
+}
+
+async function prepareArrayCoverVisibility(design, finish, selectedSlot, neutralizeRowTint = false) {
+  if (!archiveScene) {
+    await setupArchiveScene();
+    window.caseCheck.editor.destroy();
+    document.body.replaceChildren(archiveHost);
+    document.body.style.cssText = "margin:0;padding:0;overflow:hidden";
+    archiveHost.style.cssText = "position:relative;width:1450px;height:840px;background:#07111f;margin:0";
+    archiveHost.dataset.mode = "archive";
+  }
+  const scene = archiveScene;
+  restoreArrayCoverVisibilityTint();
+  if (!arrayCoverVisibilityFixture) {
+    const palettes = [
+      { title: "RED ARRAY COVER", color: "#e31b35" },
+      { title: "BLUE ARRAY COVER", color: "#145fe1" },
+      { title: "GREEN ARRAY COVER", color: "#08ad66" },
+    ];
+    const albums = palettes.map((palette, albumIndex) => {
+      const id = "array-cover-visibility-" + albumIndex;
+      return { ...records[0].album, id, title: palette.title, artist: "ARRAY VISIBILITY FIXTURE " + (albumIndex + 1),
+        year: 2026, genreId: "fixture-array-cover", rawGenres: ["ARRAY visibility fixture"],
+        coverUrl: createArrayCoverVisibilityArt(palette.color), folder: "offline-fixture/array-cover-" + albumIndex,
+        tracks: Array.from({ length: 20 }, (_, slot) => ({ id: id + "-track-" + (slot + 1), albumId: id,
+          title: palette.title + " / SLOT " + String(slot + 1).padStart(2, "0"), trackNumber: slot + 1,
+          artist: "ARRAY VISIBILITY FIXTURE " + (albumIndex + 1), format: "FLAC", codec: "FLAC",
+          sampleRate: 96000, bitsPerSample: 24, lossless: true, browserPlayable: true,
+          audioUrl: "", relativePath: "", duration: 120 })) };
+    });
+    const coverUrls = albums.map(album => album.coverUrl);
+    setMusicAlbums(albums, [{ id: "fixture-array-cover", name: "ARRAY visibility fixture" }], "genre");
+    configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
+    await scene.refreshLibrary(0);
+    const decoded = await Promise.all(coverUrls.map(async url => {
+      const image = await scene.covers.loadImage(url);
+      return { dataUrlLength: url.length, decoded: !!image, width: image?.width ?? 0, height: image?.height ?? 0,
+        atlasCacheHasUrl: scene.covers.decodedImages.has(url) };
+    }));
+    expect(JSON.stringify(getMusicCatalogShelves().map(shelf => shelf.entryKeys.length)) === "[20,20,20]",
+      "ARRAY cover visibility fixture requires three parent albums with twenty tracks each.");
+    arrayCoverVisibilityFixture = { decoded };
+  }
+  configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
+  archiveHost.dataset.design = design;
+  archiveHost.dataset.foobarLayout = "array";
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  archiveHost.style.background = design === "archive" ? stylePalette(style, "day").bg : "#eae5e1";
+  scene.setMusicStyle(style);
+  scene.setTheme("day");
+  const settings = sceneCaseSettings("punk");
+  const appearance = casePreset(finish === "frost" ? "frost" : "glass", "punk");
+  if (finish !== "frost") appearance.surfaces.cover.transmission = .98;
+  settings.appearances.punk = appearance;
+  await scene.setCaseSettings(settings);
+  await scene.rhineInfo?.ready;
+  scene.setMode("hidden");
+  scene.setReduced(true);
+  const shelves = getMusicCatalogShelves();
+  const key = shelves[0].entryKeys[selectedSlot];
+  const entry = getMusicDisplayEntries().find(item => item.key === key);
+  expect(!!entry, "The selected ARRAY fixture track must resolve from lane zero.");
+  focusMusicEntry(entry.key);
+  scene.select(entry.recordIndex, { cell: { lane: 0, row: 12 + selectedSlot, foobarEntryKey: entry.key } });
+  scene.showMusicArchiveImmediately(archiveTime);
+  stepArchiveScene(4);
+  scene.composer.render();
+  let regions = arrayCoverVisibilityRegions();
+  if (neutralizeRowTint) {
+    const meshes = [...scene.instances, scene.covers.array, scene.covers.arrayInsert,
+      scene.caseTitles?.array, scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge].filter(Boolean);
+    for (const item of regions) {
+      if (item.index === undefined) continue;
+      for (const mesh of meshes) {
+        const attribute = mesh.instanceColor;
+        if (!attribute || item.index >= attribute.count) continue;
+        const offset = item.index * 3;
+        arrayCoverTintRestore.push({ attribute, offset, green: attribute.array[offset + 1] });
+        attribute.array[offset + 1] = 1;
+        attribute.needsUpdate = true;
+      }
+    }
+    scene.composer.render();
+    regions = arrayCoverVisibilityRegions();
+  }
+  let windowMaterial;
+  scene.model.traverse(child => { if (child.userData?.casePart === "cover") windowMaterial = child.material; });
+  return { design, finish, selectedSlot, neutralizeRowTint, selectedKey: entry.key,
+    catalogColumns: shelves.map(shelf => shelf.entryKeys.length), decoded: arrayCoverVisibilityFixture.decoded,
+    coverTransmission: settings.appearances.punk.surfaces.cover.transmission,
+    loadedCoverTransmission: windowMaterial?.transmission ?? null, loadedWindowOpacity: windowMaterial?.opacity ?? null,
+    cases: scene.caseSettings.structure, caseEnabled: scene.caseSettings.enabled,
+    screenshotViewport: { width: archiveHost.clientWidth, height: archiveHost.clientHeight },
+    atlas: { decodedUrlCount: scene.covers.decodedImages.size, pendingUrlCount: scene.covers.pendingImages.size,
+      tileWidth: scene.covers.tileWidth, tileHeight: scene.covers.tileHeight,
+      imageMatchesAtlas: scene.covers.array.material.map?.image === scene.covers.atlasCanvas },
+    regions };
 }
 
 // Motion acceptance uses actual submitted matrices, independently of the rail helper.
@@ -2634,6 +2808,8 @@ window.caseCheck = {
   captureRhineAlbumInfo,
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
+  prepareArrayCoverVisibility,
+  restoreArrayCoverVisibilityTint,
   exercisePunkArrayMotion,
   get arrayCompositionPreviewScreenshot() { return arrayCompositionPreviewScreenshot; },
   get arrayCompositionRightLaneScreenshot() { return arrayCompositionRightLaneScreenshot; },
@@ -5532,7 +5708,8 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const profile = path.join(isUnifiedRender ? unifiedOutput : output, `profile-${process.pid}-${Date.now()}`);
+const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isUnifiedRender ? unifiedOutput : output;
+const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
   "--headless=new",
@@ -5913,7 +6090,7 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(unifiedOutput, { recursive: true });
+    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
     if (isArrayComposition) {
       const motionOutput = unifiedOutput;
@@ -6067,6 +6244,69 @@ async function main() {
         "all-mesh right-column removal and rear tint", "real mouse focus plus hover and hit guards", "full-scene composer screenshots at 1600/1920/2560",
         "persistent selection and neighbor lift", "twenty-slot final partial tray", "detail-only inspection Z", "both MATRIX guards"],
         report: ".tools/array-composition/array-composition-audit.json", screenshots: screenshots.map(item => item.name) }, null, 2));
+      return;
+    }
+    if (isArrayCoverVisibility) {
+      const captures = [];
+      const classifyColor = rgb => {
+        const [red, green, blue] = rgb;
+        if (red > green * 1.25 && red > blue * 1.1) return "red";
+        if (blue > red * 1.2 && blue > green * 1.2) return "blue";
+        if (green > red * 1.1 && green > blue * 1.1) return "green";
+        if (red > 218 && green > 218 && blue > 218) return "white";
+        if (red < 40 && green < 40 && blue < 40) return "black";
+        return "mixed";
+      };
+      for (const design of ["rhine", "archive"]) for (const finish of ["glass", "frost"]) for (const selectedSlot of [0, 2]) {
+        for (const neutralizeRowTint of [false, true]) {
+          const metadata = await evaluate("window.caseCheck.prepareArrayCoverVisibility(" +
+            [design, finish, selectedSlot, neutralizeRowTint].map(JSON.stringify).join(",") + ")");
+          const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+          const name = `${arrayCoverPhase}-${design}-${finish}-slot${selectedSlot + 1}-${neutralizeRowTint ? "rowtint-off" : "rowtint-on"}.png`;
+          await writeFile(path.join(arrayCoverOutput, name), Buffer.from(screen.data, "base64"));
+          const points = metadata.regions.flatMap(region => (region.samplePoints ?? []).map(point => ({ lane: region.lane,
+            x: point.x, y: point.y, screenX: point.screenX, screenY: point.screenY })));
+          const dataUrl = "data:image/png;base64," + screen.data;
+          const pixelExpression = `(async()=>{const image=new Image();image.src=${JSON.stringify(dataUrl)};await image.decode();` +
+            `const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;` +
+            `const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(image,0,0);` +
+            `return ${JSON.stringify(points)}.map(point=>{const x=Math.max(0,Math.min(canvas.width-1,Math.round(point.screenX)));` +
+            `const y=Math.max(0,Math.min(canvas.height-1,Math.round(point.screenY)));` +
+            `return {...point,pixel:{x,y,rgb:Array.from(context.getImageData(x,y,1,1).data).slice(0,3)}};});})()`;
+          const pixelSamples = await evaluate(pixelExpression);
+          for (const sample of pixelSamples) sample.colorClass = classifyColor(sample.pixel.rgb);
+          captures.push({ ...metadata, screenshot: name, pixelSamples,
+            colorClassCounts: Object.fromEntries(["red", "blue", "green", "white", "black", "mixed"].map(color =>
+              [color, pixelSamples.filter(sample => sample.colorClass === color).length])) });
+          if (neutralizeRowTint) await evaluate("window.caseCheck.restoreArrayCoverVisibilityTint()");
+        }
+      }
+      const pairs = [];
+      for (const design of ["rhine", "archive"]) for (const finish of ["glass", "frost"]) for (const selectedSlot of [0, 2]) {
+        const key = item => item.design === design && item.finish === finish && item.selectedSlot === selectedSlot;
+        const tinted = captures.find(item => key(item) && !item.neutralizeRowTint);
+        const untinted = captures.find(item => key(item) && item.neutralizeRowTint);
+        const differences = (tinted?.pixelSamples ?? []).map(left => {
+          const right = untinted?.pixelSamples.find(sample => sample.lane === left.lane && sample.x === left.x && sample.y === left.y);
+          if (!right) return { lane: left.lane, x: left.x, y: left.y, missingComparison: true };
+          const delta = left.pixel.rgb.map((value, index) => value - right.pixel.rgb[index]);
+          return { lane: left.lane, x: left.x, y: left.y, tintedRgb: left.pixel.rgb,
+            rowTintOffRgb: right.pixel.rgb, deltaRgb: delta,
+            deltaMagnitude: Math.sqrt(delta.reduce((sum, value) => sum + value * value, 0)) };
+        });
+        pairs.push({ design, finish, selectedSlot, differences });
+      }
+      assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
+      assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader compile/link errors.");
+      assert.deepEqual(blockedRoutes, [], "The offline fixture must not request anything beyond its exact route whitelist.");
+      const report = { ok: true, scope: "Three synthetic parent albums × twenty tracks, real ArchiveScene/GLB/cover atlas and Punk shell, no player or audio.",
+        phase: arrayCoverPhase, captures, rowTintComparison: pairs, runtimeErrors, shaderErrors, blockedRoutes };
+      const reportName = `${arrayCoverPhase}-report.json`;
+      await writeFile(path.join(arrayCoverOutput, reportName), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: true, report: `.tools/array-cover-visibility/${reportName}`,
+        screenshots: captures.map(item => item.screenshot), rowTintComparison: pairs.map(item => ({ design: item.design,
+          finish: item.finish, selectedSlot: item.selectedSlot,
+          meanPixelDelta: item.differences.length ? Number((item.differences.reduce((sum, value) => sum + (value.deltaMagnitude ?? 0), 0) / item.differences.length).toFixed(2)) : null })) }, null, 2));
       return;
     }
     const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
@@ -7033,7 +7273,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  const failureDirectory = isReference ? referenceOutput : isUnifiedRender ? unifiedOutput : output;
+  const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

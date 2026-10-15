@@ -57,6 +57,7 @@ import { createCaseIllumination } from "./case-illumination";
 import { qualitySelectionWave, qualityIdleGain, qualityWaveLimit, qualityPulseLimit } from "./quality-motion";
 import { MusicArrayMotion, MusicArrayCaseMotion, arrayLaneAppearance, ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT } from "./music-array-motion";
 import { MusicArrayAppearance } from "./music-array-appearance";
+import { MusicArrayFadePass } from "./music-array-fade-pass";
 import {
   archiveWave,
   extraction,
@@ -92,6 +93,7 @@ export class ArchiveScene {
   readonly camera = new THREE.PerspectiveCamera(34, 16 / 9, 5, 300);
   private composer: EffectComposer;
   private playbackGlass?: PlaybackGlassPass;
+  private arrayFade?: MusicArrayFadePass;
   private ao: SSAOPass;
   private bokeh: BokehPass;
   private instances: THREE.InstancedMesh[] = [];
@@ -282,6 +284,10 @@ export class ArchiveScene {
     this.smaa.enabled = false;
     this.composer.addPass(this.smaa);
     this.composer.addPass(musicLibrary ? this.playbackGlass = new PlaybackGlassPass() : new OutputPass());
+    if (musicLibrary) {
+      this.arrayFade = new MusicArrayFadePass(this.scene, this.camera, this.arrayAppearance);
+      this.composer.addPass(this.arrayFade);
+    }
     this.bindPointer();
   }
   attachPlaybackGlass(host: HTMLElement) {
@@ -1634,6 +1640,10 @@ export class ArchiveScene {
     const arrayComposition = localArray ? this.arrayComposition() : undefined;
     if (arrayComposition) this.arraySlotsInView = arrayComposition.visibleSlots;
     this.arrayAppearance.setBackground(this.scene.background as THREE.Color);
+    if (this.arrayFade) {
+      this.arrayFade.enabled = localArray;
+      this.arrayFade.setBackground(this.arrayAppearance.backgroundColor);
+    }
     this.arrayAppearance.patchAuxiliary(this.ao.normalMaterial);
     // The bundled BokehPass uses the underscored name; older typings expose it publicly.
     const bokehDepth = (this.bokeh as BokehPass & { _materialDepth?: THREE.MeshDepthMaterial })._materialDepth ?? this.bokeh.materialDepth;
