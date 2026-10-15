@@ -15,6 +15,7 @@
 - 用户通过“启动源码验证.cmd → 主题盒体预览”看不到新版。已修复固定GLB地址遇到长期immutable缓存的更新缺口，并重新构建；隔离Chrome跨进程回归通过。
 - **尚未收到用户确认缓存修复后实际窗口已显示新版**，不能标成已完成人工视觉验收。
 - 当前浏览工具栏在两主题分别显示完整SHOW/LAYOUT/GROUP/SORT：Punk位于右上角两行，LAYOUT选中显示橙色点；Future位于左上角对应两行并移除内嵌筛选框；Punk查询复用顶栏SEARCH ARCHIVE。公共view/query在两主题和设置 → 音乐库的旧排列别名间同步，切主题保留状态，设置文案指向浏览工具栏；STYLE不再显示“视图与浏览”整块，专注外观、盒体与画质。TypeScript、1653模块界面构建、公共目录/状态与隔离`--display`检查通过；两主题三布局按钮、字段同步、筛选空集恢复、曲目身份、设置别名和查询Esc已验证，Punk三布局橙色点、Future无内嵌输入与GRID计数无交叠检查通过，截图已复核。报告在`.tools/foobar-layout-check/display-controls.json`，构建日志在`.tools/browse-toolbar-refinement/build.log`；本轮未运行个人播放器或音频设备测试。
+- 当前LAYOUT文案映射为内部`shelf`→ARRAY/阵列、`array`→MATRIX/矩阵、`grid`→GRID/网格，偏好字段与JSON值不变。Punk的`shelf`是有限20槽实体托盘：水波按排独立，仅选中排沿槽位方向滑动，不跨排传播；Future和MATRIX保留连续波动，画质值仍为`off/basic/reduced/full`。TypeScript、1654模块界面构建、原质量波动回归、单排纯合约、完整unified场景及两主题控件检查通过。实际四排场景中，非选中三排的Z/Y/倾斜变化均为0；快速换排后旧排冻结，选中排四档水波幅度依次约0/0.2/0.4/0.6，托盘/盒体/封面/纸卡/命中区域位置一致。已按新的平面基准修正取景，非对称变换盒体在浏览/详情中完整可见；Future与MATRIX原波动守卫通过。证据位于`.tools/punk-array-motion/{pure-motion-audit,scene-motion-audit}.json`、`build.log`及`.tools/unified-architecture-stage4/unified-render-audit.json`，截图已复核；本轮未访问个人曲库或调用音频设备。
 - GRID分页细节已接入公共view与MusicApplicationState：`view.gridPageSize`支持10/36/50/75/100/200、默认36并跨主题持久化；`gridPage`只在运行期保存。GRID只渲染当前页，筛选/show/group/sort/page-size变化优先回第一页，主题/layout切换保留页码，结果减少时夹到合法范围；单独改变选中entry时显露其所在页，手动翻页不被选中项拉回。分页不改变选择、曲目身份和详情，也不改变3D货架20槽规则。TypeScript、1653模块界面构建、统一状态及211条目分页纯检查通过；隔离`--display`验证六档页大小、跨组全量计数、筛选/SHOW/GROUP/SORT重置、主题同步、非首曲详情、页按钮键盘焦点、Punk纯106px封面及四角选框、Future卡片保留和STYLE无分页入口通过，截图已复核。报告在`.tools/foobar-layout-check/display-controls.json`，构建日志在`.tools/grid-catalog/build.log`；未访问个人曲库或调用音频设备。
 - 两主题货架、阵列、网格详情共用ArchiveScene/Three.js renderer、实例池、封面图集与后期覆盖，保留各自盒体、材质、配色和右栏裁切。旧Canvas/foobar目录渲染链已在第四阶段删除，不作为当前源码回退选项；旧实现可从Git历史追溯。
 - Future第二阶段视觉反馈及历史验收仍有效：当时浏览页左上角的显示/分组/排序与STYLE共用view；资料区移除整块圆角玻璃底，以原音乐信息、细线及分段遮罩揭示呈现；ACCESS ALBUM保持小号文字/箭头和中英无障碍名称，Punk皮肤保持。第二阶段已获用户验收；本轮工具栏补齐布局并调整入口，隔离UI回归已通过。第三、四阶段基本完成，后续逐步修复细节。
@@ -38,11 +39,11 @@
 | 导航/曲库 | Archive回唱片主页；设置内管理目录/扫描；同窗口EQ/歌词/信号/主题 | 不恢复独立library入口或Playlist |
 | 专辑操作 | 统一右侧基本信息/PROFILE、唯一打开按钮、曲目/介绍展开和点击区域焦点 | 已纳入2026-10-15第二阶段用户整体验收，隔离检查记录保留 |
 | 专辑队列 | 两主题播放条上方浮窗，只列当前播放专辑，点播不强制跳页 | 不是跨专辑总队列 |
-| 公共目录/交互 | 两主题共用专辑/曲目、筛选、流派/歌手/年代/字母/不分组、艺术家/标题/年份/添加顺序；公共entry身份、列/槽导航、阵列镜头与网格详情；完整浏览工具栏调用公共view/query | TRACKS每曲一盒、父专辑编号；ADDED无时间戳，用稳定库顺序；网格每页数量为共享view设置、页码为运行期状态；工具栏及分页隔离UI回归通过 |
-| 布局/主题适配 | 浏览页两主题均显示SHOW/LAYOUT/GROUP/SORT；GRID按主题呈现并支持共享每页数量、总数、查询及二维分页；Punk在右上，Future在左上；STYLE集中外观/盒体/画质。同一ArchiveScene/WebGL renderer和实例池服务两主题货架、阵列与网格详情 | 第三、四阶段仍为基本完成；旧Canvas/foobar生产链已删除，网格分页及两主题控件隔离回归通过；实际整窗手感继续收集用户反馈 |
+| 公共目录/交互 | 两主题共用专辑/曲目、筛选、流派/歌手/年代/字母/不分组、艺术家/标题/年份/添加顺序；公共entry身份、实体托盘槽位/连续排列导航与网格详情；完整浏览工具栏调用公共view/query，LAYOUT映射`shelf`→ARRAY/阵列、`array`→MATRIX/矩阵、`grid`→GRID/网格 | TRACKS每曲一盒、父专辑编号；ADDED无时间戳，用稳定库顺序；网格每页数量为共享view设置、页码为运行期状态；本轮命名、单排位移与水波隔离检查通过 |
+| 布局/主题适配 | 浏览页两主题均显示SHOW/LAYOUT/GROUP/SORT；GRID按主题呈现并支持共享每页数量、总数、查询及二维分页；Punk在右上，Future在左上；STYLE集中外观/盒体/画质。同一ArchiveScene/WebGL renderer和实例池服务实体托盘、连续排列与网格详情 | 第三、四阶段仍为基本完成；旧Canvas/foobar生产链已删除，网格分页及两主题旧控件隔离回归通过；Punk实体ARRAY已按20槽逐排独立，真实矩阵与浏览/详情可见性检查通过 |
 | 公共渲染/主题资源 | 共享封面图集、铭牌、后期覆盖；MusicShelf/MusicSceneResources按主题着色，MusicCaseTitles绘制Punk纸面标题；plain/deck/程序木质桌面细节 | 无原货架/地面3D网格；新几何是估算重建，不是原网格或像素复刻；无GLB/PNG修改 |
 | 质量检测 | 固定80张合成专辑（6组、每专辑2曲）使用生产ArchiveScene，预热四档测货架及开合；最高稳定60FPS档建议、用户采用才保存。四档流程/取消重启/键盘隔离/存储/父目录保持与采用守卫的浏览器检查通过 | 本次Chrome流程为960×540/DPR1、Future简单款；不代表完整Electron或用户硬件性能。没有真实曲库、音频API或外站/API/音频请求，个人配置未读写 |
-| 主题/质量 | 画质/比例共用，外观/盒体按主题保存；波动/光照/终端光分调及组合预设 | 编辑页具体美术仍待后续调整；检测不自动切档或换盒型/材质 |
+| 主题/质量 | 画质/比例共用，外观/盒体按主题保存；Archive显示“水波强度”，Future显示“波动效果”；波动/光照/终端光分调及组合预设 | 画质波动值`off/basic/reduced/full`保持不变；本轮文案和单排行为的隔离检查通过，实际整窗手感继续收集反馈 |
 | 唱片盒 | Future简单款无编辑、精细款独立透光/透明度；Punk拓展与Punk主题共用十套内置/部件下拉/折叠进阶/个人预设布局，视觉与两套个人库独立 | Punk重建原PBR未知，不能称100%复刻；实际窗口交互仍需用户验收 |
 | EQ | 入门图形/参数、Poweramp导入、预设/工作区/备份；固定官方LSP CLAP弹窗 | LSP实际窗口/状态/播放整体验收不足 |
 | 歌词 | 共同三栏、同步/翻译/定位、真实频谱、选项弹窗和来源/缓存 | 单次线上成功不等于所有歌曲可用 |

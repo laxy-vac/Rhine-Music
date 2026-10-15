@@ -54,7 +54,8 @@ import { getCaseLayout, minimalCaseLayout } from "./case-layout";
 import { CaseAlbumInfo } from "./rhine-album-info";
 import { paintArchiveLabel } from "./archive-label";
 import { createCaseIllumination } from "./case-illumination";
-import { qualitySelectionWave, qualityIdleGain, qualityWaveLimit, qualityPulseLimit } from "./quality-motion";
+import { qualitySelectionWave, punkArraySelectionWave, qualityIdleGain, qualityWaveLimit, qualityPulseLimit } from "./quality-motion";
+import { PunkArrayMotion } from "./punk-array-motion";
 import {
   archiveWave,
   extraction,
@@ -110,6 +111,7 @@ export class ArchiveScene {
   private coordinateOrigin: ArchiveCell = { lane: 0, row: 0 };
   private lift = { value: 0, velocity: 0 };
   private rail = { value: 0, velocity: 0 };
+  private punkArrayMotion = new PunkArrayMotion(MUSIC_ARRAY_VIEW.firstRow);
   private shoulder = { value: 12, velocity: 0 };
   private laneFocus = { value: 2, velocity: 0 };
   private columnCamera = { value: 0, velocity: 0 };
@@ -593,6 +595,7 @@ export class ArchiveScene {
       ? { column: -Math.max(MUSIC_SHELF_VIEW.columnSpacing, this.caseLayout.width + .5), row: -Math.max(MUSIC_SHELF_VIEW.rowSpacing, this.caseLayout.depth + .2) }
       : { column: COLUMN_SPACING, row: ROW_SPACING };
   }
+  private get punkArrayView() { return this.shelfView && this.musicStyle.design === "archive"; }
   get musicDisplayLayout() { return { ...this.displayLayout }; }
 
   private syncViewCanvases() {
@@ -633,6 +636,7 @@ export class ArchiveScene {
     this.laneFocus = { value: this.selectedCell.lane, velocity: 0 };
     this.columnCamera = { value: chosen.x, velocity: 0 };
     this.rail = { value: -2.17 - chosen.z, velocity: 0 };
+    if (this.punkArrayView) this.punkArrayMotion.bind(getMusicCatalogShelves().map(shelf => shelf.id), this.selectedCell.lane, this.selectedCell.row, true);
     const visible = records.length > 0 && (!this.catalogView || getMusicCatalogShelves().length > 0);
     this.model.visible = visible;
     for (const inst of this.instances) inst.visible = visible;
@@ -660,6 +664,8 @@ export class ArchiveScene {
     this.syncViewCanvases();
     this.syncDisplayViewportClip();
     if (previousView !== this.catalogView || previousCanvas !== this.displayLayout.canvas) this.syncDisplayCatalog();
+    if (previousDesign !== this.musicStyle.design && this.punkArrayView)
+      this.punkArrayMotion.bind(getMusicCatalogShelves().map(shelf => shelf.id), this.selectedCell.lane, this.selectedCell.row, true);
     if (previousView !== this.catalogView || previousDesign !== this.musicStyle.design || previousScheme !== this.musicStyle.scheme)
       this.setTheme(this.theme, _animate);
   }
@@ -1589,6 +1595,8 @@ export class ArchiveScene {
     const chosen = this.cellPosition(this.selectedCell);
     const selectedRow = this.selectedCell.row;
     const selectedLane = this.selectedCell.lane;
+    const spacing = this.spatialSpacing;
+    const localArray = this.punkArrayView && !cinematic;
     const navigationLift = musicLibrary && !cinematic && this.musicNavigationLift;
     // Independent lift ownership survives an interrupted return; fast motion
     // belongs only to detail navigation, never to the returning/archive phases.
@@ -1596,7 +1604,11 @@ export class ArchiveScene {
     damp(this.shoulder, selectedRow, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 5, dt);
     damp(this.laneFocus, selectedLane, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 4, dt);
     damp(this.columnCamera, chosen.x, this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 3.7, dt);
-    damp(
+    if (localArray) {
+      this.punkArrayMotion.step(selectedLane, selectedRow, detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 3.7, dt, this.reduced);
+      this.rail.value = this.punkArrayMotion.rail(selectedLane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ);
+      this.rail.velocity = -spacing.row * this.punkArrayMotion.velocity(selectedLane);
+    } else damp(
       this.rail,
       cinematic ? 0 : -2.17 - chosen.z,
       this.reduced ? 35 : detailNavigation ? MUSIC_ALBUM_SWITCH_RATE : 3.7,
@@ -1625,7 +1637,9 @@ export class ArchiveScene {
     // Keep the illuminated set near the origin. Lateral navigation is a track
     // movement of the whole array, just like the existing front/back rail.
     const trackX = cinematic && !musicIntro ? 0 : this.columnCamera.value;
-    const spacing = this.spatialSpacing;
+    const railAt = (lane: number) => localArray
+      ? this.punkArrayMotion.rail(lane, spacing.row, MUSIC_ARRAY_VIEW.centerRow, MUSIC_ARRAY_VIEW.inspectionZ)
+      : this.rail.value;
     const center = {
       lane: this.columnCamera.value / spacing.column + 2,
       row: (-this.rail.value - 2.17) / spacing.row + 15.5,
@@ -1664,7 +1678,22 @@ export class ArchiveScene {
       this.targetDetail || this.returnY !== null || aligningCopy ? 0 : 1,
       1 - Math.exp(-dt * 8),
     );
+    const localArrayBase = .025 + .04 * Math.max(Math.abs(this.caseLayout.bounds.min[2]), Math.abs(this.caseLayout.bounds.max[2])) +
+      .001 * Math.max(Math.abs(this.caseLayout.bounds.min[1]), Math.abs(this.caseLayout.bounds.max[1]));
     const field = (row: number, lane: number) => {
+      if (localArray) {
+        const clearance = localArrayBase;
+        if (lane !== selectedLane || this.reduced || this.quality.wave === "off") return clearance;
+        let ripple = 0;
+        for (const pulse of this.pulses) if (pulse.lane === selectedLane) {
+          const distance = Math.abs(row - pulse.row);
+          ripple += punkArraySelectionWave(this.quality.wave, distance, time - pulse.time) * ease(distance / 1.2) *
+            (this.deferSelectionPulse ? rippleEnvelope(distance, time - pulse.time) : 1);
+        }
+        const height = THREE.MathUtils.clamp(ripple, -qualityWaveLimit(this.quality.wave), qualityWaveLimit(this.quality.wave)) * this.pulseGain +
+          idleWave(row, lane, time) * this.idleGain;
+        return Math.max(clearance, clearance + height);
+      }
       if (musicIntro) {
         // Recenter the authored wave on whichever album the library selected.
         // The same looping cells, resting shoulders and lane weights are used
@@ -1801,7 +1830,7 @@ export class ArchiveScene {
       o.group.position.set(
         p.x - trackX,
         baseY + o.lift.value,
-        p.z + entryZ + this.rail.value,
+        p.z + entryZ + railAt(o.cell.lane),
       );
       const quality = ease(o.lift.value / 0.4);
       this.appearance.apply(o.group, quality);
@@ -1852,7 +1881,7 @@ export class ArchiveScene {
       this.dummy.position.set(
         p.x - trackX,
         p.y + field(row, lane),
-        p.z + entryZ + this.rail.value,
+        p.z + entryZ + railAt(lane),
       );
       this.dummy.rotation.set(slope * 0.024 * (1 - detail), 0, 0);
       this.dummy.scale.setScalar(
@@ -1911,7 +1940,7 @@ export class ArchiveScene {
     this.model.position.set(
       chosen.x - trackX,
       chosen.y + field(selectedRow, selectedLane) + this.lift.value,
-      chosen.z + entryZ + this.rail.value,
+      chosen.z + entryZ + railAt(selectedLane),
     );
     // Extraction only changes elevation. Reframing belongs to the camera.
     this.model.rotation.set(
@@ -2092,11 +2121,12 @@ export class ArchiveScene {
     }
     if (!cinematic) {
       const pixelScale = height / framing.span;
+      const restHeight = localArray ? localArrayBase : settlingWave(0, 26.56);
       if (this.shelfView && !framing.portrait) {
         const availableWidth = this.musicStyle.design === "archive" ? this.displayViewportWidth : width;
         // Compose in the available browsing area, then use the same detail slot.
         // Changing yaw alone otherwise places the chosen case behind the info edge.
-        cameraAim.set(this.caseLayout.center.x, MUSIC_ARRAY_VIEW.floorY + settlingWave(0, 26.56) + previewLift + this.caseLayout.center.y,
+        cameraAim.set(this.caseLayout.center.x, MUSIC_ARRAY_VIEW.floorY + restHeight + previewLift + this.caseLayout.center.y,
           MUSIC_ARRAY_VIEW.inspectionZ + this.caseLayout.center.z);
         cameraAim.addScaledVector(right, (width / 2 - availableWidth * MUSIC_SHELF_VIEW.originX) / pixelScale);
         cameraAim.addScaledVector(up, .08 * framing.span);
@@ -2104,7 +2134,7 @@ export class ArchiveScene {
       if (framing.portrait) {
         // Keep the preview camera independent of the live lift, wave and rail.
         // Following model.position here would visually cancel those motions.
-        const previewAim = new THREE.Vector3(0, -4.6 + settlingWave(0, 26.56) + 0.4 + 1.85, -2.17);
+        const previewAim = new THREE.Vector3(0, -4.6 + restHeight + 0.4 + 1.85, -2.17);
         previewAim.addScaledVector(up, (framing.previewY - 0.5) * height / pixelScale);
         cameraAim.copy(previewAim);
       }
@@ -2114,7 +2144,7 @@ export class ArchiveScene {
       // when that slot reaches the camera; following its lift cancels extraction.
       const detailAim = musicLibrary
         ? new THREE.Vector3(this.shelfView ? this.caseLayout.center.x : 0,
-          -4.6 + settlingWave(0, 26.56) + this.inspectionLift + this.caseLayout.center.y,
+          -4.6 + restHeight + this.inspectionLift + this.caseLayout.center.y,
           -2.17 + (this.shelfView ? this.caseLayout.center.z : 0))
         : this.model.position.clone().add(new THREE.Vector3(0, 1.85, 0));
       const detailX = musicLibrary ? framing.portrait ? 0.5 : 0.25 : framing.detailX;
@@ -2226,7 +2256,7 @@ export class ArchiveScene {
     this.sceneResources?.update({
       shelf: this.shelfView,
       slots: this.shelfView ? this.positions.map((position, index) => ({ x: position.x - trackX + this.caseLayout.center.x, y: shelfBottom,
-        z: position.z + entryZ + this.rail.value + this.caseLayout.center.z, visible: this.cells[index].lane >= 0 &&
+        z: position.z + entryZ + railAt(this.cells[index].lane) + this.caseLayout.center.z, visible: this.cells[index].lane >= 0 &&
           this.cells[index].lane < getMusicCatalogShelves().length && this.cells[index].row >= MUSIC_ARRAY_VIEW.firstRow &&
           this.cells[index].row < MUSIC_ARRAY_VIEW.firstRow + MUSIC_SHELF_VIEW.slots,
         row: this.cells[index].row - MUSIC_ARRAY_VIEW.firstRow, lane: this.cells[index].lane }))

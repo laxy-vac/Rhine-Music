@@ -37,7 +37,7 @@ node scripts/build-source-preview.mjs --interface-only
 .启动源码验证.cmd
 ```
 
-阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。用户于2026-10-15要求将第三、四阶段记录为基本完成，后续按反馈逐步修复细节；实现及必要自动验证均已完成。当前在 `main` 源码上继续按反馈修复；基本完成不追加逐项人工或硬件验收结论。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变。
+阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。用户于2026-10-15要求将第三、四阶段记录为基本完成，后续按反馈逐步修复细节；实现及必要自动验证均已完成。当前在 `main` 源码上继续按反馈修复；基本完成不追加逐项人工或硬件验收结论。两主题实体托盘、连续排列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变。
 
 第三阶段公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。历史隐藏mock GUI检查12项、阶段文件哈希核验通过；这些结果不等于个人播放器、Electron整窗、60FPS硬件验收或用户阶段通过。阶段报告分别位于`.tools/unified-architecture-stage3`和`.tools/unified-architecture-stage4/stage3-independent-*`；第四阶段目标与验收见[统一架构](UNIFIED-ARCHITECTURE.md)。
 
@@ -84,7 +84,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | --- | --- |
 | 源码验证profile | 仓库旁 `music-data-source-preview/desktop`，不提交 |
 | 界面偏好 | profile/preferences.json，style/caseProfiles及全局画质/比例 |
-| 公共视图 | 同一preferences.json的view，保存shelf/array/grid和show/group/sort；foobarArchive保留兼容投影，新值优先，不新增个人数据目录 |
+| 公共视图 | 同一preferences.json的view保存稳定key `shelf/array/grid`和show/group/sort；浏览器可见标签为ARRAY/阵列、MATRIX/矩阵、GRID/网格；foobarArchive保留兼容投影，新值优先，不新增个人数据目录。Punk实体ARRAY仅选中排沿槽位方向滑动、逐排前后offset且不跨排波动；画质波动值`off/basic/reduced/full`不变 |
 | Future盒体个人预设 | profile旁presets/themes/theme-presets.json的futurePunkPresets；仅Future使用，整盒材质/部件快照，最多50条，不改内置预设 |
 | Punk主题盒体个人预设 | 同一主题文件的archivePunkPresets；仅Punk主题使用，独立最多50条，不复制或覆盖Future个人库 |
 | EQ预设/模式工作区 | profile旁presets/eq/audio-processing-presets.json，独立于HTTP端口 |
@@ -118,6 +118,8 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-case-system.mjs` | 当前模型、真实编辑器、预设、纸卡/铭牌、查看器与退场材质/纹理生命周期；退役sprite专属实现断言已移除，产品保护迁到真实Scene/GLB |
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
 | `scripts/check-music-display.mjs` | 第二阶段真实公共catalog/shelves/array模块，合成专辑/曲目身份、分组/筛选/排序、缓存、导航循环/边界和布局能力回退；纯Node，不启动浏览器或个人播放器 |
+| `scripts/check-punk-array-motion.mjs` | Punk实体ARRAY单排弹簧与水波强度纯合约；选中排更新、旧排冻结、稳定身份重排和减少动态，不启动播放器 |
+| `scripts/check-case-system.mjs --unified-render --punk-array-motion` | 独立四排合成数据的真实Scene矩阵检查；单排前后位移、水波/待机隔离、壳/封面/纸卡/托盘/命中一致及Future/MATRIX守卫，报告在`.tools/punk-array-motion`；完整`--unified-render`另保留盒体变换与浏览/详情可见性检查 |
 | `scripts/check-foobar-tracks.mjs` | 当前公共catalog/shelves及共享markup，TRACKS身份、分组/过滤/导航、卡片和旧配置迁移；文件名保留兼容命令 |
 | `scripts/check-foobar-layout.mjs --display` | 真实浏览工具栏、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查两主题三布局与Punk橙色状态点、字段同步、筛选恢复、右栏/曲目保持、排列别名、STYLE无旧视图区及Future无内嵌筛选框；211条目验证六档页大小、页码边界、全组计数、内容变化重置、主题同步、非首曲详情、分页键盘焦点及DOM上限，生成Punk封面墙/Future卡片和浏览/详情截图；与实际Scene验证分开 |
 | `scripts/check-foobar-layout.mjs --glass` | 真实Future顶栏SVG、歌词组件和terminal-lighting的离线光效回归；日夜×四档、受光对象/留白/内部裁切/窄屏滚动，报告和截图在foobar-layout-check/terminal-glass/current。`--baseline`仅用于修复前留证，`--compare-existing`只分析已有A/B PNG底边像素，不重拍；严格模拟歌词请求，不启动音乐服务或设备 |

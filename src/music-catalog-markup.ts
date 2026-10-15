@@ -18,7 +18,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c
 
 const choices = {
   show: [["albums", "ALBUMS"], ["tracks", "TRACKS"]],
-  layout: [["shelf", "SHELF"], ["array", "ARRAY"], ["grid", "GRID"]],
+  layout: [["shelf", "ARRAY"], ["array", "MATRIX"], ["grid", "GRID"]],
   group: [["genre", "GENRE"], ["artist", "ARTIST"], ["decade", "DECADE"], ["az", "A-Z"], ["none", "NONE"]],
   sort: [["artist", "ARTIST"], ["title", "TITLE"], ["year", "YEAR"], ["added", "ADDED"]],
 } as const;

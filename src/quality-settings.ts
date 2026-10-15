@@ -27,6 +27,7 @@ function range(
 }
 export function qualityMarkup(quality: RenderQuality, design?: "rhine" | "archive") {
   const preset = matchingPreset(quality);
+  const archiveWave = design === "archive";
   return ui`<section class="quality-settings" aria-label="画质设置">
     <div class="quality-heading"><h3>RENDER QUALITY <span>渲染画质</span></h3><select id="quality-preset" aria-label="画质预设">${(Object.keys(presetLabels) as QualityPreset[]).map((key) => `<option value="${key}" ${preset === key ? "selected" : ""}>${presetLabels[key]}</option>`).join("")}<option value="custom" disabled ${preset === "custom" ? "selected" : ""}>自定义</option></select></div>
     <p class="quality-summary" id="quality-summary" aria-live="polite"></p>
@@ -35,13 +36,13 @@ export function qualityMarkup(quality: RenderQuality, design?: "rhine" | "archiv
     ${select(
       quality,
       "wave",
-      trUi("阵列波动"),
-      trUi("Future 与可调盒体的传播、近邻联动和待机起伏"),
+      trUi(archiveWave ? "水波强度" : "波动效果"),
+      trUi(archiveWave ? "阵列仅当前排起伏，矩阵保留连续波动。" : "调整唱片的传播和待机起伏"),
       [
         ["off", trUi("关闭")],
-        ["basic", trUi("近邻")],
-        ["reduced", trUi("平衡")],
-        ["full", trUi("完整")],
+        ["basic", trUi(archiveWave ? "轻柔" : "近邻")],
+        ["reduced", trUi(archiveWave ? "适中" : "平衡")],
+        ["full", trUi(archiveWave ? "强烈" : "完整")],
       ],
     )}
     ${select(

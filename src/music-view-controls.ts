@@ -5,9 +5,9 @@ import { musicGridPageSizes, type MusicViewSettings } from "./music-view-setting
 const t = (zh: string, en: string) => (uiLanguage() === "en" ? en : zh);
 
 const layouts = [
-  { value: "shelf", zh: "货架", en: "Shelf" },
-  { value: "array", zh: "阵列", en: "Array" },
-  { value: "grid", zh: "网格", en: "Grid" },
+  { value: "shelf", zh: "阵列", en: "ARRAY" },
+  { value: "array", zh: "矩阵", en: "MATRIX" },
+  { value: "grid", zh: "网格", en: "GRID" },
 ] as const;
 
 const shows = [

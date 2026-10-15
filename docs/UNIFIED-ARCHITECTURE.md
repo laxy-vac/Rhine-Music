@@ -49,7 +49,7 @@ Future（rhine）和 Punk（archive）是同一个播放器的主题，共用功
 | sort | artist / title / year / added |
 | gridPageSize | 10 / 36 / 50 / 75 / 100 / 200；默认36 |
 
-逐字段读取有效view，再取有效旧foobarArchive，最后回退默认；旧ARRAY→shelf、FUTURE→array、GRID→grid。完全缺失布局时按旧活动主题迁移默认（Future为array、Punk为shelf），只用于首次兼容；有效全局值不受主题影响。保存时view为权威，foobarArchive仅是兼容投影。桌面白名单保留view，迁移后主动持久化。
+当前可见LAYOUT文案按稳定内部key映射：`shelf`显示ARRAY/阵列，`array`显示MATRIX/矩阵，`grid`显示GRID/网格。标签变化不改`preferences.view.layout`、事件属性或兼容投影中的key。历史偏好兼容映射仍为旧ARRAY→shelf、FUTURE→array、GRID→grid；逐字段读取有效view，再取有效旧foobarArchive，最后回退默认。完全缺失布局时按旧活动主题迁移默认（Future为array、Punk为shelf），只用于首次兼容；有效全局值不受主题影响。保存时view为权威，foobarArchive仅是兼容投影。桌面白名单保留view，迁移后主动持久化。
 
 查询、当前选中身份、打开模式、页签和阅读位置是公共运行态，不新增启动时自动恢复曲库/播放的行为。
 
@@ -67,7 +67,7 @@ Future（rhine）和 Punk（archive）是同一个播放器的主题，共用功
 - `music-catalog-shelves.ts`按entry key映射列/槽并缓存结果，导航返回目标条目，由应用显式提交焦点。阵列按分组形成列并循环导航；货架/网格按20槽分页、导航在边界停止。不分组阵列也按20槽分列。
 - `music-display-layout.ts`集中布局能力解析、阵列镜头及几何参数、拖动阈值；`music-array-layout.ts`把目录条目投影为无限阵列坐标。两主题使用同一算法，Punk继续应用自己的资源与右栏裁切。
 - `music-catalog-grid.ts`只渲染`gridPage`当前页；分组标题count为该组全量条目数，页码变化不重建右侧详情、不改公共selection。Punk使用106px方形封面墙、约26px间距、黑细选框与accent四角，标题/资料只在右栏和卡片无障碍/hover信息中保留；Future维持136px圆角文字卡片及原皮肤。进入详情使用公共阵列镜头。
-- 两主题的浏览页均提供公共SHOW/LAYOUT/GROUP/SORT：Punk在右上分两行（SHOW+LAYOUT、GROUP+SORT），LAYOUT选中显示固定橙色点、未选为空心框；Future在左上用相同两行。Punk查询复用顶栏SEARCH ARCHIVE；目录筛选继续使用公共query，切主题保留view/query。GRID时Punk第一行是SHOW+PER PAGE+LAYOUT，第二行是GROUP+SORT并显示RANDOM，左上显示当前目录结果总数；Future GRID也提供PER PAGE及当前结果总数。非GRID隐藏PER PAGE。设置 → 音乐库中的旧排列入口保留为view别名，文案指向浏览工具栏，更新不刷新窗口。STYLE不再包含“视图与浏览”区，只保留外观、盒体和画质设置。
+- 两主题的浏览页均提供公共SHOW/LAYOUT/GROUP/SORT：Punk在右上分两行（SHOW+LAYOUT、GROUP+SORT），LAYOUT选中显示固定橙色点、未选为空心框；Future在左上用相同两行。可见布局为ARRAY/阵列（内部`shelf`）、MATRIX/矩阵（内部`array`）、GRID/网格（内部`grid`）。Punk查询复用顶栏SEARCH ARCHIVE；目录筛选继续使用公共query，切主题保留view/query。GRID时Punk第一行是SHOW+PER PAGE+LAYOUT，第二行是GROUP+SORT并显示RANDOM，左上显示当前目录结果总数；Future GRID也提供PER PAGE及当前结果总数。非GRID隐藏PER PAGE。Punk实体ARRAY是20槽托盘，波动按排独立，只有选中排沿槽位方向滑动，不跨排传播；Future与MATRIX保留连续波动。画质控件保留`off/basic/reduced/full`值，Archive显示“水波强度”和单排说明，Future显示通用“波动效果”。设置 → 音乐库中的旧排列入口保留为view别名，文案指向浏览工具栏，更新不刷新窗口。STYLE不再包含“视图与浏览”区，只保留外观、盒体和画质设置。
 - `src/music-grid-page.ts`提供分页计算。`MusicViewSettings.gridPageSize`通过`preferences.view`持久化且两主题共享；允许10/36/50/75/100/200，默认36。`MusicApplicationState.gridPage`只属当前运行期。query/show/group/sort/gridPageSize变化优先从第1页开始，layout/theme切换保持页码，结果减少时将页码夹在有效范围。单独改变entry selection key时grid controller显露该entry所在页；手动翻页不被原selection拉回。选择/浏览详情/非首曲身份不随页码变化，网格二维页与3D货架20槽分页互不影响。分页按钮重绘后保留可用的键盘焦点。
 - 按用户第二阶段验收反馈，Future右栏采用悬浮文字/细线、无外框的小号ACCESS ALBUM文字和箭头、分段遮罩揭示；移除整块圆角玻璃底，借用上游设计语言，现有音乐字段、内容、顺序与交互继续保留，Punk外观保持。Future左上两行工具及GRID总数适配网格空间。
 - 第四阶段已清退`foobar-catalog.ts`、`foobar-shelves.ts`、`punk-future-catalog.ts`、`case-sprites.ts`与`ArchiveCaseRenderer`旧生产链。有效Grid/SHOW/GROUP/SORT DOM迁到`music-catalog-markup`并使用公共entryKeys；保留现有DOM类/data钩子及Punk外壳，清除的是旧的隐藏LAYOUT DOM节点；当前Punk工具栏中的可见LAYOUT是公共浏览控件。音乐页点击共用公共view处理器。LegacyCatalogOptions、偏好迁移和兼容投影继续保留。清退前的实现只作历史说明，不作为可以切回旧外观的承诺。
@@ -142,8 +142,8 @@ Future（rhine）和 Punk（archive）是同一个播放器的主题，共用功
 
 已清退`ArchiveCaseRenderer`、`case-sprites`、`foobar-shelves`、`punk-future-catalog`和`foobar-catalog`生产适配链、仅旧sprite实现的断言及隐藏LAYOUT节点。有效目录DOM改由`music-catalog-markup`按公共entryKeys生成；保留Punk皮肤、既有DOM钩子、LegacyCatalogOptions与偏好迁移、非音乐ArchiveScene、编辑器/查看器、原资产和许可。光学、纸面、身份与生命周期保护在当前Scene/GLB继续验证。
 
-1. 退出旧窗口后，通过“启动源码验证.cmd”或 `npm run desktop` 启动当前 `main` 源码；使用原源码验证profile检查两主题日夜、货架/阵列/网格和右侧资料，记录问题供后续复现与回归。
-2. 分别截图完整Punk右上工具栏及Future左上工具栏，确认两主题均显示SHOW、LAYOUT、GROUP、SORT全部控件，Future工具栏不再有额外筛选框，Punk查询仍用顶栏SEARCH ARCHIVE。逐项检查SHOW的ALBUMS/TRACKS、LAYOUT的SHELF/ARRAY/GRID、GROUP的GENRE/ARTIST/DECADE/A-Z/NONE、SORT的ARTIST/TITLE/YEAR/ADDED；GRID时检查Punk第一行SHOW/PER PAGE/LAYOUT、第二行GROUP/SORT与RANDOM及左上当前结果总数，Future提供PER PAGE及当前结果总数；离开GRID时两主题均隐藏PER PAGE。Punk截图还要看到完整封面墙和选中样式，Future截图保留136px圆角文字卡片。设置 → 音乐库的排列方式仍作为兼容别名工作，文案指向浏览工具栏且更新不刷新窗口。检查STYLE不再出现“视图与浏览”整块，外观/盒体/画质入口仍在。
+1. 退出旧窗口后，通过“启动源码验证.cmd”或 `npm run desktop` 启动当前 `main` 源码；使用原源码验证profile检查两主题日夜、实体托盘/连续排列/网格和右侧资料，记录问题供后续复现与回归。
+2. 分别截图完整Punk右上工具栏及Future左上工具栏，确认两主题均显示SHOW、LAYOUT、GROUP、SORT全部控件，Future工具栏不再有额外筛选框，Punk查询仍用顶栏SEARCH ARCHIVE。逐项检查SHOW的ALBUMS/TRACKS、LAYOUT的ARRAY/MATRIX/GRID（内部key分别为`shelf/array/grid`）、GROUP的GENRE/ARTIST/DECADE/A-Z/NONE、SORT的ARTIST/TITLE/YEAR/ADDED；GROUP/SORT维持现有英文枚举。GRID时检查Punk第一行SHOW/PER PAGE/LAYOUT、第二行GROUP/SORT与RANDOM及左上当前结果总数，Future提供PER PAGE及当前结果总数；离开GRID时两主题均隐藏PER PAGE。Punk截图还要看到完整封面墙和选中样式，Future截图保留136px圆角文字卡片。设置 → 音乐库的排列方式仍作为兼容别名工作，文案指向浏览工具栏且更新不刷新窗口。检查STYLE不再出现“视图与浏览”整块，外观/盒体/画质入口仍在。
 3. 用合成目录验证PER PAGE选项10/36/50/75/100/200及默认36，顶栏总数反映当前目录结果总量，分组标题count反映全组总量，分页仅渲染当前页。检查query/show/group/page-size变化回第一页，layout/theme切换保留页码，结果缩小时页码夹到合法范围。选中项变化时自动显露其所在页；手动翻页不会被选中项拉回，分页不改变selection/非首曲/详情，3D货架仍为独立20槽。检查期间不要把正在进行的UI分页专项写成通过。
 4. 在Punk顶栏查询已有名称、无匹配名称并清空，确认卡片与三维盒体对应过滤结果/恢复。切主题检查公共query状态保持；完整退出重启后查询不自动恢复。截图须完整露出SHOW/LAYOUT/GROUP/SORT，确认Future工具栏无专用搜索输入框；本轮回归未完成前，不把历史截图/检查写成本次通过结果。
 5. 选择非首曲，双击打开后切介绍并滚动；通过浏览工具栏改变布局、在STYLE改主题，再返回ARCHIVE，确认曲目、父专辑编号、详情、页签与阅读位置保持。检查空白双击不打开、拖动不误触，货架首末导航停止。

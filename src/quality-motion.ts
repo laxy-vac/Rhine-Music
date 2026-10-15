@@ -53,6 +53,11 @@ export function qualityIdleGain(level: WaveQuality): number {
   }
 }
 
+/** One-dimensional rack ripple: the four saved values select its intensity. */
+export function punkArraySelectionWave(level: WaveQuality, distance: number, age: number): number {
+  return qualitySelectionWave("full", distance, age) * (qualityIdleGain(level) ?? 0);
+}
+
 /** Maximum absolute displacement contributed by selected-item waves. */
 export function qualityWaveLimit(level: WaveQuality): number {
   switch (level) {

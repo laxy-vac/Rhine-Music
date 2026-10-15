@@ -1191,6 +1191,176 @@ async function exerciseUnifiedRender() {
   return { audit, transformedImage, paperProtection, pointerTarget: unifiedPointerTarget() };
 }
 
+// Motion acceptance uses actual submitted matrices, independently of the rail helper.
+function punkArrayMotionSnapshot() {
+  const scene = archiveScene, matrix = new THREE.Matrix4(), position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion(), scale = new THREE.Vector3(), euler = new THREE.Euler();
+  scene.scene.updateMatrixWorld(true);
+  const tray = scene.sceneResources?.group.getObjectByName("Record shelf tray");
+  const values = [];
+  for (let index = 0; index < scene.cells.length; index++) {
+    const cell = scene.cells[index], entry = musicSpatialEntry(cell, scene.shelfView);
+    if (!entry) continue;
+    scene.caseHitProxy.getMatrixAt(index, matrix);
+    matrix.decompose(position, quaternion, scale); euler.setFromQuaternion(quaternion);
+    const item = { index, key: entry.key, lane: cell.lane, row: cell.row, x: position.x, y: position.y, z: position.z,
+      rotX: scale.x ? euler.x : null, drawn: scale.x !== 0, selected: entry.key === scene.selectedCell.foobarEntryKey };
+    scene.covers.array.getMatrixAt(index, matrix);
+    item.coverZ = matrix.elements[14];
+    scene.covers.arrayInsert.getMatrixAt(index, matrix);
+    item.insertZ = matrix.elements[14];
+    scene.instances[0].getMatrixAt(index, matrix);
+    item.shellZ = matrix.elements[14];
+    if (tray?.parent.visible) {
+      tray.getMatrixAt(index, matrix); matrix.premultiply(tray.matrixWorld);
+      item.trayZ = matrix.elements[14] - scene.caseLayout.center.z;
+    }
+    values.push(item);
+  }
+  return { time: archiveTime, design: scene.musicStyle.design, layout: scene.displayLayout.effective,
+    quality: scene.quality.wave, reduced: scene.reduced, selected: { ...scene.selectedCell },
+    selectedModel: { x: scene.model.position.x, y: scene.model.position.y, z: scene.model.position.z,
+      coverZ: scene.covers.selected.getWorldPosition(new THREE.Vector3()).z,
+      insertZ: scene.covers.selectedInsert.getWorldPosition(new THREE.Vector3()).z },
+    presentation: scene.getStats().musicPresentationPhase, targetDetail: scene.targetDetail,
+    returnY: scene.returnY, outgoing: scene.outgoing.length, values };
+}
+
+async function exercisePunkArrayMotion() {
+  if (!archiveScene) {
+    await setupArchiveScene(); window.caseCheck.editor.destroy(); document.body.replaceChildren(archiveHost);
+    document.body.style.cssText = "margin:0;padding:0;overflow:hidden"; archiveHost.style.margin = "0";
+    archiveHost.dataset.mode = "archive";
+  }
+  const scene = archiveScene;
+  const albums = records.slice(0, 2).map((record, index) => ({ ...record.album,
+    tracks: Array.from({ length: 40 }, (_, slot) => ({ id: "motion-" + index + "-" + slot, albumId: record.id,
+      title: "Motion Fixture " + index + " / " + slot, trackNumber: slot + 1, artist: record.album.artist,
+      format: "FLAC", audioUrl: "", relativePath: "", duration: 120 })) }));
+  setMusicAlbums(albums, [{ id: "fixture-a", name: "Fixture A" }, { id: "fixture-b", name: "Fixture B" }], "genre");
+  configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
+  const entries = getMusicDisplayEntries();
+  expect(entries.length === 80 && getMusicCatalogShelves().length === 4, "Motion acceptance requires four independent full physical lanes.");
+  await scene.refreshLibrary(0);
+  const select = (lane, slot) => {
+    const key = getMusicCatalogShelves()[lane].entryKeys[slot], entry = entries.find(value => value.key === key);
+    focusMusicEntry(key); scene.select(entry.recordIndex, { cell: { lane, row: 12 + slot, foobarEntryKey: key } });
+  };
+  const prepare = async (design = "archive", layout = "shelf", wave = "full") => {
+    configureMusicCatalog({ layout, show: "tracks", group: "none", sort: "added" }, "");
+    scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" });
+    archiveHost.dataset.design = design;
+    await scene.setCaseSettings(sceneCaseSettings("punk"));
+    scene.setQuality({ ...qualityPresets.original, wave, modelDetail: "medium", lighting: "high", scale: 80,
+      pixelRatio: 1, aoSamples: 0, depthOfField: 0 });
+    scene.setReduced(true); select(0, 2); scene.showMusicArchiveImmediately(archiveTime); stepArchiveScene(100);
+    scene.setReduced(false);
+    scene.pulses = []; scene.scanBlend = 0; scene.idleGain = 0; scene.lastInteraction = archiveTime;
+    const snapshot = punkArrayMotionSnapshot();
+    expect(snapshot.presentation === "archive" && !snapshot.targetDetail && snapshot.returnY === null && snapshot.outgoing === 0,
+      "Motion fixture must be settled archive browsing, without cinematic/detail/return ownership: " + JSON.stringify(snapshot));
+    return snapshot;
+  };
+  const compare = (before, after, lane, active) => {
+    const byKey = new Map(before.values.map(value => [value.key, value]));
+    const shared = after.values.filter(value => value.lane === lane && byKey.has(value.key));
+    expect(shared.length >= 18, "Each measured lane must retain at least eighteen actual submitted cells.");
+    const z = shared.map(value => Math.abs(value.z - byKey.get(value.key).z));
+    const regular = shared.filter(value => value.drawn && byKey.get(value.key).drawn);
+    const y = regular.map(value => Math.abs(value.y - byKey.get(value.key).y));
+    const rotation = regular.map(value => Math.abs(value.rotX));
+    const result = { lane, matched: shared.length, maxZDelta: Math.max(...z), maxYDelta: Math.max(0, ...y), maxAbsRotationX: Math.max(0, ...rotation) };
+    expect(active ? result.maxZDelta > .01 : result.maxZDelta === 0,
+      (active ? "Active" : "Inactive") + " lane Z ownership failed: " + JSON.stringify(result));
+    if (!active) expect(result.maxYDelta === 0 && result.maxAbsRotationX === 0,
+      "An inactive lane must have stable Y and zero X rotation: " + JSON.stringify(result));
+    return result;
+  };
+  const aligned = snapshot => {
+    const selected = snapshot.values.find(value => value.selected);
+    expect(selected && Math.abs(selected.z - snapshot.selectedModel.z) < 2e-6 &&
+      snapshot.selectedModel.z === snapshot.selectedModel.coverZ && snapshot.selectedModel.z === snapshot.selectedModel.insertZ,
+      "The selected entity, artwork and physical paper must follow the selected lane's actual submitted Z.");
+    for (const value of snapshot.values) {
+      expect(value.z === value.coverZ && value.z === value.insertZ && value.z === value.shellZ,
+        "Shell/hit-proxy/artwork/physical-paper must submit the same Z for " + value.key);
+      if (value.trayZ !== undefined) expect(Math.abs(value.z - value.trayZ) < 2e-6,
+        "The physical tray must follow its own lane Z: " + JSON.stringify(value));
+    }
+  };
+  const before = await prepare();
+  select(0, 12); stepArchiveScene(18);
+  const during = punkArrayMotionSnapshot(); aligned(during);
+  const laneChecks = [0, 1, 2, 3].map(lane => compare(before, during, lane, lane === 0));
+  select(1, 9); stepArchiveScene(1);
+  const switched = punkArrayMotionSnapshot(); stepArchiveScene(44);
+  const afterSwitch = punkArrayMotionSnapshot(); aligned(afterSwitch);
+  const frozen = compare(switched, afterSwitch, 0, false);
+  const nextLane = compare(switched, afterSwitch, 1, true);
+  scene.setReduced(true); select(2, 14); stepArchiveScene(1);
+  const reduced = punkArrayMotionSnapshot();
+  const reducedSelected = reduced.values.find(value => value.selected);
+  expect(Math.abs(reducedSelected.z + 2.17) < 2e-6, "Reduced motion places the new active lane on the inspection Z in one update.");
+  for (const value of reduced.values.filter(value => value.lane !== 2)) {
+    const previous = afterSwitch.values.find(old => old.key === value.key);
+    expect(previous && previous.z === value.z, "Reduced selection cannot move another lane's rail.");
+  }
+  // The former active wave drops to its resting plane at deactivation; measure stability after that boundary.
+  stepArchiveScene(1); const reducedSettled = punkArrayMotionSnapshot();
+  const reducedInactive = [0, 1, 3].map(lane => compare(reduced, reducedSettled, lane, false));
+  // Old selected/outgoing boxes may lower; regular nonselected slots must never inherit their old pulse.
+  const waveLevels = [];
+  for (const wave of ["off", "basic", "reduced", "full"]) {
+    const baseline = await prepare("archive", "shelf", wave);
+    const restingSelectedY = baseline.values.find(value => value.selected).y;
+    select(0, 12);
+    const samples = [];
+    for (let frame = 1; frame <= 90; frame++) {
+      stepArchiveScene(1);
+      const snapshot = punkArrayMotionSnapshot(); aligned(snapshot);
+      const neighbor = snapshot.values.find(value => value.lane === 0 && value.row === 26);
+      expect(snapshot.values.find(value => value.selected).y === restingSelectedY,
+        "The selected slot retains its distance-zero ease gate rather than receiving its own pulse: " + wave);
+      const inactive = snapshot.values.filter(value => value.lane !== 0);
+      expect(inactive.every(value => value.rotX === null || value.rotX === 0), "Every inactive submitted cell stays upright for " + wave);
+      if ([1, 6, 12, 18, 30, 45, 60, 90].includes(frame)) samples.push({ frame, snapshot });
+      samples.push({ frame, neighborY: neighbor.y, neighborRotationX: neighbor.rotX });
+    }
+    waveLevels.push({ wave, baseline, samples });
+  }
+  const off = waveLevels[0].samples.filter(value => value.neighborY !== undefined);
+  const strengths = waveLevels.map(level => {
+    const samples = level.samples.filter(value => value.neighborY !== undefined);
+    return { wave: level.wave, maxNeighborYDeltaFromOff: Math.max(...samples.map((value, index) => Math.abs(value.neighborY - off[index].neighborY))) };
+  });
+  expect(strengths[0].maxNeighborYDeltaFromOff === 0 && strengths[1].maxNeighborYDeltaFromOff > 1e-5 &&
+    strengths[1].maxNeighborYDeltaFromOff < strengths[2].maxNeighborYDeltaFromOff &&
+    strengths[2].maxNeighborYDeltaFromOff < strengths[3].maxNeighborYDeltaFromOff,
+    "Actual neighboring Scene matrices retain off/light/medium/strong selection amplitudes: " + JSON.stringify(strengths));
+  await prepare("archive", "shelf", "full"); stepArchiveScene(240);
+  const idleBefore = punkArrayMotionSnapshot(); stepArchiveScene(60);
+  const idleAfter = punkArrayMotionSnapshot();
+  const idleInactive = [1, 2, 3].map(lane => compare(idleBefore, idleAfter, lane, false));
+  const idleOld = new Map(idleBefore.values.map(value => [value.key, value]));
+  const idleActiveYDelta = Math.max(...idleAfter.values.filter(value => value.lane === 0 && value.drawn)
+    .map(value => Math.abs(value.y - idleOld.get(value.key).y)));
+  expect(idleActiveYDelta > 1e-5, "The selected lane still visibly receives its existing idle wave.");
+  // Existing shared rail behavior must remain in the non-target theme and MATRIX layout.
+  const guards = [];
+  for (const [design, layout] of [["rhine", "shelf"], ["archive", "array"]]) {
+    const start = await prepare(design, layout, "full"); select(0, 12); stepArchiveScene(18);
+    const finish = punkArrayMotionSnapshot();
+    const old = start.values.find(value => value.lane === 1 && value.row === 16 && value.drawn);
+    const next = finish.values.find(value => value.lane === old?.lane && value.row === old?.row);
+    expect(old && next && Math.abs(next.z - old.z) > .01,
+      "Non-target Future ARRAY / Punk MATRIX preserve their shared rail: " + JSON.stringify({ design, layout, old, next }));
+    guards.push({ design, layout, inactiveLaneZDelta: next.z - old.z, start, finish });
+  }
+  return { scope: "Actual ArchiveScene instance/cover/paper/tray matrices, four synthetic lanes, deterministic 1/60 updates; no audio/player/real library.",
+    before, during, switched, afterSwitch, laneChecks, frozen, nextLane, reduced, reducedInactive,
+    strengths, waveLevels, idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards };
+}
+
 async function captureRhineInsetAlbum() {
   const model = await createCaseModel("rhine", "high");
   const layout = getCaseLayout(model);
@@ -2066,6 +2236,7 @@ window.caseCheck = {
   captureRhineAlbumInfo,
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
+  exercisePunkArrayMotion,
   unifiedRenderVariant,
   unifiedPointerTarget,
   unifiedRenderResult() { return { clicks: unifiedClicks, opens: unifiedOpens, snapshot: unifiedSnapshot() }; },
@@ -5333,6 +5504,17 @@ async function main() {
   if (isUnifiedRender) {
     await mkdir(unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (process.argv.includes("--punk-array-motion")) {
+      const motionOutput = path.join(project, ".tools", "punk-array-motion");
+      await mkdir(motionOutput, { recursive: true });
+      const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
+      assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
+      await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion,
+        runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+      console.log(JSON.stringify({ ok: true, checks: ["Punk ARRAY active-lane rail", "inactive-lane stability", "wave strengths", "idle", "Future and MATRIX guards"],
+        report: ".tools/punk-array-motion/scene-motion-audit.json" }, null, 2));
+      return;
+    }
     const result = await evaluate("window.caseCheck.exerciseUnifiedRender()");
     await writeFile(path.join(unifiedOutput, "unified-production-paper-occlusion.png"), pngBuffer(result.paperProtection.image, "Production paper protection"));
     delete result.paperProtection.image;
@@ -5372,6 +5554,11 @@ async function main() {
         assert.deepEqual(pixel, [...rgb, 255], "Punk's clipped right region preserves its theme background.");
       }
     }
+    const motionOutput = path.join(project, ".tools", "punk-array-motion");
+    await mkdir(motionOutput, { recursive: true });
+    const motion = await evaluate("window.caseCheck.exercisePunkArrayMotion()");
+    await writeFile(path.join(motionOutput, "scene-motion-audit.json"), JSON.stringify({ ok: true, ...motion,
+      runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
     assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
     await writeFile(path.join(unifiedOutput, "unified-render-audit.json"), JSON.stringify({ ok: true,
       scope: "Production ArchiveScene/WebGL, local GLBs and browser pointer input; synthetic tracks only, no player or audio ports.",
