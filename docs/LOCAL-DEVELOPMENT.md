@@ -37,7 +37,7 @@ node scripts/build-source-preview.mjs --interface-only
 .启动源码验证.cmd
 ```
 
-阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。第三阶段实现及必要自动验证已完成、用户验收待进行；冻结版本和Stage3→Stage4顺序见[阶段版本](STAGE-VERSIONS.md)。用户明确允许先保存第三阶段再实施第四阶段，所以当前源码窗口运行第四阶段，不代表第三阶段已获人工通过。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变，Stage3 App/源码ZIP单独保存。
+阶段一于2026-10-14、阶段二于2026-10-15获用户验收通过。用户于2026-10-15要求将第三、四阶段记录为基本完成，后续按反馈逐步修复细节；两阶段实现、必要自动验证与独立交付均已完成。冻结版本和Stage3→Stage4对比测试顺序见[阶段版本](STAGE-VERSIONS.md)。当前源码窗口运行第四阶段及后续细节修复；基本完成不追加逐项人工或硬件验收结论。两主题货架、阵列与网格详情共用ArchiveScene/WebGL；`quality-benchmark.html`与Vite配置均纳入源码manifest。第三阶段界面构建通过（1652模块）；朋友品尝版原安装器/源码ZIP保持不变，Stage3/Stage4 App及源码ZIP分别保存。
 
 第三阶段公共状态/目录/转场、控件/管理页返回、实际Scene/GLB和隔离benchmark浏览器检查已通过。检测使用合成数据；独立iframe存储为空只读，父公共目录、非首曲、详情与测试哨兵保持，音频API、外站/API/音频请求均为0。staged Stage3 App的隐藏mock GUI检查12项通过、全量文件哈希核验通过；这些结果不等于个人播放器、Electron整窗、60FPS硬件验收或用户阶段通过。历史/独立快照报告分别位于`.tools/unified-architecture-stage3`和`.tools/unified-architecture-stage4/stage3-independent-*`；第四阶段目标与验收见[统一架构](UNIFIED-ARCHITECTURE.md)。
 
