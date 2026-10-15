@@ -1,6 +1,6 @@
 import { uiLanguage } from "./i18n";
 import { escapeHtml } from "./html";
-import type { MusicViewSettings } from "./music-view-settings";
+import { musicGridPageSizes, type MusicViewSettings } from "./music-view-settings";
 
 const t = (zh: string, en: string) => (uiLanguage() === "en" ? en : zh);
 
@@ -82,13 +82,20 @@ export function musicBrowseControlsMarkup(view: MusicViewSettings, query = ""): 
   );
 
   return `<section class="music-browse-tools" aria-label="${escapeHtml(t("浏览选项", "Browse options"))}">
-    <div class="music-browse-tools__row">${groupsMarkup[0]}${groupsMarkup[1]}</div>
+    <div class="music-browse-tools__row">${groupsMarkup[0]}<div class="music-browse-tools__group music-grid-page-size" data-field="pageSize" role="group" aria-label="${escapeHtml(t("每页数量", "Per page"))}"><small><i aria-hidden="true"></i><b>PER PAGE</b></small><div class="music-browse-tools__options">${musicGridPageSizes.map(size => `<button type="button" data-music-grid-size="${size}" aria-pressed="${view.gridPageSize === size}">${size}</button>`).join("")}</div></div>${groupsMarkup[1]}</div>
     <div class="music-browse-tools__row">${groupsMarkup[2]}${groupsMarkup[3]}</div>
+    <output class="music-grid-total" data-music-grid-total>0 ${view.show === "tracks" ? "TRACKS" : "ALBUMS"}</output>
     <label class="music-browse-tools__filter"><small>${escapeHtml(t("筛选唱片", "Filter records"))}</small><input type="search" data-music-catalog-query value="${escapeHtml(query)}" placeholder="${escapeHtml(t("专辑、曲目、歌手…", "Album, track, artist…"))}" aria-label="${escapeHtml(t("筛选唱片", "Filter records"))}"></label>
   </section>`;
 }
 
-export function syncMusicViewControls(root: HTMLElement, view: MusicViewSettings, query?: string): void {
+export function syncMusicViewControls(root: HTMLElement, view: MusicViewSettings, query?: string, total?: number): void {
+  if (total !== undefined) root.querySelectorAll<HTMLOutputElement>("[data-music-grid-total]").forEach(output => {
+    output.textContent = `${total} ${view.show === "tracks" ? "TRACK" : "ALBUM"}${total === 1 ? "" : "S"}`;
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-music-grid-size]").forEach(button => {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.musicGridSize) === view.gridPageSize));
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-music-layout]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.musicLayout === view.layout));
   });

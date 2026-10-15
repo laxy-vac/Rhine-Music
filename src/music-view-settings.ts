@@ -1,10 +1,14 @@
 export type MusicLayout = "shelf" | "array" | "grid";
+export type MusicGridPageSize = 10 | 36 | 50 | 75 | 100 | 200;
+
+export const musicGridPageSizes = [10, 36, 50, 75, 100, 200] as const;
 
 export type MusicViewSettings = {
   layout: MusicLayout;
   show: "albums" | "tracks";
   group: "genre" | "artist" | "decade" | "az" | "none";
   sort: "artist" | "title" | "year" | "added";
+  gridPageSize: MusicGridPageSize;
 };
 
 export type LegacyCatalogOptions = {
@@ -19,6 +23,7 @@ export const defaultMusicViewSettings: MusicViewSettings = {
   show: "albums",
   group: "genre",
   sort: "artist",
+  gridPageSize: 36,
 };
 
 const layouts = ["shelf", "array", "grid"] as const;
@@ -34,6 +39,9 @@ const objectValue = (value: unknown): Record<string, unknown> =>
 
 const isOneOf = <T extends string>(value: unknown, values: readonly T[]): value is T =>
   typeof value === "string" && (values as readonly string[]).includes(value);
+
+const isMusicGridPageSize = (value: unknown): value is MusicGridPageSize =>
+  typeof value === "number" && (musicGridPageSizes as readonly number[]).includes(value);
 
 const layoutFromLegacy = (value: unknown): MusicLayout | undefined => {
   if (!isOneOf(value, legacyLayouts)) return undefined;
@@ -80,6 +88,9 @@ export function migrateMusicViewSettings(
       : isOneOf(previous.sort, sorts)
         ? previous.sort
         : defaultMusicViewSettings.sort,
+    gridPageSize: isMusicGridPageSize(current.gridPageSize)
+      ? current.gridPageSize
+      : defaultMusicViewSettings.gridPageSize,
   };
 }
 

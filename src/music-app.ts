@@ -108,7 +108,8 @@ import { setupMusicRuler } from "./music-ruler";
 import { MusicPresentation, type AlbumSelection } from "./music-presentation";
 import { MusicTrackFocus } from "./music-track-focus";
 import { musicApplication } from "./music-application-state";
-import { legacyCatalogOptions, migrateMusicViewSettings, type LegacyCatalogOptions, type MusicViewSettings } from "./music-view-settings";
+import { legacyCatalogOptions, migrateMusicViewSettings, musicGridPageSizes, type MusicGridPageSize, type LegacyCatalogOptions, type MusicViewSettings } from "./music-view-settings";
+import { getMusicGridPage, paginateMusicGridGroups } from "./music-grid-page";
 import { MusicBoot } from "./music-boot";
 import { viewportLayout } from "./viewport-layout";
 import { applyWindowAspect, windowAspectMarkup } from "./window-aspect";
@@ -3596,7 +3597,7 @@ function syncMusicCatalogView() {
   stage.dataset.musicLayout = scene?.musicDisplayLayout.effective ?? view.layout;
   catalogGrid?.setDesign(preferences.style.design);
   catalogGrid?.update(view.layout, musicApplication.selectedIndex, musicApplication.mode === "detail");
-  syncMusicViewControls(stage, view, musicApplication.query);
+  syncMusicViewControls(stage, view, musicApplication.query, getMusicGridPage().total);
   settingsSelectControls?.sync();
 }
 function musicArrangementPreset(): MusicSortMode | "custom" {
@@ -3609,7 +3610,14 @@ function musicArrangementPreset(): MusicSortMode | "custom" {
 function applyMusicView(next: Partial<MusicViewSettings>, query?: string) {
   const previous = musicApplication.view;
   const layoutOnly = next.layout !== undefined && next.show === undefined && next.group === undefined && next.sort === undefined && query === undefined;
+  const gridSizeOnly = next.gridPageSize !== undefined && next.layout === undefined && next.show === undefined && next.group === undefined && next.sort === undefined && query === undefined;
   configureMusicCatalog(next, query);
+  if (gridSizeOnly) {
+    foobarShell?.refreshCatalog();
+    syncMusicCatalogView();
+    savePrefs();
+    return;
+  }
   const pending = libraryRebuilding && libraryIntent && "index" in libraryIntent
     ? libraryIntent : presentation.pendingSelection;
   const entry = getMusicFocusedEntry(pending?.index ?? musicApplication.selectedIndex);
@@ -3621,6 +3629,12 @@ function applyMusicView(next: Partial<MusicViewSettings>, query?: string) {
   if (!layoutOnly && filtered.length && !filtered.includes(musicApplication.selectedIndex)) select(filtered[0]);
   else updateSelection();
   savePrefs();
+}
+function setMusicGridPage(pageIndex: number) {
+  if (page !== "music" || musicApplication.mode !== "archive" || musicApplication.view.layout !== "grid") return;
+  const next = paginateMusicGridGroups(getMusicCatalogGroups(), getMusicGridPage().pageSize, pageIndex);
+  musicApplication.setGridPage(next.pageIndex);
+  syncMusicCatalogView();
 }
 function shuffleFoobarLibrary() {
   const tracks = records.flatMap(record => record.album && !record.album.offline ? record.album.tracks : []);
@@ -3658,6 +3672,15 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (target.dataset.action === "dismiss-panel" && e.target !== target) return;
+  if (target.dataset.musicGridSize !== undefined) {
+    const size = Number(target.dataset.musicGridSize);
+    if (musicGridPageSizes.includes(size as MusicGridPageSize)) applyMusicView({ gridPageSize: size as MusicGridPageSize });
+    return;
+  }
+  if (target.dataset.musicGridPage !== undefined) {
+    if (!(target as HTMLButtonElement).disabled) setMusicGridPage(Number(target.dataset.musicGridPage));
+    return;
+  }
   const browseField = target.dataset.musicBrowseField ?? target.dataset.foobarCatalog;
   if (browseField === "show" || browseField === "group" || browseField === "sort") {
     applyMusicView({ [browseField]: target.dataset.value } as Partial<MusicViewSettings>);

@@ -30,6 +30,40 @@
   grid-template-columns: minmax(0, 1.7fr) minmax(118px, 1fr);
 }
 
+.music-browse-tools .music-grid-page-size {
+  display: none;
+}
+
+.music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools .music-grid-page-size {
+  display: grid;
+}
+
+.music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools {
+  width: min(640px, calc(66vw - 42px));
+}
+
+.music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools__row:first-child {
+  grid-template-columns: minmax(86px, 0.7fr) minmax(0, 1.5fr) minmax(96px, 1fr);
+}
+
+.music-browse-tools .music-grid-total {
+  display: none;
+}
+
+.music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools .music-grid-total {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  display: block;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .music-browse-tools__group {
   display: grid;
   min-width: 0;
@@ -154,6 +188,10 @@
   .music-browse-tools {
     width: min(520px, calc(57vw - 66px));
   }
+
+  .music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools {
+    width: min(640px, calc(57vw - 66px));
+  }
 }
 
 @media (max-width: 720px) {
@@ -172,6 +210,10 @@
 
   .music-browse-tools__row:first-child,
   .music-browse-tools__row:nth-child(2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-app[data-design="rhine"][data-music-layout="grid"] .music-browse-tools__row:first-child {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -77,8 +77,17 @@ function makeRecord({ id, title, artist, category, year, trackCount, needle = fa
   };
 }
 
-export async function createTrackFixture() {
-  const records = [
+export function createGridPaginationRecords() {
+  return [
+    makeRecord({ id: "grid-alpha", title: "Alpha Grid", artist: "Alpha Artist", category: "Alternative", year: 1992, trackCount: 64, needle: true }),
+    makeRecord({ id: "grid-classical", title: "Classical Grid", artist: "Classical Artist", category: "Classical", year: 1978, trackCount: 55 }),
+    makeRecord({ id: "grid-jazz", title: "Jazz Grid", artist: "Jazz Artist", category: "Jazz", year: 1964, trackCount: 47 }),
+    makeRecord({ id: "grid-pop", title: "Pop Grid", artist: "Pop Artist", category: "Pop", year: 2014, trackCount: 45 }),
+  ];
+}
+
+export async function createTrackFixture(seedRecords) {
+  const records = seedRecords || [
     makeRecord({ id: "album-rock", title: "Rock Album", artist: "Alpha Artist", category: "Alternative", year: 2002, trackCount: 24, needle: true }),
     makeRecord({ id: "album-jazz", title: "Jazz Album", artist: "Beta Artist", category: "Jazz", year: 1994, trackCount: 5 }),
   ];
@@ -97,6 +106,13 @@ export async function createTrackFixture() {
     if (specifier === "./data") return dataModule;
     if (specifier === "./music-application-state") return applicationState;
     throw new Error(`Unexpected public catalog import: ${specifier}`);
+  });
+  const musicGridPageSource = await readFile(path.join(project, "src/music-grid-page.ts"), "utf8");
+  const musicGridPage = runModule(musicGridPageSource, "music-grid-page.js", specifier => {
+    if (specifier === "./music-application-state") return applicationState;
+    if (specifier === "./music-catalog") return musicCatalog;
+    if (specifier === "./music-view-settings") return viewSettings;
+    throw new Error(`Unexpected grid page import: ${specifier}`);
   });
   const displayLayoutSource = await readFile(path.join(project, "src/music-display-layout.ts"), "utf8");
   const displayLayout = runModule(displayLayoutSource, "music-display-layout.js", specifier => {
@@ -132,9 +148,10 @@ export async function createTrackFixture() {
     if (specifier === "./music-application-state") return applicationState;
     if (specifier === "./music-view-settings") return viewSettings;
     if (specifier === "./music-catalog") return musicCatalog;
+    if (specifier === "./music-grid-page") return musicGridPage;
     throw new Error(`Unexpected catalog markup import: ${specifier}`);
   });
-  return { catalog: musicCatalog, shelves: musicShelves, musicCatalog, musicShelves, arrayLayout, displayLayout,
+  return { catalog: musicCatalog, shelves: musicShelves, musicCatalog, musicShelves, musicGridPage, arrayLayout, displayLayout,
     applicationState, viewSettings, catalogMarkup, records,
     replaceRecords(next) { dataModule.records = next; } };
 }
@@ -270,6 +287,98 @@ export async function runChecks() {
   assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [2]);
   assert.strictEqual(records, originalRecords);
   assert.equal(records.length, 2);
+
+  const gridFixture = await createTrackFixture(createGridPaginationRecords());
+  const { musicCatalog: gridCatalog, musicGridPage, applicationState: gridApplication, viewSettings: gridViewSettings, catalogMarkup: gridMarkupModule } = gridFixture;
+  const gridState = gridApplication.musicApplication;
+  assert.deepEqual(Array.from(gridViewSettings.musicGridPageSizes), [10, 36, 50, 75, 100, 200]);
+  assert.equal(gridViewSettings.defaultMusicViewSettings.gridPageSize, 36);
+  assert.equal(gridViewSettings.normalizeMusicViewSettings({ gridPageSize: 99 }).gridPageSize, 36);
+  assert.equal(gridState.view.gridPageSize, 36, "New catalogs start with 36 entries per grid page.");
+  gridCatalog.configureMusicCatalog({ layout: "grid", show: "tracks", group: "genre", sort: "added" }, "");
+  const fullGroups = Array.from(gridCatalog.getMusicCatalogGroups());
+  const fullKeys = fullGroups.flatMap(group => Array.from(group.entryKeys));
+  assert.equal(fullKeys.length, 211, "The pagination fixture exceeds the largest supported page size.");
+  assert.equal(new Set(fullKeys).size, fullKeys.length);
+  assert.deepEqual(Array.from(fullGroups, group => group.entryKeys.length), [64, 55, 47, 45]);
+
+  const defaultGridPage = musicGridPage.getMusicGridPage();
+  assert.equal(defaultGridPage.pageIndex, 0);assert.equal(defaultGridPage.pageSize, 36);
+  assert.equal(defaultGridPage.pageCount, 6);assert.equal(defaultGridPage.total, 211);
+  const flattenPage = page => Array.from(page.groups).flatMap(group => Array.from(group.entryKeys));
+  const expectedSizes = size => Math.ceil(211 / size);
+  for (const pageSize of gridViewSettings.musicGridPageSizes) {
+    gridCatalog.configureMusicCatalog({ gridPageSize: pageSize }, "");
+    assert.equal(gridState.gridPage, 0, `${pageSize}: changing page size resets the page index.`);
+    const first = musicGridPage.getMusicGridPage();
+    assert.equal(first.pageSize, pageSize);assert.equal(first.pageIndex, 0);
+    assert.equal(first.pageCount, expectedSizes(pageSize));assert.equal(first.total, fullKeys.length);
+    const seen = [];
+    for (let pageIndex = 0; pageIndex < first.pageCount; pageIndex++) {
+      gridState.setGridPage(pageIndex);
+      const page = musicGridPage.getMusicGridPage();
+      const start = pageIndex * pageSize;
+      const count = Math.min(pageSize, fullKeys.length - start);
+      const keys = flattenPage(page);
+      assert.equal(page.pageIndex, pageIndex);assert.equal(page.pageSize, pageSize);
+      assert.equal(page.pageCount, first.pageCount);assert.equal(page.total, fullKeys.length);
+      assert.equal(page.end - page.start, keys.length);
+      assert.equal(keys.length, count, `${pageSize}: every page respects its selected card limit.`);
+      assert.deepEqual(keys, fullKeys.slice(start, start + count), `${pageSize}: page slices preserve sorted grouped order.`);
+      seen.push(...keys);
+      const html = gridMarkupModule.musicGridMarkup(0, keys[0]);
+      assert.equal((html.match(/data-foobar-entry=/g) || []).length, count, `${pageSize}: the grid markup contains only the current page.`);
+      assert.match(html, /data-music-grid-page=/, "Grid markup includes page navigation controls.");
+    }
+    assert.deepEqual(seen, fullKeys, `${pageSize}: traversing pages produces every entry once in order.`);
+    assert.equal(new Set(seen).size, fullKeys.length, `${pageSize}: page navigation does not duplicate entry keys.`);
+    const last = musicGridPage.paginateMusicGridGroups(fullGroups, pageSize, first.pageCount - 1);
+    assert.equal(flattenPage(last).length, 211 - pageSize * (first.pageCount - 1), `${pageSize}: the last page contains the remainder.`);
+  }
+
+  const crossingGroupPage = musicGridPage.paginateMusicGridGroups(fullGroups, 36, 1);
+  assert.deepEqual(Array.from(crossingGroupPage.groups, ({ group, index, entryKeys }) => [group.name, index, entryKeys.length, group.entryKeys.length]), [
+    ["Alternative", 0, 28, 64], ["Classical", 1, 8, 55],
+  ], "A page crossing a group boundary slices visible keys while preserving each group's full count.");
+  for (const [requested, expected] of [[-2, 0], [2.8, 2], [Infinity, 0], [NaN, 0], [500, 5]]) {
+    const page = musicGridPage.paginateMusicGridGroups(fullGroups, 36, requested);
+    assert.equal(page.pageIndex, expected, `Invalid page request ${String(requested)} is clamped to a legal index.`);
+  }
+  const emptyGridPage = musicGridPage.paginateMusicGridGroups([], 36, 500);
+  assert.equal(emptyGridPage.pageCount, 1);assert.equal(emptyGridPage.pageIndex, 0);
+  assert.equal(emptyGridPage.total, 0);assert.equal(emptyGridPage.start, 0);assert.equal(emptyGridPage.end, 0);
+  assert.deepEqual(Array.from(emptyGridPage.groups), []);
+  assert.equal(musicGridPage.paginateMusicGridGroups(fullGroups, 12, 0).pageSize, 36,
+    "Unsupported page sizes fall back to the public default.");
+
+  gridCatalog.configureMusicCatalog({ gridPageSize: 36 }, "");
+  const preservedEntry = gridCatalog.getMusicDisplayEntries()[25];
+  gridCatalog.focusMusicEntry(preservedEntry.key);
+  gridState.setGridPage(4);
+  const preservedFocus = gridState.catalogFocus;
+  gridState.setGridPage(2);
+  assert.equal(gridState.catalogFocus.entryKey, preservedFocus.entryKey, "Manual page changes do not alter catalog focus.");
+  gridCatalog.configureMusicCatalog({ layout: "array" }, "");
+  assert.equal(gridState.gridPage, 2, "Switching to a spatial layout preserves the grid page.");
+  gridCatalog.configureMusicCatalog({ layout: "grid" }, "");
+  assert.equal(gridState.gridPage, 2, "Returning to Grid preserves the runtime page index.");
+  gridCatalog.configureMusicCatalog({ sort: "title" }, "");
+  assert.equal(gridState.gridPage, 0, "Sorting resets the page index.");
+  gridState.setGridPage(3);gridCatalog.configureMusicCatalog({ group: "artist" }, "");
+  assert.equal(gridState.gridPage, 0, "Regrouping resets the page index.");
+  gridState.setGridPage(3);gridCatalog.configureMusicCatalog({ show: "albums" }, "");
+  assert.equal(gridState.gridPage, 0, "Changing SHOW resets the page index.");
+  gridState.setGridPage(3);gridCatalog.configureMusicCatalog({ show: "tracks" }, "Needle");
+  assert.equal(gridState.gridPage, 0, "Filtering resets the page index.");
+  assert.equal(musicGridPage.getMusicGridPage().total, 1);
+  gridCatalog.configureMusicCatalog({}, "no-synthetic-match");
+  assert.equal(gridState.gridPage, 0);assert.equal(musicGridPage.getMusicGridPage().total, 0);
+  gridCatalog.configureMusicCatalog({}, "");
+  assert.equal(musicGridPage.getMusicGridPage().total, 211, "Clearing a filter restores the full grid result.");
+  const revealEntry = gridCatalog.getMusicDisplayEntries()[77];
+  gridCatalog.focusMusicEntry(revealEntry.key);gridState.setGridPage(0);musicGridPage.revealMusicGridEntry(revealEntry.key);
+  assert.equal(gridState.gridPage, 2, "Focusing an entry reveals its containing page.");
+  assert.equal(gridState.catalogFocus.entryKey, revealEntry.key, "Revealing an entry preserves its stable identity.");
 
   console.log("Public TRACKS catalog, focus, navigation, shelves and shared grid markup passed with synthetic records.");
 }

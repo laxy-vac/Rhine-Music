@@ -36,6 +36,7 @@ const stateModule = await import(dataModule(transpile(stateSource, "music-applic
 
 const {
   defaultMusicViewSettings,
+  musicGridPageSizes,
   normalizeMusicViewSettings,
   migrateMusicViewSettings,
   legacyCatalogOptions,
@@ -45,6 +46,19 @@ const { MusicApplicationState } = stateModule;
 
 assert.deepEqual(normalizeMusicViewSettings(undefined), defaultMusicViewSettings,
   "New preferences use the public default view.");
+assert.deepEqual(musicGridPageSizes, [10, 36, 50, 75, 100, 200],
+  "The grid page-size options remain the supported public choices.");
+assert.equal(defaultMusicViewSettings.gridPageSize, 36, "The default grid page size is 36.");
+assert.equal(normalizeMusicViewSettings({ gridPageSize: 50 }).gridPageSize, 50,
+  "A supported current grid page size is retained.");
+for (const invalidPageSize of ["50", 48, 0, 201, null]) {
+  assert.equal(normalizeMusicViewSettings({ gridPageSize: invalidPageSize }).gridPageSize, 36,
+    `An invalid or legacy grid page size ${String(invalidPageSize)} falls back to 36.`);
+}
+assert.equal(migrateMusicViewSettings({ gridPageSize: 50 }, { gridPageSize: 100 }).gridPageSize, 50,
+  "A valid current grid page size takes precedence over legacy-shaped data.");
+assert.equal(migrateMusicViewSettings({ gridPageSize: 48 }, { gridPageSize: 100 }).gridPageSize, 36,
+  "An invalid current grid page size falls back to the public default.");
 assert.deepEqual(migrateMusicViewSettings(undefined, undefined, "shelf"), {
   ...defaultMusicViewSettings, layout: "shelf",
 }, "An unconfigured Archive profile preserves its initial shelf view.");
@@ -53,7 +67,7 @@ assert.deepEqual(migrateMusicViewSettings(undefined, undefined, "array"), defaul
 assert.deepEqual(migrateMusicViewSettings(
   { layout: "grid", show: "invalid", group: "none", sort: "invalid" },
   { layout: "array", show: "tracks", group: "genre", sort: "year" },
-), { layout: "grid", show: "tracks", group: "none", sort: "year" },
+), { layout: "grid", show: "tracks", group: "none", sort: "year", gridPageSize: 36 },
 "Migration chooses a valid current field first, then falls back to that field's legacy value.");
 for (const [legacyLayout, currentLayout] of [["array", "shelf"], ["future", "array"], ["grid", "grid"]]) {
   assert.equal(musicViewFromLegacy({ layout: legacyLayout, show: "albums", group: "genre", sort: "artist" }).layout,
@@ -61,25 +75,69 @@ for (const [legacyLayout, currentLayout] of [["array", "shelf"], ["future", "arr
 }
 assert.equal(normalizeMusicViewSettings({ group: "artist" }).group, "artist",
   "The public schema retains the former Future artist grouping.");
-const serializedView = { layout: "array", show: "tracks", group: "decade", sort: "title" };
+const serializedView = { layout: "array", show: "tracks", group: "decade", sort: "title", gridPageSize: 75 };
 assert.deepEqual(migrateMusicViewSettings(
   JSON.parse(JSON.stringify(serializedView)),
   legacyCatalogOptions(serializedView),
 ), serializedView, "Current view settings survive JSON persistence and the legacy projection.");
+assert.deepEqual(Object.keys(legacyCatalogOptions(serializedView)), ["layout", "show", "group", "sort"],
+  "The legacy catalog projection remains limited to its original four fields.");
 
 const state = new MusicApplicationState();
 const initialStateView = state.view;
+assert.equal(state.gridPage, 0, "Grid pagination begins at page zero.");
 assert.ok(Object.isFrozen(initialStateView), "Public app view snapshots are frozen.");
 assert.strictEqual(state.view, initialStateView, "An unchanged view keeps the same reference.");
 state.configureView({ layout: "grid", show: "tracks", group: "none", sort: "title" }, "needle query");
 const gridStateView = state.view;
 assert.notStrictEqual(gridStateView, initialStateView, "A settings change replaces the immutable view snapshot.");
 assert.ok(Object.isFrozen(gridStateView));
+assert.equal(state.view.gridPageSize, 36, "A view without a saved page size uses the default.");
 assert.equal(state.spatialLayout, "array", "Grid remembers the initial spatial layout.");
+state.setGridPage(3.9);
+assert.equal(state.gridPage, 3, "Grid page updates are floored.");
+const gridPageRevision = state.catalogRevision;
+const gridPageView = state.view;
+state.setGridPage(-2);
+assert.equal(state.gridPage, 0, "Negative grid page updates clamp to zero.");
+state.setGridPage(2);
+assert.equal(state.gridPage, 2);
+state.setGridPage(Number.NaN);
+assert.equal(state.gridPage, 0, "A non-finite grid page update resets to zero.");
+state.setGridPage(Number.POSITIVE_INFINITY);
+assert.equal(state.gridPage, 0);
+assert.equal(state.catalogRevision, gridPageRevision, "Grid page changes do not revise view settings.");
+assert.strictEqual(state.view, gridPageView, "Grid page changes preserve the immutable view snapshot.");
+state.setGridPage(4);
 state.configureView({ layout: "shelf" }, "needle query");
 assert.equal(state.spatialLayout, "shelf");
+assert.equal(state.gridPage, 4, "A pure layout change preserves the current grid page.");
 state.configureView({ layout: "grid" }, "needle query");
 assert.equal(state.spatialLayout, "shelf", "Returning to Grid retains the last spatial layout.");
+assert.equal(state.gridPage, 4, "Returning to Grid preserves the current page.");
+const pageResetState = new MusicApplicationState({ ...defaultMusicViewSettings, layout: "grid" });
+pageResetState.setGridPage(8);
+pageResetState.configureView({ show: "tracks" });
+assert.equal(pageResetState.gridPage, 0, "Changing show resets the grid page.");
+pageResetState.setGridPage(8);
+pageResetState.configureView({ group: "artist" });
+assert.equal(pageResetState.gridPage, 0, "Changing group resets the grid page.");
+pageResetState.setGridPage(8);
+pageResetState.configureView({ sort: "title" });
+assert.equal(pageResetState.gridPage, 0, "Changing sort resets the grid page.");
+pageResetState.setGridPage(8);
+pageResetState.configureView({ gridPageSize: 50 });
+assert.equal(pageResetState.gridPage, 0, "Changing the grid page size resets the grid page.");
+pageResetState.setGridPage(8);
+pageResetState.configureView({}, "new query");
+assert.equal(pageResetState.gridPage, 0, "Changing the query resets the grid page.");
+pageResetState.setGridPage(5);
+const unchangedPageView = pageResetState.view;
+const unchangedPageRevision = pageResetState.catalogRevision;
+pageResetState.configureView({ gridPageSize: 50 }, "new query");
+assert.equal(pageResetState.gridPage, 5, "Repeated settings that do not change results preserve the grid page.");
+assert.strictEqual(pageResetState.view, unchangedPageView, "Unchanged settings keep a stable view reference.");
+assert.equal(pageResetState.catalogRevision, unchangedPageRevision, "Unchanged settings do not revise the catalog.");
 state.selectAlbum(2, "album-b");
 state.focusEntry({ entryKey: "track|album-b|needle-track", albumId: "album-b", trackId: "needle-track" });
 state.mode = "detail";
@@ -92,7 +150,7 @@ assert.equal(state.selectedAlbumId, "album-b");
 assert.equal(state.selectedTrackId, "needle-track", "Reordering retains focus inside the selected album.");
 assert.equal(state.infoScrollTop, 120, "Reordering preserves the selected album's reading position.");
 assert.equal(state.query, "needle query");
-assert.deepEqual(state.view, { layout: "grid", show: "tracks", group: "none", sort: "title" });
+assert.deepEqual(state.view, { layout: "grid", show: "tracks", group: "none", sort: "title", gridPageSize: 36 });
 state.reconcileAlbums(["album-c", "album-a"]);
 assert.equal(state.selectedIndex, 0, "Removing the selection uses the first-album fallback.");
 assert.equal(state.selectedAlbumId, "album-c");
@@ -119,7 +177,7 @@ const selectPreferences = new Function(
 const allowedPayload = {
   theme: "night",
   windowAspect: "21:9",
-  view: { layout: "grid", show: "tracks", group: "az", sort: "year" },
+  view: { layout: "grid", show: "tracks", group: "az", sort: "year", gridPageSize: 50 },
   style: { design: "archive", scheme: "flare" },
   styleProfiles: { rhine: { mode: "day" }, archive: { mode: "night" } },
   caseProfiles: { rhine: { id: "rhine-case" }, archive: { id: "archive-case" } },
@@ -128,9 +186,12 @@ const allowedPayload = {
   unknownField: true,
 };
 const selectedPreferences = selectPreferences(allowedPayload);
-for (const key of ["view", "styleProfiles", "caseProfiles", "futurePunkPresets", "archivePunkPresets"])
+for (const key of ["styleProfiles", "caseProfiles", "futurePunkPresets", "archivePunkPresets"])
   assert.deepEqual(selectedPreferences[key], allowedPayload[key], `Desktop preference whitelist retains ${key}.`);
 assert.equal(selectedPreferences.windowAspect, "21:9");
+assert.deepEqual(selectedPreferences.view, {
+  layout: "grid", show: "tracks", group: "az", sort: "year", gridPageSize: 50,
+}, "The existing desktop preference whitelist retains gridPageSize inside the view setting.");
 assert.equal(Object.hasOwn(selectedPreferences, "unknownField"), false,
   "Desktop persistence continues to drop unrecognized preference fields.");
 
@@ -164,8 +225,10 @@ const records = [
 ];
 
 const application = stateModule.musicApplication;
-application.configureView({ layout: "shelf", show: "tracks", group: "none", sort: "title" }, "");
-application.configureView({ layout: "array", show: "tracks", group: "none", sort: "title" }, "Needle");
+application.configureView({ layout: "grid", show: "tracks", group: "none", sort: "title" }, "Needle");
+application.setGridPage(2);
+application.configureView({ layout: "array" }, "Needle");
+assert.equal(application.gridPage, 2, "A pure layout change retains shared grid pagination state.");
 application.selectAlbum(1, "album-b");
 application.mode = "detail";
 application.activeTab = "about";
@@ -321,6 +384,7 @@ application.mode = detailMode;
 const globalStateSnapshot = () => ({
   view: application.view,
   query: application.query,
+  gridPage: application.gridPage,
   selectedIndex: application.selectedIndex,
   selectedAlbumId: application.selectedAlbumId,
   selectedTrackId: application.selectedTrackId,
@@ -334,6 +398,7 @@ const globalStateSnapshot = () => ({
 const stableState = structuredClone(globalStateSnapshot());
 await appFunctions.setTheme("night");
 assert.deepEqual(globalStateSnapshot(), stableState, "Changing day/night appearance preserves shared app state and playback order.");
+assert.equal(Object.hasOwn(saved.at(-1).value, "gridPage"), false, "Runtime grid pagination is not persisted.");
 assert.equal(preferences.theme, "night");
 assert.equal(saved.at(-1).value.styleProfiles.archive.mode, "night", "The active design's appearance is saved in its own profile.");
 

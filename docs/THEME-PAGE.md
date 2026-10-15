@@ -18,8 +18,8 @@ Future参考《莱茵生命：访问》和现有唱片页，融合现代工业�
 - renderQuality全局共用：流畅/均衡/高画质/极致/自定义，分调波动、模型细节、光照、终端光及已有AA/阴影/AO/景深/传输等。
 - windowAspect全局：16:9默认、16:10、4:3、3:2、21:9、自由；固定模式等比缩放，最大化/全屏留边。
 - styleProfiles保存各主题陈列/配色；caseProfiles保存各主题结构/材质/部件。
-- 公共布局/目录设置由view保存（shelf/array/grid及show/group/sort），foobarArchive兼容投影；新字段逐项优先，旧ARRAY→shelf、FUTURE→array、GRID→grid。主题外观档不拥有全局视图，播放顺序不再按主题切换。
-- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询和view。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示。第四阶段已清退迁移前Canvas货架文件及重复目录链；当前源码不提供旧Canvas回退入口，清退范围见[统一架构](UNIFIED-ARCHITECTURE.md)。
+- 公共布局/目录设置由view保存（shelf/array/grid及show/group/sort/gridPageSize）；gridPageSize为10/36/50/75/100/200，默认36，切主题共享。foobarArchive兼容投影；新字段逐项优先，旧ARRAY→shelf、FUTURE→array、GRID→grid。主题外观档不拥有全局视图，播放顺序不再按主题切换。
+- MusicApplicationState集中选中专辑/曲目身份、打开模式、右侧页签、查询、view和运行期gridPage。query/show/group/sort/gridPageSize变化优先回第1页，layout/theme切换保留当前页；结果收缩时页码夹到合法范围。单独改变选中entry时自动显露它所在页，手动翻页不跟随原selection跳页。详情不因design变化重建内容节点；两主题货架、阵列与网格详情由同一ArchiveScene/Three.js renderer显示。第四阶段已清退迁移前Canvas货架文件及重复目录链；当前源码不提供旧Canvas回退入口，清退范围见[统一架构](UNIFIED-ARCHITECTURE.md)。
 - 切主题不重置质量/比例/音频。质量预设不换盒体或外观；传输渲染分辨率不等于材质透过率。
 - 设计基准1920×1080及以上，保留工作区DIP容纳和既有触控，不另做低分辨率适配。
 
@@ -43,10 +43,13 @@ Archive从EQ/歌词/信号/主题等同窗口页面返回原唱片上下文，�
 | LAYOUT | SHELF / ARRAY / GRID |
 | GROUP | GENRE / ARTIST / DECADE / A-Z / NONE |
 | SORT | ARTIST / TITLE / YEAR / ADDED |
+| PER PAGE（仅GRID） | 10 / 36 / 50 / 75 / 100 / 200；默认36 |
 
-Punk浏览页右上角按SHOW+LAYOUT、GROUP+SORT分两行；Future浏览页左上角提供相同两行，并在下方提供紧凑查询输入。Punk查询复用顶栏SEARCH ARCHIVE。两主题调用同一公共view/query，切换主题保留当前状态；设置 → 音乐库的旧排列入口继续作为公共view别名，文案指向浏览工具栏。STYLE不再显示“视图与浏览”区，只集中外观、盒体和画质设置。
+Punk浏览页右上角按SHOW+LAYOUT、GROUP+SORT分两行；Future浏览页左上角提供相同两行，并在下方提供紧凑查询输入。GRID时Punk改为SHOW+PER PAGE+LAYOUT第一行、GROUP+SORT第二行，RANDOM位于第二行，左上角显示当前目录结果总数；Future GRID保留自己的左上布局，同时提供PER PAGE、当前结果总数和查询。离开GRID时两主题都隐藏PER PAGE。Punk查询复用顶栏SEARCH ARCHIVE。两主题调用同一公共view/query，切换主题保留当前状态；设置 → 音乐库的旧排列入口继续作为公共view别名，文案指向浏览工具栏。STYLE不再显示“视图与浏览”区，只集中外观、盒体和画质设置。
 
-TRACKS是独立曲目entry、每曲一盒，封面/ARC归父专辑；货架20槽跨组分页，网格每曲小卡，分组阵列每组一列。两主题共用目录、空间布局与三维相机，以各自盒体、材质和配色呈现；TRACKS各曲有独立entry key，不改全局专辑records为track数组。货架列沿负X、槽沿负Z；间距按用户变换后的盒体bounds扩展，保留稳定父专辑身份。ADDED无时间戳时沿稳定库顺序，不编日期。
+Punk GRID呈现纯106px方形封面墙，间距约26px；选中项为黑色细框与accent四角。标题和资料仅在右栏、卡片无障碍名称及hover信息中提供，不落在封面墙卡片上。
+
+TRACKS是独立曲目entry、每曲一盒，封面/ARC归父专辑；货架20槽跨组分页，网格分页与货架20槽相互独立，网格每曲小卡，分组阵列每组一列。GRID只渲染当前页，顶部总数反映当前目录结果总量，分组标题显示类别（GENRE/ARTIST/DECADE/A-Z等）、序号、名称、横线和全组总条数；组计数不随当前页缩小。两主题共用目录、空间布局与三维相机，以各自盒体、材质和配色呈现；TRACKS各曲有独立entry key，不改全局专辑records为track数组。网格分页不改变selection、曲目身份或右侧详情；选中entry key变化时controller显露其页，手动翻页不被既有selection拉回。货架列沿负X、槽沿负Z；间距按用户变换后的盒体bounds扩展，保留稳定父专辑身份。ADDED无时间戳时沿稳定库顺序，不编日期。
 
 视图选择由公共view保存，foobarArchive.layout仅保留兼容投影；缺失字段按旧配置/默认迁移。切布局保留当前专辑/曲目身份、右侧信息区DOM、位置、内容、活动tab与展开状态。Punk三维画布用现有右栏边界裁切，不借布局切主题。G在网格与最近空间布局之间切换。Future和Punk货架现位于共同Three.js场景；`MusicShelf`与`MusicSceneResources`以程序几何构成托盘、货架和地面细节，`MusicCaseTitles`使用纸面图集呈现Punk顶边标题。Future使用陶瓷/轻玻璃边，Punk使用主题金属材质。第四阶段已清退迁移前的ArchiveCaseRenderer/sprite/foobar目录链；本主题页描述公共场景，不承诺在当前源码中切回旧Canvas外观。Punk旧目录DOM保留的类/data钩子迁入公共markup，旧的隐藏LAYOUT节点已清退；当前可见LAYOUT控件属于公共浏览工具栏。波浪设置沿用现有规则，不新增波浪模式。
 
@@ -66,6 +69,7 @@ Punk SETTINGS紧跟时钟，不auto margin推到最右；顶栏保留溢出访�
 
 - 胶囊播放条、轻透导航/时钟、清晰PROFILE层级。
 - 唱片资料直接以悬浮文字和细规则线呈现，移除右侧整块圆角玻璃底；ACCESS ALBUM保留小号文字/箭头及原打开操作与无障碍名称，不画外框或悬停底板。左上浏览工具栏分两行提供SHOW+LAYOUT、GROUP+SORT，下方为紧凑查询输入。借上游版式/揭示语言，保留专辑名、歌手、音质徽标、PROFILE、歌单和介绍等现有音乐内容。
+- GRID保留Future原136px圆角文字卡片与原主题皮肤；左上工具栏在GRID提供PER PAGE、总数和查询，非GRID隐藏PER PAGE。
 - 歌词共同三栏，中央独立阅读面、两侧开放。
 - EQ浮起模块、旋钮/推子/读数，不复制Punk硬黑块。
 - 信号保留大环/既有尺寸，不加厚重外围框。

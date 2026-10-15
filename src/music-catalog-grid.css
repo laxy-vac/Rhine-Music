@@ -20,8 +20,27 @@
 .music-app[data-design="rhine"] .music-catalog-grid-host .foobar-cover-image { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; margin-bottom: 8px; }
 .music-app[data-design="rhine"] .music-catalog-grid-host :is(strong,small,em,.foobar-album-copy>span) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .music-app[data-design="rhine"] .music-catalog-grid-host :is(small,em) { color: var(--muted); font-style: normal; }
-.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-catalog-group>h2 { display: flex; justify-content: space-between; margin: 10px 0; font-size: 12px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-catalog-group>h2 {
+  display: grid; grid-template-columns: max-content minmax(0,max-content) minmax(18px,1fr) max-content;
+  align-items: center; gap: 8px; margin: 10px 0 16px; font-size: 12px;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-group-label { color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: .08em; white-space: nowrap; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-group-label::after { content: " ·"; margin-left: 4px; color: var(--accent); }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-group-rule { height: 1px; min-width: 18px; background: var(--line); }
+.music-app[data-design="rhine"] .music-catalog-grid-host .foobar-group-count { color: var(--muted); font-size: 9px; font-weight: 400; letter-spacing: .04em; white-space: nowrap; }
 .music-app[data-design="rhine"] .music-catalog-grid-host .foobar-cover-placeholder { display: grid; place-items: center; aspect-ratio: 1; color: var(--muted); font-size: 10px; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .music-grid-pagination {
+  display: flex; align-items: center; gap: 8px; margin: 28px 0 12px; padding: 12px 0;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 10px;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .music-grid-pagination button {
+  min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px;
+  color: var(--ink); background: color-mix(in srgb, var(--surface) 78%, transparent); font: inherit;
+}
+.music-app[data-design="rhine"] .music-catalog-grid-host .music-grid-pagination button:disabled { opacity: .42; cursor: default; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .music-grid-page-status { color: var(--ink); font-variant-numeric: tabular-nums; }
+.music-app[data-design="rhine"] .music-catalog-grid-host .music-grid-range { margin-left: auto; font-variant-numeric: tabular-nums; }
 @media (min-width: 721px) and (max-width: 1100px) {
   .music-app[data-design="rhine"] .music-catalog-grid-host { right: calc(43% + 24px); }
 }

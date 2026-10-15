@@ -115,17 +115,18 @@ const modules = (await Promise.all([
   moduleFunctions("native-audio", ["isDsd", "directDsd", "outputDefault"], true),
   moduleFunctions("audio-info", ["setupAudioInfoPopup"]),
   moduleFunctions("foobar-shell", ["setupFoobarShell"]),
-  moduleFunctions("music-view-settings", ["legacyCatalogOptions"]),
+  moduleFunctions("music-view-settings", ["legacyCatalogOptions", "musicGridPageSizes"]),
   moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle"]),
   moduleFunctions("music-view-controls", ["musicBrowseControlsMarkup", "syncMusicViewControls"]),
   moduleFunctions("music-catalog-grid", ["setupMusicCatalogGrid"]),
+  moduleFunctions("music-grid-page", ["paginateMusicGridGroups", "getMusicGridPage", "revealMusicGridEntry"]),
   moduleFunctions("music-catalog-markup", ["musicCatalogToolsMarkup", "musicGridMarkup"]),
   moduleFunctions("album-panel", ["setupAlbumPanel"]),
   moduleFunctions("ui-transitions", ["SurfaceTransition", "PageScanTransition"]),
   moduleFunctions("music-presentation", ["MusicPresentation"]),
   moduleFunctions("album-interaction", ["setupAlbumInteraction"]),
   moduleFunctions("album-queue", ["setupAlbumQueue"]),
-  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','$'],true),
+  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$'],true),
 ])).join("\n");
 const initialize = `(async () => {
   const trUi = value => value;
@@ -135,38 +136,50 @@ const initialize = `(async () => {
   const records=[];
   let catalogGrid;
   let page='music', panel=false, musicFilterTimer, mockCatalogVersion=0;
-  const musicApplication={selectedIndex:0,selectedAlbumId:'fixture-album',selectedTrackId:'fixture-flac',catalogFocus:{entryKey:'track|fixture-album|fixture-flac',albumId:'fixture-album',trackId:'fixture-flac'},spatialLayout:'shelf',mode:'archive',activeTab:'tracks',infoScrollTop:0,query:'',view:Object.freeze({layout:'shelf',show:'albums',group:'genre',sort:'artist'})};
+  const musicApplication={selectedIndex:0,selectedAlbumId:'fixture-album',selectedTrackId:'fixture-flac',catalogFocus:{entryKey:'track|fixture-album|fixture-flac',albumId:'fixture-album',trackId:'fixture-flac'},gridPage:0,setGridPage(page){this.gridPage=page;},spatialLayout:'shelf',mode:'archive',activeTab:'tracks',infoScrollTop:0,query:'',view:Object.freeze({layout:'shelf',show:'albums',group:'genre',sort:'artist',gridPageSize:36})};
+  let useGeneratedCatalog=false;
   const mockEntries=[
     {key:'track|fixture-album|fixture-flac',albumId:'fixture-album',trackId:'fixture-flac',recordIndex:0,record:{title:'Needle Track',album:{offline:false}},track:{id:'fixture-flac',title:'Needle Track'}},
     {key:'track|fixture-album|fixture-track-2',albumId:'fixture-album',trackId:'fixture-track-2',recordIndex:0,record:{title:'Second Track',album:{offline:false}},track:{id:'fixture-track-2',title:'Second Track'}},
     {key:'track|fixture-album-2|fixture-track-3',albumId:'fixture-album-2',trackId:'fixture-track-3',recordIndex:1,record:{title:'Other Track',album:{offline:false}},track:{id:'fixture-track-3',title:'Other Track'}},
   ];
-  const entryByKey=key=>mockEntries.find(entry=>entry.key===key);
+  const getMusicDisplayEntries=()=>useGeneratedCatalog&&musicApplication.view.show==='albums'
+    ? records.map((record,index)=>({index,key:record.id,albumId:record.id,recordIndex:index,record,album:record.album}))
+    : mockEntries;
+  const entryByKey=key=>getMusicDisplayEntries().find(entry=>entry.key===key)||mockEntries.find(entry=>entry.key===key);
   mockEntries.forEach((entry,index)=>{
     entry.index=index;
     entry.record={...entry.record,id:entry.key,en:'Fixture Artist',category:'Fixture',date:'2010',
       album:{...entry.record.album,id:entry.albumId,title:'Fixture Album',artist:'Fixture Artist',year:2010,tracks:[{format:'FLAC'}]}};
     entry.track={...entry.track,format:'FLAC',discNumber:1,trackNumber:index+1,duration:180};
   });
-  const getMusicDisplayEntries=()=>mockEntries;
-  const getMusicEntry=index=>mockEntries[index];
+  const getMusicEntry=index=>getMusicDisplayEntries()[index];
   const getMusicEntryByKey=entryByKey;
-  const getMusicCatalogGroups=()=>{const visible=new Set(getMusicCatalogRecords());const entryKeys=mockEntries.filter(entry=>visible.has(entry.recordIndex)).map(entry=>entry.key);return entryKeys.length?[{key:'fixture',name:'Fixture',entryKeys}]:[];};
+  const getMusicCatalogGroups=()=>{
+    const visible=new Set(getMusicCatalogRecords()),grouped=new Map();
+    for(const entry of getMusicDisplayEntries()){if(!visible.has(entry.recordIndex))continue;
+      const name=musicApplication.view.group==='none'?'ALL RECORDS':entry.record.category||'Fixture';
+      const key=musicApplication.view.group==='none'?'all':musicApplication.view.group+':'+name.toLocaleLowerCase('en');
+      let group=grouped.get(key);if(!group){group={key,name,entryKeys:[]};grouped.set(key,group);}group.entryKeys.push(entry.key);
+    }
+    return [...grouped.values()].sort((a,b)=>a.name.localeCompare(b.name)).map(group=>({...group,entryKeys:[...group.entryKeys]}));
+  };
   const getMusicCatalogOptions=()=>musicApplication.view;
   const configureMusicCatalog=(next,query)=>{
     const view={...musicApplication.view,...next};
     const text=query===undefined?musicApplication.query:String(query).trim();
     if(Object.keys(view).every(key=>view[key]===musicApplication.view[key])&&text===musicApplication.query)return;
+    if(view.show!==musicApplication.view.show||view.group!==musicApplication.view.group||view.sort!==musicApplication.view.sort||view.gridPageSize!==musicApplication.view.gridPageSize||text!==musicApplication.query)musicApplication.setGridPage(0);
     musicApplication.view=Object.freeze(view);musicApplication.query=text;
     if(view.layout!=='grid')musicApplication.spatialLayout=view.layout;
     mockCatalogVersion++;
   };
   const getMusicCatalogVersion=()=>mockCatalogVersion;
-  const getMusicCatalogRecords=()=>musicApplication.query.toLowerCase().includes('no-match')?[]:musicApplication.query.toLowerCase().includes('needle')?[0]:[0,1];
+  const getMusicCatalogRecords=()=>musicApplication.query.toLowerCase().includes('no-match')?[]:musicApplication.query.toLowerCase().includes('needle')?[0]:Array.from({length:records.length},(_,index)=>index);
   const getMusicFocusedEntry=index=>{
     if(!getMusicCatalogRecords().includes(index))return undefined;
-    const focused=entryByKey(musicApplication.catalogFocus?.entryKey||'');
-    return focused?.recordIndex===index?focused:mockEntries.find(entry=>entry.recordIndex===index);
+    const entries=getMusicDisplayEntries(),focused=entries.find(entry=>entry.key===musicApplication.catalogFocus?.entryKey);
+    return focused?.recordIndex===index?focused:entries.find(entry=>entry.recordIndex===index);
   };
   const focusMusicEntry=key=>{
     const entry=entryByKey(key);if(entry){musicApplication.catalogFocus={entryKey:entry.key,albumId:entry.albumId,trackId:entry.trackId};musicApplication.selectedTrackId=entry.trackId;}return entry;
@@ -195,6 +208,7 @@ const initialize = `(async () => {
   const select=(index)=>{
     musicApplication.selectedIndex=index;musicApplication.selectedAlbumId=records[index]?.id;
     if(musicApplication.catalogFocus?.albumId!==musicApplication.selectedAlbumId)musicApplication.selectedTrackId=undefined;
+    updateSelection();
   };
   const updateSelection=()=>syncMusicCatalogView();
   // DOM fixture boundary: exercise the production shared catalog markup with
@@ -244,12 +258,36 @@ const initialize = `(async () => {
   const updateSonyTechIndicators=()=>{};
   const albumMock={id:'fixture-album',title:'18 Plus',artist:'G.E.M.邓紫棋',year:2010,genreId:'pop',rawGenres:['流行'],discCount:1,folder:'example',producers:[],description:'一段用于检查专辑介绍和滚动焦点的示例文字。'.repeat(50),tracks:Array.from({length:30},(_,index)=>({id:'track-'+index,albumId:'fixture-album',title:['写不完的温柔','All About U','Game Over'][index%3]+' '+(index+1),artist:'G.E.M.邓紫棋',duration:180,trackNumber:index+1,format:'FLAC',sampleRate:192000,bitsPerSample:24,numberOfChannels:2,bitrate:4500000,lossless:true,browserPlayable:true}))};
   records.push({id:albumMock.id,album:albumMock},{id:'fixture-album-2',album:{...albumMock,id:'fixture-album-2',title:'Other Album'}});
-  const currentAlbum=()=>albumMock;
-  const profileMarkup=design=>'<div class="selection-profile-heading"><span>PROFILE</span><span>ARC-0001</span></div><dl>'+albumProfileFields(albumMock).map(([label,value])=>'<div><dt>'+esc(design==='archive'?label.split(' / ')[0]:label)+'</dt><dd data-cjk="'+containsCjk(value)+'">'+esc(value)+'</dd></div>').join('')+'</dl>';
+  const currentAlbum=()=>records[musicApplication.selectedIndex]?.album||albumMock;
+  const profileMarkup=design=>'<div class="selection-profile-heading"><span>PROFILE</span><span>ARC-'+String(musicApplication.selectedIndex+1).padStart(4,'0')+'</span></div><dl>'+albumProfileFields(currentAlbum()).map(([label,value])=>'<div><dt>'+esc(design==='archive'?label.split(' / ')[0]:label)+'</dt><dd data-cjk="'+containsCjk(value)+'">'+esc(value)+'</dd></div>').join('')+'</dl>';
+  const installGridPaginationEntries=()=>{
+    const specs=[
+      {id:'grid-alpha',title:'Alpha Grid',artist:'Alpha Artist',category:'Alternative',year:1992,count:24},
+      {id:'grid-classical',title:'Classical Grid',artist:'Classical Artist',category:'Classical',year:1978,count:83},
+      {id:'grid-jazz',title:'Jazz Grid',artist:'Jazz Artist',category:'Jazz',year:1964,count:59},
+      {id:'grid-pop',title:'Pop Grid',artist:'Pop Artist',category:'Pop',year:2014,count:45},
+    ];
+    useGeneratedCatalog=true;records.splice(0,records.length);mockEntries.splice(0,mockEntries.length);
+    for(const [recordIndex,spec] of specs.entries()){
+      const tracks=Array.from({length:spec.count},(_,index)=>({id:spec.id+'-track-'+String(index+1).padStart(3,'0'),albumId:spec.id,title:spec.title+' Track '+String(index+1).padStart(3,'0'),artist:spec.artist,duration:210+index,trackNumber:index+1,discNumber:Math.floor(index/20)+1,format:'FLAC',codec:'FLAC',sampleRate:44100,bitsPerSample:16,numberOfChannels:2,bitrate:900000,lossless:true,browserPlayable:true}));
+      const color=['#685B86','#356E76','#A66B42','#567955'][recordIndex],coverSvg='<svg xmlns="http://www.w3.org/2000/svg" width="106" height="106" viewBox="0 0 106 106"><rect width="106" height="106" fill="'+color+'"/><path d="M0 78 42 36l22 22 14-14 28 28v34H0Z" fill="#161923" fill-opacity=".56"/><circle cx="76" cy="28" r="12" fill="#E6B35A" fill-opacity=".88"/></svg>',coverUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(coverSvg);
+      const album={id:spec.id,title:spec.title,artist:spec.artist,year:spec.year,genreId:spec.category.toLowerCase(),rawGenres:[spec.category],coverUrl,discCount:Math.ceil(spec.count/20),folder:spec.id,producers:[],description:spec.title+' fixture description',tracks,offline:false};
+      const record={id:spec.id,title:spec.title,en:spec.artist,department:spec.artist,category:spec.category,date:String(spec.year),lead:spec.artist,clearance:String(spec.count)+' tracks',abstract:spec.id,findings:[spec.category],source:'fixture',album};
+      records.push(record);
+      for(const track of tracks){const key='track|'+spec.id+'|'+track.id,copy={...record,id:key,title:track.title,en:track.artist,lead:track.artist};
+        mockEntries.push({key,index:mockEntries.length,albumId:spec.id,trackId:track.id,recordIndex,record:copy,album,track});}
+    }
+    musicApplication.selectedIndex=0;musicApplication.selectedAlbumId=records[0].id;musicApplication.selectedTrackId=records[0].album.tracks[0].id;
+    musicApplication.catalogFocus={entryKey:mockEntries[0].key,albumId:records[0].id,trackId:records[0].album.tracks[0].id};
+    musicApplication.view=Object.freeze({...musicApplication.view,layout:'grid',show:'tracks',group:'genre',sort:'added',gridPageSize:36});
+    musicApplication.query='';musicApplication.setGridPage(0);musicApplication.mode='archive';stage.dataset.mode='archive';mockCatalogVersion++;
+    shell.refreshCatalog();syncDesignIdentity();syncMusicCatalogView();
+    return {total:mockEntries.length,groups:getMusicCatalogGroups().map(group=>({name:group.name,count:group.entryKeys.length}))};
+  };
   function renderSharedTab(tab) {
     const previous=musicApplication.activeTab;musicApplication.activeTab=tab;
     stage.querySelectorAll('[data-tab]').forEach(button=>{button.setAttribute('aria-selected',String(button.dataset.tab===tab));button.tabIndex=button.dataset.tab===tab?0:-1;});
-    const body=stage.querySelector('#album-tab-content');body.innerHTML=tab==='tracks'?trackList(albumMock,1):albumAbout(albumMock);
+    const album=currentAlbum(),body=stage.querySelector('#album-tab-content');body.innerHTML=tab==='tracks'?trackList(album,album.discCount||1):albumAbout(album);
     sharedPanel?.scanTab(previous,tab);
   }
   if(${sharedMode}) {
@@ -324,7 +362,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -401,7 +439,7 @@ try {
     for(const design of ['rhine','archive']) {
       await evaluate(`fixture.renderProductionStylePage(${JSON.stringify(design)},true);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       const style=await evaluate(`(()=>{const page=document.querySelector('#music-theme-page'),content=document.querySelector('#theme-page-content');
-        return {design:fixture.stage.dataset.design,visible:!page.hidden,oldBlocks:content.querySelectorAll('.music-view-controls,.music-browse-tools,.foobar-catalog-toolbar,[data-music-view-field],[data-music-layout],[data-music-catalog-query]').length};})()`);
+        return {design:fixture.stage.dataset.design,visible:!page.hidden,oldBlocks:content.querySelectorAll('.music-view-controls,.music-browse-tools,.foobar-catalog-toolbar,.music-grid-pagination,.music-grid-page-size,.foobar-grid-page-size,.foobar-catalog-total,[data-music-view-field],[data-music-layout],[data-music-catalog-query],[data-music-grid-size],[data-music-grid-page],[data-music-grid-total]').length};})()`);
       assert.equal(style.design,design);assert.equal(style.visible,true,`${design}: STYLE page must render.`);
       assert.equal(style.oldBlocks,0,`${design}: STYLE must not contain the removed view, browse, layout, or filter controls.`);
       stylePageChecks.push(style);
@@ -428,8 +466,11 @@ try {
       const field=key=>${design==='rhine'
         ? `active('[data-music-browse-field="'+key+'"]')`
         : `active('[data-field="'+key+'"] [data-foobar-catalog="'+key+'"]')`};
+      const size=root.querySelector('[data-field="pageSize"]'),pager=document.querySelector('.music-grid-pagination');
       return {view:{...fixture.musicApplication.view},layout:root.querySelector('[data-music-layout][aria-pressed="true"]')?.dataset.musicLayout,
-        show:field('show'),group:field('group'),sort:field('sort'),track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey};})()`);
+        show:field('show'),group:field('group'),sort:field('sort'),pageSizeButtons:root.querySelectorAll('[data-music-grid-size]').length,
+        pageSizeVisible:!!size&&size.getClientRects().length>0&&getComputedStyle(size).display!=='none',pagerVisible:!!pager&&pager.getClientRects().length>0,
+        track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey};})()`);
     const controlSnapshots=[];
     for(const design of ['rhine','archive']) {
       await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
@@ -440,6 +481,9 @@ try {
         const state=await viewValues(design);
         assert.equal(state.view.layout,layout,`${design}: ${layout} click updates the shared layout.`);
         assert.equal(state.layout,layout,`${design}: selected ${layout} control is synchronized.`);
+        assert.equal(state.pageSizeButtons,6,`${design}: grid page size exposes all six supported values.`);
+        assert.equal(state.pageSizeVisible,layout==='grid',`${design}: per-page options are visible only in Grid.`);
+        assert.equal(state.pagerVisible,layout==='grid',`${design}: page navigation is visible only in Grid.`);
         assert.equal(state.track,'fixture-flac');assert.equal(state.entry,'track|fixture-album|fixture-flac');
         controlSnapshots.push({design,layout,...state});
       }
@@ -588,16 +632,18 @@ try {
         const fields=(row,field)=>!!row?.querySelector('[data-field="'+field+'"]');
         const layoutCount=tools.querySelectorAll('[data-music-layout]').length;
         const layoutInFirstRow=rowElements[0]?.querySelectorAll('[data-music-layout]').length||0;
+        const pageSizeCount=tools.querySelectorAll('[data-music-grid-size]').length;
+        const pageSizeInFirstRow=rowElements[0]?.querySelectorAll('[data-music-grid-size]').length||0;
         const rowGroupRights=groupsByRow.map(groups=>Math.max(0,...groups.map(group=>group.right)));
         const controls=[...tools.querySelectorAll('button,input')].map(control=>{const b=control.getBoundingClientRect();return{tag:control.tagName,field:control.closest('[data-field]')?.dataset.field||control.dataset.musicBrowseField||control.dataset.foobarCatalog||control.dataset.musicLayout,
           x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height,visible:getComputedStyle(control).display!=='none'&&b.width>0&&b.height>0};});
         const filter=future?tools.querySelector('input[data-music-catalog-query]'):document.querySelector('.foobar-header-search'),fr=filter?.getBoundingClientRect();
         return {design:fixture.stage.dataset.design,visible:getComputedStyle(tools).display!=='none'&&r.width>0&&r.height>0,
           rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height},rows,
-          rowFields:[fields(rowElements[0],'show')&&fields(rowElements[0],'layout')&&layoutInFirstRow===3,fields(rowElements[1],'group')&&fields(rowElements[1],'sort')],
+          rowFields:[fields(rowElements[0],'show')&&fields(rowElements[0],'pageSize')&&fields(rowElements[0],'layout')&&layoutInFirstRow===3&&pageSizeInFirstRow===6,fields(rowElements[1],'group')&&fields(rowElements[1],'sort')],
           groupsByRow,rowGroupRights,controls,allControlsVisible:controls.length>0&&controls.every(control=>control.visible&&control.x>=-1&&control.right<=innerWidth+1),
           filterVisible:!!filter&&getComputedStyle(filter).display!=='none'&&!!fr&&fr.width>0&&fr.height>0,
-          layoutCount,layoutInFirstRow,infoRect:{x:ir.x,y:ir.y,right:ir.right,bottom:ir.bottom,width:ir.width,height:ir.height},
+          layoutCount,layoutInFirstRow,pageSizeCount,pageSizeInFirstRow,infoRect:{x:ir.x,y:ir.y,right:ir.right,bottom:ir.bottom,width:ir.width,height:ir.height},
           groupOverlapsInfo:groupRects.some(group=>overlap({x:group.x,right:group.right,y:group.y,bottom:group.bottom},{x:ir.x,right:ir.right,y:ir.y,bottom:ir.bottom})),
           randomRect:rr?{x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height}:null,
           groupOverlapsRandom:!!rr&&groupRects.some(group=>overlap({x:group.x,right:group.right,y:group.y,bottom:group.bottom},{x:rr.x,right:rr.right,y:rr.y,bottom:rr.bottom})),
@@ -684,9 +730,179 @@ try {
       assert.equal(punk.tools,'none',`${theme}: Punk hides Future browse controls.`);assert.equal(punk.aria,'打开专辑');assert.equal(punk.label,'打开专辑');
       assert.notEqual(punk.labelDisplay,'none');assert.equal(punk.accessDisplay,'none');assert.ok(punk.fontSize>=18);assert.equal(punk.radius,'0px');
     }
+    const gridPagination=await evaluate(`fixture.installGridPaginationEntries()`);
+    assert.equal(gridPagination.total,211);assert.deepEqual(gridPagination.groups,[
+      {name:'Alternative',count:24},{name:'Classical',count:83},{name:'Jazz',count:59},{name:'Pop',count:45},
+    ]);
+    await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design='archive';fixture.sharedPanel.setOpen(false);fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const clickDisplayControl=async selector=>{
+      assert.equal(await evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)});if(!button||button.disabled)return false;button.click();return true;})()`),true,`Expected an active display control: ${selector}`);
+      await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    };
+    const gridPageSnapshot=()=>evaluate(`(()=>{
+      const grid=document.querySelector('.music-catalog-grid-host .foobar-catalog-grid'),host=document.querySelector('.music-catalog-grid-host'),page=fixture.musicGridPage.getMusicGridPage();
+      const cards=[...grid.querySelectorAll('.foobar-grid-card')],tools=document.querySelector(fixture.stage.dataset.design==='archive'?'.foobar-catalog-toolbar':'.music-browse-tools');
+      const total=document.querySelector('.foobar-catalog-total,.music-grid-total');
+      return {design:fixture.stage.dataset.design,view:{...fixture.musicApplication.view},pageIndex:page.pageIndex,pageSize:page.pageSize,pageCount:page.pageCount,total:page.total,start:page.start,end:page.end,
+        cardCount:cards.length,keys:cards.map(card=>card.dataset.foobarEntry),selected:cards.find(card=>card.getAttribute('aria-pressed')==='true')?.dataset.foobarEntry,
+        groups:[...grid.querySelectorAll('.foobar-catalog-group')].map(group=>({name:group.querySelector('.foobar-group-name')?.textContent.trim(),index:Number(group.dataset.groupIndex),total:Number(group.dataset.groupTotal),pageCards:group.querySelectorAll('.foobar-grid-card').length,countText:group.querySelector('.foobar-group-count')?.textContent.trim()})),
+        focusEntry:fixture.musicApplication.catalogFocus.entryKey,focusTrack:fixture.musicApplication.catalogFocus.trackId,
+        sizeSelected:[...tools.querySelectorAll('[data-music-grid-size][aria-pressed="true"]')].map(button=>Number(button.dataset.musicGridSize)),
+        pageStatus:grid.querySelector('.music-grid-page-status')?.textContent.trim(),range:grid.querySelector('.music-grid-range')?.textContent.trim(),totalLabel:total?.textContent.trim(),
+        hiddenCards:grid.querySelectorAll('.foobar-grid-card[hidden]').length,allCardsHaveRects:cards.length>0&&cards.every(card=>card.getClientRects().length>0),hostRect:(()=>{const r=host.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};})()};
+    })()`);
+    const setFixtureTheme=async theme=>{
+      await evaluate(`(()=>{document.documentElement.dataset.theme=${JSON.stringify(theme)};fixture.stage.dataset.theme=${JSON.stringify(theme)};fixture.preferences.theme=${JSON.stringify(theme)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      assert.deepEqual(await evaluate(`({document:document.documentElement.dataset.theme,stage:fixture.stage.dataset.theme,preference:fixture.preferences.theme})`),
+        {document:theme,stage:theme,preference:theme},`Grid screenshot theme is explicitly ${theme}.`);
+    };
+    const punkGridStart=await gridPageSnapshot();
+    assert.equal(punkGridStart.view.gridPageSize,36);assert.equal(punkGridStart.pageIndex,0);assert.equal(punkGridStart.pageSize,36);assert.equal(punkGridStart.pageCount,6);assert.equal(punkGridStart.total,211);
+    assert.equal(punkGridStart.cardCount,36);assert.equal(punkGridStart.hiddenCards,0);assert.equal(punkGridStart.allCardsHaveRects,true);
+    assert.deepEqual(punkGridStart.sizeSelected,[36]);assert.equal(punkGridStart.pageStatus,'01 / 06');assert.equal(punkGridStart.range,'1–36 / 211 TRACKS');assert.equal(punkGridStart.totalLabel,'211 TRACKS');
+    assert.deepEqual(punkGridStart.groups.map(group=>[group.name,group.index,group.total,group.pageCards]),[['Alternative',0,24,24],['Classical',1,83,12]]);
+    const firstSelectedCover=await evaluate(`(()=>{const card=document.querySelector('.music-catalog-grid-host .foobar-grid-card[aria-pressed="true"]'),cover=card.querySelector('.foobar-album-cover'),copy=card.querySelector('.foobar-album-copy'),host=document.querySelector('.music-catalog-grid-host'),r=card.getBoundingClientRect(),c=cover.getBoundingClientRect(),h=host.getBoundingClientRect(),after=getComputedStyle(card,'::after');
+      return {entry:card.dataset.foobarEntry,width:r.width,height:r.height,coverWidth:c.width,coverHeight:c.height,copyDisplay:getComputedStyle(copy).display,aria:card.getAttribute('aria-label'),title:card.getAttribute('title'),cornerContent:after.content,cornerLayers:(after.backgroundImage.match(/linear-gradient/g)||[]).length,outerLeft:r.left-6,outerTop:r.top-6,hostLeft:h.left,hostTop:h.top};})()`);
+    assert.equal(firstSelectedCover.width,106);assert.equal(firstSelectedCover.height,106);assert.equal(firstSelectedCover.coverWidth,106);assert.equal(firstSelectedCover.coverHeight,106);
+    assert.equal(firstSelectedCover.copyDisplay,'none');assert.ok(firstSelectedCover.aria&&firstSelectedCover.title,'Cover-only cards retain an accessible name and title.');
+    assert.equal(firstSelectedCover.cornerContent,'""');assert.equal(firstSelectedCover.cornerLayers,4,'Punk selected cards paint four orange corner blocks.');
+    assert.ok(firstSelectedCover.outerLeft>=firstSelectedCover.hostLeft-1&&firstSelectedCover.outerTop>=firstSelectedCover.hostTop-1,'The first selected card corner frame remains inside the scrolled host clip.');
+    assert.equal(await evaluate(`(()=>{const image=document.querySelector('.music-catalog-grid-host .foobar-grid-card[aria-pressed="true"] img.foobar-cover-image');return !!image&&image.getAttribute('src').startsWith('data:image/svg+xml;charset=utf-8,');})()`),true,'Punk screenshot cards use local synthetic cover images.');
+    await evaluate(`Promise.all([...document.querySelectorAll('.music-catalog-grid-host img')].map(image=>image.decode().catch(()=>{})))`);
+    await setFixtureTheme('day');
+    const punkDayGridScreenshot='display-punk-grid-first-page-day.png';
+    const punkDayGridPng=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+    await writeFile(path.join(output,punkDayGridScreenshot),Buffer.from(punkDayGridPng.data,'base64'));
+    await setFixtureTheme('night');
+    const firstGridScreenshot='display-punk-grid-first-page-selected.png';
+    const firstGridPng=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+    await writeFile(path.join(output,firstGridScreenshot),Buffer.from(firstGridPng.data,'base64'));
+    const punkGridPages=[];
+    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    await evaluate(`Promise.all([...document.querySelectorAll('.music-catalog-grid-host img')].map(image=>image.decode().catch(()=>{})))`);
+    const futureGridFirst=await gridPageSnapshot();
+    assert.equal(futureGridFirst.view.gridPageSize,36);assert.equal(futureGridFirst.pageIndex,0);assert.equal(futureGridFirst.pageCount,6);
+    assert.equal(futureGridFirst.total,211);assert.equal(futureGridFirst.cardCount,36);assert.equal(futureGridFirst.totalLabel,'211 TRACKS');
+    assert.deepEqual(futureGridFirst.groups.map(group=>[group.name,group.total,group.pageCards]),[['Alternative',24,24],['Classical',83,12]]);
+    const futureSelectedCard=await evaluate(`(()=>{const card=document.querySelector('.music-catalog-grid-host .foobar-grid-card[aria-pressed="true"]'),cover=card.querySelector('.foobar-album-cover'),copy=card.querySelector('.foobar-album-copy'),r=cover.getBoundingClientRect();return{cardWidth:card.getBoundingClientRect().width,coverWidth:r.width,coverHeight:r.height,copy:getComputedStyle(copy).display,text:copy.querySelector('strong')?.textContent,aria:card.getAttribute('aria-label')};})()`);
+    assert.notEqual(futureSelectedCard.copy,'none');assert.ok(futureSelectedCard.coverWidth>0);assert.ok(Math.abs(futureSelectedCard.coverWidth-futureSelectedCard.coverHeight)<=1);
+    assert.equal(futureSelectedCard.text,'Alpha Grid Track 001');assert.ok(futureSelectedCard.aria);
+    await setFixtureTheme('day');
+    await evaluate(`Promise.all([...document.querySelectorAll('.music-catalog-grid-host img')].map(image=>image.decode().catch(()=>{})))`);
+    const futureDayGridScreenshot='display-future-grid-first-page-day.png';
+    const futureDayGridPng=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+    await writeFile(path.join(output,futureDayGridScreenshot),Buffer.from(futureDayGridPng.data,'base64'));
+    await setFixtureTheme('night');
+    await evaluate(`Promise.all([...document.querySelectorAll('.music-catalog-grid-host img')].map(image=>image.decode().catch(()=>{})))`);
+    const futureGridScreenshot='display-future-grid-first-page-36.png';
+    const futureGridPng=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+    await writeFile(path.join(output,futureGridScreenshot),Buffer.from(futureGridPng.data,'base64'));
+    await evaluate(`(()=>{fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    await clickDisplayControl('.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="1"]');
+    const crossingPage=await gridPageSnapshot();
+    assert.equal(crossingPage.pageIndex,1);assert.equal(crossingPage.cardCount,36);assert.equal(crossingPage.pageStatus,'02 / 06');
+    assert.equal(crossingPage.range,'37–72 / 211 TRACKS');assert.deepEqual(crossingPage.groups.map(group=>[group.name,group.index,group.total,group.pageCards]),[['Classical',1,83,36]]);
+    assert.equal(crossingPage.focusEntry,punkGridStart.focusEntry,'Manual paging leaves selection on the original track.');assert.equal(crossingPage.selected,undefined);punkGridPages.push(crossingPage);
+    const focusedNext=await evaluate(`(()=>{const button=document.querySelector('.foobar-catalog-grid .music-grid-pagination [data-music-grid-direction="next"]');button.focus();button.click();return true;})()`);
+    assert.equal(focusedNext,true);await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const nextFocusAfterPaging=await evaluate(`(()=>({page:fixture.musicGridPage.getMusicGridPage().pageIndex,direction:document.activeElement?.dataset.musicGridDirection,disabled:document.activeElement?.disabled}))()`);
+    assert.equal(nextFocusAfterPaging.page,2);assert.equal(nextFocusAfterPaging.direction,'next');assert.equal(nextFocusAfterPaging.disabled,false,
+      'Paging keeps keyboard focus on the usable Next control.');
+    const targetTrackKey='track|grid-classical|grid-classical-track-080';
+    assert.equal(await evaluate(`(()=>{const card=document.querySelector('.music-catalog-grid-host [data-foobar-entry=${JSON.stringify(targetTrackKey)}]');if(!card)return false;card.click();return true;})()`),true,'The non-first track on the later page is clickable.');
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const selectedLaterTrack=await evaluate(`(()=>({page:fixture.musicGridPage.getMusicGridPage().pageIndex,entry:fixture.musicApplication.catalogFocus.entryKey,track:fixture.musicApplication.catalogFocus.trackId,album:fixture.musicApplication.catalogFocus.albumId,index:fixture.musicApplication.selectedIndex,pressed:document.querySelector('.music-catalog-grid-host .foobar-grid-card[aria-pressed="true"]')?.dataset.foobarEntry,
+      cards:[...document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card')].slice(0,2).map(card=>({entry:card.dataset.foobarEntry,pressed:card.getAttribute('aria-pressed'),selected:card.classList.contains('is-selected')})),count:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length}))()`);
+    assert.equal(selectedLaterTrack.page,2);assert.equal(selectedLaterTrack.entry,targetTrackKey);assert.equal(selectedLaterTrack.track,'grid-classical-track-080');
+    assert.equal(selectedLaterTrack.album,'grid-classical');assert.equal(selectedLaterTrack.index,1);assert.equal(selectedLaterTrack.pressed,targetTrackKey,JSON.stringify(selectedLaterTrack));
+    const selectedLaterCover=await evaluate(`(()=>{const card=document.querySelector('.music-catalog-grid-host .foobar-grid-card[aria-pressed="true"]'),after=getComputedStyle(card,'::after');return{entry:card.dataset.foobarEntry,copy:getComputedStyle(card.querySelector('.foobar-album-copy')).display,aria:card.getAttribute('aria-label'),corners:(after.backgroundImage.match(/linear-gradient/g)||[]).length};})()`);
+    assert.equal(selectedLaterCover.entry,targetTrackKey);assert.equal(selectedLaterCover.copy,'none');assert.ok(selectedLaterCover.aria);assert.equal(selectedLaterCover.corners,4);
+    await evaluate(`Promise.all([...document.querySelectorAll('.music-catalog-grid-host img')].map(image=>image.decode().catch(()=>{})))`);
+    const selectedGridScreenshot='display-punk-grid-page-3-selected.png';
+    const selectedGridPng=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+    await writeFile(path.join(output,selectedGridScreenshot),Buffer.from(selectedGridPng.data,'base64'));
+
+    const pageSizeClicks=[];
+    for(const pageSize of [10,36,50,75,100,200]) {
+      await clickDisplayControl(`.foobar-catalog-toolbar [data-music-grid-size="${pageSize}"]`);
+      const state=await gridPageSnapshot();
+      const expectedPages=Math.ceil(211/pageSize),expectedCards=Math.min(pageSize,211);
+      assert.equal(state.view.gridPageSize,pageSize);assert.equal(state.pageSize,pageSize);assert.equal(state.pageIndex,0);
+      assert.equal(state.pageCount,expectedPages);assert.equal(state.total,211);assert.equal(state.cardCount,expectedCards);
+      assert.deepEqual(state.sizeSelected,[pageSize]);assert.equal(state.hiddenCards,0);assert.equal(state.allCardsHaveRects,true);
+      assert.equal(state.focusEntry,targetTrackKey,'Changing page size preserves the selected track identity.');
+      pageSizeClicks.push({pageSize,pageIndex:state.pageIndex,pageCount:state.pageCount,total:state.total,cards:state.cardCount,focusEntry:state.focusEntry,visibleSelection:state.selected});
+    }
+    await clickDisplayControl('.foobar-catalog-toolbar [data-music-grid-size="10"]');
+    await clickDisplayControl('.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="1"]');
+    for(const pageIndex of Array.from({length:20},(_,index)=>index+2))await clickDisplayControl(`.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="${pageIndex}"]`);
+    const tenPerPage=await gridPageSnapshot();assert.equal(tenPerPage.pageIndex,21);assert.equal(tenPerPage.cardCount,1);assert.equal(tenPerPage.pageStatus,'22 / 22');
+    const lastPageFocus=await evaluate(`(()=>({direction:document.activeElement?.dataset.musicGridDirection,disabled:document.activeElement?.disabled}))()`);
+    assert.equal(lastPageFocus.direction,'previous');assert.equal(lastPageFocus.disabled,false,'At the last page, keyboard focus moves to the usable Previous control.');
+    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const futureSync=await gridPageSnapshot();
+    assert.equal(futureSync.view.gridPageSize,10);assert.equal(futureSync.pageSize,10);assert.equal(futureSync.pageIndex,21);assert.equal(futureSync.total,211);assert.equal(futureSync.cardCount,1);
+    assert.equal(futureSync.focusEntry,targetTrackKey);assert.deepEqual(futureSync.sizeSelected,[10]);
+    assert.ok(futureSync.groups[0].pageCards>0);assert.ok(futureSync.allCardsHaveRects);
+    await clickDisplayControl('.music-browse-tools [data-music-grid-size="75"]');
+    const futureSizeChange=await gridPageSnapshot();
+    assert.equal(futureSizeChange.view.gridPageSize,75);assert.equal(futureSizeChange.pageIndex,0);assert.equal(futureSizeChange.pageCount,3);assert.equal(futureSizeChange.cardCount,75);
+    assert.equal(futureSizeChange.focusEntry,targetTrackKey,'Future page-size changes also retain the selected track.');
+    await evaluate(`(()=>{fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const punkSizeSync=await gridPageSnapshot();
+    assert.equal(punkSizeSync.view.gridPageSize,75);assert.equal(punkSizeSync.pageSize,75);assert.equal(punkSizeSync.pageIndex,0);assert.equal(punkSizeSync.cardCount,75);
+    assert.equal(punkSizeSync.focusEntry,targetTrackKey);
+
+    await clickDisplayControl('.foobar-catalog-toolbar [data-music-grid-size="36"]');
+    for(const pageIndex of [1,2,3,4])await clickDisplayControl(`.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="${pageIndex}"]`);
+    assert.equal((await gridPageSnapshot()).pageIndex,4);
+    await clickDisplayControl('.foobar-catalog-toolbar [data-field="show"] [data-foobar-catalog="show"][data-value="albums"]');
+    const albumShow=await gridPageSnapshot();assert.equal(albumShow.view.show,'albums');assert.equal(albumShow.pageIndex,0);assert.equal(albumShow.total,4);assert.equal(albumShow.cardCount,4);
+    await clickDisplayControl('.foobar-catalog-toolbar [data-field="show"] [data-foobar-catalog="show"][data-value="tracks"]');
+    const trackShow=await gridPageSnapshot();assert.equal(trackShow.view.show,'tracks');assert.equal(trackShow.pageIndex,0);assert.equal(trackShow.total,211);assert.equal(trackShow.cardCount,36);
+    await clickDisplayControl('.foobar-catalog-toolbar [data-field="sort"] [data-foobar-catalog="sort"][data-value="title"]');
+    assert.equal((await gridPageSnapshot()).pageIndex,0,'SORT changes reset the current grid page.');
+    await clickDisplayControl('.foobar-catalog-toolbar [data-field="sort"] [data-foobar-catalog="sort"][data-value="added"]');
+    assert.equal((await gridPageSnapshot()).pageIndex,0);
+    for(const pageIndex of [1,2,3])await clickDisplayControl(`.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="${pageIndex}"]`);
+    const focusBeforeFilter=(await gridPageSnapshot()).focusEntry;
+    await evaluate(`(()=>{const input=document.querySelector('.foobar-header-search');input.value='no-match';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(resolve=>setTimeout(resolve,240));
+    const filteredGrid=await gridPageSnapshot();assert.equal(filteredGrid.pageIndex,0);assert.equal(filteredGrid.pageSize,36);assert.equal(filteredGrid.total,0);assert.equal(filteredGrid.cardCount,0);
+    assert.equal(filteredGrid.pageStatus,'00 / 00');assert.equal(filteredGrid.range,'0–0 / 0 TRACKS');assert.equal(filteredGrid.focusEntry,focusBeforeFilter);
+    await evaluate(`(()=>{const input=document.querySelector('.foobar-header-search');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await new Promise(resolve=>setTimeout(resolve,240));
+    const clearedGrid=await gridPageSnapshot();assert.equal(clearedGrid.pageIndex,0);assert.equal(clearedGrid.total,211);assert.equal(clearedGrid.cardCount,36);
+    assert.equal(clearedGrid.focusEntry,focusBeforeFilter);assert.equal(clearedGrid.pageStatus,'01 / 06');
+    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const futureFilterSync=await gridPageSnapshot();assert.equal(futureFilterSync.view.gridPageSize,36);assert.equal(futureFilterSync.pageIndex,0);assert.equal(futureFilterSync.total,211);
+    assert.equal(futureFilterSync.focusEntry,focusBeforeFilter);assert.deepEqual(futureFilterSync.sizeSelected,[36]);
+    await evaluate(`(()=>{fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+    const punkFilterSync=await gridPageSnapshot();assert.equal(punkFilterSync.view.gridPageSize,36);assert.equal(punkFilterSync.pageIndex,0);assert.equal(punkFilterSync.total,211);
+    assert.equal(punkFilterSync.focusEntry,focusBeforeFilter);
+
+    await clickDisplayControl('.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="1"]');
+    await clickDisplayControl('.foobar-catalog-grid .music-grid-pagination [data-music-grid-page="2"]');
+    assert.equal(await evaluate(`(()=>{const card=document.querySelector('.music-catalog-grid-host [data-foobar-entry=${JSON.stringify(targetTrackKey)}]');if(!card)return false;card.click();return true;})()`),true);
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    assert.equal(await evaluate(`fixture.musicApplication.catalogFocus.entryKey`),targetTrackKey,'The page-two non-first track can be selected again after changing SHOW.');
+    const targetOpen=await evaluate(`(()=>{const button=document.querySelector('.album-panel .open-album');if(!button)return false;button.click();return true;})()`);
+    assert.equal(targetOpen,true);
+    await evaluate(`(()=>{fixture.sharedPanel.setOpen(true);fixture.sharedPanel.finish();fixture.musicApplication.activeTab='tracks';fixture.renderSharedTab('tracks');fixture.sharedPanel.contentChanged(fixture.musicApplication.selectedAlbumId);fixture.sharedPanel.finish();})()`);
+    const selectedDetail=await evaluate(`(()=>({mode:fixture.musicApplication.mode,entry:fixture.musicApplication.catalogFocus.entryKey,track:fixture.musicApplication.catalogFocus.trackId,album:fixture.musicApplication.catalogFocus.albumId,
+      selectedTrack:fixture.musicApplication.selectedTrackId,rows:[...document.querySelectorAll('#album-tab-content .track-row')].map(row=>row.dataset.track)}))()`);
+    assert.equal(selectedDetail.mode,'detail');assert.equal(selectedDetail.entry,targetTrackKey);assert.equal(selectedDetail.track,'grid-classical-track-080');
+    assert.equal(selectedDetail.album,'grid-classical');assert.equal(selectedDetail.selectedTrack,'grid-classical-track-080');
+    assert.ok(selectedDetail.rows.includes('grid-classical-track-080'));
+    const paginationScreenshotPaths={punkFirstPage:firstGridScreenshot,futureFirstPage:futureGridScreenshot,
+      punkFirstPageDay:punkDayGridScreenshot,futureFirstPageDay:futureDayGridScreenshot,punkSelectedPage:selectedGridScreenshot};
     await writeFile(path.join(output,'display-controls.json'),JSON.stringify({viewport:{width:1920,height:1080},stylePageChecks,layoutControls:controlSnapshots,
-      browseFields:browseFieldSnapshots,filters:filterSnapshots,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots},null,2));
-    console.log('Passed --display and saved Future/Punk browse, grid, Future day/night detail screenshots, and display-controls.json.');
+      browseFields:browseFieldSnapshots,filters:filterSnapshots,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots,
+      gridPagination:{fixture:gridPagination,punkDefault:punkGridStart,punkFirstCover:firstSelectedCover,punkCrossing:crossingPage,nextFocusAfterPaging,lastPageFocus,
+        punkSelected:selectedLaterTrack,punkSelectedCover:selectedLaterCover,pageSizeClicks,pageSizeSync:{future:futureSync,punk:punkSizeSync},futureFirst:futureGridFirst,futureSelectedCard,
+        show:{albums:albumShow,tracks:trackShow},filtered:filteredGrid,cleared:clearedGrid,detail:selectedDetail,screenshots:paginationScreenshotPaths}},null,2));
+    console.log('Passed --display and saved Future/Punk browse, day/night paginated grid, Future day/night detail screenshots, and display-controls.json.');
   } else if(navigationMode) {
     const report=await checkManagementNavigation({command,evaluate,output});
     console.log(`Passed management navigation: ${report.cases.length} focused design, detail, Escape and ARCHIVE return cases; native ViewTransition ${report.nativeViewTransition?'available':'unavailable'}.`);

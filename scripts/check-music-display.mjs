@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
-import { createTrackFixture } from "./check-foobar-tracks.mjs";
+import { createTrackFixture, createGridPaginationRecords } from "./check-foobar-tracks.mjs";
 
 const {
   musicCatalog,
@@ -115,9 +115,11 @@ assert.deepEqual({ ...viewSettings.legacyCatalogOptions(musicCatalog.getMusicCat
 
 assert.deepEqual({ ...viewSettings.musicViewFromLegacy({ layout: "future", show: "tracks", group: "none", sort: "added" }) }, {
   layout: "array", show: "tracks", group: "none", sort: "added",
+  gridPageSize: 36,
 }, "Legacy FUTURE storage migrates to the public array layout.");
 assert.deepEqual({ ...viewSettings.musicViewFromLegacy({ layout: "array", show: "albums", group: "artist", sort: "year" }) }, {
   layout: "shelf", show: "albums", group: "artist", sort: "year",
+  gridPageSize: 36,
 }, "Legacy ARRAY storage migrates to the public shelf layout.");
 assert.equal(musicApplication.query, "Needle");
 assert.equal(musicCatalog.getMusicCatalogGroups()[0].entryKeys.length, 1);
@@ -202,6 +204,54 @@ assert.equal(musicCatalog.getMusicCatalogGroups().length, 2, "Clearing the query
 assert.ok(musicShelves.getMusicCatalogShelves().length > 0, "Clearing the query rebuilds the shelf projection.");
 assert.equal(musicCatalog.getMusicFocusedEntry(sameAlbumTracks[1].recordIndex).key, sameAlbumTracks[1].key,
   "Clearing the query restores a still-valid focused entry.");
+
+const gridPageFixture = await createTrackFixture(createGridPaginationRecords());
+const gridPageCatalog = gridPageFixture.musicCatalog;
+const gridPageState = gridPageFixture.applicationState.musicApplication;
+const gridPageApi = gridPageFixture.musicGridPage;
+gridPageCatalog.configureMusicCatalog({ layout: "grid", show: "tracks", group: "genre", sort: "added" }, "");
+assert.equal(gridPageState.view.gridPageSize, 36);
+assert.equal(gridPageApi.getMusicGridPage().total, 211);
+assert.equal(gridPageApi.getMusicGridPage().pageCount, 6);
+const detailEntry = gridPageCatalog.getMusicDisplayEntries().find(entry => entry.albumId === "grid-classical" && entry.track?.trackNumber === 11);
+assert.ok(detailEntry?.track, "The pagination fixture contains a non-first track in a later group.");
+gridPageState.selectAlbum(detailEntry.recordIndex, detailEntry.albumId);
+gridPageCatalog.focusMusicEntry(detailEntry.key);
+gridPageState.activeTab = "about";
+gridPageState.infoScrollTop = 72;
+gridPageState.setGridPage(3);
+assert.equal(gridPageState.gridPage, 3);
+assert.equal(gridPageState.catalogFocus.entryKey, detailEntry.key);
+assert.equal(gridPageState.selectedTrackId, detailEntry.trackId);
+assert.equal(gridPageState.activeTab, "about");assert.equal(gridPageState.infoScrollTop, 72);
+gridPageCatalog.configureMusicCatalog({ layout: "array" }, "");
+assert.equal(gridPageState.gridPage, 3, "Switching layouts preserves the current runtime grid page.");
+gridPageCatalog.configureMusicCatalog({ layout: "grid" }, "");
+assert.equal(gridPageState.gridPage, 3, "Returning to Grid preserves the runtime page.");
+assert.equal(gridPageState.catalogFocus.entryKey, detailEntry.key);
+gridPageCatalog.configureMusicCatalog({ gridPageSize: 50 }, "");
+assert.equal(gridPageState.gridPage, 0, "Changing page size resets the page index.");
+assert.equal(gridPageApi.getMusicGridPage().pageSize, 50);
+gridPageState.setGridPage(2);
+gridPageCatalog.configureMusicCatalog({ sort: "title" }, "");
+assert.equal(gridPageState.gridPage, 0, "Sorting resets to the first page.");
+gridPageState.setGridPage(2);
+gridPageCatalog.configureMusicCatalog({ group: "artist" }, "");
+assert.equal(gridPageState.gridPage, 0, "Regrouping resets to the first page.");
+gridPageState.setGridPage(2);
+gridPageCatalog.configureMusicCatalog({ show: "albums" }, "");
+assert.equal(gridPageState.gridPage, 0, "Changing SHOW resets to the first page.");
+assert.equal(gridPageApi.getMusicGridPage().total, 4);
+gridPageState.setGridPage(2);
+gridPageCatalog.configureMusicCatalog({ show: "tracks", sort: "added" }, "Needle");
+assert.equal(gridPageState.gridPage, 0, "Filtering resets to the first page.");
+assert.equal(gridPageApi.getMusicGridPage().total, 1);
+assert.equal(gridPageState.catalogFocus.entryKey, detailEntry.key, "Filtering does not replace selected track identity.");
+gridPageCatalog.configureMusicCatalog({}, "no-synthetic-match");
+assert.equal(gridPageState.gridPage, 0);assert.equal(gridPageApi.getMusicGridPage().total, 0);
+gridPageCatalog.configureMusicCatalog({}, "");
+assert.equal(gridPageApi.getMusicGridPage().total, 211, "Clearing the query restores all track entries.");
+assert.equal(gridPageState.catalogFocus.entryKey, detailEntry.key);
 
 for (const layout of ["shelf", "array", "grid"]) {
   const result = displayLayout.resolveMusicDisplayLayout(layout, ["shelf", "array", "grid"]);

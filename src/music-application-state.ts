@@ -19,6 +19,7 @@ export class MusicApplicationState {
   private focusValue: CatalogFocus | undefined;
   private viewValue: Readonly<MusicViewSettings>;
   private queryValue = "";
+  private gridPageValue = 0;
   private catalogRevisionValue = 0;
   private spatialLayoutValue: "shelf" | "array";
 
@@ -29,6 +30,7 @@ export class MusicApplicationState {
 
   get view() { return this.viewValue; }
   get query() { return this.queryValue; }
+  get gridPage() { return this.gridPageValue; }
   get catalogRevision() { return this.catalogRevisionValue; }
   get spatialLayout() { return this.spatialLayoutValue; }
   get catalogFocus() { return this.focusValue ? { ...this.focusValue } : undefined; }
@@ -36,14 +38,22 @@ export class MusicApplicationState {
     return this.focusValue?.albumId === this.selectedAlbumId ? this.focusValue?.trackId : undefined;
   }
 
+  setGridPage(page: number) {
+    this.gridPageValue = Number.isFinite(page) ? Math.max(0, Math.floor(page)) : 0;
+  }
+
   configureView(next: Partial<MusicViewSettings>, query = this.queryValue) {
     const view = normalizeMusicViewSettings({ ...this.viewValue, ...next });
     const text = query.trim();
     if (view.layout === this.viewValue.layout && view.show === this.viewValue.show &&
-      view.group === this.viewValue.group && view.sort === this.viewValue.sort && text === this.queryValue) return;
+      view.group === this.viewValue.group && view.sort === this.viewValue.sort &&
+      view.gridPageSize === this.viewValue.gridPageSize && text === this.queryValue) return;
+    const gridResultsChanged = view.show !== this.viewValue.show || view.group !== this.viewValue.group ||
+      view.sort !== this.viewValue.sort || view.gridPageSize !== this.viewValue.gridPageSize || text !== this.queryValue;
     this.viewValue = Object.freeze(view);
     if (view.layout !== "grid") this.spatialLayoutValue = view.layout;
     this.queryValue = text;
+    if (gridResultsChanged) this.gridPageValue = 0;
     this.catalogRevisionValue++;
   }
 
