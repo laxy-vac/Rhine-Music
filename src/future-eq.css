@@ -28,6 +28,25 @@ html .music-app[data-design="rhine"] #music-eq-page #eq-page-content {
   scrollbar-color: color-mix(in srgb, var(--future-eq-edge-hi) 28%, transparent) transparent;
 }
 
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings {
+  border-color: color-mix(in srgb, var(--future-eq-edge) 36%, transparent);
+  border-radius: 16px;
+  background: var(--future-eq-glass);
+  color: var(--future-eq-instrument);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .tone-filter-card {
+  border-color: color-mix(in srgb, var(--future-eq-edge) 36%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--future-eq-panel) 80%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings input[type="number"] {
+  border-radius: 10px;
+  color: var(--future-eq-instrument);
+  background: var(--future-eq-glass);
+}
+
 html .music-app[data-design="rhine"] #music-eq-page #eq-page-editor .eq-controls {
   color: var(--future-eq-instrument);
 }

@@ -148,6 +148,7 @@ export const mainEnglish: Record<string, string> = {
   "的介绍查询已开始，可在设置中查看进度。": "’s description search has started. Check its progress in Settings.",
   "等待校验表示尚未获得本次播放的检查结果。": "Pending means no check result is available for this playback session yet.",
   "低音与高音": "Bass and treble",
+  "独立于均衡器开关；低音和高音增益均为 0 dB 时不改变声音。": "Controlled separately from the equalizer; bass and treble at 0 dB leave the sound unchanged.",
   "调节独立的低音和高音架式滤波。导入预设只填入参数，不会自动打开音调控制。": "Adjust the separate bass and treble shelf filters. Importing a preset fills in the parameters but does not enable tone controls.",
   "调整界面动效、操作音效和氛围配乐。": "Adjust interface motion, interface sounds, and ambient music.",
   "调整频段，预览声音的变化": "Adjust frequency bands and preview the sound",

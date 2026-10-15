@@ -34,7 +34,8 @@ assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{
 const displayMode = process.argv.includes('--display');
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
-const sharedMode = process.argv.includes('--panel') || navigationMode || displayMode || glassMode;
+const eqMode = process.argv.includes('--eq');
+const sharedMode = process.argv.includes('--panel') || navigationMode || displayMode || glassMode || eqMode;
 const navigationBootstrap = navigationMode ? createManagementNavigationBootstrap(main) : '';
 const hiResURL='data:image/svg+xml;base64,'+(await readFile(path.join(project,'public/audio-tech/hi-res.svg'))).toString('base64');
 let css = await readFile(path.join(project, "node_modules/@kitlangton/rolling-number/dist/styles.css"), "utf8");
@@ -343,7 +344,8 @@ const initialize = `(async () => {
   const locatePlaying=(albumId,trackId)=>{coverInspection=[albumId,trackId];};
   const openArchivePage=()=>{coverInspection=['focused'];};
   const setMode=mode=>{coverInspection??=[];coverInspection.push(mode);musicApplication.mode=mode;stage.dataset.mode=mode;};
-  const audioInfoPopup=setupAudioInfoPopup(stage,{refresh(){refreshed++;},navigate(category,target){navigated=target;}});
+  const audioInfoCallbacks={refresh(){refreshed++;},navigate(category,target){navigated=target;}};
+  const audioInfoPopup=setupAudioInfoPopup(stage,audioInfoCallbacks);
   const albumQueue=setupAlbumQueue(stage,{albumFor:id=>id===albumMock.id?albumMock:undefined,play:(id,tracks)=>player.play(id,tracks),closeOther:()=>audioInfoPopup.close(false)});
   document.addEventListener('click',event=>{const target=event.target.closest('button,[data-action]');if(!target)return;const action=target.dataset.action;
     if(action==='playback-queue'){albumQueue.toggle(target);return;}
@@ -362,7 +364,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -414,7 +416,10 @@ try {
   const {frameTree}=await command("Page.getFrameTree",{});
   await command("Page.setDocumentContent",{frameId:frameTree.frame.id,html:`<!doctype html><style>${css}</style><main id="stage" class="music-app"></main>`});
   await evaluate(initialize);
-  if(glassMode) {
+  if(eqMode) {
+    await checkPunkEq({command,evaluate,output,project});
+    console.log('Passed focused EQ rendering and tone controls; screenshots and report saved under .tools/foobar-layout-check.');
+  } else if(glassMode) {
     await checkTerminalGlassProbe({command,evaluate,output:path.join(output,"terminal-glass",process.argv.includes('--baseline')?'baseline':'current'),project});
   } else {
   if(sharedMode) {
@@ -1178,7 +1183,7 @@ try {
   }
   }
 } finally {
-  if(!displayMode&&!glassMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
+  if(!displayMode&&!glassMode&&!eqMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
   for(const {timer} of pending.values())clearTimeout(timer);
   if(socket?.readyState===WebSocket.OPEN)await send("Browser.close").catch(()=>browser.kill());
   else browser.kill();

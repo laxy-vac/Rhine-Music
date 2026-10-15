@@ -138,6 +138,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-foobar-layout.mjs --display` | 真实浏览工具栏、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查两主题三布局与Punk橙色状态点、字段同步、筛选恢复、右栏/曲目保持、排列别名、STYLE无旧视图区及Future无内嵌筛选框；211条目验证六档页大小、页码边界、全组计数、内容变化重置、主题同步、非首曲详情、分页键盘焦点及DOM上限；Punk日间头部另断言FLAC文本display:none、无布局框且橙色chip不存在。报告`.tools/foobar-layout-check/display-controls.json`的`formatBadgeChecks`记录该结果；与实际Scene验证分开 |
 | `scripts/check-foobar-layout.mjs --glass` | 真实Future顶栏SVG、歌词组件和terminal-lighting的离线光效回归；日夜×四档、受光对象/留白/内部裁切/窄屏滚动，报告和截图在foobar-layout-check/terminal-glass/current。`--baseline`仅用于修复前留证，`--compare-existing`只分析已有A/B PNG底边像素，不重拍；严格模拟歌词请求，不启动音乐服务或设备 |
 | `scripts/check-foobar-layout.mjs --navigation` | 第一阶段管理页返回专用合成DOM检查；生产打开/ARCHIVE点击、STYLE/主题切换/关闭及全局键盘函数，真实面板与过渡控制器，模拟播放器/Scene；实际CDP鼠标/键盘，报告management-navigation.json。不运行114项宽布局矩阵或个人播放器 |
+| `scripts/check-foobar-layout.mjs --eq` | EQ迁移聚焦入口，复用离线DOM/独立Chrome profile；检查设置中EQ/Tone入口清退、EQ页独立音调开关和参数、预设唯一挂载、音频链路跳转及两主题外观。播放器/保存/音频接口使用隔离模拟，不启动个人播放器或设备，不代替LSP原生窗口实机验收 |
 | `scripts/check-case-system.mjs --punk-view` | 真实Scene/本地GLB/合成曲库，两主题公共阵列/TRACKS与网格详情、Future精细父编号、空过滤恢复、Punk机位/鼠标命中、右区裁切与JSON布局偏好；不启动播放器 |
 | `scripts/check-case-user-presets.mjs` | 个人预设JSON往返、独立快照、输入校验与桌面偏好白名单；不读取个人配置或设备 |
 | `scripts/check-archive-label.mjs` | 仍有效的公共Canvas标签绘制helper：编号、缩放/图像就绪及真实源格式分类；Scene/GLB中完整铭牌另由真实图形检查覆盖 |

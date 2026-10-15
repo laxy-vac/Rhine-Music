@@ -45,6 +45,48 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
       presets: presetStore,
     };
   })()`);
+  const openTopLevelPage = async (action, page, label) => {
+    const current = await evaluate(`document.querySelector('#stage')?.dataset.page ?? ''`);
+    if (current !== page) await click(`.music-topnav [data-action="${action}"]`);
+    await waitFor(`document.querySelector('#stage')?.dataset.page === ${JSON.stringify(page)}`, label);
+  };
+  const openSettingsAudio = async (label = 'audio settings') => {
+    await openTopLevelPage('settings', 'settings', `${label}: settings page`);
+    const category = await evaluate(`document.querySelector('#music-settings [data-settings-category-target][aria-current="page"]')?.dataset.settingsCategoryTarget ?? ''`);
+    if (category !== 'audio') await click('#music-settings [data-settings-category-target="audio"]');
+    await waitFor(`document.querySelector('#music-settings [data-settings-category-target="audio"]')?.getAttribute('aria-current') === 'page'`, `${label}: audio category`);
+  };
+  const openEqPage = async (label = 'EQ page') => {
+    await openTopLevelPage('eq', 'eq', label);
+    await waitFor(`document.querySelector('#music-eq-page')?.hidden === false && document.querySelector('#music-eq-page')?.inert === false`, `${label} is visible`);
+  };
+  const assertSettingsHasNoEqOrTone = async (label = 'Settings EQ/Tone placement') => {
+    const placement = await evaluate(`(() => { const root=document.querySelector('#music-settings'); return {
+      navigation: root.querySelectorAll('[data-audio-settings-target="eq"],[data-audio-settings-target="tone"]').length,
+      groups: root.querySelectorAll('#audio-settings-eq,#audio-settings-tone').length,
+      fields: root.querySelectorAll('[data-processing-field^="eq."],[data-processing-field^="tone."]').length,
+      presetControls: root.querySelectorAll('#processing-presets,#processing-preset-select,[data-processing-presets-slot]').length,
+    }; })()`);
+    assert.deepEqual(placement, { navigation: 0, groups: 0, fields: 0, presetControls: 0 }, label);
+  };
+  const assertEqPageControls = async (label = 'EQ page controls', expectedTone = { enabled: false, bassGain: '0', trebleGain: '0' }) => {
+    const placement = await evaluate(`(() => { const root=document.querySelector('#music-eq-page'),count=s=>root.querySelectorAll(s).length,value=s=>root.querySelector(s)?.value??null; return {
+      presetGroups: count('.eq-preset-disclosure'), presetSelects: count('#processing-preset-select'),
+      eqSwitches: count('[data-processing-field="eq.enabled"]'), toneSections: count('#tone-settings'),
+      toneSwitches: count('#tone-settings [data-processing-field="tone.enabled"]'),
+      bassFields: ['frequency','q','gain'].reduce((n,key)=>n+count('[data-processing-field="tone.bass.'+key+'"]'),0),
+      trebleFields: ['frequency','q','gain'].reduce((n,key)=>n+count('[data-processing-field="tone.treble.'+key+'"]'),0),
+      bassGain: value('[data-processing-field="tone.bass.gain"]'), trebleGain: value('[data-processing-field="tone.treble.gain"]'),
+      toneEnabled: root.querySelector('[data-processing-field="tone.enabled"]')?.checked??null,
+      allPresetSelects: document.querySelectorAll('#processing-preset-select').length,
+    }; })()`);
+    assert.deepEqual(placement, {
+      presetGroups: 1, presetSelects: 1, eqSwitches: 1, toneSections: 1, toneSwitches: 1,
+      bassFields: 3, trebleFields: 3, bassGain: expectedTone.bassGain, trebleGain: expectedTone.trebleGain,
+      toneEnabled: expectedTone.enabled, allPresetSelects: 1,
+    }, label);
+    return placement;
+  };
 
   try {
     assert(browserWindow && typeof waitFor === 'function' && typeof click === 'function' && typeof capture === 'function',
@@ -83,6 +125,7 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     await waitFor(`document.querySelector('#stage')?.dataset.page === 'settings'`, 'audio controls settings page');
     await click('#music-settings [data-settings-category-target="audio"]');
     await waitFor(`document.querySelector('#music-settings [data-settings-category-target="audio"]')?.getAttribute('aria-current') === 'page'`, 'audio settings category');
+    await assertSettingsHasNoEqOrTone();
 
     const profileOriginState = await evaluate(`({ exists: window.rhineDesktop?.audioPresetStoreExists, error: window.rhineDesktop?.audioPresetPersistenceError ?? '' })`);
     assert.deepEqual(profileOriginState, { exists: false, error: '' }, 'Audio preset migration fixture requires a new, healthy desktop profile file.');
@@ -102,6 +145,22 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     const migratedStore = await readPersistedPresetStore((store) => store.presets?.some((preset) => preset.id === 'legacy-local-eq'), 'existing-origin localStorage store migrated to the profile file');
     assert.equal(migratedStore.eqBanks.graphic.bands.length, processingDefault.eq.bands.length, 'Migration lost the existing graphic mode bank.');
     report.checks.existingOriginPresetStoreMigratesToProfile = true;
+
+    await openEqPage('EQ top-level navigation after preset-store migration');
+    await assertEqPageControls('EQ page owns one preset group, independent switches, and the default tone values');
+    const beforeToneToggle = await getState();
+    assert.equal(beforeToneToggle.processing.tone.enabled, false, 'Tone switch must start disabled.');
+    assert.equal(beforeToneToggle.processing.tone.bass.gain, 0, 'Default bass gain must be 0 dB.');
+    assert.equal(beforeToneToggle.processing.tone.treble.gain, 0, 'Default treble gain must be 0 dB.');
+    await setField('tone.enabled', true);
+    await waitFor(`JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing?.tone?.enabled===true`, 'independent tone switch enabled');
+    const toneEnabledState = await getState();
+    assert.deepEqual(toneEnabledState.processing.eq, beforeToneToggle.processing.eq, 'Enabling Tone changed the EQ switch or parameters.');
+    await setField('tone.enabled', false);
+    await waitFor(`JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing?.tone?.enabled===false`, 'independent tone switch disabled');
+    const toneDisabledState = await getState();
+    assert.deepEqual(toneDisabledState.processing.eq, beforeToneToggle.processing.eq, 'Disabling Tone changed the EQ switch or parameters.');
+    report.checks.toneSwitchIsIndependentOfEq = true;
 
     const graphicAudit = await evaluate(`(() => {
       const mode = document.querySelector('#processing-eq-controls [data-processing-field="eq.mode"]');
@@ -130,8 +189,6 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     assert.equal(graphicAudit.sliderBank, true, 'Graphic EQ must show its fixed-band gain slider bank.');
 
     if (typeof setViewport === 'function') await setViewport(1280, 840);
-    await click('#audio-settings-subnav [data-audio-settings-target="eq"]');
-    await waitFor(`document.querySelector('#audio-settings-eq')?.getBoundingClientRect().height > 0`, 'EQ section visible');
     await click('.music-header .theme-switch [data-theme="day"]');
     await waitFor(`document.querySelector('#stage')?.dataset.theme === 'day'`, 'warm day theme');
     report.screenshots.push(await capture('audio-eq-1280x840-day.png'));
@@ -141,7 +198,7 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     await click('.music-header .theme-switch [data-theme="day"]');
     await waitFor(`document.querySelector('#stage')?.dataset.theme === 'day'`, 'restore day theme after EQ capture');
     await evaluate(`document.querySelector('#processing-eq-controls .eq-response-figure')?.scrollIntoView({block:'center',behavior:'instant'})`);
-    await waitFor(`(() => { const figure=document.querySelector('#processing-eq-controls .eq-response-figure'); const content=document.querySelector('.settings-page-content'); if(!figure||!content) return false; const a=figure.getBoundingClientRect(), b=content.getBoundingClientRect(); return a.top>=b.top-1 && a.bottom<=b.bottom+1; })()`, 'EQ response chart in view');
+    await waitFor(`(() => { const figure=document.querySelector('#processing-eq-controls .eq-response-figure'); const content=document.querySelector('#eq-page-content'); if(!figure||!content) return false; const a=figure.getBoundingClientRect(), b=content.getBoundingClientRect(); return a.top>=b.top-1 && a.bottom<=b.bottom+1; })()`, 'EQ response chart in view');
     report.screenshots.push(await capture('audio-eq-response-1280x840-day.png'));
     await click('.music-header .theme-switch [data-theme="night"]');
     await waitFor(`document.querySelector('#stage')?.dataset.theme === 'night'`, 'night theme for EQ response chart');
@@ -189,8 +246,8 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     if (typeof setViewport === 'function') {
       await setViewport(1920, 1080);
       await evaluate(`document.querySelector('#processing-eq-controls .eq-workspace').scrollIntoView({block:'start',behavior:'instant'})`);
-      await waitFor(`(() => { const strip=document.querySelector('.eq-parametric-strip'), figure=document.querySelector('.eq-response-figure'), content=document.querySelector('.settings-page-content'); if(!strip||!figure||!content)return false; const a=strip.getBoundingClientRect(),b=figure.getBoundingClientRect(),c=content.getBoundingClientRect(); return a.top>=c.top-2 && a.bottom<=b.top+2 && b.bottom<=c.bottom+2; })()`, 'parameter strip and response fit together in the fullscreen-sized viewport');
-      const fullLayout = await evaluate(`(() => { const strip=document.querySelector('.eq-parametric-strip'), content=document.querySelector('.settings-page-content'), page=document.querySelector('#music-settings'), cards=[...strip.querySelectorAll('[data-eq-band-card]')]; return {width:content.clientWidth,rightGap:page.getBoundingClientRect().right-content.getBoundingClientRect().right,singleRow:cards.every(card=>Math.abs(card.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:strip.scrollWidth>strip.clientWidth}; })()`);
+      await waitFor(`(() => { const strip=document.querySelector('.eq-parametric-strip'), figure=document.querySelector('.eq-response-figure'), content=document.querySelector('#eq-page-content'); if(!strip||!figure||!content)return false; const a=strip.getBoundingClientRect(),b=figure.getBoundingClientRect(),c=content.getBoundingClientRect(); return a.top>=c.top-2 && a.bottom<=b.top+2 && b.bottom<=c.bottom+2; })()`, 'parameter strip and response fit together in the fullscreen-sized viewport');
+      const fullLayout = await evaluate(`(() => { const strip=document.querySelector('.eq-parametric-strip'), content=document.querySelector('#eq-page-content'), page=document.querySelector('#music-eq-page'), cards=[...strip.querySelectorAll('[data-eq-band-card]')]; return {width:content.clientWidth,rightGap:page.getBoundingClientRect().right-content.getBoundingClientRect().right,singleRow:cards.every(card=>Math.abs(card.getBoundingClientRect().top-cards[0].getBoundingClientRect().top)<1),overflow:strip.scrollWidth>strip.clientWidth}; })()`);
       assert(fullLayout.width>1400 && fullLayout.rightGap<16, 'Fullscreen settings retained the narrow content cap.');
       assert(fullLayout.singleRow && fullLayout.overflow, 'Parametric cards do not form one scrollable horizontal strip.');
       await evaluate(`(() => { const range=document.querySelector('[data-eq-strip-scroll]'); range.value='850'; range.dispatchEvent(new Event('input',{bubbles:true})); })()`);
@@ -222,6 +279,9 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     await click('#music-settings [data-settings-category-target="audio"]');
     await waitFor(`(() => { const p=JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing; const b=JSON.parse(localStorage.getItem('rhine-audio-processing-presets-v1')||'{}').eqBanks; return p?.eq?.mode==='parametric' && p.eq.bands[0]?.type===0 && b?.graphic?.bands?.[0]?.frequency===31 && b?.graphic?.bands?.[0]?.gain>4.2 && b?.parametric?.bands?.[0]?.q===0.8; })()`, 'both EQ mode banks restored after reload');
     report.checks.modeBanksSurviveReload = true;
+    await assertSettingsHasNoEqOrTone('Settings remains free of EQ/Tone controls after EQ state reload');
+    await openEqPage('EQ page after mode-bank reload');
+    await assertEqPageControls('EQ controls and presets are mounted on the EQ page after reload');
 
     const presetNamed = await evaluate(`(() => { const n=document.querySelector('#processing-preset-name'); if(!n) return false; n.value='Audio Core EQ'; n.dispatchEvent(new Event('input',{bubbles:true})); n.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
     assert.equal(presetNamed, true, 'Could not enter the EQ preset name.');
@@ -234,10 +294,27 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     await setField('tone.bass.frequency', 130);
     await setField('tone.bass.q', 0.9);
     await setField('tone.bass.gain', 3.5);
+    await setField('tone.treble.frequency', 9200);
+    await setField('tone.treble.q', 0.75);
+    await setField('tone.treble.gain', -1.5);
+    const toneBeforePageRoundTrip = await getState();
+    await openSettingsAudio('ReplayGain control remains in Settings');
+    await assertSettingsHasNoEqOrTone();
     await setField('replayGain.mode', 'gain');
     await setField('replayGain.source', 'album');
     await setField('replayGain.preamp', 1.25);
     await waitFor(`(() => { const p=JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing; return p?.tone?.enabled===true && p.replayGain?.mode==='gain' && p.replayGain?.source==='album' && Math.abs(p.replayGain.preamp-1.25)<0.001; })()`, 'local tone and ReplayGain state saved');
+    await openEqPage('return to EQ after editing ReplayGain in Settings');
+    const toneAfterPageRoundTrip = await getState();
+    assert.deepEqual(toneAfterPageRoundTrip.processing.tone, toneBeforePageRoundTrip.processing.tone, 'EQ page navigation changed Tone values.');
+    assert.deepEqual(toneAfterPageRoundTrip.processing.eq, toneBeforePageRoundTrip.processing.eq, 'EQ page navigation changed EQ values.');
+    const visibleToneAfterRoundTrip = await evaluate(`(() => ({
+      enabled: document.querySelector('#tone-settings [data-processing-field="tone.enabled"]')?.checked ?? null,
+      bass: [...document.querySelectorAll('#tone-settings [data-processing-field^="tone.bass."]')].map(n=>n.value),
+      treble: [...document.querySelectorAll('#tone-settings [data-processing-field^="tone.treble."]')].map(n=>n.value),
+    }))()`);
+    assert.deepEqual(visibleToneAfterRoundTrip, { enabled: true, bass: ['130', '0.9', '3.5'], treble: ['9200', '0.75', '-1.5'] }, 'Re-rendered EQ page did not show saved Tone values.');
+    report.checks.toneValuesSurviveEqSettingsNavigation = true;
     const stateBeforePresetApply = await getState();
     await evaluate(`(() => { const s=document.querySelector('#processing-preset-select'); const p=JSON.parse(localStorage.getItem('rhine-audio-processing-presets-v1')||'{}').presets.find(p=>p.name==='Audio Core EQ'); if(!s||!p) return false; s.value=p.id; s.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
     await waitFor(`(() => { const p=JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing; return p?.eq?.bands?.[0]?.frequency===60 && p?.tone?.bass?.frequency===130 && p?.replayGain?.source==='album'; })()`, 'EQ preset application preserves local tone and ReplayGain');
@@ -357,6 +434,7 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     }
     report.checks.rhineBackupDefaultsToEqAndRequiresExplicitFullRestore = true;
 
+    await openTopLevelPage('settings', 'settings', 'settings page before volume range check');
     const rangeOpened = await evaluate(`(() => {
       const range=document.querySelector('#volume'); const button=range?.nextElementSibling;
       if(!range||!button?.classList.contains('editable-range-value')) return false;
@@ -380,6 +458,10 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     await waitFor(`document.querySelector('#stage')?.dataset.page==='settings'`, 'settings page after audio state reload');
     await click('#music-settings [data-settings-category-target="audio"]');
     await waitFor(`(() => { const p=JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}').output?.processing; return p?.eq?.name==='Full Rhine Backup EQ' && p?.tone?.enabled===true && p?.replayGain?.mode==='protect' && p?.resampling?.rate===96000; })()`, 'processing state restored after reload');
+    await assertSettingsHasNoEqOrTone('Settings remains free of EQ/Tone controls after restart');
+    await openEqPage('EQ page after processing-state restart');
+    const reloadedControls = await assertEqPageControls('EQ controls and tone values restored after restart', { enabled: true, bassGain: '5.25', trebleGain: '-2.5' });
+    assert.deepEqual([reloadedControls.toneEnabled,reloadedControls.bassGain,reloadedControls.trebleGain],[true,'5.25','-2.5'],'Tone control values did not return after restart.');
     const reloaded = await getState();
     assert.deepEqual(reloaded.processing, expectedProcessing, 'Audio processing settings changed across reload.');
     assert(reloaded.presets?.presets?.some((preset) => preset.kind === 'saved' && preset.name === 'Audio Core EQ'), 'Named EQ preset was not persistent across reload.');
@@ -400,9 +482,7 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
     assert.equal(await evaluate(`localStorage.getItem('rhine-audio-processing-presets-v1') === null`), true, 'Could not clear the renderer preset key for the preload recovery test.');
     await evaluate(`location.reload()`).catch(() => {});
     await waitFor(`location.pathname==='/' && document.querySelector('#music-loading')===null && document.querySelector('#three-scene canvas') && document.querySelector('#stage')?.dataset.page==='music' && localStorage.getItem('rhine-audio-processing-presets-v1')!==null`, 'desktop preload restores the preset store after renderer storage is cleared', 60000);
-    await click('.music-topnav [data-action="settings"]');
-    await waitFor(`document.querySelector('#stage')?.dataset.page==='settings'`, 'settings page after profile preset restore');
-    await click('#music-settings [data-settings-category-target="audio"]');
+    await openEqPage('EQ page after profile preset restore');
     const profileRestored = await getState();
     assert.deepEqual(profileRestored.presets, durableStore, 'Preload did not restore the desktop profile preset file into the existing localStorage key.');
     report.checks.presetFileRestoredByPreloadAfterStorageClear = true;
@@ -427,6 +507,7 @@ export async function runAudioControlsCheck({ browserWindow, waitFor, click, cap
         && store.presets?.some((preset) => preset.kind === 'imported' && preset.sourceText === fullBackupJson),
     'imported-record deletion persisted while the Rhine backup remains');
     report.checks.importedRecordDeletionPreservesSourceFile = true;
+    await openTopLevelPage('settings', 'settings', 'settings page before appearance category');
     await click('#music-settings [data-settings-category-target="appearance"]');
     report.ok = true;
   } catch (error) {

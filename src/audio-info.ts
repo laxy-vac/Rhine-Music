@@ -557,7 +557,7 @@ export function audioPrecisionMarkup(state:MusicPlayerState|undefined,expanded=f
     ${!direct&&inactive.length?ui`<details class="precision-inactive" ${expanded?'open':''}><summary>未启用 · ${inactive.length} 项</summary><div>${inactive.map(stage=>`<span>${safeMarkup(audioStageName(stage))}</span>`).join('')}</div></details>`:''}`;
 }
 function stageTarget(id:string):string{
-  if(/tone/i.test(id))return '#audio-settings-tone';
+  if(/tone/i.test(id))return '#tone-settings';
   if(/eq|equal/i.test(id))return '#music-eq-page';
   if(/replay|gain/i.test(id))return '#audio-settings-replaygain';
   if(/resampl|src/i.test(id))return '#audio-settings-resampling';
@@ -678,7 +678,8 @@ export function audioChainNodes(state:MusicPlayerState,status?:NativeStatus):Aud
     addRow(dspRows,trUi('算法'),src.engine==='soxr'?`SoX · ${src.soxrQuality==='hq'?trUi('高质量'):trUi('极高质量')}`:src.engine==='r8brain'?'r8brain':src.engine==='fast'?trUi('线性插值'):undefined);
   }
   if(effects.some(stage=>stage.id==='mix'))addRow(dspRows,trUi('切歌'),trUi('交叉淡化中'));
-  add('dsp',trUi('信号处理'),dspValue,dspRows,eq?'#music-eq-page':src?'#audio-settings-resampling':'#audio-settings-dsp',processingActive);
+  const dspTarget=eq||eqFilters.length?'#music-eq-page':tone||toneFilters.length?'#tone-settings':src?'#audio-settings-resampling':'#audio-settings-dsp';
+  add('dsp',trUi('信号处理'),dspValue,dspRows,dspTarget,processingActive);
 
   const volumeRows=rows(),locked=raw||pure||output?.volumeLocked===true;
   const gain=Math.max(0,Math.min(1,state.volume));

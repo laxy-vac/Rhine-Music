@@ -126,19 +126,17 @@ type SettingsCategory = "appearance" | "interface" | "audio" | "lyrics" | "libra
 const settingsCategories: { id: SettingsCategory; title: string; intro: string; sections: string[] }[] = [
   { id: "appearance", title: trUi("外观与显示"), intro: trUi("选择明暗模式与界面语言。"), sections: ["#appearance-settings"] },
   { id: "interface", title: trUi("界面与交互"), intro: trUi("调整界面动效、操作音效和氛围配乐。"), sections: ["#motion-settings", "#interface-sound-settings"] },
-  { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#equalizer-settings", "#tone-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
+  { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
   { id: "lyrics", title: trUi("歌词"), intro: trUi("管理默认来源、共享服务器与本地缓存。"), sections: ["#lyrics-global-settings"] },
   { id: "library", title: trUi("音乐库"), intro: trUi("选择音乐文件夹、导入与扫描，管理专辑分类和介绍资料。"), sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
   { id: "sources", title: trUi("音乐来源"), intro: trUi("连接 FTP 远程音乐库。"), sections: ["#ftp-settings"] },
   { id: "about", title: trUi("关于"), intro: trUi("查看项目来源和使用许可。"), sections: ["#about-settings"] },
 ];
-type AudioSettingsSection = "source" | "decoder" | "dsp" | "eq" | "tone" | "replaygain" | "volume" | "transition" | "resampling" | "precision" | "buffer" | "output";
+type AudioSettingsSection = "source" | "decoder" | "dsp" | "replaygain" | "volume" | "transition" | "resampling" | "precision" | "buffer" | "output";
 const audioSettingsSections: { id: AudioSettingsSection; title: string; sections: string[] }[] = [
   { id: "source", title: trUi("当前音源"), sections: ["#current-audio-settings"] },
   { id: "decoder", title: trUi("解码与转换"), sections: ["#decoder-settings", "#dsd-route-settings"] },
   { id: "dsp", title: trUi("信号处理 DSP"), sections: ["#sony-settings"] },
-  { id: "eq", title: trUi("EQ 均衡器"), sections: ["#equalizer-settings"] },
-  { id: "tone", title: trUi("低音与高音"), sections: ["#tone-settings"] },
   { id: "replaygain", title: trUi("播放增益"), sections: ["#replaygain-settings"] },
   { id: "volume", title: trUi("音量与过渡"), sections: ["#sound-settings"] },
   { id: "transition", title: trUi("切歌与淡变"), sections: ["#transition-settings"] },
@@ -1471,6 +1469,14 @@ const audioInfoPopup = setupAudioInfoPopup(stage, {
   refresh: () => { void refreshNativeStatus(); },
   navigate: function navigate(category, target) {
     if (pageScan.change(() => navigate(category, target), preferences.reduced)) return;
+    if (target === "#tone-settings" || target === "#audio-settings-tone") {
+      if (panel) return closePanel(() => navigate(category, target));
+      openEqPage();
+      const tone = $("#tone-settings");
+      tone.scrollIntoView({ block: "start", behavior: preferences.reduced ? "instant" : "smooth" });
+      tone.querySelector<HTMLInputElement>('[data-processing-field="tone.enabled"]')?.focus({ preventScroll: true });
+      return;
+    }
     if (target === "#music-eq-page" || target === "#audio-settings-eq" || target === "#equalizer-settings") { openEqPage(); return; }
     openSettingsPage();
     selectSettingsCategory(category);
@@ -3075,8 +3081,6 @@ function renderSettingsPage() {
     ${outputSettingsMarkup()}
     ${sonySettingsMarkup()}
     ${ftpSettingsMarkup()}
-    <section class="panel-section" id="equalizer-settings"><h3>均衡器与本机预设</h3><p id="processing-apply-status" data-processing-apply-status class="processing-support-note" role="status">${esc(processingApplyMessage)}</p><div data-processing-presets-slot></div><label class="settings-row"><span>均衡器<small>仅在原生音频输出中参与处理</small></span><input type="checkbox" role="switch" data-processing-field="eq.enabled" ${processingSettings.eq.enabled ? "checked" : ""}></label><button type="button" class="text-button" data-action="open-eq">打开均衡器 ↗</button></section>
-    <section class="panel-section" id="tone-settings"><h3>低音与高音</h3><p>调节独立的低音和高音架式滤波。导入预设只填入参数，不会自动打开音调控制。</p>${renderToneControls(processingSettings)}</section>
     ${replayGainMarkup()}
     <section class="panel-section" id="sound-settings"><h3>音乐音量</h3><p id="audio-volume-summary" class="audio-live-summary"></p><label class="settings-row"><span>歌曲音量</span><input type="range" id="volume" aria-label="歌曲音量" min="0" max="100" value="${Math.round(preferences.volume * 100)}"></label><label class="settings-row" data-compat-transition ${preferences.output.backend==='browser'?'':'hidden'}><span>兼容播放切歌淡变<small>先淡出当前歌曲，再淡入下一首</small></span><input type="checkbox" id="song-fade-setting" ${preferences.songFade ? "checked" : ""}></label></section>
     ${transitionMarkup()}
@@ -3120,7 +3124,6 @@ function renderSettingsPage() {
     return section;
   });
   content.replaceChildren(...categories);
-  mountProcessingPresets(content);
   lyricsSettings = setupLyricsSettings($("#lyrics-global-settings"), {
     chooseDirectory: async () => {
       if (!window.rhineDesktop?.chooseLyricsCacheFolder) { notify(trUi("请在桌面应用中选择歌词缓存文件夹。")); return null; }
@@ -3148,7 +3151,7 @@ function renderSettingsPage() {
 function syncPunkEqTypography() {
   if(preferences.style.design!=="archive")return;
   syncPunkEqInstruments($("#eq-page-content"));
-  $("#eq-page-content").querySelectorAll<HTMLElement>('button,label > span,.settings-row > span,.eq-band-index,summary,figcaption,.eq-mode-description').forEach(node=>{
+  $("#eq-page-content").querySelectorAll<HTMLElement>('button,label > span,.settings-row > span,.eq-band-index,summary,figcaption,.eq-mode-description,#tone-settings h3,#tone-settings h4,#tone-settings p').forEach(node=>{
     node.dataset.punkCjk=String(containsCjk(node.textContent??''));
   });
 }
@@ -3156,7 +3159,7 @@ function renderEqPage() {
   const content = $("#eq-page-content");
   settingsSelectControls?.destroy();
   void eqControls?.destroy().catch((error: Error) => notify(error.message));
-  content.innerHTML = ui`<details class="eq-preset-disclosure" ${eqPresetsExpanded ? "open" : ""}><summary>预设与保存 <span id="eq-preset-summary">${esc(processingSettings.eq.name)}</span></summary><div data-processing-presets-slot></div></details><p class="processing-support-note" data-processing-apply-status role="status">${esc(processingApplyMessage)}</p><div id="eq-page-editor">${renderEqControls(processingSettings)}</div>`;
+  content.innerHTML = ui`<details class="eq-preset-disclosure" ${eqPresetsExpanded ? "open" : ""}><summary>预设与保存 <span id="eq-preset-summary">${esc(processingSettings.eq.name)}</span></summary><div data-processing-presets-slot></div></details><p class="processing-support-note" data-processing-apply-status role="status">${esc(processingApplyMessage)}</p><div id="eq-page-editor">${renderEqControls(processingSettings)}</div><section class="eq-tone-section" id="tone-settings" aria-labelledby="eq-tone-title"><h3 id="eq-tone-title">低音与高音</h3><p>独立于均衡器开关；低音和高音增益均为 0 dB 时不改变声音。</p>${renderToneControls(processingSettings)}</section>`;
   mountProcessingPresets(content);
   settingsSelectControls = enhanceSettingsSelectControls(content);
   eqControls = setupEqControls(
@@ -3765,7 +3768,6 @@ document.addEventListener("click", (e) => {
   if (action === "lyrics") { page === "lyrics" ? closeManagementPage() : openLyricsPage(); return; }
   if (action === "signal") { page === "signal" ? closeManagementPage() : openSignalPage(); return; }
   if (action === "theme") { page === "theme" ? closeManagementPage() : openThemePage(); return; }
-  if (action === "open-eq") { openEqPage(); return; }
   if (action === "library-home") { if (isLibrarySettings()) renderLibraryPage(); return; }
   if (action === "library-select-root") { selectedLibraryRoot = Number(target.dataset.rootIndex); renderLibraryPaths(); return; }
   if (action === "library-add-folder" || action === "library-replace-folder") { void chooseLibraryRoots(action === "library-replace-folder"); return; }
