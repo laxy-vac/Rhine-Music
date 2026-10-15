@@ -80,7 +80,6 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
     if(slot.scrollWidth>slot.clientWidth&&event.deltaY&&!event.ctrlKey&&!event.metaKey){event.preventDefault();slot.scrollLeft+=event.deltaY;}
   },{passive:false});
   const playback = stage.querySelector<HTMLElement>("#music-playback")!;
-  const formatChip = document.createElement("span");formatChip.className = "foobar-format-chip";
   const labels = new Map<HTMLButtonElement, string>();
   const names: Record<string, [string, string]> = { library: ["01", "ARCHIVE"], eq: ["02", "EQ"], lyrics: ["03", "LYRICS"], signal: ["04", "SIGNAL"], theme: ["05", "STYLE"] };
   const clock = document.createElement("time"); clock.className = "foobar-clock";
@@ -157,8 +156,6 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
         const queueButton = playback.querySelector<HTMLElement>(".playback-queue");
         if (queueButton) move(queueButton, utilities.querySelector<HTMLElement>(".foobar-mode-slot")!);
         move(stage.querySelector<HTMLElement>(".album-panel") ?? stage.querySelector<HTMLElement>(".album-callout")!, q(".foobar-home-info"));
-        const format=stage.querySelector<HTMLElement>("#selection-format")!;
-        format.before(formatChip);move(format,formatChip);
         const badges = stage.querySelector<HTMLElement>(".album-callout .source-audio-badges");
         if (badges) move(badges, stage.querySelector<HTMLElement>(".album-callout")!);
         move(stage.querySelector<HTMLElement>(".music-navigation")!, q(".foobar-home-navigation"));
@@ -184,7 +181,7 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
           if (port.marker.parentNode) port.marker.replaceWith(port.node);
           else port.parent.appendChild(port.node);
         } ports.length = 0;
-        utilities.remove();formatChip.remove(); delete stage.dataset.foobarLayout; delete stage.dataset.foobarEmpty;
+        utilities.remove(); delete stage.dataset.foobarLayout; delete stage.dataset.foobarEmpty;
       }
       // Reparenting the shared pane can drop browser focus and scroll state.
       if (infoScroll && scrollTop !== undefined) infoScroll.scrollTop = scrollTop;

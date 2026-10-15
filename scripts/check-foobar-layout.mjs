@@ -645,9 +645,9 @@ try {
       gridShots.push({design,...geometry,screenshot});
     }
 
-    const browseToolGeometry=[];
+    const browseToolGeometry=[],formatBadgeChecks=[];
     for(const design of ['rhine','archive']) {
-      await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design=${JSON.stringify(design)};fixture.sharedPanel.setOpen(false);fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.theme='day';fixture.stage.dataset.design=${JSON.stringify(design)};fixture.sharedPanel.setOpen(false);fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
       await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       const geometry=await evaluate(`(()=>{
         const future=fixture.stage.dataset.design==='rhine',tools=document.querySelector(future?'.music-browse-tools':'.foobar-catalog-toolbar'),r=tools.getBoundingClientRect();
@@ -710,10 +710,19 @@ try {
       if(design==='archive')assert.equal(geometry.groupOverlapsRandom,false,'Punk visible control groups must not cover RANDOM.');
       browseToolGeometry.push(geometry);
       if(design==='archive') {
+        const formatBadge=await evaluate(`(()=>{const format=document.querySelector('#selection-format');return {design:fixture.stage.dataset.design,theme:fixture.stage.dataset.theme,mode:fixture.musicApplication.mode,
+          formatFound:!!format,formatDisplay:format?getComputedStyle(format).display:null,formatRects:format?.getClientRects().length??null,
+          chipPresent:document.querySelector('.foobar-format-chip')!==null};})()`);
+        assert.equal(formatBadge.design,'archive');assert.equal(formatBadge.theme,'day');assert.equal(formatBadge.mode,'archive');
+        assert.equal(formatBadge.formatFound,true);assert.equal(formatBadge.formatDisplay,'none','Punk hides the format text without leaving a layout box.');
+        assert.equal(formatBadge.formatRects,0,'Punk format text has no layout rect or flex gap.');
+        assert.equal(formatBadge.chipPresent,false,'Punk does not render the orange format badge frame.');
+        formatBadgeChecks.push(formatBadge);
         const screenshot='display-punk-day-browse.png';
         const {data}=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
         await writeFile(path.join(output,screenshot),Buffer.from(data,'base64'));
         geometry.screenshot=screenshot;
+        formatBadgeChecks.at(-1).screenshot=screenshot;
       }
     }
 
@@ -939,7 +948,7 @@ try {
     const paginationScreenshotPaths={punkFirstPage:firstGridScreenshot,futureFirstPage:futureGridScreenshot,
       punkFirstPageDay:punkDayGridScreenshot,futureFirstPageDay:futureDayGridScreenshot,punkSelectedPage:selectedGridScreenshot};
     await writeFile(path.join(output,'display-controls.json'),JSON.stringify({viewport:{width:1920,height:1080},stylePageChecks,layoutControls:controlSnapshots,
-      browseFields:browseFieldSnapshots,filters:filterSnapshots,futureInlineFilter,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots,
+      browseFields:browseFieldSnapshots,filters:filterSnapshots,futureInlineFilter,sortAliases,navigation,browseToolGeometry,formatBadgeChecks,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots,
       gridPagination:{fixture:gridPagination,punkDefault:punkGridStart,punkFirstCover:firstSelectedCover,punkCrossing:crossingPage,nextFocusAfterPaging,lastPageFocus,
         punkSelected:selectedLaterTrack,punkSelectedCover:selectedLaterCover,pageSizeClicks,pageSizeSync:{future:futureSync,punk:punkSizeSync},futureFirst:futureGridFirst,futureSelectedCard,
         show:{albums:albumShow,tracks:trackShow},filtered:filteredGrid,cleared:clearedGrid,detail:selectedDetail,screenshots:paginationScreenshotPaths}},null,2));
@@ -1048,12 +1057,12 @@ try {
   }
   const typography=await evaluate(`(()=>{
     const slots=[...document.querySelectorAll('.foobar-shell .rn-slot')];
-    const format=document.querySelector('#selection-format'),chip=format.closest('.foobar-format-chip'),shelf=document.querySelector('.genre-stepper'),name=document.querySelector('#genre-name'),random=document.querySelector('.foobar-random'),workspace=document.querySelector('.foobar-workspace');
-    const f=format.getBoundingClientRect(),c=chip.getBoundingClientRect(),r=random.getBoundingClientRect(),w=workspace.getBoundingClientRect();
-    return {slotsContent:slots.every(element=>getComputedStyle(element).boxSizing==='content-box'),formatPadding:getComputedStyle(format).padding,formatCenter:Math.abs((f.top+f.bottom)/2-(c.top+c.bottom)/2),shelfBorder:getComputedStyle(name).borderTopWidth,shelfBackground:getComputedStyle(name).backgroundColor,shelfName:name.querySelector('.rn-value').textContent,shelfColor:getComputedStyle(document.querySelector('#genre-position')).color,muted:getComputedStyle(fixture.stage).getPropertyValue('--muted'),artistFont:getComputedStyle(document.querySelector('#selection-artist')).fontFamily,randomX:r.x-w.x,randomY:r.y-w.y,randomHeight:r.height,dice:random.querySelectorAll('svg path').length,shortcut:random.querySelector('kbd').textContent};
+    const format=document.querySelector('#selection-format'),chip=document.querySelector('.foobar-format-chip'),shelf=document.querySelector('.genre-stepper'),name=document.querySelector('#genre-name'),random=document.querySelector('.foobar-random'),workspace=document.querySelector('.foobar-workspace');
+    const r=random.getBoundingClientRect(),w=workspace.getBoundingClientRect();
+    return {slotsContent:slots.every(element=>getComputedStyle(element).boxSizing==='content-box'),formatDisplay:getComputedStyle(format).display,formatRects:format.getClientRects().length,chipPresent:chip!==null,shelfBorder:getComputedStyle(name).borderTopWidth,shelfBackground:getComputedStyle(name).backgroundColor,shelfName:name.querySelector('.rn-value').textContent,shelfColor:getComputedStyle(document.querySelector('#genre-position')).color,muted:getComputedStyle(fixture.stage).getPropertyValue('--muted'),artistFont:getComputedStyle(document.querySelector('#selection-artist')).fontFamily,randomX:r.x-w.x,randomY:r.y-w.y,randomHeight:r.height,dice:random.querySelectorAll('svg path').length,shortcut:random.querySelector('kbd').textContent};
   })()`);
   assert.equal(typography.slotsContent,true,'Global shell sizing must not crop rolling slots');
-  assert.equal(typography.formatPadding,'0px');assert.ok(typography.formatCenter<=1,'FLAC text is centered inside a separate chip');
+  assert.equal(typography.formatDisplay,'none','Punk hides the format text without leaving a layout box');assert.equal(typography.formatRects,0);assert.equal(typography.chipPresent,false,'Punk must not render the format badge frame');
   assert.equal(typography.shelfBorder,'0px');assert.equal(typography.shelfBackground,'rgba(0, 0, 0, 0)');
   assert.equal(typography.shelfName,'2010s · 2020s');
   assert.ok(typography.artistFont.startsWith('"Archive Mono"') && typography.artistFont.includes('"Microsoft YaHei UI"'),'Mixed artist text must retain Geist Mono with YaHei for CJK');

@@ -91,8 +91,7 @@
 .music-app[data-design="archive"] .album-callout #selection-code { flex:0 1 auto;position:relative;display:inline-flex;align-items:center;min-height:34px;padding:0 20px;font-size:13px;font-weight:600;letter-spacing:1.56px;color:var(--ink);white-space:nowrap;background:linear-gradient(var(--ink),var(--ink)) left top/5px 5px no-repeat,linear-gradient(var(--ink),var(--ink)) right top/5px 5px no-repeat,linear-gradient(var(--ink),var(--ink)) left bottom/5px 5px no-repeat,linear-gradient(var(--ink),var(--ink)) right bottom/5px 5px no-repeat; }
 .music-app[data-design="archive"] .album-callout #selection-code-number { flex:none; }
 .music-app[data-design="archive"] .album-callout #selection-code-number { color:inherit; }
-.music-app[data-design="archive"] .album-callout .foobar-format-chip { margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:0 8px;border:1px solid var(--accent); }
-.music-app[data-design="archive"] .album-callout #selection-format { margin:0;padding:0;border:0;font-size:9.5px;font-weight:600;line-height:1.3;letter-spacing:.95px; }
+.music-app[data-design="archive"] .album-callout #selection-format { display:none; }
 .music-app[data-design="archive"] .album-callout h1 { font-size:25px;line-height:1.28;letter-spacing:0;font-weight:600; }
 .music-app[data-design="archive"] .album-callout #selection-title { position:relative;display:block;width:calc(100% - var(--foobar-badge-space,0px));max-width:none;padding:5px 9px;margin:0 0 58px;background:transparent;color:var(--page-bg); }
 .music-app[data-design="archive"] #selection-title[data-hi-res="true"] { --foobar-badge-space:calc(var(--source-badges-width) + var(--hi-res-title-gap)); }

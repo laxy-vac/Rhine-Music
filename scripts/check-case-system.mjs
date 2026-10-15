@@ -14,12 +14,27 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 const isArrayBump = process.argv.includes("--array-bump");
-const isArrayRailProfile = process.argv.includes("--array-rail-profile");
+const isShelfColors = process.argv.includes("--shelf-colors");
+const isArrayRailProfile = process.argv.includes("--array-rail-profile") || isShelfColors;
 const isRailRegression = process.argv.includes("--rail-regression");
+const isShelfDetailRegression = process.argv.includes("--shelf-detail-regression");
 const isArrayTrayStructure = process.argv.includes("--array-tray-structure");
 const isArrayTray = process.argv.includes("--array-tray") || isArrayTrayStructure;
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
 const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
+const shelfColorDesign = process.argv.find(argument => argument.startsWith("--design="))?.slice(9) === "rhine" ? "rhine" : "archive";
+const shelfColorTheme = process.argv.find(argument => argument.startsWith("--theme="))?.slice(8) === "night" ? "night" : "day";
+const shelfColorPhase = process.argv.includes("--before") ? "before" : "after";
+const shelfColorVariant = `${shelfColorDesign}-${shelfColorTheme}`;
+const shelfColorPatchArgument = process.argv.find(argument => argument.startsWith("--material-patch-json="))?.slice(22);
+const shelfColorRuntimePatch = shelfColorPatchArgument ? JSON.parse(shelfColorPatchArgument) : null;
+const shelfColorPatchLabel = process.argv.find(argument => argument.startsWith("--patch-label="))?.slice(14)?.replace(/[^a-z0-9._-]/gi, "_");
+const shelfColorCaptureLabel = process.argv.find(argument => argument.startsWith("--capture-label="))?.slice(16)?.replace(/[^a-z0-9._-]/gi, "_");
+const shelfColorOutput = shelfColorPatchLabel
+  ? path.join(project, ".tools", "shelf-color-calibration", "patches", shelfColorPatchLabel, shelfColorVariant)
+  : shelfColorCaptureLabel
+    ? path.join(project, ".tools", "shelf-color-calibration", shelfColorPhase, shelfColorCaptureLabel, shelfColorVariant)
+  : path.join(project, ".tools", "shelf-color-calibration", shelfColorPhase, shelfColorVariant);
 const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
   : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
@@ -28,10 +43,14 @@ const unifiedOutput = isRailRegression ? path.join(project, ".tools", "array-rai
   : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
-const arrayTrayOutput = isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "structure", arrayTrayPhase)
+const arrayTrayOutput = isRailRegression
+  ? path.join(project, ".tools", isShelfDetailRegression ? "shelf-color-calibration" : "array-rail-profile",
+    "regression", "structure", arrayTrayPhase)
   : path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
 const arrayRailPhase = process.argv.includes("--before") ? "before" : "after";
-const arrayRailOutput = path.join(project, ".tools", "array-rail-profile", arrayRailPhase);
+const arrayRailOutput = isShelfColors ? shelfColorOutput
+  : isShelfDetailRegression ? path.join(project, ".tools", "shelf-color-calibration", "profile", arrayRailPhase)
+  : path.join(project, ".tools", "array-rail-profile", arrayRailPhase);
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -1708,6 +1727,108 @@ const arrayTrayPartNames = ["Music shelf base", "Music shelf side rails", "Music
   "Record shelf guide grooves", "Record shelf index strip", "Record shelf tick",
   "Music shelf front number plates", "Music shelf plate markers", "Music shelf support feet",
   "Music shelf end platforms", "Music shelf foot pins", "Music shelf contact shadows", "Music shelf underframe"];
+function arrayTraySurfaceSnapshot() {
+  const scene = archiveScene, group = scene.sceneResources?.group, matrix = new THREE.Matrix4();
+  if (!group) return { available: false, reason: "scene resource group missing" };
+  scene.scene.updateMatrixWorld(true);
+  const worldInstances = name => {
+    const mesh = group.getObjectByName(name), result = [];
+    if (!mesh?.isInstancedMesh) return result;
+    mesh.geometry.computeBoundingBox();
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getMatrixAt(index, matrix);
+      if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+      const worldMatrix = matrix.clone().premultiply(mesh.matrixWorld);
+      result.push({ mesh, index, worldMatrix, box: mesh.geometry.boundingBox.clone().applyMatrix4(worldMatrix) });
+    }
+    return result;
+  };
+  const materialTopSurfaceMetrics = instance => {
+    if (!instance) return null;
+    const geometry = instance.mesh.geometry, position = geometry.getAttribute("position"), indices = geometry.getIndex();
+    const levels = new Map([0, 1].map(materialIndex => [materialIndex, { materialIndex, yValues: [], triangleCount: 0 }]));
+    for (let offset = 0; offset + 2 < (indices?.count ?? position.count); offset += 3) {
+      const materialIndex = geometry.groups.find(item => offset >= item.start && offset < item.start + item.count)?.materialIndex ?? 0;
+      const level = levels.get(materialIndex);
+      if (!level) continue;
+      const vertices = [0, 1, 2].map(corner => new THREE.Vector3().fromBufferAttribute(position,
+        indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(instance.worldMatrix));
+      const normal = new THREE.Triangle(vertices[0], vertices[1], vertices[2]).getNormal(new THREE.Vector3());
+      if (normal.y <= .999) continue;
+      level.triangleCount++;
+      for (const vertex of vertices) level.yValues.push(vertex.y);
+    }
+    for (const level of levels.values()) {
+      level.minY = level.yValues.length ? Math.min(...level.yValues) : null;
+      level.maxY = level.yValues.length ? Math.max(...level.yValues) : null;
+      level.maxMinError = level.yValues.length ? level.maxY - level.minY : null;
+      delete level.yValues;
+    }
+    const gray = levels.get(0), black = levels.get(1);
+    const combinedRange = gray.minY !== null && black.minY !== null
+      ? Math.max(gray.maxY, black.maxY) - Math.min(gray.minY, black.minY) : null;
+    return { material0Gray: gray, material1Black: black, combinedMaxMinError: combinedRange,
+      bothMaterialsHaveTopTriangles: gray.triangleCount > 0 && black.triangleCount > 0,
+      bothMaterialTopRangesWithinTolerance: gray.maxMinError !== null && gray.maxMinError <= 1e-6 &&
+        black.maxMinError !== null && black.maxMinError <= 1e-6,
+      blackAndGrayTopCoplanar: combinedRange !== null && combinedRange <= 1e-6 };
+  };
+  const modelX = scene.model.getWorldPosition(new THREE.Vector3()).x;
+  const base = worldInstances("Music shelf base").sort((a, b) =>
+    Math.abs(a.box.getCenter(new THREE.Vector3()).x - modelX) - Math.abs(b.box.getCenter(new THREE.Vector3()).x - modelX))[0];
+  if (!base) return { available: false, reason: "active base instance missing" };
+  const lane = scene.selectedCell.lane, bedIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12);
+  const bed = worldInstances("Record shelf recessed bed").find(item => item.index === bedIndex);
+  const bedTopMaterials = materialTopSurfaceMetrics(bed);
+  const landings = worldInstances("Music shelf end platforms").filter(item => {
+    const center = item.box.getCenter(new THREE.Vector3());
+    return Math.abs(center.x - base.box.getCenter(new THREE.Vector3()).x) < .1 &&
+      item.box.max.z >= base.box.min.z - .1 && item.box.min.z <= base.box.max.z + .1;
+  }).map(item => ({ instance: item.index, bounds: { min: item.box.min.toArray(), max: item.box.max.toArray() },
+    materialTopSurfaces: materialTopSurfaceMetrics(item) }));
+  const caps = worldInstances("Music shelf end caps").filter(item => {
+    const center = item.box.getCenter(new THREE.Vector3());
+    return Math.abs(center.x - base.box.getCenter(new THREE.Vector3()).x) < .1 &&
+      item.box.max.z >= base.box.min.z - .1 && item.box.min.z <= base.box.max.z + .1;
+  });
+  const endCapTop = caps.length ? Math.max(...caps.map(item => item.box.max.y)) : null;
+  const rightGuide = worldInstances("Music shelf right guide").sort((a, b) =>
+    Math.abs(a.box.getCenter(new THREE.Vector3()).x - (base.box.max.x - .1)) -
+    Math.abs(b.box.getCenter(new THREE.Vector3()).x - (base.box.max.x - .1)))[0];
+  let rightSilverTop = null;
+  if (rightGuide) {
+    const geometry = rightGuide.mesh.geometry, position = geometry.getAttribute("position"), indices = geometry.getIndex();
+    let highest = null;
+    for (let offset = 0; offset < (indices?.count ?? position.count); offset += 3) {
+      const groupIndex = geometry.groups.find(item => offset >= item.start && offset < item.start + item.count)?.materialIndex ?? 0;
+      if (groupIndex !== 1) continue;
+      for (let corner = 0; corner < 3; corner++) {
+        const vertex = new THREE.Vector3().fromBufferAttribute(position,
+          indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(rightGuide.worldMatrix);
+        if (!highest || vertex.y > highest.y) highest = { point: vertex.toArray(), y: vertex.y };
+      }
+    }
+    if (highest) rightSilverTop = { ...highest, mesh: rightGuide.mesh.name, instance: rightGuide.index, materialIndex: 1 };
+  }
+  const baseTop = base.box.max.y, bedBottom = bed?.box.min.y ?? null;
+  const bedBottomDelta = bedBottom === null ? null : bedBottom - baseTop;
+  const rightSilverBelowBase = rightSilverTop ? baseTop - rightSilverTop.y : null;
+  return { available: true, base: { mesh: base.mesh.name, instance: base.index, bounds: { min: base.box.min.toArray(), max: base.box.max.toArray() }, top: baseTop },
+    bed: bed ? { mesh: bed.mesh.name, instance: bed.index, bottom: bedBottom, top: bed.box.max.y, bottomDeltaFromBaseTop: bedBottomDelta,
+      grayTop: bedTopMaterials?.material0Gray ?? null, blackBandTop: bedTopMaterials?.material1Black ?? null,
+      topPartitionMetrics: bedTopMaterials } : null,
+    landingTopPartitions: landings,
+    rightSilverFace: rightSilverTop ? { ...rightSilverTop, belowBaseTop: rightSilverBelowBase, excludedMaterialIndex: 2 } : null,
+    endCaps: { instances: caps.map(item => item.index), maximumTop: endCapTop, excessAboveBase: endCapTop === null ? null : endCapTop - baseTop },
+    checks: { bedBottomApproximatelyBaseTop: bedBottomDelta !== null && Math.abs(bedBottomDelta) <= .001,
+      bedGrayAndBlackTopCoplanar: !!bedTopMaterials?.bothMaterialsHaveTopTriangles &&
+        bedTopMaterials.bothMaterialTopRangesWithinTolerance && bedTopMaterials.blackAndGrayTopCoplanar,
+      landingGrayAndBlackTopsCoplanar: landings.length === 2 && landings.every(item => item.materialTopSurfaces?.bothMaterialsHaveTopTriangles &&
+        item.materialTopSurfaces.bothMaterialTopRangesWithinTolerance && item.materialTopSurfaces.blackAndGrayTopCoplanar),
+      rightSilverFaceBelowBaseTop: rightSilverBelowBase !== null && rightSilverBelowBase >= .0049,
+      endCapsAtOrBelowBaseTop: endCapTop !== null && endCapTop <= baseTop + .001 } };
+}
+
 function arrayTrayStructureSnapshot() {
   const scene = archiveScene, group = scene.sceneResources?.group;
   const matrix = new THREE.Matrix4();
@@ -1720,6 +1841,7 @@ function arrayTrayStructureSnapshot() {
     layout: scene.displayLayout.effective, shelfCanvas: scene.displayLayout.canvas === "shelf",
     resourceGroupVisible: !!group?.visible, physicalTrayGroupVisible: !!group?.getObjectByName("Physical record trays")?.visible,
     raisedTransverseBeamsPresent: !!group?.getObjectByName("Record shelf transverse beams"),
+    surfaceRelationships: arrayTraySurfaceSnapshot(),
     rowLabels,
     parts: arrayTrayPartNames.map(name => {
       const object = group?.getObjectByName(name);
@@ -1754,13 +1876,101 @@ function arrayTrayStructureSnapshot() {
           }
         }
         meshes.push({ name: child.name || name, visible: child.visible, instances: child.isInstancedMesh ? child.count : 1,
-          drawnInstances, submittedBounds,
+          drawnInstances, geometryType: child.geometry.type, geometryParameters: child.geometry.parameters ?? null, submittedBounds,
           localBounds: { min: child.geometry.boundingBox.min.toArray(), max: child.geometry.boundingBox.max.toArray() }, materials });
       });
       return { name, present: true, visible: object.visible, instances: meshes.reduce((sum, value) => sum + value.instances, 0),
         drawnInstances: meshes.reduce((sum, value) => sum + value.drawnInstances, 0), meshes };
     }) };
 }
+
+function arrayTrayTickSurfaceSnapshot() {
+  const scene = archiveScene, group = scene.sceneResources?.group, matrix = new THREE.Matrix4();
+  if (!group) return { available: false, reason: "scene resource group missing" };
+  scene.scene.updateMatrixWorld(true);
+  const lane = scene.selectedCell.lane;
+  const instanceIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12);
+  const tickMesh = group.getObjectByName("Record shelf tick"), bedMesh = group.getObjectByName("Record shelf recessed bed");
+  if (!tickMesh?.isInstancedMesh || !bedMesh?.isInstancedMesh || instanceIndex < 0)
+    return { available: false, reason: "active tick/bed instanced meshes or central slot missing", instanceIndex };
+  const instanceBounds = (mesh, index) => {
+    mesh.geometry.computeBoundingBox(); mesh.getMatrixAt(index, matrix);
+    const worldMatrix = matrix.clone().premultiply(mesh.matrixWorld);
+    return { worldMatrix, box: mesh.geometry.boundingBox.clone().applyMatrix4(worldMatrix) };
+  };
+  const tick = instanceBounds(tickMesh, instanceIndex), bed = instanceBounds(bedMesh, instanceIndex), bedTopY = bed.box.max.y;
+  const geometry = tickMesh.geometry, position = geometry.getAttribute("position"), indices = geometry.getIndex();
+  const elementCount = indices?.count ?? position.count;
+  const materialIndexFor = offset => geometry.groups.find(item => offset >= item.start && offset + 2 < item.start + item.count)?.materialIndex ?? 0;
+  const flatTop = [], flatBottom = [];
+  for (let offset = 0, faceIndex = 0; offset + 2 < elementCount; offset += 3, faceIndex++) {
+    if (materialIndexFor(offset) !== 0) continue;
+    const vertices = [0, 1, 2].map(corner => new THREE.Vector3().fromBufferAttribute(position,
+      indices ? indices.getX(offset + corner) : offset + corner).applyMatrix4(tick.worldMatrix));
+    const minY = Math.min(...vertices.map(vertex => vertex.y)), maxY = Math.max(...vertices.map(vertex => vertex.y));
+    if (maxY - minY > .00001 || minY < bedTopY - .02 || maxY > bedTopY + .02) continue;
+    const normal = new THREE.Triangle(vertices[0], vertices[1], vertices[2]).getNormal(new THREE.Vector3());
+    const record = { faceIndex, vertices, y: (minY + maxY) / 2 };
+    if (normal.y > .999) flatTop.push(record);
+    else if (normal.y < -.999) flatBottom.push(record);
+  }
+  const triangleBounds = triangles => {
+    const box = new THREE.Box3();
+    for (const triangle of triangles) for (const vertex of triangle.vertices) box.expandByPoint(vertex);
+    return triangles.length ? box : null;
+  };
+  const topBounds = triangleBounds(flatTop), bottomBounds = triangleBounds(flatBottom);
+  if (!topBounds || !bottomBounds) return { available: false, reason: "could not find horizontal top and bottom tick faces near the bed surface",
+    instanceIndex, bedBounds: { min: bed.box.min.toArray(), max: bed.box.max.toArray() },
+    tickBounds: { min: tick.box.min.toArray(), max: tick.box.max.toArray() }, flatTopFaceCount: flatTop.length, flatBottomFaceCount: flatBottom.length };
+  const sampleRegion = { minX: Math.max(topBounds.min.x, bottomBounds.min.x, bed.box.min.x),
+    maxX: Math.min(topBounds.max.x, bottomBounds.max.x, bed.box.max.x),
+    minZ: Math.max(topBounds.min.z, bottomBounds.min.z, bed.box.min.z),
+    maxZ: Math.min(topBounds.max.z, bottomBounds.max.z, bed.box.max.z) };
+  const width = sampleRegion.maxX - sampleRegion.minX, depth = sampleRegion.maxZ - sampleRegion.minZ;
+  if (!(width > .004 && depth > .002)) return { available: false, reason: "tick flat face has insufficient overlap with the actual bed top",
+    instanceIndex, bedBounds: { min: bed.box.min.toArray(), max: bed.box.max.toArray() },
+    topBounds: { min: topBounds.min.toArray(), max: topBounds.max.toArray() },
+    bottomBounds: { min: bottomBounds.min.toArray(), max: bottomBounds.max.toArray() }, sampleRegion };
+  const topFaces = new Set(flatTop.map(item => item.faceIndex)), bottomFaces = new Set(flatBottom.map(item => item.faceIndex));
+  const samples = [0.2, 0.5, 0.8].map((fraction, sampleIndex) => {
+    const x = sampleRegion.minX + width * fraction, z = (sampleRegion.minZ + sampleRegion.maxZ) / 2;
+    const edgeClearance = Math.min(x - sampleRegion.minX, sampleRegion.maxX - x, z - sampleRegion.minZ, sampleRegion.maxZ - z);
+    const downRay = new THREE.Raycaster(new THREE.Vector3(x, bedTopY + .02, z), new THREE.Vector3(0, -1, 0), 0, .05);
+    const upRay = new THREE.Raycaster(new THREE.Vector3(x, bedTopY - .02, z), new THREE.Vector3(0, 1, 0), 0, .05);
+    const tickTopHit = downRay.intersectObject(tickMesh, false).find(hit => hit.instanceId === instanceIndex &&
+      hit.face?.materialIndex === 0 && topFaces.has(hit.faceIndex));
+    const bedTopHit = downRay.intersectObject(bedMesh, false).find(hit => hit.instanceId === instanceIndex &&
+      (hit.face?.materialIndex === 0 || hit.face?.materialIndex === 1));
+    const tickBottomHit = upRay.intersectObject(tickMesh, false).find(hit => hit.instanceId === instanceIndex &&
+      hit.face?.materialIndex === 0 && bottomFaces.has(hit.faceIndex));
+    const topOffset = tickTopHit && bedTopHit ? tickTopHit.point.y - bedTopHit.point.y : null;
+    const thickness = tickTopHit && tickBottomHit ? tickTopHit.point.y - tickBottomHit.point.y : null;
+    return { sample: ["near-bed-end-a", "center", "near-bed-end-b"][sampleIndex], raycastWorld: [x, bedTopY + .02, z],
+      bedTopWorldY: bedTopHit?.point.y ?? null, tickTopWorldY: tickTopHit?.point.y ?? null,
+      tickBottomWorldY: tickBottomHit?.point.y ?? null, topOffsetFromBed: topOffset, thickness,
+      topFaceIndex: tickTopHit?.faceIndex ?? null, bottomFaceIndex: tickBottomHit?.faceIndex ?? null,
+      edgeClearance, edgeClearanceThreshold: .001,
+      downRayHit: tickTopHit ? { object: tickTopHit.object.name, instance: tickTopHit.instanceId, materialIndex: tickTopHit.face?.materialIndex } : null,
+      upRayHit: tickBottomHit ? { object: tickBottomHit.object.name, instance: tickBottomHit.instanceId, materialIndex: tickBottomHit.face?.materialIndex } : null,
+      bedRayHit: bedTopHit ? { object: bedTopHit.object.name, instance: bedTopHit.instanceId, materialIndex: bedTopHit.face?.materialIndex } : null };
+  });
+  const topTolerance = .003001, thicknessTolerance = .003001;
+  const allSamplesHitFlatFaces = samples.length === 3 && samples.every(sample => sample.downRayHit && sample.upRayHit && sample.bedRayHit);
+  const noStepEdgeSamples = samples.every(sample => sample.edgeClearance > sample.edgeClearanceThreshold);
+  const allTopOffsetsWithinTolerance = samples.every(sample => sample.topOffsetFromBed !== null && Math.abs(sample.topOffsetFromBed) <= topTolerance);
+  const allThicknessesWithinTolerance = samples.every(sample => sample.thickness !== null && sample.thickness >= 0 && sample.thickness <= thicknessTolerance);
+  return { available: true, instanceIndex, bedBounds: { min: bed.box.min.toArray(), max: bed.box.max.toArray() },
+    tickBounds: { min: tick.box.min.toArray(), max: tick.box.max.toArray() },
+    flatTopBounds: { min: topBounds.min.toArray(), max: topBounds.max.toArray() },
+    flatBottomBounds: { min: bottomBounds.min.toArray(), max: bottomBounds.max.toArray() }, sampleRegion, flatTopFaceCount: flatTop.length,
+    flatBottomFaceCount: flatBottom.length, raycastDirections: ["down to tick top and bed top", "up to tick bottom"],
+    thresholds: { topOffset: topTolerance, thickness: thicknessTolerance, minimumStepEdgeClearance: .001 }, samples,
+    checks: { exactlyThreeSamples: samples.length === 3, allSamplesHitFlatFaces, noStepEdgeSamples,
+      allTopOffsetsWithinTolerance, allThicknessesWithinTolerance,
+      allValid: allSamplesHitFlatFaces && noStepEdgeSamples && allTopOffsetsWithinTolerance && allThicknessesWithinTolerance } };
+}
+
 async function prepareArrayTray(design, theme, floor, layout = "shelf") {
   if (!arrayMotionPrepare) await exercisePunkArrayMotion(true);
   await arrayMotionPrepare(design, layout, "full");
@@ -1875,7 +2085,7 @@ function arrayTrayClearanceSnapshot() {
         } else matrix.identity();
         const worldMatrix = matrix.clone().premultiply(child.matrixWorld);
         let triangles = null;
-        if (name === "Music shelf side rails") {
+        if (name === "Music shelf side rails" || name === "Record shelf tick") {
           triangles = [];
           const position = child.geometry.getAttribute("position"), indices = child.geometry.getIndex();
           for (let offset = 0; offset < (indices?.count ?? position.count); offset += 3) {
@@ -1905,10 +2115,10 @@ function arrayTrayClearanceSnapshot() {
     }
   }
   footprintClearances.sort((left, right) => left.clearance - right.clearance);
-  return { method: "Case proxies/selected actual bounds and tray world AABB broadphase; integrated side rails refined against real world triangles with case bounds inset 0.001. Zero-height contact AO cannot collide.",
+  return { method: "Case proxies/selected actual bounds and tray world AABB broadphase; side rails and folded ticks refined against real world triangles with case bounds inset 0.001. Zero-height contact AO cannot collide.",
     caseCount: cases.length, colliderCount: colliders.length, intersections,
     minimumStructuralClearance: footprintClearances[0]?.clearance ?? null, nearestSupports: footprintClearances.slice(0, 12),
-    clearanceScope: "Under-case bed/base/flush-line supports; excludes composite side-rail envelopes and zero-height ground AO.",
+    clearanceScope: "Under-case bed/base/tick supports; side-rail and tick AABB overlap is refined against their actual triangles, including the folded tick ends. Zero-height ground AO is ignored.",
     support: unifiedSnapshot().support };
 }
 
@@ -1935,6 +2145,16 @@ function arrayTraySupportSnapshot() {
   };
   const floorY = scene.floor.getWorldPosition(new THREE.Vector3()).y, caps = boxes("Music shelf end caps"), underframe = boxes("Music shelf underframe");
   const body = boxes("Music shelf base"), footBounds = boxes("Music shelf support feet");
+  const footMesh = group.getObjectByName("Music shelf support feet"), underframeMesh = group.getObjectByName("Music shelf underframe");
+  const underframeGeometry = underframeMesh?.geometry;
+  const activeLaneCount = footBounds.length / 4;
+  const underframeRadialChecks = underframe.map(item => {
+    const instanceMatrix = new THREE.Matrix4(); underframeMesh.getMatrixAt(item.index, instanceMatrix);
+    const worldMatrix = instanceMatrix.premultiply(underframeMesh.matrixWorld), e = worldMatrix.elements;
+    const radialScaleX = Math.hypot(e[0], e[1], e[2]), radialScaleY = Math.hypot(e[4], e[5], e[6]);
+    return { index: item.index, cylinderAxisLocal: "Z", radialAxesLocal: ["X", "Y"], radialScale: [radialScaleX, radialScaleY],
+      absoluteDifference: Math.abs(radialScaleX - radialScaleY) };
+  });
   const connections = (box, targets) => targets.flatMap(target => {
     const overlap = ["x", "y", "z"].map(axis => Math.min(box.max[axis], target.box.max[axis]) - Math.max(box.min[axis], target.box.min[axis]));
     return overlap[0] > .001 && overlap[2] > .001 && overlap[1] >= -.001 ? [{ index: target.index, overlap }] : [];
@@ -1943,6 +2163,13 @@ function arrayTraySupportSnapshot() {
     groundGap: box.min.y - floorY,
     capConnections: connections(box, caps), underframeConnections: connections(box, underframe) }));
   return { floorY, floorPositionY: scene.floor.position.y, feet,
+    footGeometryType: footMesh?.geometry.type ?? null,
+    underframeGeometry: underframeGeometry ? { type: underframeGeometry.type, cylinderAxisLocal: "Z",
+      radiusTop: underframeGeometry.parameters?.radiusTop ?? null, radiusBottom: underframeGeometry.parameters?.radiusBottom ?? null,
+      radialSegments: underframeGeometry.parameters?.radialSegments ?? null, instanceCount: underframe.length, activeLaneCount,
+      instanceCountPerLane: activeLaneCount > 0 ? underframe.length / activeLaneCount : null,
+      radialChecks: underframeRadialChecks, allRadiallyEqual: underframeRadialChecks.length === underframe.length &&
+        underframeRadialChecks.length > 0 && underframeRadialChecks.every(value => value.absoluteDifference <= .0001) } : null,
     allGrounded: feet.length > 0 && feet.every(foot => Math.abs(foot.groundGap) <= .001),
     allConnectedToEndCaps: feet.length > 0 && feet.every(foot => foot.capConnections.length > 0),
     allConnectedToUnderframe: feet.length > 0 && feet.every(foot => foot.underframeConnections.length > 0),
@@ -2099,6 +2326,38 @@ async function captureArrayRailProfile(referenceUrl) {
     const rightEndCamera = new THREE.OrthographicCamera(-1.5, 1.5, 1.05, -1.05, .1, 150);
     rightEndCamera.position.copy(rightEndTarget).add(new THREE.Vector3(50, 0, 0)); rightEndCamera.up.set(0, 1, 0); rightEndCamera.lookAt(rightEndTarget);
     forceShadowUpdate(); const rightEndImage = render(rightEndCamera, 1000, 700);
+    const crossSectionHiddenNames = new Set(["Music shelf end caps", "Music shelf front number plates", "Music shelf plate markers",
+      "Music shelf end safety stripes", "Music shelf support feet", "Music shelf foot pins"]);
+    const crossSectionHidden = [];
+    scene.scene.traverse(object => {
+      if (!object.isMesh || !crossSectionHiddenNames.has(object.name)) return;
+      crossSectionHidden.push([object, object.visible]); object.visible = false;
+    });
+    const laneX = (base.min.x + base.max.x) / 2;
+    const localCrossBounds = ["Music shelf left guide", "Music shelf right guide", "Music shelf side rails", "Music shelf underframe"]
+      .flatMap(name => boxes(name).map(item => item.box))
+      .filter(box => Math.abs(box.getCenter(new THREE.Vector3()).x - laneX) <= (base.max.x - base.min.x) / 2 + .55);
+    const crossBounds = [base, bed, ...localCrossBounds];
+    const crossXMin = Math.min(...crossBounds.map(box => box.min.x)), crossXMax = Math.max(...crossBounds.map(box => box.max.x));
+    const crossYMin = Math.min(base.min.y, ...localCrossBounds.map(box => box.min.y));
+    const crossYMax = Math.max(base.max.y, bed.max.y, ...localCrossBounds.map(box => box.max.y));
+    const crossTarget = new THREE.Vector3((crossXMin + crossXMax) / 2, (crossYMin + crossYMax) / 2, bed.max.z);
+    const crossWidth = crossXMax - crossXMin + .24, crossSectionSize = [2400, 600];
+    const crossCameraDistance = 30;
+    const crossCamera = elevationDegrees => {
+      const aspect = crossSectionSize[0] / crossSectionSize[1], height = crossWidth / aspect;
+      const camera = new THREE.OrthographicCamera(-crossWidth / 2, crossWidth / 2, height / 2, -height / 2, .1, 150);
+      const elevation = THREE.MathUtils.degToRad(elevationDegrees);
+      camera.position.copy(crossTarget).add(new THREE.Vector3(0,
+        Math.sin(elevation) * crossCameraDistance, Math.cos(elevation) * crossCameraDistance));
+      camera.up.set(0, 1, 0); camera.lookAt(crossTarget); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
+      return camera;
+    };
+    forceShadowUpdate();
+    const crossSectionImage = render(crossCamera(0), ...crossSectionSize);
+    forceShadowUpdate();
+    const crossSectionTopImage = render(crossCamera(8), ...crossSectionSize);
+    for (const [object, visible] of crossSectionHidden) object.visible = visible;
     scene.scene.traverse(light => {
       if (!light.isLight || !light.castShadow || !light.shadow?.camera) return;
       shadowLights.push({ type: light.type, mapPresent: !!light.shadow.map, mapSize: light.shadow.mapSize.toArray(),
@@ -2179,7 +2438,7 @@ async function captureArrayRailProfile(referenceUrl) {
     context.drawImage(original, 0, 50); context.drawImage(current, 1920, 50);
     return { nativeImage, innerImage, endImage, supportImage, supportCloseImage, supportShadowOffImage, supportShadowAllOffImage,
       rearSupportImage, rearShadowOffImage, rearShadowAllOffImage,
-      rightImage, rightEndImage,
+      rightImage, rightEndImage, crossSectionImage, crossSectionTopImage,
       comparisonImage: comparison.toDataURL("image/png"),
       inspection: { nativeProjection: "Original axes, first mid-slot anchored at [320,1300], actual world pitch normalized to source pitch=1.",
         axes: { x: [79.31, 36.9], y: [57.56, -50.85], z: [0, -75.21] }, size: [1920, 1600], sourcePpu: 98,
@@ -2197,6 +2456,15 @@ async function captureArrayRailProfile(referenceUrl) {
           size: [rightWidth, rightHeight], pixelsPerWorldUnit: 145, worldRange: { z: [rightZMin, rightZMax], y: [rightYMin, rightYMax] },
           endCrop: "Same exact right projection, front end and runner/leg contour cropped at 1000x700.",
           floorNote: "Actual horizontal floor/contact-AO planes are edge-on and project to zero area in this exact side view. Ground contact/shadows are verified separately by front/rear contact cameras." },
+        frontOrthographicViews: { classification: "Scene inspection only; orthographic observation of the complete visible front geometry. Listed exterior parts are hidden; this is not a production screenshot or a cutaway section.",
+          targetWorld: crossTarget.toArray(), selectedLane: lane, selectedRow: 12, bedReferenceZ: bed.max.z,
+          clipping: { near: .1, far: 150, depthSlice: false }, widthRange: [crossXMin - .12, crossXMax + .12],
+          verticalRange: [crossYMin, crossYMax], size: crossSectionSize,
+          hiddenForInspection: crossSectionHidden.map(([object]) => object.name),
+          front: { camera: "Orthographic front-end observation from world +Z looking -Z, yaw=0°, elevation=0°, up=+Y; screen horizontal=+X and vertical=+Y; full depth retained with near=.1 and far=150.",
+            filename: "inspection-front-cross-section-orthographic.png" },
+          top: { camera: "Orthographic front-end observation from world +Z looking -Z, yaw=0°, elevation=8° above horizontal, up=+Y; screen horizontal=+X; full depth retained with near=.1 and far=150.",
+            filename: "inspection-front-cross-section-top-8deg.png", purpose: "Reveal the coplanar grey/black bed material bands." } },
         shadowAB: { changedCasters: shadowCasters.map(([object]) => object.name), camera: "Same contactCamera frame and all other render settings",
           forcedUpdates: "Renderer and each light shadow needsUpdate forced before on/off/restored-on render; shadow renderer clears and redraws maps.",
           quality: { ...scene.quality }, groundRegions: shadowGroundRegions,
@@ -2220,6 +2488,283 @@ async function captureArrayRailProfile(referenceUrl) {
     for (const [object, visible] of visibility) object.visible = visible;
     scene.scene.fog = oldFog; scene.scene.background = oldBackground; renderer.autoClear = oldAutoClear;
     renderer.shadowMap.needsUpdate = oldShadowNeedsUpdate;
+    renderer.setSize(oldSize.x, oldSize.y, false); renderer.setRenderTarget(oldTarget); scene.composer.render();
+  }
+}
+
+async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = null, capturePhase = "after") {
+  const scene = archiveScene, renderer = scene.renderer, matrix = new THREE.Matrix4();
+  const oldSize = renderer.getSize(new THREE.Vector2()), oldTarget = renderer.getRenderTarget();
+  const oldFog = scene.scene.fog, oldBackground = scene.scene.background, oldAutoClear = renderer.autoClear;
+  const visibility = [], instanceData = [], materialSnapshots = new Map(), appliedPatch = [], group = scene.sceneResources.group;
+  const allowed = new Set([...arrayTrayPartNames, "Music shelf left guide", "Music shelf right guide"]);
+  const contactAo = group.getObjectByName("Music shelf contact shadows"), oldContactAoVisible = contactAo?.visible ?? false;
+  const boxes = name => {
+    const object = group.getObjectByName(name), result = [];
+    object?.traverse(mesh => {
+      if (!mesh.isInstancedMesh) return;
+      mesh.geometry.computeBoundingBox();
+      for (let index = 0; index < mesh.count; index++) {
+        mesh.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        result.push({ mesh, index, box: mesh.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(mesh.matrixWorld) });
+      }
+    });
+    return result;
+  };
+  scene.scene.updateMatrixWorld(true);
+  const modelX = scene.model.getWorldPosition(new THREE.Vector3()).x;
+  const baseEntry = boxes("Music shelf base").sort((a, b) => Math.abs(a.box.getCenter(new THREE.Vector3()).x - modelX) -
+    Math.abs(b.box.getCenter(new THREE.Vector3()).x - modelX))[0];
+  expect(baseEntry, "Shelf color probe requires an active actual shelf base.");
+  const lane = scene.selectedCell.lane, firstIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12);
+  const nextIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 13);
+  const first = boxes("Record shelf tray").find(item => item.index === firstIndex)?.box;
+  const next = boxes("Record shelf tray").find(item => item.index === nextIndex)?.box;
+  const bed = boxes("Record shelf recessed bed").find(item => item.index === firstIndex)?.box;
+  expect(first && next && bed, "Shelf color probe requires the actual central tray pitch and bed.");
+  const anchor = first.getCenter(new THREE.Vector3()); anchor.y = bed.max.y + .025;
+  const pitch = Math.abs(next.getCenter(new THREE.Vector3()).z - anchor.z), ppu = 98 / pitch;
+  const right = new THREE.Vector3(79.31, 0, -57.56).normalize();
+  const up = new THREE.Vector3(-36.9, 75.21, -50.85); up.addScaledVector(right, -up.dot(right)).normalize();
+  const normal = new THREE.Vector3().crossVectors(right, up).normalize();
+  const camera = new THREE.OrthographicCamera(-1920 / ppu / 2, 1920 / ppu / 2,
+    1600 / ppu / 2, -1600 / ppu / 2, .1, 150);
+  const center = anchor.clone().addScaledVector(right, (1920 / 2 - 320) / ppu).addScaledVector(up, (1300 - 1600 / 2) / ppu);
+  camera.position.copy(center).addScaledVector(normal, 50); camera.up.copy(up); camera.lookAt(center);
+  camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
+  try {
+    expect(runtimePatch === null || Array.isArray(runtimePatch), "Material patch must be a JSON array of mesh/material overrides.");
+    for (const patch of runtimePatch ?? []) {
+      expect(typeof patch.object === "string", "Each runtime material patch needs an exact mesh or group object name.");
+      const targetRoot = group.getObjectByName(patch.object);
+      expect(targetRoot, "Runtime material patch target was not found: " + patch.object);
+      const patchKeys = Object.keys(patch).filter(key => key !== "object" && key !== "materialIndex");
+      expect(patchKeys.length > 0 && patchKeys.every(key => ["color", "roughness", "metalness", "envMapIntensity",
+        "useSceneEnvironment", "environmentFactor"].includes(key)),
+      "Runtime material patch supports albedo/roughness/metalness, direct envMapIntensity, or a scaled Scene environment map.");
+      if (patch.useSceneEnvironment !== undefined)
+        expect(patch.useSceneEnvironment === true, "Scene environment borrowing is enabled with useSceneEnvironment:true only.");
+      if (patch.useSceneEnvironment === true)
+        expect(patch.envMapIntensity === undefined, "Use environmentFactor instead of absolute envMapIntensity when borrowing the Scene environment.");
+      if (patch.environmentFactor !== undefined) {
+        expect(patch.useSceneEnvironment === true && Number.isFinite(patch.environmentFactor),
+          "environmentFactor must be numeric and paired with useSceneEnvironment:true.");
+      }
+      targetRoot.traverse(mesh => {
+        if (!mesh.isMesh) return;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const indices = Number.isInteger(patch.materialIndex) ? [patch.materialIndex] : materials.map((_, index) => index);
+        for (const materialIndex of indices) {
+          const material = materials[materialIndex];
+          expect(material, "Runtime material index is missing on " + mesh.name + ".");
+          if (!materialSnapshots.has(material)) materialSnapshots.set(material, {
+            color: material.color?.clone() ?? null, roughness: material.roughness, metalness: material.metalness,
+            envMapIntensity: material.envMapIntensity, envMap: material.envMap, needsUpdate: material.needsUpdate ?? null,
+          });
+          if (patch.color !== undefined) { expect(material.color?.set, "Target material has no color: " + mesh.name); material.color.set(patch.color); }
+          for (const key of ["roughness", "metalness", "envMapIntensity"]) if (patch[key] !== undefined) {
+            expect(Number.isFinite(patch[key]), "Runtime material value must be numeric: " + key); material[key] = patch[key];
+          }
+          if (patch.useSceneEnvironment === true) {
+            expect(scene.scene.environment, "Scene environment borrowing requires scene.environment.");
+            const factor = patch.environmentFactor ?? 1;
+            expect(Number.isFinite(scene.scene.environmentIntensity), "Scene environment intensity must be numeric.");
+            material.envMap = scene.scene.environment;
+            material.envMapIntensity = scene.scene.environmentIntensity * factor;
+            material.needsUpdate = true;
+          }
+          const recordedPatch = Object.fromEntries(patchKeys.map(key => {
+            if (key === "color") return [key, "#" + material.color.getHexString()];
+            if (key === "useSceneEnvironment") return [key, material.envMap === scene.scene.environment];
+            if (key === "environmentFactor") return [key, patch.environmentFactor];
+            return [key, material[key]];
+          }));
+          if (patch.useSceneEnvironment === true) {
+            recordedPatch.environmentMap = "scene.environment";
+            recordedPatch.sceneEnvironmentIntensity = scene.scene.environmentIntensity;
+            recordedPatch.effectiveEnvMapIntensity = material.envMapIntensity;
+          }
+          appliedPatch.push({ object: mesh.name, materialIndex, ...recordedPatch });
+        }
+      });
+    }
+    scene.scene.traverse(object => {
+      if (!object.isMesh) return;
+      visibility.push([object, object.visible]);
+      if (!allowed.has(object.name)) { object.visible = false; return; }
+      if (!object.isInstancedMesh) return;
+      instanceData.push({ object, matrices: object.instanceMatrix.array.slice(), colors: object.instanceColor?.array.slice() ?? null });
+      object.geometry.computeBoundingBox();
+      for (let index = 0; index < object.count; index++) {
+        object.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        const bounds = object.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(object.matrixWorld);
+        const centerX = bounds.getCenter(new THREE.Vector3()).x;
+        if (centerX < baseEntry.box.min.x - .2 || centerX > baseEntry.box.max.x + .2)
+          object.setMatrixAt(index, new THREE.Matrix4().makeScale(0, 0, 0));
+      }
+      object.instanceMatrix.needsUpdate = true;
+    });
+    scene.scene.fog = null; scene.scene.background = new THREE.Color("#e5e4e2"); renderer.autoClear = true;
+    if (contactAo) contactAo.visible = false;
+    renderer.setSize(1920, 1600, false); renderer.setRenderTarget(null); renderer.render(scene.scene, camera);
+    const imageUrl = renderer.domElement.toDataURL("image/png"), screenCanvas = document.createElement("canvas");
+    screenCanvas.width = 1920; screenCanvas.height = 1600;
+    const screenContext = screenCanvas.getContext("2d", { willReadFrequently: true });
+    const image = new Image(); image.src = imageUrl; await image.decode(); screenContext.drawImage(image, 0, 0);
+    const project = point => {
+      const value = point.clone().project(camera); return [(value.x + 1) * 960, (1 - value.y) * 800];
+    };
+    const rayTargets = [];
+    scene.scene.traverse(object => {
+      if (!object.isMesh || !object.visible || object === contactAo) return;
+      for (let parent = object.parent; parent; parent = parent.parent) if (!parent.visible) return;
+      rayTargets.push(object);
+    });
+    const allInstances = name => {
+      const object = group.getObjectByName(name), result = [];
+      if (!object?.isInstancedMesh) return result;
+      object.geometry.computeBoundingBox();
+      for (let index = 0; index < object.count; index++) {
+        object.getMatrixAt(index, matrix);
+        if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+        result.push({ mesh: object, index, box: object.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(object.matrixWorld) });
+      }
+      return result;
+    };
+    const findTarget = (name, score) => allInstances(name).sort((a, b) => score(a) - score(b))[0] ?? null;
+    const probes = [];
+    const sampleProbe = ({ semantic, name, target, localPoint, materialIndex = 0, uvNote = null }) => {
+      if (!target) { probes.push({ semantic, object: name, skipped: true, reason: "active instance not found" }); return; }
+      const transform = new THREE.Matrix4(); target.mesh.getMatrixAt(target.index, transform);
+      const world = new THREE.Vector3(...localPoint).applyMatrix4(transform).applyMatrix4(target.mesh.matrixWorld);
+      const ndc = world.clone().project(camera), screen = [(ndc.x + 1) * 960, (1 - ndc.y) * 800];
+      const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), camera);
+      const hit = ray.intersectObjects(rayTargets, false)[0];
+      const hitSummary = hit ? { object: hit.object.name, instance: hit.instanceId ?? null, materialIndex: hit.face?.materialIndex ?? null } : null;
+      const material = Array.isArray(target.mesh.material) ? target.mesh.material[materialIndex] : target.mesh.material;
+      const materialInput = { color: material?.color ? "#" + material.color.getHexString() : null,
+        roughness: material?.roughness ?? null, metalness: material?.metalness ?? null,
+        envMapIntensity: material?.envMapIntensity ?? null, map: material?.map?.name || null,
+        environmentMap: material?.envMap ? (material.envMap === scene.scene.environment ? "scene.environment" : material.envMap.name || "explicit") : null,
+        sceneEnvironmentIntensity: scene.scene.environmentIntensity ?? null,
+        colorSpace: material?.map?.colorSpace ?? null };
+      if (hit?.object !== target.mesh || hit.instanceId !== target.index || hit.face?.materialIndex !== materialIndex) {
+        probes.push({ semantic, object: name, instance: target.index, materialIndex, localPoint, world: world.toArray(), screen,
+          materialInput, rayHit: hitSummary, skipped: true, reason: "raycast did not confirm the expected visible mesh face" });
+        return;
+      }
+      const x = Math.max(3, Math.min(1916, Math.round(screen[0]))), y = Math.max(3, Math.min(1596, Math.round(screen[1])));
+      const pixels = screenContext.getImageData(x - 2, y - 2, 5, 5).data, channels = [[], [], []];
+      const pixelRay = new THREE.Raycaster();
+      let opaquePixelCount = 0, raycastMatchedPixelCount = 0;
+      for (let row = 0; row < 5; row++) for (let column = 0; column < 5; column++) {
+        const offset = (row * 5 + column) * 4;
+        if (pixels[offset + 3] !== 255) continue;
+        opaquePixelCount++;
+        const pixelX = x - 2 + column, pixelY = y - 2 + row;
+        pixelRay.setFromCamera(new THREE.Vector2((pixelX + .5) / 960 - 1, 1 - (pixelY + .5) / 800), camera);
+        const pixelHit = pixelRay.intersectObjects(rayTargets, false)[0];
+        if (pixelHit?.object !== target.mesh || pixelHit.instanceId !== target.index || pixelHit.face?.materialIndex !== materialIndex) continue;
+        raycastMatchedPixelCount++;
+        for (let channel = 0; channel < 3; channel++) channels[channel].push(pixels[offset + channel]);
+      }
+      const median = values => values.length ? values.slice().sort((a, b) => a - b)[Math.floor(values.length / 2)] : null;
+      probes.push({ semantic, object: name, instance: target.index, materialIndex, materialInput,
+      localPoint, uvNote, world: world.toArray(), screen, rayHit: hitSummary,
+      roi: { x: x - 2, y: y - 2, width: 5, height: 5, opaquePixelCount, raycastMatchedPixelCount,
+        raycastMask: "same mesh, instance and materialIndex" }, opaquePixelCount, raycastMatchedPixelCount,
+      rgbMedian: channels.map(median), skipped: !raycastMatchedPixelCount,
+      ...(!raycastMatchedPixelCount ? { reason: "no opaque ROI pixels raycast to the expected mesh instance and material face" } : {}) });
+    };
+    const frontCap = findTarget("Music shelf end caps", item => -item.box.max.z);
+    const frontPlatform = findTarget("Music shelf end platforms", item => -item.box.max.z);
+    const leftGuide = findTarget("Music shelf left guide", item => Math.abs(item.box.getCenter(new THREE.Vector3()).x - (baseEntry.box.min.x + .1)));
+    const rightGuide = findTarget("Music shelf right guide", item => Math.abs(item.box.getCenter(new THREE.Vector3()).x - (baseEntry.box.max.x - .1)));
+    const base = findTarget("Music shelf base", item => Math.abs(item.box.getCenter(new THREE.Vector3()).x - modelX));
+    const selectedBed = allInstances("Record shelf recessed bed").find(item => item.index === firstIndex);
+    const actualBedWidth = selectedBed ? selectedBed.box.max.x - selectedBed.box.min.x : null;
+    const rightBlackBandLocalX = actualBedWidth && actualBedWidth > .095 ? .5 - .0475 / actualBedWidth : .5;
+    const feet = boxes("Music shelf support feet"), frontZ = Math.max(...feet.map(item => (item.box.min.z + item.box.max.z) / 2));
+    const leg = findTarget("Music shelf support feet", item => Math.abs(item.box.getCenter(new THREE.Vector3()).z - frontZ) * 4 +
+      Math.abs(item.box.getCenter(new THREE.Vector3()).x - (baseEntry.box.max.x - .5)));
+    sampleProbe({ semantic: "body front end wall", name: "Music shelf end caps", target: frontCap, localPoint: [0, 0, .49] });
+    sampleProbe({ semantic: "outer base wall", name: "Music shelf base", target: base, localPoint: [.49, 0, 0] });
+    sampleProbe({ semantic: "left backstop inner wall", name: "Music shelf left guide", target: leftGuide, localPoint: [-.089, .06, 0], materialIndex: 0 });
+    sampleProbe({ semantic: "left backstop outer wall", name: "Music shelf left guide", target: leftGuide, localPoint: [.099, .06, 0], materialIndex: 0 });
+    sampleProbe({ semantic: "left backstop silver top", name: "Music shelf left guide", target: leftGuide, localPoint: [.01, .179, 0], materialIndex: 1 });
+    sampleProbe({ semantic: "right bed black band", name: "Record shelf recessed bed", target: selectedBed,
+      localPoint: [rightBlackBandLocalX, .499, 0], materialIndex: 1, uvNote: "right black-band center, 0.0475 world units inward from the actual bed edge" });
+    sampleProbe({ semantic: "right guide silver edge", name: "Music shelf right guide", target: rightGuide, localPoint: [.045, -.1015, 0], materialIndex: 1 });
+    sampleProbe({ semantic: "middle bed dark", name: "Record shelf recessed bed", target: selectedBed, localPoint: [0, .499, 0], uvNote: "center of broad fixed bed shade" });
+    sampleProbe({ semantic: "middle bed bright", name: "Record shelf recessed bed", target: selectedBed, localPoint: [0, .499, .35], uvNote: "fixed UV near the open end of the broad bed shade" });
+    sampleProbe({ semantic: "front end platform", name: "Music shelf end platforms", target: frontPlatform, localPoint: [0, .49, 0] });
+    sampleProbe({ semantic: "front support leg", name: "Music shelf support feet", target: leg, localPoint: [.49, 0, 0] });
+    const referenceTargets = [
+      { file: "rail-front.png", semantic: "high-left top grey", pixel: [290, 476], expected: [118, 121, 123] },
+      { file: "rail-front.png", semantic: "left inner face", pixel: [302, 478], expected: [52, 55, 67] },
+      { file: "rail-front.png", semantic: "right silver wide cap", pixel: [638, 650], expected: [187, 190, 201] },
+      { file: "rail-front.png", semantic: "right silver cap second point", pixel: [620, 660], expected: [189, 191, 202] },
+      { file: "rail-front.png", semantic: "grey support foot", pixel: [279, 558], expected: [87, 89, 91] },
+      { file: "rail-front.png", semantic: "black front core", pixel: [608, 690], expected: [36, 37, 43] },
+      { file: "rail-front.png", semantic: "paper row", pixel: [532, 659], expected: [199, 199, 197] },
+      { file: "rail-mid.png", semantic: "middle bed dark", pixel: [400, 545], expected: [103, 103, 103] },
+      { file: "rail-mid.png", semantic: "middle bed bright", pixel: [380, 520], expected: [122, 123, 122] },
+    ];
+    const sourceSamples = [];
+    for (const file of [...new Set(referenceTargets.map(item => item.file))]) {
+      const source = new Image(); source.src = sourceReferenceUrls[file]; await source.decode();
+      const sourceCanvas = document.createElement("canvas"); sourceCanvas.width = source.naturalWidth; sourceCanvas.height = source.naturalHeight;
+      const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true }); sourceContext.drawImage(source, 0, 0);
+      for (const target of referenceTargets.filter(item => item.file === file)) {
+        const [x, y] = target.pixel, pixel = [...sourceContext.getImageData(x, y, 1, 1).data];
+        sourceSamples.push({ ...target, rgba: pixel, expectedMatches: pixel[3] === 255 && pixel.slice(0, 3).every((value, index) => value === target.expected[index]) });
+      }
+    }
+    const sourceSamplesMatched = sourceSamples.length === 9 && sourceSamples.every(sample => sample.expectedMatches);
+    expect(sourceSamplesMatched, "All nine manually selected opaque source reference pixels must match their expected RGBA values: " +
+      JSON.stringify(sourceSamples.map(sample => ({ file: sample.file, semantic: sample.semantic, pixel: sample.pixel, rgba: sample.rgba,
+        expectedMatches: sample.expectedMatches }))));
+    const runtimeOverridesApplied = appliedPatch.length > 0;
+    const rightSilverProbe = probes.find(probe => probe.semantic === "right guide silver edge");
+    const sourceEnvironmentCheck = !runtimeOverridesApplied && capturePhase === "after" ? {
+      design: scene.musicStyle.design,
+      expectedEnvironmentMap: scene.musicStyle.design === "archive" ? "scene.environment" : null,
+      actualEnvironmentMap: rightSilverProbe?.materialInput?.environmentMap ?? null,
+    } : null;
+    if (sourceEnvironmentCheck) expect(sourceEnvironmentCheck.actualEnvironmentMap === sourceEnvironmentCheck.expectedEnvironmentMap,
+      "Unpatched source silver edge must retain the expected Archive/Future environment-map policy: " + JSON.stringify(sourceEnvironmentCheck));
+    const railBoxes = boxes("Music shelf side rails").map(item => item.box);
+    return { imageUrl, inspection: { projection: "Original axes, 1920x1600 orthographic image; active actual Scene geometry/materials, no fog, contact AO, composer or DOF.",
+      axes: { x: [79.31, 36.9], y: [57.56, -50.85], up: [0, -75.21] }, size: [1920, 1600], sourcePpu: 98,
+      actualWorldPitch: pitch, pixelsPerWorldUnit: ppu, anchor: anchor.toArray(), projectedAnchor: project(anchor),
+      actualCaseWidth: scene.caseLayout.bounds.max[0] - scene.caseLayout.bounds.min[0],
+      actualBaseWidth: baseEntry.box.max.x - baseEntry.box.min.x,
+      actualRailOuterWidth: railBoxes.length ? Math.max(...railBoxes.map(box => box.max.x)) - Math.min(...railBoxes.map(box => box.min.x)) : null,
+      widthNote: "Current geometry dimensions are retained; screenshot axes and pitch match the source reference.",
+      probes, sourceSamples, sourceSampleValidation: { expected: 9, actual: sourceSamples.length, allOpaque: sourceSamples.every(sample => sample.rgba[3] === 255), allMatched: sourceSamplesMatched },
+      sourceEnvironmentCheck, runtimePatch: appliedPatch, skippedProbes: probes.filter(item => item.skipped).map(item => item.semantic),
+      sourceReferences: Object.keys(sourceReferenceUrls), settings: { fog: false, composer: false, ambientOcclusion: false,
+        proceduralContactAo: false, depthOfField: false, floor: false, otherCases: false, otherLanes: false,
+        materialAndLighting: runtimeOverridesApplied
+          ? "Runtime material overrides applied for this capture and restored afterward; Scene lighting is unchanged."
+          : "Actual source Scene materials and lights; no runtime material overrides." } } };
+  } finally {
+    if (contactAo) contactAo.visible = oldContactAoVisible;
+    for (const item of instanceData) {
+      item.object.instanceMatrix.array.set(item.matrices); item.object.instanceMatrix.needsUpdate = true;
+      if (item.colors) { item.object.instanceColor.array.set(item.colors); item.object.instanceColor.needsUpdate = true; }
+    }
+    for (const [material, snapshot] of materialSnapshots) {
+      const environmentChanged = material.envMap !== snapshot.envMap;
+      if (snapshot.color) material.color.copy(snapshot.color);
+      for (const key of ["roughness", "metalness", "envMapIntensity"]) if (snapshot[key] !== undefined) material[key] = snapshot[key];
+      material.envMap = snapshot.envMap;
+      if (environmentChanged || snapshot.needsUpdate === true) material.needsUpdate = true;
+    }
+    for (const [object, visible] of visibility) object.visible = visible;
+    scene.scene.fog = oldFog; scene.scene.background = oldBackground; renderer.autoClear = oldAutoClear;
     renderer.setSize(oldSize.x, oldSize.y, false); renderer.setRenderTarget(oldTarget); scene.composer.render();
   }
 }
@@ -3520,8 +4065,10 @@ window.caseCheck = {
   arrayBumpQualityMarkup(design, layout) { return qualityMarkup(qualityPresets.high, design, layout); },
   prepareArrayTray,
   arrayTrayStructureSnapshot,
+  arrayTrayTickSurfaceSnapshot,
   captureEmptyArrayTray,
   captureArrayRailProfile,
+  captureShelfColorCalibration,
   arrayTraySupportSnapshot,
   arrayTrayShadowCameraSnapshot,
   arrayTrayClearanceSnapshot,
@@ -6395,7 +6942,8 @@ try {
   });
   bundleJs = built.outputFiles.find(file => file.path.endsWith(".js"))?.text ?? "";
   bundleCss = built.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
-  if (isArrayRailProfile) console.log("ARRAY_RAIL_PROFILE_BUNDLE_LOCKED " + arrayRailPhase);
+  if (isShelfColors) console.log("SHELF_COLOR_CALIBRATION_BUNDLE_LOCKED " + shelfColorPhase + " " + shelfColorVariant);
+  else if (isArrayRailProfile) console.log("ARRAY_RAIL_PROFILE_BUNDLE_LOCKED " + arrayRailPhase);
   assert.ok(bundleJs, "esbuild must bundle the local offline fixture in memory.");
   if (!isReference) assert.ok(bundleCss, "esbuild must bundle the real case-editor.css stylesheet.");
 } catch (error) {
@@ -6798,6 +7346,33 @@ async function main() {
   if (isUnifiedRender) {
     await mkdir(isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isShelfColors) {
+      const normal = await evaluate("window.caseCheck.prepareArrayTray(" + [shelfColorDesign, shelfColorTheme, "plain"].map(JSON.stringify).join(",") + ")");
+      const active = await evaluate("window.caseCheck.settleArrayTrayLane(4,4)");
+      const sourceReferenceRoot = path.resolve(project, "..", "..", "references", "RhinE-1.4.0-portable", "audio-archive-1.4.0", "assets", "render", "rail");
+      const sourceReferencePaths = Object.fromEntries(["rail-front.png", "rail-mid.png"].map(file =>
+        [file, path.join(sourceReferenceRoot, file)]));
+      const sourceReferenceUrls = {};
+      for (const [file, sourcePath] of Object.entries(sourceReferencePaths))
+        sourceReferenceUrls[file] = "data:image/png;base64," + (await readFile(sourcePath)).toString("base64");
+      const inspection = await evaluate("window.caseCheck.captureShelfColorCalibration(" + JSON.stringify(sourceReferenceUrls) + "," +
+        JSON.stringify(shelfColorRuntimePatch) + "," + JSON.stringify(shelfColorPhase) + ")");
+      assert.deepEqual(runtimeErrors, []); assert.deepEqual(shaderErrors, []); assert.deepEqual(blockedRoutes, []);
+      const imageName = `native-${shelfColorVariant}.png`;
+      await writeFile(path.join(shelfColorOutput, imageName), pngBuffer(inspection.imageUrl, imageName));
+      const report = { ok: true, phase: shelfColorPhase, design: shelfColorDesign, theme: shelfColorTheme,
+        scenePreparation: normal, selectedLane: active.structure.selectedLane ?? null, captureLabel: shelfColorCaptureLabel,
+        patchLabel: shelfColorPatchLabel, requestedRuntimePatch: shelfColorRuntimePatch,
+        sourceReferencePaths: Object.fromEntries(Object.entries(sourceReferencePaths).map(([file, sourcePath]) =>
+          [file, path.relative(project, sourcePath)])), inspection: inspection.inspection, screenshots: [imageName],
+        runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(shelfColorOutput, "shelf-color-calibration-report.json"), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: true, phase: shelfColorPhase, design: shelfColorDesign, theme: shelfColorTheme,
+        report: path.relative(project, path.join(shelfColorOutput, "shelf-color-calibration-report.json")), screenshots: [imageName],
+        visibleProbes: inspection.inspection.probes.filter(probe => !probe.skipped).length,
+        skippedProbes: inspection.inspection.skippedProbes }, null, 2));
+      return;
+    }
     if (isArrayRailProfile) {
       const normal = await evaluate('window.caseCheck.prepareArrayTray("archive","day","plain")');
       const browse = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
@@ -6813,6 +7388,8 @@ async function main() {
         rearSupportImage: "inspection-rear-support-contact-closeup.png", rearShadowOffImage: "inspection-rear-directional-casters-off.png",
         rearShadowAllOffImage: "inspection-rear-casters-and-contact-ao-off.png",
         rightImage: "inspection-right-orthographic-full.png", rightEndImage: "inspection-right-orthographic-end-closeup.png",
+        crossSectionImage: "inspection-front-cross-section-orthographic.png",
+        crossSectionTopImage: "inspection-front-cross-section-top-8deg.png",
         comparisonImage: "original-vs-current-native.png" };
       for (const [key, filename] of Object.entries(files))
         await writeFile(path.join(arrayRailOutput, filename), pngBuffer(inspection[key], filename));
@@ -6877,6 +7454,7 @@ async function main() {
           return !part?.present || !part.visible || part.drawnInstances === 0;
         });
         assert.deepEqual(missing, [], "The live ARRAY Scene must submit the bed, tray and both side rails: " + JSON.stringify(missing));
+        let tickSurface = null;
         if (isArrayTrayStructure) {
           const part = name => visibleState.parts.find(value => value.name === name);
           const lanes = part("Music shelf base").drawnInstances;
@@ -6903,12 +7481,17 @@ async function main() {
             "Each physical pitch must submit exactly one flush separator line.");
           assert.equal(visibleState.raisedTransverseBeamsPresent, false,
             "The central record bed must contain no raised transverse supporting ribs.");
-          const bedBounds = part("Record shelf recessed bed").meshes[0].submittedBounds;
-          const tickBounds = part("Record shelf tick").meshes[0].submittedBounds;
-          assert.ok(tickBounds.length > 0 && tickBounds.every(tick => {
-            const bed = bedBounds.find(value => value.index === tick.index);
-            return bed && tick.max[1] <= bed.max[1] + .003001 && tick.max[1] - tick.min[1] <= .003001;
-          }), "Separator lines must stay within 0.003 of the flat recessed bed surface.");
+          const surfaces = visibleState.surfaceRelationships;
+          assert.ok(surfaces.available && surfaces.checks.bedBottomApproximatelyBaseTop && surfaces.checks.bedGrayAndBlackTopCoplanar &&
+            surfaces.checks.landingGrayAndBlackTopsCoplanar && surfaces.checks.rightSilverFaceBelowBaseTop && surfaces.checks.endCapsAtOrBelowBaseTop,
+          "The bed bottom must sit on the base, gray/black bed and landing top triangles must share one level, the material-1 right silver face must remain below the base top, and end caps must not rise above it: " +
+            JSON.stringify(surfaces));
+          tickSurface = await evaluate("window.caseCheck.arrayTrayTickSurfaceSnapshot()");
+          assert.ok(tickSurface.available && tickSurface.checks.exactlyThreeSamples && tickSurface.checks.allSamplesHitFlatFaces &&
+            tickSurface.checks.noStepEdgeSamples && tickSurface.checks.allTopOffsetsWithinTolerance &&
+            tickSurface.checks.allThicknessesWithinTolerance,
+          "The actual tick central flat face must be raycast at center and two inset ends; all three samples must be flush/thin and clear of folded steps: " +
+            JSON.stringify(tickSurface));
           const stripe = part("Music shelf end safety stripes").meshes[0].submittedBounds[0];
           assert.ok(stripe && stripe.max[1] - stripe.min[1] > .08 && stripe.max[2] - stripe.min[2] < .02,
             "Safety stripes must occupy a vertical front XY face.");
@@ -6923,6 +7506,10 @@ async function main() {
           support.allUnderframeConnectedToBody && support.allUnderframeConnectedToBothEndLegs && support.shadowMapEnabled &&
           support.feetCastShadow && support.baseCastShadow && support.underframeCastShadow && support.underframeReceiveShadow && support.floorReceiveShadow,
         "Actual tray legs must meet the current main floor and end beams with production shadow support: " + JSON.stringify(support));
+        if (support) assert.ok(support.footGeometryType === "BoxGeometry" && support.underframeGeometry?.type === "CylinderGeometry" &&
+          support.underframeGeometry.instanceCountPerLane === 2 && Math.abs(support.underframeGeometry.radiusTop - support.underframeGeometry.radiusBottom) <= 1e-6 &&
+          support.underframeGeometry.allRadiallyEqual,
+        "Each tray must retain box feet and two straight, equal-radius cylinder runners per lane: " + JSON.stringify(support.underframeGeometry));
         if (clearance) {
           assert.ok(clearance.caseCount > 0 && clearance.colliderCount > 0, "Structural clearance must inspect submitted case and tray bounds.");
           assert.deepEqual(clearance.intersections, [], "No tray structure may overlap an occupied case bound: " + JSON.stringify(clearance.intersections));
@@ -6954,7 +7541,7 @@ async function main() {
             cameraPosition: end.cameraPosition, target: end.target,
             endBounds: end.endBounds, structure: end.structure, finalFiveClearance: tail.clearance };
         }
-        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, endName, visibleState, clearance, support,
+        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, endName, visibleState, tickSurface, clearance, support,
           endTray,
           emptyTray: { cameraZoom: empty.cameraZoom, structure: empty.structure } });
       }

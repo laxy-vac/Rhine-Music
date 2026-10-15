@@ -3,20 +3,26 @@ import * as THREE from "three";
 /** Small shared maps for the tray, independent of the selected scene floor. */
 export function createMusicShelfTextures() {
   const size = 256;
-  const bed = new Uint8Array(size * size * 4);
-  const endBed = new Uint8Array(size * size * 4);
+  // A slot is much wider than it is deep. Square color maps were minified
+  // heavily along its short axis, erasing the reference's fine matte grain.
+  const bedHeight = 64;
+  const bed = new Uint8Array(size * bedHeight * 4);
+  const endBed = new Uint8Array(size * bedHeight * 4);
   const roughness = new Uint8Array(size * size * 4);
   const normal = new Uint8Array(size * size * 4);
+  for (let y = 0; y < bedHeight; y++) for (let x = 0; x < size; x++) {
+    const offset = (y * size + x) * 4;
+    const noise = grain(x, y);
+    const brush = Math.sin(y * Math.PI * 2 * 13 / bedHeight + Math.sin(x * Math.PI * 2 / size) * .12);
+    const v = y / (bedHeight - 1);
+    const shade = smooth(.12, .24, v) * (1 - smooth(.72, .86, v));
+    gray(bed, offset, 245 - shade * 40 + noise * 26 + brush);
+    gray(endBed, offset, 245 + noise * 26 + brush);
+  }
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const offset = (y * size + x) * 4;
-    // Fine sanded grain and the soft broad shade seen in rail-mid. It is a
-    // surface cue, not a second physical trench across every slot.
-    const noise = ((Math.imul(x + 17, 374761393) ^ Math.imul(y + 31, 668265263)) >>> 0) % 101 / 100 - .5;
+    const noise = grain(x, y);
     const brush = Math.sin(y * Math.PI * 2 * 53 / size + Math.sin(x * Math.PI * 2 / size) * .12);
-    const v = y / (size - 1);
-    const shade = smooth(.12, .24, v) * (1 - smooth(.72, .86, v));
-    gray(bed, offset, 245 - shade * 40 + noise * 18 + brush);
-    gray(endBed, offset, 245 + noise * 18 + brush);
     gray(roughness, offset, 222 + noise * 16 + brush * 4);
     normal[offset] = Math.round(128 + noise * 3);
     normal[offset + 1] = Math.round(128 + brush + noise * 3);
@@ -35,8 +41,8 @@ export function createMusicShelfTextures() {
   }
 
   return {
-    bed: texture(bed, size, size, "Music tray fine matte grain", true),
-    endBed: texture(endBed, size, size, "Music tray end platform grain", true),
+    bed: texture(bed, size, bedHeight, "Music tray fine matte grain", true),
+    endBed: texture(endBed, size, bedHeight, "Music tray end platform grain", true),
     roughness: texture(roughness, size, size, "Music tray brushed metal roughness"),
     normal: texture(normal, size, size, "Music tray machining micro normal"),
     hazard: texture(hazard, 128, 32, "Music tray end safety stripes", true),
@@ -58,8 +64,15 @@ function texture(data: Uint8Array, width: number, height: number, name: string, 
   map.generateMipmaps = true;
   map.minFilter = THREE.LinearMipmapLinearFilter;
   map.magFilter = THREE.LinearFilter;
+  map.anisotropy = 4;
   map.needsUpdate = true;
   return map;
+}
+
+function grain(x: number, y: number) {
+  let value = Math.imul(x + 17, 374761393) ^ Math.imul(y + 31, 668265263);
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967295 - .5;
 }
 
 function gray(data: Uint8Array, offset: number, value: number) {

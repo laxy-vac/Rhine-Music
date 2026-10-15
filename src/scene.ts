@@ -2379,6 +2379,7 @@ export class ArchiveScene {
         row: this.cells[index].row - MUSIC_ARRAY_VIEW.firstRow, lane: this.cells[index].lane }))
         : [],
       width: this.caseLayout.width, depth: this.caseLayout.depth, rowSpacing: Math.abs(spacing.row), floorY: shelfBottom,
+      environment: this.scene.environment, environmentIntensity: this.scene.environmentIntensity,
     });
     const shadowCamera = this.light.shadow.camera;
     const shelfShadowExtent = this.shelfView
