@@ -22,7 +22,7 @@ import "./music-style-page.css";
 import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
 import { getMusicCatalogShelves, getMusicRecordLocation, navigateMusicEntry } from "./music-catalog-shelves";
 import { configureMusicCatalog, getMusicCatalogOptions, getMusicCatalogRecords, getMusicCatalogGroups, getMusicEntry, getMusicEntryByKey, getMusicFocusedEntry, focusMusicEntry } from "./music-catalog";
-import { musicViewControlsMarkup, musicBrowseControlsMarkup, syncMusicViewControls } from "./music-view-controls";
+import { musicBrowseControlsMarkup, syncMusicViewControls } from "./music-view-controls";
 import { setupMusicCatalogGrid } from "./music-catalog-grid";
 import "./music-view-controls.css";
 import "./music-catalog-grid.css";
@@ -578,7 +578,7 @@ stage.addEventListener("lyrics-settings-updated", () => {
   settingsSelectControls?.destroy();
   settingsSelectControls = enhanceSettingsSelectControls($("#settings-page-content"));
 });
-$("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view));
+$("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view, musicApplication.query));
 $(".open-album").setAttribute("aria-label", uiLanguage() === "en" ? "Open album" : "打开专辑");
 const titleMotion = setupMusicTitleLayout(stage);
 const albumPanel = setupAlbumPanel(stage, () => preferences.reduced);
@@ -1855,7 +1855,6 @@ function renderThemePage() {
     getSize: () => { const rect = stage.getBoundingClientRect(); return { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }; },
     apply: quality => { renderQuality = normalizeQuality(quality); updateQuality(); },
   });
-  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforebegin", musicViewControlsMarkup(musicApplication.view, musicApplication.query));
   const editorHost = document.createElement("section");
   editorHost.id = "theme-case-editor";
   content.querySelector("#theme-quality-slot")?.before(editorHost);
@@ -3067,7 +3066,7 @@ function renderSettingsPage() {
   lyricsSettings = undefined;
   content.innerHTML =
     ui`<section class="panel-section" id="appearance-settings"><h3>外观主题</h3><div class="theme-cards">${(["day", "night"] as Theme[]).map((t) => `<button data-theme="${t}" aria-pressed="${preferences.theme === t}" class="${t}"><i></i><strong>${themeNames[t]}</strong><span>${t === "day" ? trUi("暖白玻璃与日光") : trUi("极简星空与透光白卡")}</span></button>`).join("")}</div></section>
-    <section class="panel-section" id="library-sort-settings"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>${uiLanguage() === "en" ? "Shared with STYLE" : "与 STYLE 共享设置"}</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${musicArrangementPreset() === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}<option value="custom" disabled ${musicArrangementPreset() === "custom" ? "selected" : ""}>${trUi("自定义")}</option></select></label><p>${uiLanguage() === "en" ? "More grouping and sorting options are available under View & Browse in STYLE." : "更多分组与排序选项可在 STYLE 的“视图与浏览”中调整。"}</p></section>
+    <section class="panel-section" id="library-sort-settings"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>${uiLanguage() === "en" ? "Shared with browse toolbar" : "与浏览工具栏共享设置"}</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${musicArrangementPreset() === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}<option value="custom" disabled ${musicArrangementPreset() === "custom" ? "selected" : ""}>${trUi("自定义")}</option></select></label><p>${uiLanguage() === "en" ? "More grouping and sorting options are available in the album browse toolbar." : "更多分组与排序选项可在唱片浏览页工具栏中调整。"}</p></section>
     <section class="panel-section" id="introduction-settings"><h3>专辑介绍</h3><p>从公开百科查询并更新专辑介绍，附上资料来源。介绍保存在本机，不需要配置 MusicBrainz 联系信息；音乐文件不会上传。</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details></section>
     <section class="panel-section" id="current-audio-settings"><h3>当前音源</h3><p id="current-audio-source"></p><p>歌曲文件的格式与音质信息。播放时的处理和输出方式可在音频链路中查看。</p><button class="text-button" data-action="audio-info">查看音频链路 ↗</button></section>
     <section class="panel-section" id="decoder-settings"><h3>解码与格式转换</h3><p id="audio-decode-summary" class="audio-live-summary"></p><p>原生播放时，FLAC 由 libFLAC 解码，其他 PCM 音源由 FFmpeg 解码。保持音源采样率进入处理链；解码样本格式与计算精度分别显示。DSD 使用下方独立播放路线。</p><p id="processing-support-status" class="processing-support-note" role="status"></p></section>
@@ -3971,11 +3970,6 @@ document.addEventListener("keydown", event => {
 });
 document.addEventListener("change", (e) => {
   const control = e.target as HTMLInputElement | HTMLSelectElement;
-  const viewField = control.dataset.musicViewField;
-  if (viewField === "show" || viewField === "group" || viewField === "sort") {
-    applyMusicView({ [viewField]: control.value } as Partial<MusicViewSettings>);
-    return;
-  }
   if (control.hasAttribute("data-music-catalog-query")) {
     clearTimeout(musicFilterTimer);
     applyMusicView({}, control.value);
@@ -4130,6 +4124,13 @@ document.addEventListener("keydown", (e) => {
     }
     if (e.key === "Delete") { e.preventDefault(); adjustLibraryRoots("library-remove-folder"); return; }
   }
+  if (!panel && page === "music" && !e.ctrlKey && !e.metaKey && !e.altKey &&
+      (e.key === "Enter" || e.key === "Escape") && (e.target as HTMLElement).hasAttribute("data-music-catalog-query")) {
+    e.preventDefault();
+    const input = e.target as HTMLInputElement;
+    if (e.key === "Escape") input.value = "";
+    clearTimeout(musicFilterTimer);applyMusicView({}, input.value);return;
+  }
   if (e.key === "Escape") {
     e.preventDefault();
     if (e.repeat) return;
@@ -4161,9 +4162,6 @@ document.addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement).closest(".music-header, .foobar-header, .music-topnav, .music-playback, .foobar-footer, .foobar-status")) return;
   const editing = (e.target as HTMLElement).matches("input, textarea, select, [contenteditable=true]");
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (editing && e.key === "Enter" && (e.target as HTMLElement).hasAttribute("data-music-catalog-query")) {
-    e.preventDefault();clearTimeout(musicFilterTimer);applyMusicView({}, (e.target as HTMLInputElement).value);return;
-  }
   if (!editing) {
     if (page === "music" && e.key === "/") { e.preventDefault();searchGenre="";openPanel("search");return; }
     if ((page === "lyrics" || page === "signal") && ["ArrowLeft", "ArrowRight"].includes(e.key)) {

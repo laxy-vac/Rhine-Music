@@ -40,19 +40,21 @@ Archive从EQ/歌词/信号/主题等同窗口页面返回原唱片上下文，�
 | 控件 | 当前选项 |
 | --- | --- |
 | SHOW | ALBUMS / TRACKS |
-| LAYOUT | 公共货架 / 阵列 / 网格，入口在STYLE；旧LAYOUT节点在第四阶段清退 |
+| LAYOUT | SHELF / ARRAY / GRID |
 | GROUP | GENRE / ARTIST / DECADE / A-Z / NONE |
 | SORT | ARTIST / TITLE / YEAR / ADDED |
 
+Punk浏览页右上角按SHOW+LAYOUT、GROUP+SORT分两行；Future浏览页左上角提供相同两行，并在下方提供紧凑查询输入。Punk查询复用顶栏SEARCH ARCHIVE。两主题调用同一公共view/query，切换主题保留当前状态；设置 → 音乐库的旧排列入口继续作为公共view别名，文案指向浏览工具栏。STYLE不再显示“视图与浏览”区，只集中外观、盒体和画质设置。
+
 TRACKS是独立曲目entry、每曲一盒，封面/ARC归父专辑；货架20槽跨组分页，网格每曲小卡，分组阵列每组一列。两主题共用目录、空间布局与三维相机，以各自盒体、材质和配色呈现；TRACKS各曲有独立entry key，不改全局专辑records为track数组。货架列沿负X、槽沿负Z；间距按用户变换后的盒体bounds扩展，保留稳定父专辑身份。ADDED无时间戳时沿稳定库顺序，不编日期。
 
-视图选择由公共view保存，foobarArchive.layout仅保留兼容投影；缺失字段按旧配置/默认迁移。切布局保留当前专辑/曲目身份、右侧信息区DOM、位置、内容、活动tab与展开状态。Punk三维画布用现有右栏边界裁切，不借布局切主题。G在网格与最近空间布局之间切换。Future和Punk货架现位于共同Three.js场景；`MusicShelf`与`MusicSceneResources`以程序几何构成托盘、货架和地面细节，`MusicCaseTitles`使用纸面图集呈现Punk顶边标题。Future使用陶瓷/轻玻璃边，Punk使用主题金属材质。第四阶段已清退迁移前的ArchiveCaseRenderer/sprite/foobar目录链；本主题页描述公共场景，不承诺在当前源码中切回旧Canvas外观。Punk旧目录DOM保留的类/data钩子迁入公共markup，隐藏LAYOUT节点清除。波浪设置沿用现有规则，不新增波浪模式。
+视图选择由公共view保存，foobarArchive.layout仅保留兼容投影；缺失字段按旧配置/默认迁移。切布局保留当前专辑/曲目身份、右侧信息区DOM、位置、内容、活动tab与展开状态。Punk三维画布用现有右栏边界裁切，不借布局切主题。G在网格与最近空间布局之间切换。Future和Punk货架现位于共同Three.js场景；`MusicShelf`与`MusicSceneResources`以程序几何构成托盘、货架和地面细节，`MusicCaseTitles`使用纸面图集呈现Punk顶边标题。Future使用陶瓷/轻玻璃边，Punk使用主题金属材质。第四阶段已清退迁移前的ArchiveCaseRenderer/sprite/foobar目录链；本主题页描述公共场景，不承诺在当前源码中切回旧Canvas外观。Punk旧目录DOM保留的类/data钩子迁入公共markup，旧的隐藏LAYOUT节点已清退；当前可见LAYOUT控件属于公共浏览工具栏。波浪设置沿用现有规则，不新增波浪模式。
 
 第三阶段没有可直接复用的原始货架/地面3D模型。新几何是按现有坐标、盒体bounds与主题图形估算的程序实现，不是原作者网格或像素复刻；未修改现有GLB/PNG，也不直接把含预烘焙光照的地面投影作为实时材质。Punk货架前牌`ROW 001`按列递增，ALBUM NO.继续显示独立全库编号。
 
 左下编号是架内位置，右侧ALBUM NO.是全库四位档案编号，不强行统一成同一序号。SHELF/RANDOM PICK保持源式布局，不再加大底板。播放栏方槽是当前封面槽，空闲不放音符/金色占位；无封面使用既有小标记。
 
-目标曲目点播使用父专辑队列；打开专辑与开始播放分开。ORDER的repeat-track/random不能冒充原生gapless预排。Future浏览页左上角提供同源SHOW/GROUP/SORT，STYLE中还有布局、筛选及同样的目录选项，均写公共view。
+目标曲目点播使用父专辑队列；打开专辑与开始播放分开。ORDER的repeat-track/random不能冒充原生gapless预排。两主题浏览工具栏均提供完整SHOW/LAYOUT/GROUP/SORT并使用公共view；查询使用公共query。STYLE不承载目录浏览区。
 
 Punk SETTINGS紧跟时钟，不auto margin推到最右；顶栏保留溢出访问但隐藏横滑条，不恢复旧MENU。打开专辑橙箭头已移除。
 
@@ -63,7 +65,7 @@ Punk SETTINGS紧跟时钟，不auto margin推到最右；顶栏保留溢出访�
 正面操作终端用层级高度/阴影、高光、透明、磨砂和细腻色变形成悬浮感；光向跟唱片场景，自发光可用有限局部光影响邻近部件。当前是屏幕空间/局部光近似，不是全局光线追踪。背景不新增墙板、隔断或无含义立体物件。
 
 - 胶囊播放条、轻透导航/时钟、清晰PROFILE层级。
-- 唱片资料直接以悬浮文字和细规则线呈现，移除右侧整块圆角玻璃底；ACCESS ALBUM保留小号文字/箭头及原打开操作与无障碍名称，不画外框或悬停底板。左上目录控件在约440px内分两行，显示/分组在上、排序在下。借上游版式/揭示语言，保留专辑名、歌手、音质徽标、PROFILE、歌单和介绍等现有音乐内容。
+- 唱片资料直接以悬浮文字和细规则线呈现，移除右侧整块圆角玻璃底；ACCESS ALBUM保留小号文字/箭头及原打开操作与无障碍名称，不画外框或悬停底板。左上浏览工具栏分两行提供SHOW+LAYOUT、GROUP+SORT，下方为紧凑查询输入。借上游版式/揭示语言，保留专辑名、歌手、音质徽标、PROFILE、歌单和介绍等现有音乐内容。
 - 歌词共同三栏，中央独立阅读面、两侧开放。
 - EQ浮起模块、旋钮/推子/读数，不复制Punk硬黑块。
 - 信号保留大环/既有尺寸，不加厚重外围框。

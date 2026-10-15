@@ -119,7 +119,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-unified-state.mjs` | 公共状态、旧配置迁移、冻结view/最近空间布局、真实应用函数编排与模拟UI/渲染/音频端口、桌面偏好白名单；不启动实际播放器或读取个人数据 |
 | `scripts/check-music-display.mjs` | 第二阶段真实公共catalog/shelves/array模块，合成专辑/曲目身份、分组/筛选/排序、缓存、导航循环/边界和布局能力回退；纯Node，不启动浏览器或个人播放器 |
 | `scripts/check-foobar-tracks.mjs` | 当前公共catalog/shelves及共享markup，TRACKS身份、分组/过滤/导航、卡片和旧配置迁移；文件名保留兼容命令 |
-| `scripts/check-foobar-layout.mjs --display` | 第二阶段真实STYLE/浏览控件、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查右栏/详情/曲目保持、两主题网格节点迁移、排列别名和Esc，以及Future左上控件与STYLE同步、信息区/ACCESS尺寸、日夜浏览/详情截图与Punk保持；与实际Scene验证分开 |
+| `scripts/check-foobar-layout.mjs --display` | 真实浏览工具栏、grid组件及生产事件处理器，目录/Scene/播放器/保存端口明确模拟；检查两主题三布局按钮、公共字段同步、筛选空集恢复、查询Esc、右栏/详情/曲目保持、网格节点迁移与排列别名；确认STYLE无旧视图区、Future左上/Punk右上两行控件无交叠，生成日夜浏览/详情截图；与实际Scene验证分开 |
 | `scripts/check-foobar-layout.mjs --glass` | 真实Future顶栏SVG、歌词组件和terminal-lighting的离线光效回归；日夜×四档、受光对象/留白/内部裁切/窄屏滚动，报告和截图在foobar-layout-check/terminal-glass/current。`--baseline`仅用于修复前留证，`--compare-existing`只分析已有A/B PNG底边像素，不重拍；严格模拟歌词请求，不启动音乐服务或设备 |
 | `scripts/check-foobar-layout.mjs --navigation` | 第一阶段管理页返回专用合成DOM检查；生产打开/ARCHIVE点击、STYLE/主题切换/关闭及全局键盘函数，真实面板与过渡控制器，模拟播放器/Scene；实际CDP鼠标/键盘，报告management-navigation.json。不运行114项宽布局矩阵或个人播放器 |
 | `scripts/check-case-system.mjs --punk-view` | 真实Scene/本地GLB/合成曲库，两主题公共阵列/TRACKS与网格详情、Future精细父编号、空过滤恢复、Punk机位/鼠标命中、右区裁切与JSON布局偏好；不启动播放器 |

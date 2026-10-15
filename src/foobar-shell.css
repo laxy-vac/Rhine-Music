@@ -129,11 +129,15 @@
 .music-app[data-design="archive"] .foobar-home-navigation #genre-position { margin-bottom:4px;font-size:9px;font-weight:500;line-height:12px;letter-spacing:1.26px;color:var(--muted);white-space:nowrap; }
 .music-app[data-design="archive"] .foobar-home-navigation #genre-name { margin:0;padding:0;min-height:0;height:auto;border:0;background:none;box-shadow:none;font-size:13px;line-height:18px;letter-spacing:1.82px;font-weight:700;color:var(--ink);max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .music-app[data-design="archive"] .foobar-catalog-tools { position:absolute;top:20px;left:24px;right:calc(var(--foobar-info-width) + 48px);z-index:4;display:block;pointer-events:auto; }
-.music-app[data-design="archive"] .foobar-catalog-toolbar { display:grid;grid-template-columns:auto auto;justify-content:end;gap:5px;margin-left:140px; }
-.music-app[data-design="archive"] .foobar-catalog-tools .foobar-tool-group { display:inline-flex;align-items:center;gap:2px;padding:3px;background:var(--page-bg);border:1px solid var(--line); }
+.music-app[data-design="archive"] .foobar-catalog-toolbar { display:grid;grid-template-columns:minmax(0,1fr);justify-content:end;gap:5px;margin-left:140px; }
+.music-app[data-design="archive"] .foobar-catalog-toolbar__row { display:grid;grid-template-columns:max-content max-content;justify-content:end;gap:5px;min-width:0; }
+.music-app[data-design="archive"] .foobar-catalog-tools .foobar-tool-group { display:inline-flex;min-width:0;align-items:center;gap:2px;padding:3px;background:var(--page-bg);border:1px solid var(--line); }
+.music-app[data-design="archive"] .foobar-catalog-tools .foobar-catalog-control > small { flex:none;color:var(--muted);font-size:8px;font-weight:600;white-space:nowrap; }
+.music-app[data-design="archive"] .foobar-catalog-tools .foobar-catalog-control > div { display:flex;min-width:0;align-items:center;flex-wrap:wrap;gap:1px; }
 .music-app[data-design="archive"] .foobar-catalog-tools :is(button,label,small,span) { font-size:9px;letter-spacing:.4px; }
-.music-app[data-design="archive"] .foobar-catalog-tools button { border:0;background:transparent;color:var(--muted);padding:5px 7px;min-height:24px; }
+.music-app[data-design="archive"] .foobar-catalog-tools button { border:0;background:transparent;color:var(--muted);padding:4px 6px;min-height:24px;white-space:nowrap; }
 .music-app[data-design="archive"] .foobar-catalog-tools button[aria-pressed="true"] { background:var(--ink);color:var(--page-bg); }
+.music-app[data-design="archive"] .foobar-catalog-tools button:focus-visible { position:relative;z-index:1;outline:2px solid var(--accent);outline-offset:1px; }
 .music-app[data-design="archive"] .foobar-catalog-tools .foobar-random { position:absolute;top:2px;left:8px;display:flex;align-items:center;gap:9px;height:22px;min-height:22px;padding:0 9px;border:1px solid var(--line);background:var(--page-bg);color:var(--ink); }
 .music-app[data-design="archive"] .foobar-random svg { flex:none;width:10px;height:10px; }
 .music-app[data-design="archive"] .foobar-random :is(span,kbd) { font-size:8.5px;font-weight:500;letter-spacing:1.02px; }
@@ -296,10 +300,11 @@
   .music-app[data-design="archive"] .foobar-home-navigation .album-stepper { grid-column:2;grid-row:1; }
 }
 @media (max-width:1200px) {
-  .music-app[data-design="archive"] .foobar-catalog-toolbar { margin-left:0;padding-top:34px;grid-template-columns:minmax(0,1fr);gap:4px;max-height:104px;overflow:auto; }
-  .music-app[data-design="archive"] .foobar-catalog-toolbar .foobar-tool-group { width:max-content;justify-self:end; }
+  .music-app[data-design="archive"] .foobar-catalog-toolbar { margin-left:140px;gap:4px;max-height:none;overflow:visible; }
+  .music-app[data-design="archive"] .foobar-catalog-toolbar__row { grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px; }
+  .music-app[data-design="archive"] .foobar-catalog-toolbar .foobar-tool-group { width:100%;max-width:100%; }
+  .music-app[data-design="archive"] .foobar-catalog-control > div { flex:1; }
   .music-app[data-design="archive"] .foobar-home-info { overflow-x:hidden; }
-  .music-app[data-design="archive"][data-foobar-layout="grid"] .foobar-catalog-toolbar { padding-top:66px;max-height:136px; }
 }
 @media (max-width:720px) {
   .music-app[data-design="archive"] .foobar-home-info { margin-top:max(114px,min(20vh,120px)); }

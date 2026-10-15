@@ -117,7 +117,7 @@ const modules = (await Promise.all([
   moduleFunctions("foobar-shell", ["setupFoobarShell"]),
   moduleFunctions("music-view-settings", ["legacyCatalogOptions"]),
   moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle"]),
-  moduleFunctions("music-view-controls", ["musicViewControlsMarkup", "musicBrowseControlsMarkup", "syncMusicViewControls"]),
+  moduleFunctions("music-view-controls", ["musicBrowseControlsMarkup", "syncMusicViewControls"]),
   moduleFunctions("music-catalog-grid", ["setupMusicCatalogGrid"]),
   moduleFunctions("music-catalog-markup", ["musicCatalogToolsMarkup", "musicGridMarkup"]),
   moduleFunctions("album-panel", ["setupAlbumPanel"]),
@@ -151,7 +151,7 @@ const initialize = `(async () => {
   const getMusicDisplayEntries=()=>mockEntries;
   const getMusicEntry=index=>mockEntries[index];
   const getMusicEntryByKey=entryByKey;
-  const getMusicCatalogGroups=()=>[{key:'fixture',name:'Fixture',entryKeys:mockEntries.map(entry=>entry.key)}];
+  const getMusicCatalogGroups=()=>{const visible=new Set(getMusicCatalogRecords());const entryKeys=mockEntries.filter(entry=>visible.has(entry.recordIndex)).map(entry=>entry.key);return entryKeys.length?[{key:'fixture',name:'Fixture',entryKeys}]:[];};
   const getMusicCatalogOptions=()=>musicApplication.view;
   const configureMusicCatalog=(next,query)=>{
     const view={...musicApplication.view,...next};
@@ -274,11 +274,11 @@ const initialize = `(async () => {
     sharedPanel.setActive(true);
     sharedPanel.contentChanged(albumMock.id);
   }
-  const shell=setupFoobarShell(stage,{search(){},shuffle(){},order(){}});shell.setActive(true);
+  const shell=setupFoobarShell(stage,{search(query){applyMusicView({},query);},shuffle(){},order(){}});shell.setActive(true);
   const foobarShell=shell;
   catalogGrid=setupMusicCatalogGrid(stage,stage.querySelector('.foobar-grid-host'));
   catalogGrid.setDesign(preferences.style.design);
-  let displayStyleHost;
+  let stylePageContent;
   let musicSortAlias;
   const renderProductionStylePage=(design,visible=false)=>{
     if(visible){page='theme';stage.dataset.page='theme';}
@@ -287,9 +287,7 @@ const initialize = `(async () => {
     themePage.hidden=!visible;themePage.inert=!visible;
     const style=design==='archive'?archiveMusicStyle:defaultMusicStyle;
     content.innerHTML=musicStyleMarkup(style,'day');
-    content.querySelector('#theme-quality-slot')?.insertAdjacentHTML('beforebegin',musicViewControlsMarkup(musicApplication.view,musicApplication.query));
-    displayStyleHost=content;
-    if(visible)content.querySelector('.music-view-controls')?.scrollIntoView({block:'center',inline:'center'});
+    stylePageContent=content;
   };
   if(${displayMode}) {
     renderProductionStylePage('archive',false);
@@ -326,7 +324,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,musicViewControlsMarkup,syncMusicViewControls,displayStyleHost,musicSortAlias,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -399,73 +397,135 @@ try {
   if(displayMode) {
     await command("Emulation.setDeviceMetricsOverride",{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     await evaluate(`fixture.renderProductionStylePage('archive',true);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const stylePageChecks=[];
+    for(const design of ['rhine','archive']) {
+      await evaluate(`fixture.renderProductionStylePage(${JSON.stringify(design)},true);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      const style=await evaluate(`(()=>{const page=document.querySelector('#music-theme-page'),content=document.querySelector('#theme-page-content');
+        return {design:fixture.stage.dataset.design,visible:!page.hidden,oldBlocks:content.querySelectorAll('.music-view-controls,.music-browse-tools,.foobar-catalog-toolbar,[data-music-view-field],[data-music-layout],[data-music-catalog-query]').length};})()`);
+      assert.equal(style.design,design);assert.equal(style.visible,true,`${design}: STYLE page must render.`);
+      assert.equal(style.oldBlocks,0,`${design}: STYLE must not contain the removed view, browse, layout, or filter controls.`);
+      stylePageChecks.push(style);
+    }
+
     const before=await evaluate(`(()=>{
       fixture.setPage('theme');fixture.musicApplication.mode='detail';fixture.stage.dataset.mode='detail';
       fixture.sharedPanel.setOpen(true);fixture.musicApplication.activeTab='about';fixture.renderSharedTab('about');
       const scroll=fixture.sharedPanel.scrollTarget();scroll.scrollTop=Math.min(60,scroll.scrollHeight);
-      const article=document.querySelector('#album-detail-content'),body=document.querySelector('#album-tab-content'),panel=document.querySelector('.album-panel'),callout=document.querySelector('.album-callout'),controls=fixture.displayStyleHost.querySelector('.music-view-controls');
-      window.displayBefore={article,body,panel,callout,controls,scroll,scrollTop:scroll.scrollTop,trackId:fixture.musicApplication.catalogFocus.trackId,records:fixture.records};
-      return {layout:fixture.musicApplication.view.layout,trackId:fixture.musicApplication.catalogFocus.trackId,tab:fixture.musicApplication.activeTab,controls:fixture.displayStyleHost.querySelectorAll('[data-music-layout]').length};
+      const article=document.querySelector('#album-detail-content'),body=document.querySelector('#album-tab-content'),panel=document.querySelector('.album-panel'),callout=document.querySelector('.album-callout');
+      window.displayBefore={article,body,panel,callout,scroll,scrollTop:scroll.scrollTop,trackId:fixture.musicApplication.catalogFocus.trackId,records:fixture.records};
+      return {layout:fixture.musicApplication.view.layout,trackId:fixture.musicApplication.catalogFocus.trackId,tab:fixture.musicApplication.activeTab};
     })()`);
-    assert.equal(before.layout,'shelf');assert.equal(before.trackId,'fixture-flac');assert.equal(before.tab,'about');assert.equal(before.controls,3,
-      'The actual STYLE markup provides the neutral layout controls.');
-    await evaluate(`document.querySelector('[data-music-layout="grid"]').click()`);
-    const layoutOnly=await evaluate(`(()=>{const before=window.displayBefore,host=document.querySelector('.music-catalog-grid-host');return {
-      layout:fixture.musicApplication.view.layout,mode:fixture.musicApplication.mode,trackId:fixture.musicApplication.catalogFocus.trackId,
-      articleSame:before.article===document.querySelector('#album-detail-content'),bodySame:before.body===document.querySelector('#album-tab-content'),
-      panelSame:before.panel===document.querySelector('.album-panel'),controlsSame:before.controls===fixture.displayStyleHost.querySelector('.music-view-controls'),tab:fixture.musicApplication.activeTab,scrollSame:before.scroll.scrollTop===before.scrollTop,
-      hostHidden:host.hidden,pressed:fixture.displayStyleHost.querySelector('[data-music-layout="grid"]').getAttribute('aria-pressed'),
-      saves:fixture.savedPreferenceCount,musicLayout:fixture.stage.dataset.musicLayout};})()`);
-    assert.equal(layoutOnly.layout,'grid');assert.equal(layoutOnly.musicLayout,'grid');assert.equal(layoutOnly.pressed,'true');
-    assert.equal(layoutOnly.mode,'detail');assert.equal(layoutOnly.trackId,'fixture-flac');assert.equal(layoutOnly.tab,'about');assert.equal(layoutOnly.controlsSame,true);
-    assert.equal(layoutOnly.articleSame,true);assert.equal(layoutOnly.bodySame,true);assert.equal(layoutOnly.panelSame,true);
-    assert.equal(layoutOnly.scrollSame,true);assert.equal(layoutOnly.hostHidden,true);assert.ok(layoutOnly.saves>0);
+    assert.equal(before.layout,'shelf');assert.equal(before.trackId,'fixture-flac');assert.equal(before.tab,'about');
+    await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.sharedPanel.setOpen(false);fixture.sharedPanel.finish();fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
 
-    const changeField=async(field,value)=>evaluate(`(()=>{const control=fixture.displayStyleHost.querySelector('[data-music-view-field="${field}"]');control.value=${JSON.stringify(value)};control.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`);
-    await changeField('show','tracks');
-    await changeField('group','artist');
-    await changeField('sort','title');
-    await evaluate(`(()=>{const input=fixture.displayStyleHost.querySelector('[data-music-catalog-query]');input.value='Needle';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    const toolbarSelector=design=>design==='rhine'?'.music-browse-tools':'.foobar-catalog-toolbar';
+    const layoutSelector=(design,layout)=>`${toolbarSelector(design)} [data-music-layout="${layout}"]`;
+    const fieldSelector=(design,field,value)=>design==='rhine'
+      ? `${toolbarSelector(design)} [data-music-browse-field="${field}"][data-value="${value}"]`
+      : `${toolbarSelector(design)} [data-field="${field}"] [data-foobar-catalog="${field}"][data-value="${value}"]`;
+    const viewValues=async design=>evaluate(`(()=>{const root=document.querySelector(${JSON.stringify(toolbarSelector(design))});
+      const active=selector=>root.querySelector(selector+'[aria-pressed="true"]')?.dataset.value;
+      const field=key=>${design==='rhine'
+        ? `active('[data-music-browse-field="'+key+'"]')`
+        : `active('[data-field="'+key+'"] [data-foobar-catalog="'+key+'"]')`};
+      return {view:{...fixture.musicApplication.view},layout:root.querySelector('[data-music-layout][aria-pressed="true"]')?.dataset.musicLayout,
+        show:field('show'),group:field('group'),sort:field('sort'),track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey};})()`);
+    const controlSnapshots=[];
+    for(const design of ['rhine','archive']) {
+      await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      for(const layout of ['shelf','array','grid']) {
+        const selector=layoutSelector(design,layout);
+        assert.equal(await evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)});if(!button)return false;button.click();return true;})()`),true,
+          `${design}: the ${layout} browse control must exist and receive a real click.`);
+        const state=await viewValues(design);
+        assert.equal(state.view.layout,layout,`${design}: ${layout} click updates the shared layout.`);
+        assert.equal(state.layout,layout,`${design}: selected ${layout} control is synchronized.`);
+        assert.equal(state.track,'fixture-flac');assert.equal(state.entry,'track|fixture-album|fixture-flac');
+        controlSnapshots.push({design,layout,...state});
+      }
+    }
+
+    const browseFieldSnapshots=[];
+    for(const [design,values] of [['rhine',{show:'tracks',group:'artist',sort:'title'}],['archive',{show:'albums',group:'decade',sort:'added'}]]) {
+      await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      for(const [field,value] of Object.entries(values)) {
+        const selector=fieldSelector(design,field,value);
+        assert.equal(await evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)});if(!button)return false;button.click();return true;})()`),true,
+          `${design}: ${field}=${value} control must exist and receive a real click.`);
+        const state=await viewValues(design);
+        assert.equal(state.view[field],value,`${design}: ${field} click updates the shared view.`);
+        assert.equal(state[field],value,`${design}: ${field} selected state is synchronized.`);
+        assert.equal(state.track,'fixture-flac');assert.equal(state.entry,'track|fixture-album|fixture-flac');
+        browseFieldSnapshots.push({design,field,value,...state});
+      }
+      const retained=await evaluate(`(()=>{const before=window.displayBefore;return {mode:fixture.musicApplication.mode,track:fixture.musicApplication.catalogFocus.trackId,
+        articleSame:before.article===document.querySelector('#album-detail-content'),bodySame:before.body===document.querySelector('#album-tab-content'),
+        panelSame:before.panel===document.querySelector('.album-panel'),calloutSame:before.callout===document.querySelector('.album-callout'),
+        tab:fixture.musicApplication.activeTab,scrollSame:before.scroll.scrollTop===before.scrollTop,recordsSame:before.records===fixture.records};})()`);
+      assert.equal(retained.mode,'archive');assert.equal(retained.track,'fixture-flac');assert.equal(retained.articleSame,true);assert.equal(retained.bodySame,true);
+      assert.equal(retained.panelSame,true);assert.equal(retained.calloutSame,true);assert.equal(retained.tab,'about');assert.equal(retained.scrollSame,true);assert.equal(retained.recordsSame,true);
+    }
+    for(const design of ['rhine','archive']) {
+      await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      const state=await viewValues(design);
+      assert.equal(state.show,'albums',`${design}: SHOW state follows theme changes.`);assert.equal(state.group,'decade',`${design}: GROUP state follows theme changes.`);
+      assert.equal(state.sort,'added',`${design}: SORT state follows theme changes.`);assert.equal(state.layout,'grid',`${design}: LAYOUT state follows theme changes.`);
+    }
+
+    const filterSnapshots=[];
+    for(const design of ['rhine','archive']) {
+      await evaluate(`(()=>{fixture.stage.dataset.design=${JSON.stringify(design)};fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      const selector=design==='rhine'?'.music-browse-tools__filter input[data-music-catalog-query]':'.foobar-header-search';
+      const inputSelector=JSON.stringify(selector);
+      await evaluate(`(()=>{const input=document.querySelector(${inputSelector});if(!input)throw new Error('${design} filter control is missing');input.value='no-match';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await new Promise(resolve=>setTimeout(resolve,240));
+      const empty=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
+        track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
+      assert.equal(empty.query,'no-match',`${design}: filter input applies the query.`);assert.equal(empty.cards,0,`${design}: an empty filter produces no grid cards.`);
+      assert.equal(empty.track,'fixture-flac');assert.equal(empty.entry,'track|fixture-album|fixture-flac');
+      await evaluate(`(()=>{const input=document.querySelector(${inputSelector});input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+      await new Promise(resolve=>setTimeout(resolve,240));
+      const restored=await evaluate(`(()=>({query:fixture.musicApplication.query,cards:document.querySelectorAll('.music-catalog-grid-host .foobar-grid-card').length,
+        track:fixture.musicApplication.catalogFocus.trackId,entry:fixture.musicApplication.catalogFocus.entryKey}))()`);
+      assert.equal(restored.query,'');assert.ok(restored.cards>0,`${design}: clearing an empty filter restores catalog cards.`);
+      assert.equal(restored.track,'fixture-flac');assert.equal(restored.entry,'track|fixture-album|fixture-flac');
+      filterSnapshots.push({design,empty,restored});
+    }
+    await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();const input=document.querySelector('.music-browse-tools__filter input[data-music-catalog-query]');input.value='Needle';input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await new Promise(resolve=>setTimeout(resolve,240));
-    const controlsState=await evaluate(`(()=>({view:{...fixture.musicApplication.view},query:fixture.musicApplication.query,trackId:fixture.musicApplication.catalogFocus.trackId,
-      selects:[...fixture.displayStyleHost.querySelectorAll('[data-music-view-field]')].map(control=>control.value),queryInput:fixture.displayStyleHost.querySelector('[data-music-catalog-query]').value}))()`);
-    assert.deepEqual(controlsState.view,{layout:'grid',show:'tracks',group:'artist',sort:'title'});
-    assert.equal(controlsState.query,'Needle');assert.equal(controlsState.queryInput,'Needle');
-    assert.deepEqual(controlsState.selects,['tracks','artist','title']);assert.equal(controlsState.trackId,'fixture-flac',
-      'SHOW/GROUP/SORT/query updates retain the selected track identity.');
+    const escapeFilter=await evaluate(`(()=>{const input=document.querySelector('.music-browse-tools__filter input[data-music-catalog-query]'),routeBefore=fixture.coverInspection?.at(-1),event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});input.dispatchEvent(event);
+      return {mode:fixture.musicApplication.mode,query:fixture.musicApplication.query,value:input.value,prevented:event.defaultPrevented,routeBefore,routeAfter:fixture.coverInspection?.at(-1)};})()`);
+    assert.equal(escapeFilter.mode,'archive');assert.equal(escapeFilter.query,'');assert.equal(escapeFilter.value,'');assert.equal(escapeFilter.prevented,true);
+    assert.equal(escapeFilter.routeAfter,escapeFilter.routeBefore,'Clearing a browse query must not trigger archive navigation.');
+
     const sortAliases=[];
     for(const [value,group,sort] of [['album','none','title'],['genre','genre','artist'],['artist','artist','title']]) {
       await evaluate(`(()=>{const control=fixture.musicSortAlias;control.value=${JSON.stringify(value)};control.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       sortAliases.push(await evaluate(`({value:fixture.musicSortAlias.value,group:fixture.musicApplication.view.group,sort:fixture.musicApplication.view.sort,preset:fixture.musicArrangementPreset(),query:fixture.musicApplication.query,track:fixture.musicApplication.catalogFocus.trackId,sameRecords:window.displayBefore.records===fixture.records,hasIndependentPreference:Object.hasOwn(fixture.preferences,'musicSort')})`));
       assert.equal(sortAliases.at(-1).group,group);assert.equal(sortAliases.at(-1).sort,sort);
-      assert.equal(sortAliases.at(-1).preset,value);assert.equal(sortAliases.at(-1).query,'Needle');
+      assert.equal(sortAliases.at(-1).preset,value);assert.equal(sortAliases.at(-1).query,'');
       assert.equal(sortAliases.at(-1).track,'fixture-flac');assert.equal(sortAliases.at(-1).sameRecords,true);assert.equal(sortAliases.at(-1).hasIndependentPreference,false);
     }
 
     const gridArchive=await evaluate(`(()=>{
-      fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.sharedPanel.setOpen(false);fixture.syncMusicCatalogView();
+      fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design='archive';fixture.sharedPanel.setOpen(false);fixture.syncDesignIdentity();fixture.syncMusicCatalogView();
       window.displayGridHost=document.querySelector('.music-catalog-grid-host');
       return {sameCards:window.displayGridHost.querySelectorAll('.foobar-grid-card').length,selected:window.displayGridHost.querySelector('.foobar-grid-card[aria-pressed="true"]')?.dataset.foobarEntry,
-        parentIsWorkspace:window.displayGridHost.parentElement===document.querySelector('.foobar-workspace'),themeRadius:getComputedStyle(fixture.displayStyleHost.querySelector('.music-view-controls')).borderRadius};
+        parentIsWorkspace:window.displayGridHost.parentElement===document.querySelector('.foobar-workspace'),toolbarLayouts:document.querySelectorAll('.foobar-catalog-toolbar [data-music-layout]').length};
     })()`);
-    assert.equal(gridArchive.sameCards,3);assert.equal(gridArchive.selected,'track|fixture-album|fixture-flac');
-    assert.equal(gridArchive.parentIsWorkspace,true);assert.equal(gridArchive.themeRadius,'0px');
+    assert.ok(gridArchive.sameCards>0);assert.equal(gridArchive.selected,'track|fixture-album|fixture-flac');
+    assert.equal(gridArchive.parentIsWorkspace,true);assert.equal(gridArchive.toolbarLayouts,3);
     const rhine=await evaluate(`(()=>{fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();return {
       sameNode:window.displayGridHost===document.querySelector('.music-catalog-grid-host'),parentIsRoot:window.displayGridHost.parentElement===fixture.stage,
-      controls:fixture.displayStyleHost.querySelectorAll('[data-music-layout]').length,radius:getComputedStyle(fixture.displayStyleHost.querySelector('.music-view-controls')).borderRadius,
-      articleSame:window.displayBefore.article===document.querySelector('#album-detail-content')};})()`);
-    assert.equal(rhine.sameNode,true);assert.equal(rhine.parentIsRoot,true);assert.equal(rhine.controls,3);assert.equal(rhine.radius,'14px');
+      layouts:document.querySelectorAll('.music-browse-tools [data-music-layout]').length,articleSame:window.displayBefore.article===document.querySelector('#album-detail-content')};})()`);
+    assert.equal(rhine.sameNode,true);assert.equal(rhine.parentIsRoot,true);assert.equal(rhine.layouts,3);
     assert.equal(rhine.articleSame,true,'Theme changes move the existing grid and preserve the existing right-side DOM.');
     const archive=await evaluate(`(()=>{fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();return {
       sameNode:window.displayGridHost===document.querySelector('.music-catalog-grid-host'),parentIsWorkspace:window.displayGridHost.parentElement===document.querySelector('.foobar-workspace'),
       articleSame:window.displayBefore.article===document.querySelector('#album-detail-content')};})()`);
     assert.equal(archive.sameNode,true);assert.equal(archive.parentIsWorkspace,true);assert.equal(archive.articleSame,true);
 
-    const themeEscape=await evaluate(`(()=>{fixture.musicApplication.mode='detail';fixture.stage.dataset.mode='detail';fixture.setPage('theme');fixture.sharedPanel.setOpen(true);
-      const input=fixture.displayStyleHost.querySelector('[data-music-catalog-query]'),event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});input.dispatchEvent(event);
-      return {mode:fixture.musicApplication.mode,prevented:event.defaultPrevented,route:fixture.coverInspection?.at(-1)};})()`);
-    assert.equal(themeEscape.mode,'detail');assert.equal(themeEscape.prevented,true);
-    const albumEscape=await evaluate(`(()=>{fixture.setPage('music');const event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});document.dispatchEvent(event);
+    const albumEscape=await evaluate(`(()=>{fixture.setPage('music');fixture.setPanel(false);fixture.musicApplication.mode='detail';fixture.stage.dataset.mode='detail';fixture.sharedPanel.setOpen(true);fixture.sharedPanel.finish();const event=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true});document.body.dispatchEvent(event);
       return {mode:fixture.musicApplication.mode,prevented:event.defaultPrevented,route:fixture.coverInspection?.at(-1)};})()`);
     assert.equal(albumEscape.mode,'archive');assert.equal(albumEscape.prevented,true);assert.equal(albumEscape.route,'archive');
 
@@ -477,30 +537,8 @@ try {
     assert.deepEqual(navigation.shelf,{index:0,key:'track|fixture-album|fixture-flac',track:'fixture-flac'});
     assert.deepEqual(navigation.calls,[[0,'row',1],[1,'lane',-1]],'Album and group controls call the public navigation helper.');
 
-    const controlShots=[];
-    for(const design of ['rhine','archive']) {
-      await evaluate(`fixture.renderProductionStylePage(${JSON.stringify(design)},true);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
-      const geometry=await evaluate(`(()=>{
-        const controls=document.querySelector('#theme-page-content .music-view-controls'),r=controls.getBoundingClientRect();
-        const descendants=[...controls.querySelectorAll('*')].map(element=>element.getBoundingClientRect()).filter(box=>box.width>0&&box.height>0);
-        const noChildOverflow=descendants.every(box=>box.left>=r.left-1&&box.right<=r.right+1);
-        return {visible:controls.getClientRects().length>0&&getComputedStyle(controls).display!=='none'&&r.width>0&&r.height>0,
-          noHorizontalOverflow:controls.scrollWidth<=controls.clientWidth+1&&noChildOverflow,
-          rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:controls.scrollWidth,clientWidth:controls.clientWidth},
-          layoutChoices:controls.querySelectorAll('[data-music-layout]').length,
-          fields:controls.querySelectorAll('[data-music-view-field]').length,
-          pageVisible:!document.querySelector('#music-theme-page').hidden};
-      })()`);
-      assert.equal(geometry.visible,true,`${design}: STYLE view controls must be visible in the production page frame.`);
-      assert.equal(geometry.noHorizontalOverflow,true,`${design}: STYLE view controls must fit without horizontal overflow: ${JSON.stringify(geometry.rect)}`);
-      assert.equal(geometry.pageVisible,true);assert.equal(geometry.layoutChoices,3);assert.equal(geometry.fields,3);
-      const x=Math.max(0,Math.floor(geometry.rect.x-12)),y=Math.max(0,Math.floor(geometry.rect.y-12));
-      const clip={x,y,width:Math.max(1,Math.min(1920-x,Math.ceil(geometry.rect.width+24))),height:Math.max(1,Math.min(1080-y,Math.ceil(geometry.rect.height+24))),scale:1};
-      const {data}=await command('Page.captureScreenshot',{format:'png',clip});
-      const screenshot=`display-${design}-controls.png`;
-      await writeFile(path.join(output,screenshot),Buffer.from(data,'base64'));
-      controlShots.push({design,...geometry,screenshot});
-    }
+    await evaluate(`(()=>{fixture.musicApplication.selectedIndex=0;fixture.musicApplication.selectedAlbumId='fixture-album';fixture.focusMusicEntry('track|fixture-album|fixture-flac');
+      fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design='archive';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
 
     const gridShots=[];
     for(const design of ['archive','rhine']) {
@@ -518,7 +556,8 @@ try {
           rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height},
           infoRect:{x:i.x,y:i.y,right:i.right,bottom:i.bottom,width:i.width,height:i.height},
           cardCount:cards.length,selected:host.querySelector('.foobar-grid-card[aria-pressed="true"]')?.dataset.foobarEntry,
-          layoutControlRemoved:!document.querySelector('.foobar-catalog-control[aria-label="LAYOUT"]'),
+          layoutControlsInToolbar:document.querySelectorAll('.foobar-catalog-toolbar [data-music-layout]').length,
+          layoutControlsInCards:host.querySelectorAll('[data-music-layout]').length,
           hostParent:host.parentElement?.className||host.parentElement?.id||host.parentElement?.tagName};
       })()`);
       assert.equal(geometry.visible,true,`${design}: grid must be visible in archive browsing mode.`);
@@ -526,31 +565,76 @@ try {
       assert.ok(geometry.rect.x>=0&&geometry.rect.right<=1920&&geometry.rect.y>=0&&geometry.rect.bottom<=1080,
         `${design}: grid bounds must stay inside the 1920×1080 viewport.`);
       assert.equal(geometry.cardCount,3);assert.equal(geometry.selected,'track|fixture-album|fixture-flac');
-      assert.equal(geometry.layoutControlRemoved,true,'Catalog layout selection belongs to STYLE only.');
+      assert.equal(geometry.layoutControlsInToolbar,3,`${design}: layout controls remain in the browse toolbar.`);
+      assert.equal(geometry.layoutControlsInCards,0,`${design}: layout controls are outside the catalog cards.`);
       const {data}=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
       const screenshot=`display-${design}-grid.png`;
       await writeFile(path.join(output,screenshot),Buffer.from(data,'base64'));
       gridShots.push({design,...geometry,screenshot});
     }
 
-    await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design='rhine';fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
-    const browseControlState=[];
-    for(const [field,value] of [['show','albums'],['group','decade'],['sort','added']]) {
-      await evaluate(`document.querySelector('.music-browse-tools [data-music-browse-field="${field}"][data-value="${value}"]').click()`);
-      const state=await evaluate(`(()=>({field:${JSON.stringify(field)},value:${JSON.stringify(value)},view:{...fixture.musicApplication.view},styleValue:fixture.displayStyleHost.querySelector('[data-music-view-field="${field}"]').value,
-        pressed:document.querySelector('.music-browse-tools [data-music-browse-field="${field}"][data-value="${value}"]').getAttribute('aria-pressed'),track:fixture.musicApplication.catalogFocus.trackId}))()`);
-      assert.equal(state.view[field],value,`${field}: Future browse click updates public view state.`);
-      assert.equal(state.styleValue,value,`${field}: Future browse click synchronizes STYLE.`);
-      assert.equal(state.pressed,'true',`${field}: the selected Future browse button is pressed.`);
-      assert.equal(state.track,'fixture-flac',`${field}: browse changes retain track identity.`);
-      browseControlState.push(state);
+    const browseToolGeometry=[];
+    for(const design of ['rhine','archive']) {
+      await evaluate(`(()=>{fixture.setPage('music');fixture.musicApplication.mode='archive';fixture.stage.dataset.mode='archive';fixture.stage.dataset.design=${JSON.stringify(design)};fixture.sharedPanel.setOpen(false);fixture.syncDesignIdentity();fixture.syncMusicCatalogView();})()`);
+      await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      const geometry=await evaluate(`(()=>{
+        const future=fixture.stage.dataset.design==='rhine',tools=document.querySelector(future?'.music-browse-tools':'.foobar-catalog-toolbar'),r=tools.getBoundingClientRect();
+        const rowElements=[...tools.querySelectorAll(future?'.music-browse-tools__row':'.foobar-catalog-toolbar__row')],rows=rowElements.map(row=>{const b=row.getBoundingClientRect();return{x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height};});
+        const groupSelector=future?'.music-browse-tools__group':'.foobar-tool-group';
+        const groupsByRow=rowElements.map(row=>[...row.querySelectorAll(groupSelector)].map(group=>{const b=group.getBoundingClientRect();return{field:group.dataset.field,x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height,visible:getComputedStyle(group).display!=='none'&&b.width>0&&b.height>0};}));
+        const groupRects=groupsByRow.flat();
+        const info=document.querySelector(future?'.album-panel':'.foobar-home-info'),ir=info.getBoundingClientRect(),random=document.querySelector('.foobar-random'),rr=random?.getBoundingClientRect();
+        const overlap=(a,b)=>Math.min(a.right,b.right)>Math.max(a.left??a.x,b.left??b.x)+1&&Math.min(a.bottom,b.bottom)>Math.max(a.top??a.y,b.top??b.y)+1;
+        const fields=(row,field)=>!!row?.querySelector('[data-field="'+field+'"]');
+        const layoutCount=tools.querySelectorAll('[data-music-layout]').length;
+        const layoutInFirstRow=rowElements[0]?.querySelectorAll('[data-music-layout]').length||0;
+        const rowGroupRights=groupsByRow.map(groups=>Math.max(0,...groups.map(group=>group.right)));
+        const controls=[...tools.querySelectorAll('button,input')].map(control=>{const b=control.getBoundingClientRect();return{tag:control.tagName,field:control.closest('[data-field]')?.dataset.field||control.dataset.musicBrowseField||control.dataset.foobarCatalog||control.dataset.musicLayout,
+          x:b.x,y:b.y,right:b.right,bottom:b.bottom,width:b.width,height:b.height,visible:getComputedStyle(control).display!=='none'&&b.width>0&&b.height>0};});
+        const filter=future?tools.querySelector('input[data-music-catalog-query]'):document.querySelector('.foobar-header-search'),fr=filter?.getBoundingClientRect();
+        return {design:fixture.stage.dataset.design,visible:getComputedStyle(tools).display!=='none'&&r.width>0&&r.height>0,
+          rect:{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height},rows,
+          rowFields:[fields(rowElements[0],'show')&&fields(rowElements[0],'layout')&&layoutInFirstRow===3,fields(rowElements[1],'group')&&fields(rowElements[1],'sort')],
+          groupsByRow,rowGroupRights,controls,allControlsVisible:controls.length>0&&controls.every(control=>control.visible&&control.x>=-1&&control.right<=innerWidth+1),
+          filterVisible:!!filter&&getComputedStyle(filter).display!=='none'&&!!fr&&fr.width>0&&fr.height>0,
+          layoutCount,layoutInFirstRow,infoRect:{x:ir.x,y:ir.y,right:ir.right,bottom:ir.bottom,width:ir.width,height:ir.height},
+          groupOverlapsInfo:groupRects.some(group=>overlap({x:group.x,right:group.right,y:group.y,bottom:group.bottom},{x:ir.x,right:ir.right,y:ir.y,bottom:ir.bottom})),
+          randomRect:rr?{x:rr.x,y:rr.y,right:rr.right,bottom:rr.bottom,width:rr.width,height:rr.height}:null,
+          groupOverlapsRandom:!!rr&&groupRects.some(group=>overlap({x:group.x,right:group.right,y:group.y,bottom:group.bottom},{x:rr.x,right:rr.right,y:rr.y,bottom:rr.bottom})),
+          futureLeft:future&&r.x>=0&&r.x<400,
+          punkNearInfo:!future&&ir.x-r.right>=-48&&ir.x-r.right<=160,
+          punkRowsRightAligned:!future&&rowGroupRights.length===2&&Math.abs(rowGroupRights[0]-rowGroupRights[1])<=1&&Math.abs(rowGroupRights[0]-r.right)<=2,
+          topAligned:r.y>=0&&r.y<200};
+      })()`);
+      assert.equal(geometry.visible,true,`${design}: browse toolbar must be visible.`);
+      assert.equal(geometry.layoutCount,3,`${design}: browse toolbar exposes shelf, array, and grid.`);
+      assert.deepEqual(geometry.rowFields,[true,true],`${design}: SHOW/LAYOUT and GROUP/SORT occupy the two prescribed rows.`);
+      assert.equal(geometry.rows.length,2);assert.ok(geometry.rows[1].y>=geometry.rows[0].bottom-1,`${design}: toolbar rows must not overlap.`);
+      assert.equal(geometry.allControlsVisible,true,`${design}: every visible toolbar control remains inside the viewport: ${JSON.stringify(geometry.controls)}`);
+      assert.equal(geometry.filterVisible,true,`${design}: the active theme exposes its catalog filter.`);
+      for(const group of geometry.groupsByRow.flat())assert.equal(group.visible,true,`${design}: ${group.field} group must be visible: ${JSON.stringify(group)}`);
+      if(design==='rhine')assert.equal(geometry.futureLeft,true,`Future toolbar stays in the upper-left: ${JSON.stringify(geometry.rect)}`);
+      else {
+        assert.equal(geometry.punkNearInfo,true,`Punk toolbar right edge stays near the browse/info boundary: ${JSON.stringify({toolbar:geometry.rect,info:geometry.infoRect})}`);
+        assert.equal(geometry.punkRowsRightAligned,true,`Punk toolbar rows align at the right edge: ${JSON.stringify({rows:geometry.rows,groupRights:geometry.rowGroupRights})}`);
+      }
+      assert.equal(geometry.topAligned,true,`${design}: toolbar stays near the top edge.`);
+      assert.equal(geometry.groupOverlapsInfo,false,`${design}: visible control groups must not cover the album information.`);
+      if(design==='archive')assert.equal(geometry.groupOverlapsRandom,false,'Punk visible control groups must not cover RANDOM.');
+      browseToolGeometry.push(geometry);
+      if(design==='archive') {
+        const screenshot='display-punk-day-browse.png';
+        const {data}=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
+        await writeFile(path.join(output,screenshot),Buffer.from(data,'base64'));
+        geometry.screenshot=screenshot;
+      }
     }
 
     const browseShots=[],detailShots=[];
     for(const theme of ['day','night']) {
       await evaluate(`(()=>{
         fixture.setPage('music');fixture.stage.dataset.theme=${JSON.stringify(theme)};fixture.stage.dataset.design='rhine';fixture.stage.dataset.mode='archive';fixture.musicApplication.mode='archive';
-        fixture.applyMusicView({layout:'grid'});fixture.sharedPanel.setOpen(false);fixture.sharedPanel.finish();fixture.syncDesignIdentity();fixture.syncMusicCatalogView();
+        fixture.sharedPanel.setOpen(false);fixture.sharedPanel.finish();fixture.syncDesignIdentity();fixture.syncMusicCatalogView();document.querySelector('.music-browse-tools [data-music-layout="grid"]').click();
       })()`);
       await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
       const browse=await evaluate(`(()=>{
@@ -600,9 +684,9 @@ try {
       assert.equal(punk.tools,'none',`${theme}: Punk hides Future browse controls.`);assert.equal(punk.aria,'打开专辑');assert.equal(punk.label,'打开专辑');
       assert.notEqual(punk.labelDisplay,'none');assert.equal(punk.accessDisplay,'none');assert.ok(punk.fontSize>=18);assert.equal(punk.radius,'0px');
     }
-    await writeFile(path.join(output,'display-controls.json'),JSON.stringify({viewport:{width:1920,height:1080},controls:controlShots,grids:gridShots,
-      browseControls:browseControlState,futureBrowse:browseShots,futureDetail:detailShots},null,2));
-    console.log('Passed --display and saved STYLE, grid, Future day/night browse/detail screenshots, and display-controls.json.');
+    await writeFile(path.join(output,'display-controls.json'),JSON.stringify({viewport:{width:1920,height:1080},stylePageChecks,layoutControls:controlSnapshots,
+      browseFields:browseFieldSnapshots,filters:filterSnapshots,sortAliases,navigation,browseToolGeometry,grids:gridShots,futureBrowse:browseShots,futureDetail:detailShots},null,2));
+    console.log('Passed --display and saved Future/Punk browse, grid, Future day/night detail screenshots, and display-controls.json.');
   } else if(navigationMode) {
     const report=await checkManagementNavigation({command,evaluate,output});
     console.log(`Passed management navigation: ${report.cases.length} focused design, detail, Escape and ARCHIVE return cases; native ViewTransition ${report.nativeViewTransition?'available':'unavailable'}.`);

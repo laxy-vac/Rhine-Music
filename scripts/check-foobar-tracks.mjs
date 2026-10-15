@@ -246,8 +246,11 @@ export async function runChecks() {
   assert.match(tools, /data-foobar-catalog="show"/);
   assert.match(tools, /data-foobar-catalog="group"/);
   assert.match(tools, /data-foobar-catalog="sort"/);
-  assert.doesNotMatch(tools, /data-foobar-catalog="layout"|aria-label="LAYOUT"/,
-    "the Punk shell no longer renders its retired LAYOUT control");
+  assert.match(tools, /aria-label="LAYOUT"/, "the Punk browse toolbar exposes the shared layout choices");
+  for (const layout of ["shelf", "array", "grid"]) {
+    assert.match(tools, new RegExp(`data-music-layout="${layout}"`));
+  }
+  assert.doesNotMatch(tools, /data-foobar-catalog="layout"/, "layout uses the public view handler");
   assert.match(tools, /data-action="foobar-random"/, "RANDOM PICK remains part of the Punk shell");
 
   const gridMarkup = catalogMarkup.musicGridMarkup(1, rememberedTarget.key);

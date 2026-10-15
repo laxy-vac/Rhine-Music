@@ -30,33 +30,20 @@ const sorts = [
   { value: "added", zh: "添加顺序", en: "Added" },
 ] as const;
 
-type BrowseField = "show" | "group" | "sort";
+type BrowseField = "layout" | "show" | "group" | "sort";
 type BrowseChoice = { value: string; zh: string; en: string };
-
-function selectMarkup(
-  field: "show" | "group" | "sort",
-  value: string,
-  label: string,
-  choices: readonly { value: string; zh: string; en: string }[],
-): string {
-  const options = choices
-    .map((choice) => {
-      const selected = choice.value === value ? " selected" : "";
-      return `<option value="${escapeHtml(choice.value)}"${selected}>${escapeHtml(t(choice.zh, choice.en))}</option>`;
-    })
-    .join("");
-
-  return `<label class="music-view-controls__field"><span>${escapeHtml(label)}</span><select data-music-view-field="${field}" aria-label="${escapeHtml(label)}">${options}</select></label>`;
-}
 
 function browseButtonsMarkup(field: BrowseField, current: string, choices: readonly BrowseChoice[]): string {
   return choices.map((choice) => {
     const selected = current === choice.value;
-    return `<button type="button" data-music-browse-field="${field}" data-value="${escapeHtml(choice.value)}" aria-pressed="${selected}">${escapeHtml(t(choice.zh, choice.en))}</button>`;
+    const attribute = field === "layout"
+      ? `data-music-layout="${escapeHtml(choice.value)}"`
+      : `data-music-browse-field="${field}" data-value="${escapeHtml(choice.value)}"`;
+    return `<button type="button" ${attribute} aria-pressed="${selected}">${escapeHtml(t(choice.zh, choice.en))}</button>`;
   }).join("");
 }
 
-export function musicBrowseControlsMarkup(view: MusicViewSettings): string {
+export function musicBrowseControlsMarkup(view: MusicViewSettings, query = ""): string {
   const groupsMarkup = [
     {
       field: "show" as const,
@@ -67,8 +54,16 @@ export function musicBrowseControlsMarkup(view: MusicViewSettings): string {
       choices: shows,
     },
     {
-      field: "group" as const,
+      field: "layout" as const,
       index: "02",
+      tag: "LAYOUT",
+      label: t("布局", "Layout"),
+      current: view.layout,
+      choices: layouts,
+    },
+    {
+      field: "group" as const,
+      index: "03",
       tag: "GROUP",
       label: t("分组", "Group"),
       current: view.group,
@@ -76,46 +71,20 @@ export function musicBrowseControlsMarkup(view: MusicViewSettings): string {
     },
     {
       field: "sort" as const,
-      index: "03",
+      index: "04",
       tag: "SORT",
       label: t("排序", "Sort"),
       current: view.sort,
       choices: sorts,
     },
   ].map(({ field, index, tag, label, current, choices }) =>
-    `<div class="music-browse-tools__group" role="group" aria-label="${escapeHtml(label)}"><small><i aria-hidden="true"></i><span>${escapeHtml(index)}</span><b>${escapeHtml(tag)}</b></small><div class="music-browse-tools__options">${browseButtonsMarkup(field, current, choices)}</div></div>`,
-  ).join("");
+    `<div class="music-browse-tools__group" data-field="${field}" role="group" aria-label="${escapeHtml(label)}"><small><i aria-hidden="true"></i><span>${escapeHtml(index)}</span><b>${escapeHtml(tag)}</b></small><div class="music-browse-tools__options">${browseButtonsMarkup(field, current, choices)}</div></div>`,
+  );
 
-  return `<section class="music-browse-tools" aria-label="${escapeHtml(t("浏览选项", "Browse options"))}">${groupsMarkup}</section>`;
-}
-
-export function musicViewControlsMarkup(view: MusicViewSettings, query = ""): string {
-  const layoutLabel = t("布局", "Layout");
-  const showLabel = t("显示", "Show");
-  const groupLabel = t("分组", "Group");
-  const sortLabel = t("排序", "Sort");
-  const layoutButtons = layouts
-    .map((layout) => {
-      const selected = view.layout === layout.value;
-      return `<button type="button" data-music-layout="${layout.value}" aria-pressed="${selected}">${escapeHtml(t(layout.zh, layout.en))}</button>`;
-    })
-    .join("");
-
-  return `<section class="music-view-controls" aria-labelledby="music-view-controls-title">
-    <header class="music-view-controls__heading">
-      <small>CATALOG / VIEW</small>
-      <h2 id="music-view-controls-title">${escapeHtml(t("视图与浏览", "View & Browse"))}</h2>
-    </header>
-    <div class="music-view-controls__layout">
-      <span class="music-view-controls__label">${escapeHtml(layoutLabel)}</span>
-      <div class="music-view-controls__layout-options" role="group" aria-label="${escapeHtml(layoutLabel)}">${layoutButtons}</div>
-    </div>
-    <div class="music-view-controls__browse">
-      ${selectMarkup("show", view.show, showLabel, shows)}
-      ${selectMarkup("group", view.group, groupLabel, groups)}
-      ${selectMarkup("sort", view.sort, sortLabel, sorts)}
-    </div>
-    <label class="music-view-controls__field"><span>${escapeHtml(t("筛选唱片", "Filter records"))}</span><input type="search" data-music-catalog-query value="${escapeHtml(query)}" placeholder="${escapeHtml(t("专辑、曲目、歌手…", "Album, track, artist…"))}" aria-label="${escapeHtml(t("筛选唱片", "Filter records"))}"></label>
+  return `<section class="music-browse-tools" aria-label="${escapeHtml(t("浏览选项", "Browse options"))}">
+    <div class="music-browse-tools__row">${groupsMarkup[0]}${groupsMarkup[1]}</div>
+    <div class="music-browse-tools__row">${groupsMarkup[2]}${groupsMarkup[3]}</div>
+    <label class="music-browse-tools__filter"><small>${escapeHtml(t("筛选唱片", "Filter records"))}</small><input type="search" data-music-catalog-query value="${escapeHtml(query)}" placeholder="${escapeHtml(t("专辑、曲目、歌手…", "Album, track, artist…"))}" aria-label="${escapeHtml(t("筛选唱片", "Filter records"))}"></label>
   </section>`;
 }
 
@@ -124,12 +93,6 @@ export function syncMusicViewControls(root: HTMLElement, view: MusicViewSettings
     button.setAttribute("aria-pressed", String(button.dataset.musicLayout === view.layout));
   });
 
-  root.querySelectorAll<HTMLSelectElement>("[data-music-view-field]").forEach((select) => {
-    const field = select.dataset.musicViewField;
-    if (field === "show" || field === "group" || field === "sort") {
-      select.value = view[field];
-    }
-  });
   root.querySelectorAll<HTMLButtonElement>("[data-music-browse-field][data-value]").forEach((button) => {
     const field = button.dataset.musicBrowseField;
     if (field === "show" || field === "group" || field === "sort") {
