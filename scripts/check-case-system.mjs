@@ -14,13 +14,16 @@ const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
 const isArrayBump = process.argv.includes("--array-bump");
+const isArrayTray = process.argv.includes("--array-tray");
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
 const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
+const arrayTrayPhase = process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump;
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray;
 const unifiedOutput = path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
+const arrayTrayOutput = path.join(project, ".tools", "array-tray", arrayTrayPhase);
 const referenceOutput = path.join(output, process.argv.includes("--reference-before") ? "punk-reference-before" : "punk-reference");
 const referencePresetIds = ["marble", "hazard", "white", "glass", "frost", "red", "blue", "coral", "tide", "aurora"];
 const referenceAnglePresetIds = ["white", "glass", "frost", "red", "blue", "aurora"];
@@ -1435,6 +1438,9 @@ function arrayCompositionRenderSnapshot() {
   scene.scene.updateMatrixWorld(true);
   const shelfMeshes = [];
   scene.sceneResources?.group.traverse(object => { if (object.isInstancedMesh) shelfMeshes.push(object); });
+  const laneIndexedKinds = new Set(["Music shelf side rails", "Music shelf rail highlights",
+    "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
+    "Music shelf end safety stripes"]);
   const meshes = [
     ...scene.instances.map((mesh, index) => ({ kind: mesh.userData.casePart || "case-instance-" + index, mesh })),
     { kind: "cover", mesh: scene.covers.array },
@@ -1467,7 +1473,7 @@ function arrayCompositionRenderSnapshot() {
           if (slotIndex >= 0) {
             if (["Music shelf base", "Music shelf front number plates", "Music shelf plate markers", "Local music floor finish"].includes(kind))
               indices = laneIndex >= 0 ? [laneIndex] : [];
-            else if (kind === "Music shelf side rails") indices = laneIndex >= 0 ? [laneIndex * 2, laneIndex * 2 + 1] : [];
+            else if (laneIndexedKinds.has(kind)) indices = laneIndex >= 0 ? [laneIndex * 2, laneIndex * 2 + 1] : [];
             else if (kind === "Music floor seams and locator marks") indices = [slotIndex];
             else if (kind.startsWith("Record shelf")) indices = [slotIndex,
               ...(mesh.count >= scene.positions.length * 2 ? [slotIndex + scene.positions.length] : [])];
@@ -1675,6 +1681,95 @@ async function arraySurfaceVariant(design, floor) {
     scene.camera.zoom = oldZoom; scene.camera.updateProjectionMatrix(); scene.setQuality(oldQuality); stepArchiveScene(1);
   }
   return { detail, standard, closeup };
+}
+
+const arrayTrayTextureDisposals = [];
+const arrayTrayTextureWatched = new Set();
+const arrayTrayPartNames = ["Music shelf base", "Music shelf side rails", "Music shelf rail highlights",
+  "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
+  "Music shelf end safety stripes", "Record shelf tray", "Record shelf glass rims", "Record shelf recessed bed",
+  "Record shelf guide grooves", "Record shelf index strip", "Record shelf tick"];
+function arrayTrayStructureSnapshot() {
+  const scene = archiveScene, group = scene.sceneResources?.group;
+  const matrix = new THREE.Matrix4();
+  const rowLabels = [];
+  group?.traverse(object => {
+    if (object.name.startsWith("Music shelf row label ")) rowLabels.push({ name: object.name, visible: object.visible });
+  });
+  return { design: scene.musicStyle.design, theme: scene.theme, floor: scene.musicStyle.floor,
+    layout: scene.displayLayout.effective, shelfCanvas: scene.displayLayout.canvas === "shelf",
+    resourceGroupVisible: !!group?.visible, physicalTrayGroupVisible: !!group?.getObjectByName("Physical record trays")?.visible,
+    rowLabels,
+    parts: arrayTrayPartNames.map(name => {
+      const object = group?.getObjectByName(name);
+      if (!object) return { name, present: false, visible: false, instances: 0, drawnInstances: 0, materials: [] };
+      const meshes = [];
+      object.traverse(child => {
+        if (!child.isMesh) return;
+        const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(material => {
+          const textures = ["map", "normalMap", "roughnessMap", "bumpMap", "metalnessMap", "aoMap"]
+            .flatMap(key => material[key] ? [{ key, texture: material[key], uuid: material[key].uuid,
+              width: material[key].image?.width ?? null, height: material[key].image?.height ?? null }] : []);
+          for (const item of textures) if (!arrayTrayTextureWatched.has(item.uuid)) {
+            arrayTrayTextureWatched.add(item.uuid);
+            item.texture.addEventListener("dispose", () => arrayTrayTextureDisposals.push(item.uuid));
+          }
+          return { type: material.constructor.name, color: material.color?.getHexString?.() ?? null,
+            roughness: material.roughness ?? null, metalness: material.metalness ?? null,
+            textures: textures.map(({ texture, ...value }) => value) };
+        });
+        let drawnInstances = 0;
+        if (child.isInstancedMesh) for (let index = 0; index < child.count; index++) {
+          child.getMatrixAt(index, matrix);
+          if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2], matrix.elements[4], matrix.elements[5],
+            matrix.elements[6], matrix.elements[8], matrix.elements[9], matrix.elements[10]) > 1e-12) drawnInstances++;
+        }
+        meshes.push({ name: child.name || name, visible: child.visible, instances: child.isInstancedMesh ? child.count : 1,
+          drawnInstances, materials });
+      });
+      return { name, present: true, visible: object.visible, instances: meshes.reduce((sum, value) => sum + value.instances, 0),
+        drawnInstances: meshes.reduce((sum, value) => sum + value.drawnInstances, 0), meshes };
+    }) };
+}
+async function prepareArrayTray(design, theme, floor, layout = "shelf") {
+  if (!arrayMotionPrepare) await exercisePunkArrayMotion(true);
+  await arrayMotionPrepare(design, layout, "full");
+  archiveHost.dataset.design = design;
+  archiveScene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true,
+    topTitles: true, floor });
+  archiveScene.setTheme(theme);
+  archiveScene.setQuality({ ...qualityPresets.high, scale: 100, pixelRatio: 1, modelDetail: "medium" });
+  await archiveScene.setCaseSettings(sceneCaseSettings("punk"));
+  archiveScene.resize(); archiveScene.setReduced(true); arrayMotionSelect(0, 9); stepArchiveScene(1); archiveScene.setReduced(false);
+  stepArchiveScene(120); archiveScene.composer.render();
+  return arrayTrayStructureSnapshot();
+}
+function captureEmptyArrayTray(zoomFactor = 2.25) {
+  const scene = archiveScene, oldZoom = scene.camera.zoom;
+  const restore = [];
+  const hide = object => {
+    if (!object) return;
+    restore.push([object, object.visible]); object.visible = false;
+  };
+  try {
+    hide(scene.model); hide(scene.caseHitProxy);
+    for (const instance of scene.instances) hide(instance);
+    for (const object of [scene.covers?.array, scene.covers?.arrayInsert, scene.covers?.selected, scene.covers?.selectedInsert,
+      scene.caseTitles?.array, scene.caseTitles?.selected, scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge,
+      scene.rhineInfo?.selectedLabel, scene.rhineInfo?.selectedBadge]) hide(object);
+    for (const old of scene.outgoing) hide(old.group);
+    scene.sceneResources?.group.traverse(child => {
+      if (child.name.startsWith("Music shelf row label ")) hide(child);
+    });
+    scene.camera.zoom = oldZoom * zoomFactor; scene.camera.updateProjectionMatrix();
+    scene.scene.updateMatrixWorld(true); scene.composer.render();
+    return { image: scene.renderer.domElement.toDataURL("image/png"), cameraZoom: scene.camera.zoom,
+      structure: arrayTrayStructureSnapshot() };
+  } finally {
+    scene.camera.zoom = oldZoom; scene.camera.updateProjectionMatrix();
+    for (const [object, visible] of restore) object.visible = visible;
+    scene.scene.updateMatrixWorld(true); scene.composer.render();
+  }
 }
 
 async function exercisePunkArrayMotion(screenshotsOnly = false) {
@@ -2967,6 +3062,10 @@ window.caseCheck = {
   arrayBumpSnapshot,
   arrayBumpAdvance,
   arrayBumpQualityMarkup(design, layout) { return qualityMarkup(qualityPresets.high, design, layout); },
+  prepareArrayTray,
+  arrayTrayStructureSnapshot,
+  captureEmptyArrayTray,
+  get arrayTrayTextureDisposals() { return arrayTrayTextureDisposals.slice(); },
   arrayHoverSnapshot,
   arraySurfaceVariant,
   unifiedRenderVariant,
@@ -5853,7 +5952,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -6235,8 +6334,70 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
+    await mkdir(isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isArrayTray) {
+      const motionOutput = arrayTrayOutput;
+      const combinations = process.argv.includes("--baseline-only")
+        ? [["archive", "day", "plain"]]
+        : ["archive", "rhine"].flatMap(design => ["day", "night"].flatMap(theme => ["plain", "deck"].map(floor => [design, theme, floor])));
+      const captures = [];
+      const requiredParts = ["Music shelf base", "Music shelf side rails", "Music shelf rail highlights",
+        "Music shelf recessed rail channels", "Music shelf continuous edge lines", "Music shelf end caps",
+        "Music shelf end safety stripes", "Record shelf tray", "Record shelf glass rims", "Record shelf recessed bed",
+        "Record shelf guide grooves"];
+      for (const [design, theme, floor] of combinations) {
+        const visibleState = await evaluate("window.caseCheck.prepareArrayTray(" + [design, theme, floor].map(JSON.stringify).join(",") + ")");
+        const effectiveFloor = design === "rhine" ? "plain" : floor;
+        assert.equal(visibleState.design, design); assert.equal(visibleState.theme, theme); assert.equal(visibleState.floor, effectiveFloor);
+        assert.equal(visibleState.layout, "shelf"); assert.equal(visibleState.physicalTrayGroupVisible, true);
+        const missing = requiredParts.filter(name => {
+          const part = visibleState.parts.find(value => value.name === name);
+          return !part?.present || !part.visible || part.drawnInstances === 0;
+        });
+        assert.deepEqual(missing, [], "The live ARRAY Scene must submit the bed, tray and both side rails: " + JSON.stringify(missing));
+        const browseScreen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+        const browseName = `array-tray-${design}-${theme}-${floor}-browse.png`;
+        await writeFile(path.join(motionOutput, browseName), Buffer.from(browseScreen.data, "base64"));
+        const empty = await evaluate("window.caseCheck.captureEmptyArrayTray(2.25)");
+        const emptyName = `array-tray-${design}-${theme}-${floor}-empty-closeup.png`;
+        await writeFile(path.join(motionOutput, emptyName), pngBuffer(empty.image, "Empty physical ARRAY tray close-up"));
+        const emptyMissing = requiredParts.filter(name => {
+          const part = empty.structure.parts.find(value => value.name === name);
+          return !part?.present || !part.visible || part.drawnInstances === 0;
+        });
+        assert.deepEqual(emptyMissing, [], "The empty-tray capture must keep the real ARRAY bed/rims/rails visible.");
+        assert.ok(empty.structure.rowLabels.every(label => !label.visible),
+          "The empty-tray close-up must hide shelf row labels so the tray details stay clear.");
+        captures.push({ design, theme, requestedFloor: floor, effectiveFloor, browseName, emptyName, visibleState,
+          emptyTray: { cameraZoom: empty.cameraZoom, structure: empty.structure } });
+      }
+      const currentState = await evaluate("window.caseCheck.arrayTrayStructureSnapshot()");
+      const activeTextureIds = new Set(currentState.parts.flatMap(part => part.meshes.flatMap(mesh =>
+        mesh.materials.flatMap(material => material.textures.map(texture => texture.uuid)))));
+      const disposedTextureIds = await evaluate("window.caseCheck.arrayTrayTextureDisposals");
+      const activeDisposedTextureIds = disposedTextureIds.filter(uuid => activeTextureIds.has(uuid));
+      assert.deepEqual(activeDisposedTextureIds, [], "A texture still used by the live ARRAY tray must not be disposed.");
+      let matrixTrayGuard = null;
+      if (!process.argv.includes("--baseline-only")) {
+        const matrix = await evaluate('window.caseCheck.prepareArrayTray("archive","day","plain","array")');
+        matrixTrayGuard = await evaluate("window.caseCheck.arrayTrayStructureSnapshot()");
+        assert.equal(matrixTrayGuard.layout, "array");
+        assert.equal(matrixTrayGuard.physicalTrayGroupVisible, false,
+          "The physical shelf tray assembly must stay hidden in the non-shelf MATRIX layout.");
+      }
+      assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
+      assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
+      assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
+      const report = { ok: true, phase: arrayTrayPhase, combinations, captures, matrixTrayGuard,
+        trayTextureDisposals: { watched: currentState.parts.flatMap(part => part.meshes.flatMap(mesh =>
+          mesh.materials.flatMap(material => material.textures.map(texture => texture.uuid)))), disposedTextureIds,
+          activeDisposedTextureIds }, runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(motionOutput, "array-tray-report.json"), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: true, phase: arrayTrayPhase, combinations: captures.map(value => `${value.design}/${value.theme}/${value.requestedFloor} (effective ${value.effectiveFloor})`),
+        report: `.tools/array-tray/${arrayTrayPhase}/array-tray-report.json`, screenshots: captures.flatMap(value => [value.browseName, value.emptyName]) }, null, 2));
+      return;
+    }
     if (isArrayBump) {
       const motionOutput = arrayBumpOutput;
       const radii = { off: 0, basic: 1, reduced: 2, full: 4 };
@@ -7593,7 +7754,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

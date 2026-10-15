@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { MusicArrayAppearance } from "./music-array-appearance";
 import type { MusicStyle, StylePalette } from "./music-style";
-import { MusicShelf } from "./music-shelf";
+import { MusicShelf, musicShelfFinish } from "./music-shelf";
 import { createMusicSurfaceTextures, disposeMusicSurfaceTextures } from "./music-surface-textures";
 
 export type MusicSceneSlot = {
@@ -55,6 +55,9 @@ export class MusicSceneResources {
   });
   private readonly plateMaterial = new THREE.MeshStandardMaterial({ color: "#b9beb8", roughness: .42, metalness: .18 });
   private readonly accentMaterial = new THREE.MeshStandardMaterial({ color: "#b56834", roughness: .48, metalness: .18 });
+  private readonly railTopMaterial = new THREE.MeshStandardMaterial({ roughness: .24, metalness: .38 });
+  private readonly channelMaterial = new THREE.MeshStandardMaterial({ roughness: .8, metalness: .15 });
+  private readonly hazardMaterial = new THREE.MeshStandardMaterial({ roughness: .64, metalness: .12 });
   private readonly floorMaterial = new THREE.MeshStandardMaterial({
     color: "#71766e", roughness: .86, metalness: .06, map: null,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
@@ -65,6 +68,11 @@ export class MusicSceneResources {
   });
   private readonly laneBase: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly laneSides: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneRailTops: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneChannels: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneAccentLines: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneEndCaps: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
+  private readonly laneHazards: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material>;
   private readonly lanePlates: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly plateMarks: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly floorPanels: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material>;
@@ -83,6 +91,13 @@ export class MusicSceneResources {
     this.ownsAppearance = !appearance;
     this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
     this.trays = new MusicShelf(this.capacity, this.appearance);
+    for (const material of [this.frameMaterial, this.edgeMaterial, this.railTopMaterial]) {
+      material.roughnessMap = this.trays.textures.roughness;
+      material.normalMap = this.trays.textures.normal;
+      material.normalScale.set(.12, .12);
+    }
+    this.hazardMaterial.map = this.trays.textures.hazard;
+    this.trays.textures.hazard.repeat.x = 8;
     const makeBoxes = (name: string, material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
       amount = this.capacity, geometry: THREE.BufferGeometry = this.box) => {
       const mesh = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>(geometry, material, amount);
@@ -96,6 +111,15 @@ export class MusicSceneResources {
     };
     this.laneBase = makeBoxes("Music shelf base", this.frameMaterial, this.capacity, this.roundedBox);
     this.laneSides = makeBoxes("Music shelf side rails", this.edgeMaterial, this.capacity * 2, this.roundedBox);
+    this.laneRailTops = makeBoxes("Music shelf rail highlights", this.railTopMaterial, this.capacity * 2, this.roundedBox);
+    this.laneChannels = makeBoxes("Music shelf recessed rail channels", this.channelMaterial, this.capacity * 2);
+    this.laneAccentLines = makeBoxes("Music shelf continuous edge lines", this.accentMaterial, this.capacity * 2);
+    this.laneEndCaps = makeBoxes("Music shelf end caps", this.edgeMaterial, this.capacity * 2, this.roundedBox);
+    this.laneHazards = new THREE.InstancedMesh(this.plane, this.hazardMaterial, this.capacity * 2);
+    this.laneHazards.name = "Music shelf end safety stripes";
+    this.laneHazards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.laneHazards.frustumCulled = false;
+    this.group.add(this.laneHazards);
     this.lanePlates = makeBoxes("Music shelf front number plates", this.plateMaterial, this.capacity, this.roundedBox);
     this.plateMarks = makeBoxes("Music shelf plate markers", this.accentMaterial, this.capacity, this.roundedBox);
     this.floorPanels = new THREE.InstancedMesh(this.plane, this.floorMaterial, this.capacity);
@@ -120,20 +144,23 @@ export class MusicSceneResources {
       this.appearance.setBackground(this.appearanceBackground);
     }
     this.trays.setMode(night, palette.accent, style.design, palette);
-
-    this.frameMaterial.color.set(archive ? palette.well : palette.surface);
+    const finish = musicShelfFinish(night, style.design, palette);
+    this.frameMaterial.color.copy(finish.base);
     this.frameMaterial.metalness = archive ? .62 : .055;
     this.frameMaterial.roughness = archive ? .4 : .56;
-    this.edgeMaterial.color.set(archive ? palette.line : palette.surface);
-    this.edgeMaterial.metalness = archive ? .74 : .025;
+    this.edgeMaterial.color.copy(finish.base);
+    this.edgeMaterial.metalness = archive ? .74 : .45;
     this.edgeMaterial.roughness = archive ? .34 : .3;
-    this.edgeMaterial.transmission = archive ? 0 : .13;
+    this.edgeMaterial.transmission = 0;
     this.edgeMaterial.clearcoat = archive ? .12 : .24;
+    this.railTopMaterial.color.copy(finish.rail);
+    this.channelMaterial.color.copy(finish.channel);
+    this.hazardMaterial.color.set(palette.accent);
     this.plateMaterial.color.set(archive ? palette.panel : palette.surface);
     this.plateMaterial.metalness = archive ? .58 : .045;
     this.plateMaterial.roughness = archive ? .42 : .54;
     this.accentMaterial.color.set(palette.accent);
-    this.accentMaterial.emissive.set(palette.accent).multiplyScalar(night ? .025 : .01);
+    this.accentMaterial.emissive.set(palette.accent).multiplyScalar(night ? .18 : .065);
     this.rowLabelColor = archive ? palette.accent : palette.fg;
     for (const label of this.rowLabels) this.drawRowLabel(label, label.lane, this.rowLabelColor);
 
@@ -214,6 +241,11 @@ export class MusicSceneResources {
     const laneCount = laneList.length;
     this.laneBase.count = laneCount;
     this.laneSides.count = laneCount * 2;
+    this.laneRailTops.count = laneCount * 2;
+    this.laneChannels.count = laneCount * 2;
+    this.laneAccentLines.count = laneCount * 2;
+    this.laneEndCaps.count = laneCount * 2;
+    this.laneHazards.count = laneCount * 2;
     this.lanePlates.count = laneCount;
     this.plateMarks.count = laneCount;
     const floorHasPanel = style.floor === "real";
@@ -222,20 +254,33 @@ export class MusicSceneResources {
     const panelFloor = floorY - .218;
 
     laneList.forEach(([, lane], laneIndex) => {
-      const span = Math.max(rowSpacing, lane.maxZ - lane.minZ + rowSpacing + depth);
+      const span = Math.max(rowSpacing, lane.maxZ - lane.minZ + rowSpacing);
       const centerZ = (lane.minZ + lane.maxZ) / 2;
-      this.writeBox(this.laneBase, laneIndex, lane.x, floorY - .062, centerZ,
-        [width + .34, .036, span], rackVisible);
+      this.writeBox(this.laneBase, laneIndex, lane.x, floorY - .105, centerZ,
+        [width + .42, .07, span + .08], rackVisible);
       this.appearance.write(this.laneBase, laneIndex, lane.alpha, lane.tint);
-      const sideX = width / 2 + .17;
-      this.writeBox(this.laneSides, laneIndex * 2, lane.x - sideX, floorY - .043, centerZ,
-        [.055, .085, span], rackVisible);
-      this.appearance.write(this.laneSides, laneIndex * 2, lane.alpha, lane.tint);
-      this.writeBox(this.laneSides, laneIndex * 2 + 1, lane.x + sideX, floorY - .043, centerZ,
-        [.055, .085, span], rackVisible);
-      this.appearance.write(this.laneSides, laneIndex * 2 + 1, lane.alpha, lane.tint);
+      const sideX = width / 2 + .15;
+      for (let side = 0; side < 2; side++) {
+        const direction = side ? 1 : -1;
+        const index = laneIndex * 2 + side;
+        this.writeBox(this.laneSides, index, lane.x + direction * sideX, floorY - .023, centerZ,
+          [.12, .12, span + .07], rackVisible);
+        this.writeBox(this.laneRailTops, index, lane.x + direction * (sideX + .013), floorY + .04, centerZ,
+          [.07, .014, span + .065], rackVisible);
+        this.writeBox(this.laneChannels, index, lane.x + direction * (sideX - .074), floorY - .013, centerZ,
+          [.025, .026, span], rackVisible);
+        this.writeBox(this.laneAccentLines, index, lane.x + direction * (sideX + .062), floorY - .006, centerZ,
+          [.008, .014, span], rackVisible);
+        const endZ = centerZ + direction * (span / 2 + .018);
+        this.writeBox(this.laneEndCaps, index, lane.x, floorY - .026, endZ,
+          [width + .42, .08, .072], rackVisible);
+        this.writePlane(this.laneHazards, index, lane.x, floorY + .0145, endZ,
+          [width + .28, .048], rackVisible);
+        for (const mesh of [this.laneSides, this.laneRailTops, this.laneChannels, this.laneAccentLines,
+          this.laneEndCaps, this.laneHazards]) this.appearance.write(mesh, index, lane.alpha, lane.tint);
+      }
 
-      const frontZ = lane.maxZ + depth / 2 + .06;
+      const frontZ = lane.maxZ + rowSpacing / 2 + .056;
       const plateY = floorY - .04;
       this.writeBox(this.lanePlates, laneIndex, lane.x, plateY, frontZ, [.82, .075, .055], rackVisible);
       this.appearance.write(this.lanePlates, laneIndex, lane.alpha, lane.tint);
@@ -259,7 +304,7 @@ export class MusicSceneResources {
       const [laneNumber, lane] = entry;
       if (label.lane !== laneNumber) this.drawRowLabel(label, laneNumber, this.rowLabelColor);
       const plateY = floorY - .04;
-      const plateFront = lane.maxZ + depth / 2 + .06 + .028;
+      const plateFront = lane.maxZ + rowSpacing / 2 + .056 + .028;
       label.mesh.position.set(lane.x, plateY, plateFront);
       label.mesh.scale.set(.76, .053, 1);
       label.material.opacity = lane.alpha * (1 - lane.tint);
@@ -267,13 +312,15 @@ export class MusicSceneResources {
     }
 
     this.trays.finish();
-    this.markUpdated(this.laneBase, this.laneSides, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks);
+    this.markUpdated(this.laneBase, this.laneSides, this.laneRailTops, this.laneChannels, this.laneAccentLines,
+      this.laneEndCaps, this.laneHazards, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks);
   }
 
   dispose(): void {
     this.trays.dispose();
     if (this.ownsAppearance) this.appearance.dispose();
-    for (const mesh of [this.laneBase, this.laneSides, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks]) mesh.dispose();
+    for (const mesh of [this.laneBase, this.laneSides, this.laneRailTops, this.laneChannels, this.laneAccentLines,
+      this.laneEndCaps, this.laneHazards, this.lanePlates, this.plateMarks, this.floorPanels, this.floorTicks]) mesh.dispose();
     this.box.dispose();
     this.roundedBox.dispose();
     this.plane.dispose();
@@ -288,6 +335,9 @@ export class MusicSceneResources {
     this.edgeMaterial.dispose();
     this.plateMaterial.dispose();
     this.accentMaterial.dispose();
+    this.railTopMaterial.dispose();
+    this.channelMaterial.dispose();
+    this.hazardMaterial.dispose();
     this.floorMaterial.dispose();
     this.floorLineMaterial.dispose();
     this.group.clear();

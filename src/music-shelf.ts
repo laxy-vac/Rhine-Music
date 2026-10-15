@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { MUSIC_MODEL } from "./music-model";
 import { ROW_SPACING } from "./archive-loop";
 import { MusicArrayAppearance } from "./music-array-appearance";
+import { createMusicShelfTextures, disposeMusicShelfTextures } from "./music-shelf-textures";
 import type { StylePalette } from "./music-style";
 
 type ShelfPart = {
@@ -15,6 +16,7 @@ type ShelfPart = {
 /** Themeable, instanced metal tray details under each upright record case. */
 export class MusicShelf {
   readonly group = new THREE.Group();
+  readonly textures = createMusicShelfTextures();
   private readonly parts: ShelfPart[] = [];
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private boxDisposed = false;
@@ -39,13 +41,19 @@ export class MusicShelf {
     this.slotCapacity = capacity;
     this.ownsAppearance = !appearance;
     this.appearance = appearance ?? new MusicArrayAppearance(this.appearanceBackground);
+    this.inset.map = this.textures.bed;
+    for (const material of [this.base, this.rim, this.inset, this.tick]) {
+      material.roughnessMap = this.textures.roughness;
+      material.normalMap = this.textures.normal;
+      material.normalScale.set(.16, .16);
+    }
     const makePart = (name: string, material: THREE.Material, multiplier = 1, radius = .003) => {
       const mesh = new THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>(this.box, material, capacity * multiplier);
       mesh.name = name;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       mesh.castShadow = false;
-      mesh.receiveShadow = false;
+      mesh.receiveShadow = material === this.inset || material === this.base;
       this.group.add(mesh);
       this.parts.push({
         mesh,
@@ -76,33 +84,35 @@ export class MusicShelf {
     this.dimensions = next;
 
     const trayWidth = next.width + .22;
-    const trayDepth = Math.max(next.spacing * .94, next.depth + .08);
+    const trayDepth = Math.max(next.spacing * .98, next.depth + .08);
     const halfWidth = trayWidth / 2;
     const base = this.parts[0]!;
-    base.size.set(trayWidth, .02, trayDepth);
-    base.offsets[0]!.set(0, -.015, 0);
+    base.size.set(trayWidth, .035, trayDepth);
+    base.offsets[0]!.set(0, -.0595, 0);
 
     const rims = this.parts[1]!;
-    rims.size.set(.045, .035, trayDepth);
-    rims.offsets[0]!.set(-halfWidth + .005, -.0215, 0);
-    rims.offsets[1]!.set(halfWidth - .005, -.0215, 0);
+    rims.size.set(.044, .018, trayDepth);
+    rims.offsets[0]!.set(-halfWidth + .015, -.026, 0);
+    rims.offsets[1]!.set(halfWidth - .015, -.026, 0);
 
     const inset = this.parts[2]!;
-    inset.size.set(Math.max(.1, trayWidth - .11), .0016, Math.max(.1, trayDepth - .11));
-    inset.offsets[0]!.set(0, -.0052, 0);
+    inset.size.set(Math.max(.1, trayWidth - .11), .008, Math.max(.1, trayDepth - .024));
+    inset.offsets[0]!.set(0, -.036, 0);
 
     const grooves = this.parts[3]!;
-    grooves.size.set(.002, .00025, Math.max(.1, trayDepth * .72));
-    grooves.offsets[0]!.set(-trayWidth * .19, -.00435, 0);
-    grooves.offsets[1]!.set(trayWidth * .19, -.00435, 0);
+    // A pair of transverse dark sockets sits below the silver slot dividers.
+    grooves.size.set(Math.max(.1, trayWidth - .12), .003, .038);
+    const socketZ = Math.min(trayDepth * .35, next.depth / 2 + .025);
+    grooves.offsets[0]!.set(0, -.030, -socketZ);
+    grooves.offsets[1]!.set(0, -.030, socketZ);
 
     const index = this.parts[4]!;
-    index.size.set(.018, .026, .052);
-    index.offsets[0]!.set(-halfWidth - .012, -.018, trayDepth * .46);
+    index.size.set(.014, .007, .06);
+    index.offsets[0]!.set(-halfWidth + .015, -.012, trayDepth * .42);
 
     const tick = this.parts[5]!;
-    tick.size.set(.075, .009, .018);
-    tick.offsets[0]!.set(halfWidth - .12, -.008, trayDepth * .45);
+    tick.size.set(Math.max(.1, trayWidth - .11), .007, .012);
+    tick.offsets[0]!.set(0, -.025, trayDepth * .49);
 
     for (const part of this.parts) this.updateGeometry(part);
     if (!this.boxDisposed) {
@@ -140,21 +150,22 @@ export class MusicShelf {
       this.appearanceBackground.set(palette.bg);
       this.appearance.setBackground(this.appearanceBackground);
     }
-    this.base.color.set(palette?.surface ?? (night ? "#667078" : archive ? "#acb1ac" : "#c1c4bb"));
+    const finish = musicShelfFinish(night, design, palette);
+    this.base.color.copy(finish.base);
     this.base.metalness = archive ? .64 : .42;
     this.base.roughness = archive ? .38 : .46;
-    this.rim.color.set(palette?.["panel-hi"] ?? palette?.line ?? (night ? "#9baab8" : "#e1e4dc"));
+    this.rim.color.copy(finish.rail);
     this.rim.metalness = archive ? .68 : .52;
     this.rim.roughness = archive ? .31 : .27;
-    this.inset.color.set(palette?.well ?? palette?.surface ?? "#d7d9d3");
-    this.inset.metalness = archive ? .22 : .12;
-    this.inset.roughness = archive ? .68 : .76;
-    this.groove.color.set(palette?.line ?? (night ? "#6d7a85" : "#9da39a"));
-    this.groove.metalness = archive ? .24 : .14;
+    this.inset.color.copy(finish.bed);
+    this.inset.metalness = .12;
+    this.inset.roughness = .9;
+    this.groove.color.copy(finish.channel);
+    this.groove.metalness = .12;
     this.groove.roughness = .82;
     this.accent.color.set(accent);
     this.accent.emissive.set(accent).multiplyScalar(night ? .025 : .01);
-    this.tick.color.set(palette?.["panel-hi"] ?? palette?.muted ?? "#e4e7df");
+    this.tick.color.copy(finish.rail);
   }
 
   dispose() {
@@ -166,6 +177,7 @@ export class MusicShelf {
     for (const geometry of geometries) geometry.dispose();
     if (!this.boxDisposed) this.box.dispose();
     for (const material of [this.base, this.rim, this.inset, this.groove, this.accent, this.tick]) material.dispose();
+    disposeMusicShelfTextures(this.textures);
     if (this.ownsAppearance) this.appearance.dispose();
     this.parts.length = 0;
     this.group.clear();
@@ -177,6 +189,19 @@ export class MusicShelf {
     part.mesh.geometry = next;
     if (previous !== this.box) previous.dispose();
   }
+}
+
+/** Interface paper colours cannot also define the tray's metal/matte contrast. */
+export function musicShelfFinish(night: boolean, design: "rhine" | "archive", palette?: StylePalette) {
+  const archive = design === "archive";
+  const tint = new THREE.Color(palette?.surface ?? (night ? "#162234" : "#efede7"));
+  const metal = (day: string, dark: string) => new THREE.Color(night ? dark : day).lerp(tint, .06);
+  return {
+    base: metal(archive ? "#a5adb1" : "#b9c1c4", "#4d5a68"),
+    rail: metal(archive ? "#d1d7db" : "#dce2e5", "#8e9faf"),
+    bed: metal(archive ? "#707679" : "#8b969b", "#303d4b"),
+    channel: metal("#282e33", "#101923"),
+  };
 }
 
 function normalizedRoundedBox(size: THREE.Vector3, requestedRadius: number): THREE.BufferGeometry {
