@@ -360,6 +360,7 @@ export function normalizeProcessing(value, options = {}) {
 /** Derive runtime PCM settings without changing the saved request. */
 export function effectivePcmProcessing(value) {
   const settings = normalizeProcessing(value, { clamp: false });
+  if (settings.eq.engine === "lsp") settings.tone.enabled = false;
   if (!settings.bitPerfect) return settings;
 
   settings.eq.enabled = false;

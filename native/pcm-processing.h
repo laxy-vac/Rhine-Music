@@ -51,7 +51,11 @@ public:
         const json replaySettings = objectValue(processing, "replayGain", "processing.replayGain");
         next.push_back(makeReplayGainStage(replaySettings, replayGain));
 
-        if (processing.contains("tone")) {
+        const json eq = processing.contains("eq") ? objectValue(processing, "eq", "processing.eq") : json::object();
+        const std::string engine=stringValue(eq,"engine","standard","processing.eq.engine");
+        if(engine!="standard"&&engine!="lsp")throw std::invalid_argument("processing.eq.engine must be standard or lsp");
+        nextLspSelected=engine=="lsp";
+        if (processing.contains("tone") && !nextLspSelected) {
             const json tone = objectValue(processing, "tone", "processing.tone");
             const bool toneEnabled = boolValue(tone, "enabled", false, "processing.tone.enabled");
             addToneStage(next, tone, "bass", "Bass tone", Iir::RBJ::LowShelf{},
@@ -61,11 +65,7 @@ public:
         }
 
         if (processing.contains("eq")) {
-            const json eq = objectValue(processing, "eq", "processing.eq");
             const bool eqEnabled = boolValue(eq, "enabled", false, "processing.eq.enabled");
-            const std::string engine=stringValue(eq,"engine","standard","processing.eq.engine");
-            if(engine!="standard"&&engine!="lsp")throw std::invalid_argument("processing.eq.engine must be standard or lsp");
-            nextLspSelected=engine=="lsp";
             if(nextLspSelected) {
                 nextLspSettings=objectValue(eq,"lsp","processing.eq.lsp");
                 nextLspActive=eqEnabled&&!bitPerfect;

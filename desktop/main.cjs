@@ -4,6 +4,7 @@ const fs=require('node:fs/promises');
 const {createHash}=require('node:crypto');
 const {pathToFileURL}=require('node:url');
 const {resolveStorageLayout,prepareStorageSync,createPreferencesStore}=require('./app-storage.cjs');
+const {createStandardEqPresetStore,registerStandardEqPresetIpc}=require('./standard-eq-presets.cjs');
 const root=path.resolve(__dirname,'..');
 const args=process.argv.slice(1),selfTest=args.includes('--self-test');
 const sourcePreview=process.env.RHINE_SOURCE_PREVIEW==='1';
@@ -90,6 +91,8 @@ async function listen() {
  throw new Error('本地播放服务端口均被占用，请关闭多余的播放器实例。');
 }
 function ownedEvent(event){return window&&!window.isDestroyed()&&event.sender===window.webContents}
+const standardEqPresetStore=createStandardEqPresetStore({home:storage.home,audioPresetFile,projectRoot:root,dialog,shell,getWindow:()=>window});
+registerStandardEqPresetIpc({ipcMain,store:standardEqPresetStore,ownedEvent});
 ipcMain.handle('rhine:about:known-issues',async(event,language)=>{
  if(!ownedEvent(event))throw new Error('无效的已知问题请求');
  const {getKnownIssuesText}=await import(pathToFileURL(path.join(root,'src/known-issues.mjs')).href);
@@ -205,7 +208,7 @@ else {
  app.on('window-all-closed',()=>{if(!previewUICheck)app.quit()});
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;
-  const shut=async()=>{if(service){await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{})])};
+  const shut=async()=>{if(service){await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};
   void shut().finally(()=>app.quit());
  });
 }

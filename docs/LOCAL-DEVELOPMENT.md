@@ -89,7 +89,9 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | ARRAY强度与带起 | `off/basic/reduced/full`与持久化值不变，范围为每侧0/1/2/4张实际专辑，边界不填虚拟唱片。当前选中对应单凸起，integer距离`d`的bell为`0.748*(1+cos(pi*abs(d)/(R+1)))/2`，`abs(d)>R`严格为0，采样不低于托盘；selected目标`.748+1.35=2.098`。同列邻居用critical damping spring速率13/7平滑追随，不传播或累积packet；被选中时继承已有高度保持连续。仅选中entry hover `+.5`，不抢selection/focus。ARRAY“水波强度”四档label为仅抬起/轻柔/适中/强烈，shelf hint为“单凸起；档位越高，同列带起的前后专辑越多。”；MATRIX label/hint及原波不变。参数是用户反馈驱动的本项目观感模拟。 |
 | Future盒体个人预设 | profile旁presets/themes/theme-presets.json的futurePunkPresets；仅Future使用，整盒材质/部件快照，最多50条，不改内置预设 |
 | Punk主题盒体个人预设 | 同一主题文件的archivePunkPresets；仅Punk主题使用，独立最多50条，不复制或覆盖Future个人库 |
-| EQ预设/模式工作区 | profile旁presets/eq/audio-processing-presets.json，独立于HTTP端口 |
+| 入门EQ预设文件 | 默认profile旁presets/eq/standard，用户可选择其他目录；本机文件.rhine-eq、单向导入Poweramp .json，显示名称来自文件名。导入原字节复制且不自动应用；保存/另存/Windows另存为/重命名分别操作真实文件 |
+| 入门EQ目录配置 | profile/standard-eq-library.json仅保存目录选择；渲染器selection token只保存目录/文件名/指纹，当前工作音效仍在现有preferences中 |
+| LSP与旧EQ聚合库/模式工作区 | profile旁presets/eq/audio-processing-presets.json，独立于HTTP端口；原有读取/保存逻辑保留，不自动迁移或删除旧库 |
 | 验证索引/封面/音频缓存 | 仓库旁 `music-data-source-preview/music-data`，不自动扫描/迁移/删除 |
 | 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接 |
 
@@ -139,6 +141,8 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-foobar-layout.mjs --glass` | 真实Future顶栏SVG、歌词组件和terminal-lighting的离线光效回归；日夜×四档、受光对象/留白/内部裁切/窄屏滚动，报告和截图在foobar-layout-check/terminal-glass/current。`--baseline`仅用于修复前留证，`--compare-existing`只分析已有A/B PNG底边像素，不重拍；严格模拟歌词请求，不启动音乐服务或设备 |
 | `scripts/check-foobar-layout.mjs --navigation` | 第一阶段管理页返回专用合成DOM检查；生产打开/ARCHIVE点击、STYLE/主题切换/关闭及全局键盘函数，真实面板与过渡控制器，模拟播放器/Scene；实际CDP鼠标/键盘，报告management-navigation.json。不运行114项宽布局矩阵或个人播放器 |
 | `scripts/check-foobar-layout.mjs --eq` | EQ迁移聚焦入口，复用离线DOM/独立Chrome profile；检查设置中EQ/Tone入口清退、EQ页独立音调开关和参数、预设唯一挂载、音频链路跳转及两主题外观。播放器/保存/音频接口使用隔离模拟，不启动个人播放器或设备，不代替LSP原生窗口实机验收 |
+| `node scripts/check-poweramp-presets.mjs` | 入门文件格式纯检查：Poweramp单向读取、本机.rhine-eq完整往返、特殊标识/严格字段、LSP拒绝及本机格式不被旧Poweramp解析器识别 |
+| `node scripts/check-standard-eq-presets.mjs` | 专用.tools临时目录与mock Windows对话框/IPC，检查原字节复制、文件名显示、保存/另存/另存为、重命名、取消、指纹冲突、扩展名覆盖保护及目录恢复；不访问个人预设 |
 | `scripts/check-case-system.mjs --punk-view` | 真实Scene/本地GLB/合成曲库，两主题公共阵列/TRACKS与网格详情、Future精细父编号、空过滤恢复、Punk机位/鼠标命中、右区裁切与JSON布局偏好；不启动播放器 |
 | `scripts/check-case-user-presets.mjs` | 个人预设JSON往返、独立快照、输入校验与桌面偏好白名单；不读取个人配置或设备 |
 | `scripts/check-archive-label.mjs` | 仍有效的公共Canvas标签绘制helper：编号、缩放/图像就绪及真实源格式分类；Scene/GLB中完整铭牌另由真实图形检查覆盖 |

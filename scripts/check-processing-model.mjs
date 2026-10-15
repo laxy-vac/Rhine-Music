@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeProcessing, importPowerampPreset, calcEqResponse, calcEqResponseSamples, calcEqBandResponseSamples, processingBandQ, serializeRhineProcessingBackup, importRhineProcessingBackup } from '../src/audio-processing-model.mjs';
+import { normalizeProcessing, effectivePcmProcessing, importPowerampPreset, calcEqResponse, calcEqResponseSamples, calcEqBandResponseSamples, processingBandQ, serializeRhineProcessingBackup, importRhineProcessingBackup } from '../src/audio-processing-model.mjs';
 import { normalizeReplayGainTags } from './replaygain-tags.mjs';
 const tone = [{type:0,channels:0,frequency:90,q:.8,gain:7.528071880340576,color:0},{type:1,channels:0,frequency:10000,q:.6,gain:11.223862648010254,color:0}];
 const graphic = [31,62,124,249,498,996,1995,3993,7993,16000].map(frequency=>({type:2,channels:0,frequency,q:0,gain:frequency===996?5.999999523162842:0,color:0}));
@@ -73,6 +73,27 @@ test('shelf Q and extreme supported gains yield finite responses, including sepa
  const value=normalizeProcessing({tone:{enabled:true,bass:{gain:24,q:18},treble:{gain:-24,q:18}}});
  for(const frequency of [20,1000,20000])assert.ok(Number.isFinite(calcEqResponse(value,frequency,48000)));
  value.tone.enabled=false;assert.equal(calcEqResponse(value,1000,48000),0);
+});
+test('LSP suppresses only effective Tone and switching back to standard restores saved controls',()=>{
+ const saved=normalizeProcessing({
+  eq:{engine:'lsp',enabled:false},
+  tone:{enabled:true,bass:{frequency:95,q:.9,gain:3.5},treble:{frequency:9200,q:.75,gain:-1.5}},
+ });
+ const savedSnapshot=structuredClone(saved);
+ const lspRuntime=effectivePcmProcessing(saved);
+ assert.equal(lspRuntime.eq.engine,'lsp');assert.equal(lspRuntime.eq.enabled,false);
+ assert.equal(lspRuntime.tone.enabled,false,'LSP runtime must suppress Tone even while its saved switch is on.');
+ assert.deepEqual(lspRuntime.tone.bass,saved.tone.bass);assert.deepEqual(lspRuntime.tone.treble,saved.tone.treble);
+ assert.deepEqual(saved,savedSnapshot,'Deriving LSP runtime settings changed the saved preferences.');
+
+ const standardRuntime=effectivePcmProcessing({...saved,eq:{...saved.eq,engine:'standard'}});
+ assert.equal(standardRuntime.eq.engine,'standard');assert.equal(standardRuntime.tone.enabled,true);
+ assert.deepEqual(standardRuntime.tone,saved.tone,'Returning to standard EQ did not restore saved Tone values.');
+
+ const standardZeroGain=normalizeProcessing({eq:{engine:'standard',enabled:false},tone:{enabled:true}});
+ assert.deepEqual(effectivePcmProcessing(standardZeroGain).tone,standardZeroGain.tone,
+  'Standard mode must preserve the enabled switch and default zero-gain Tone values.');
+ assert.deepEqual([standardZeroGain.tone.bass.gain,standardZeroGain.tone.treble.gain],[0,0]);
 });
 test('working settings survive a JSON round trip without sharing mutable defaults',()=>{
  const value=normalizeProcessing({float64:true,tone:{enabled:true,bass:{gain:5}},eq:{bandwidth:1.4}});

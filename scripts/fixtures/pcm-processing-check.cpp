@@ -2,10 +2,12 @@
 #include "../../native/pcm-resampler.h"
 #include "../../native/pcm-engine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using rhine::json;
@@ -54,6 +56,65 @@ int main() {
     stages = processor.stages();
     require(stages[0]["inputPrecision"] == "float32" && stages[0]["outputPrecision"] == "float32" &&
             stages[0]["computePrecision"] == "float64", "float path precision was misreported");
+
+    const auto stageById = [](const json& stageList, const std::string& id) -> const json* {
+        for (const auto& stage : stageList) {
+            if (stage.value("id", std::string()) == id) return &stage;
+        }
+        return nullptr;
+    };
+    const json toneControls = {
+        {"tone", {{"enabled", true},
+                   {"bass", {{"frequency", 95.0}, {"q", 0.9}, {"gain", 3.5}}},
+                   {"treble", {{"frequency", 9200.0}, {"q", 0.75}, {"gain", -1.5}}}}},
+        {"eq", {{"enabled", false}, {"engine", "standard"}}}
+    };
+    rhine::PcmProcessor standardTone;
+    standardTone.configure(toneControls, 48000, 2);
+    const json standardToneStages = standardTone.stages();
+    const json* standardBass = stageById(standardToneStages, "tone.bass");
+    const json* standardTreble = stageById(standardToneStages, "tone.treble");
+    require(standardBass && standardBass->value("active", false) &&
+            standardBass->value("gainDb", 0.0) == 3.5 && standardBass->value("frequencyHz", 0.0) == 95.0,
+            "standard EQ did not apply the saved Bass tone controls");
+    require(standardTreble && standardTreble->value("active", false) &&
+            standardTreble->value("gainDb", 0.0) == -1.5 && standardTreble->value("frequencyHz", 0.0) == 9200.0,
+            "standard EQ did not apply the saved Treble tone controls");
+
+    json lspToneControls = toneControls;
+    lspToneControls["eq"]["engine"] = "lsp";
+    rhine::PcmProcessor lspToneDisabled;
+    lspToneDisabled.configure(lspToneControls, 48000, 2);
+    const json lspToneStages = lspToneDisabled.stages();
+    require(lspToneDisabled.lspPlugin() == nullptr,
+            "LSP Tone suppression fixture unexpectedly constructed a plugin while EQ is disabled");
+    require(stageById(lspToneStages, "tone.bass") == nullptr && stageById(lspToneStages, "tone.treble") == nullptr,
+            "LSP engine retained Tone stages despite saved Tone being enabled");
+
+    json standardAgain = lspToneControls;
+    standardAgain["eq"]["engine"] = "standard";
+    rhine::PcmProcessor restoredTone;
+    restoredTone.configure(standardAgain, 48000, 2);
+    const json restoredToneStages = restoredTone.stages();
+    const json* restoredBass = stageById(restoredToneStages, "tone.bass");
+    const json* restoredTreble = stageById(restoredToneStages, "tone.treble");
+    require(restoredBass && restoredBass->value("active", false) && restoredBass->value("gainDb", 0.0) == 3.5,
+            "switching back to standard EQ did not restore saved Bass tone");
+    require(restoredTreble && restoredTreble->value("active", false) && restoredTreble->value("gainDb", 0.0) == -1.5,
+            "switching back to standard EQ did not restore saved Treble tone");
+
+    json zeroGainTone = toneControls;
+    zeroGainTone["tone"]["bass"]["gain"] = 0.0;
+    zeroGainTone["tone"]["treble"]["gain"] = 0.0;
+    rhine::PcmProcessor zeroGainToneProcessor;
+    zeroGainToneProcessor.configure(zeroGainTone, 48000, 2);
+    const json zeroGainToneStages = zeroGainToneProcessor.stages();
+    const json* zeroBass = stageById(zeroGainToneStages, "tone.bass");
+    const json* zeroTreble = stageById(zeroGainToneStages, "tone.treble");
+    require(zeroBass && !zeroBass->value("active", true) && zeroBass->value("reason", std::string()) == "zero-gain-identity",
+            "enabled zero-gain Bass Tone is not treated as an identity stage");
+    require(zeroTreble && !zeroTreble->value("active", true) && zeroTreble->value("reason", std::string()) == "zero-gain-identity",
+            "enabled zero-gain Treble Tone is not treated as an identity stage");
 
     bool rejectedNyquist = false;
     try {

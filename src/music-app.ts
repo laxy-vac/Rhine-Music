@@ -63,6 +63,7 @@ import { playbackMarkup, setupMusicPlayback } from "./music-playback";
 import { setupAudioInfoPopup, audioSourceSummary, audioSignalSummary, audioSonySummary, audioProcessingText, isPlaybackBufferUnavailable, audioPrecisionMarkup, pcmConsistencyStatus } from "./audio-info";
 import { enhanceSettingsSelectControls } from "./settings-select-controls";
 import { renderEqControls, renderToneControls, setupEqControls } from "./eq-controls";
+import { createStandardEqPresetState, standardEqPresetMarkup, setupStandardEqPresets, type StandardEqFileRequest, type StandardEqFileResult } from "./standard-eq-presets";
 import { setupEditableRanges } from "./editable-range-controls";
 import { setupLyricsPage } from "./lyrics-page";
 import { setupSignalPage } from "./signal-page";
@@ -118,7 +119,7 @@ import { normalizeSony, sonyOff, type SonySettings, type SonyStatus } from "./so
 import { setupTouchRuler } from "./music-touch";
 import { sonyTechMarkup, updateSonyTechIndicators } from "./sony-tech-indicators";
 import { normalizeOutput, outputDefault, recoverNativeSession, discardNativeSession, type OutputSettings, type NativeStatus, type NativePlaybackSession } from "./native-audio";
-declare global { interface Window { rhineDesktop?: { native: boolean; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null> } } }
+declare global { interface Window { rhineDesktop?: { native: boolean; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; standardEqPresets?(request: StandardEqFileRequest): Promise<StandardEqFileResult>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null> } } }
 
 type Theme = "day" | "night";
 type Panel = "search" | "online" | null;
@@ -430,6 +431,8 @@ let audioSettingsSection: AudioSettingsSection = "source";
 const settingsScrollPositions = new Map<SettingsCategory, number>();
 let settingsSelectControls: ReturnType<typeof enhanceSettingsSelectControls> | undefined;
 let eqControls: ReturnType<typeof setupEqControls> | undefined;
+const standardEqPresetState = createStandardEqPresetState();
+let standardEqPresets: ReturnType<typeof setupStandardEqPresets> | undefined;
 let lyricsSettings: ReturnType<typeof setupLyricsSettings> | undefined;
 let processingPresetElement: HTMLElement | undefined;
 let processingApplyMessage = "";
@@ -564,6 +567,7 @@ stage.addEventListener("eq-controls-rerender", () => {
   settingsSelectControls?.destroy();
   settingsSelectControls = enhanceSettingsSelectControls(content);
   editableRanges?.sync();
+  syncEqModePanels();
   syncPunkEqTypography();
 });
 const localEmptyHtml = $("#music-empty").innerHTML;
@@ -1526,7 +1530,7 @@ player.subscribe((state) => {
   const stages = state.nativeOutputStatus?.processingStages;
   const dspActive = !processingSettings.bitPerfect && (stages
     ? stages.some(item => item.active && !/decode|volume|quant|output/i.test(item.id))
-    : state.backend !== "browser" && (processingSettings.eq.enabled || processingSettings.tone.enabled));
+    : state.backend !== "browser" && (processingSettings.eq.enabled || (processingSettings.eq.engine === "standard" && processingSettings.tone.enabled)));
   foobarShell?.updatePlayer(state, dspActive);
   const bookmark=state.nativeSessionId?`${state.nativeSessionId}:${state.queue.map(track=>track.id).join(',')}`:'';
   if(bookmark&&bookmark!==nativeBookmark){
@@ -1659,6 +1663,8 @@ function closeManagementPage(restoreFocus = true) {
   settingsSelectControls = undefined;
   void eqControls?.destroy().catch((error: Error) => notify(error.message));
   eqControls = undefined;
+  standardEqPresets?.destroy();
+  standardEqPresets = undefined;
   lyricsSettings?.destroy();
   lyricsSettings = undefined;
   lyricsPage.setVisible(false);
@@ -2691,6 +2697,10 @@ function finishProcessingEdit() {
 }
 
 function showProcessingPresetStatus(message: string, error = false) {
+  if (processingSettings.eq.engine === "standard") {
+    if (error) standardEqPresets?.show(message, true);
+    return;
+  }
   const node = document.querySelector<HTMLElement>("#processing-preset-status");
   if (node) {
     if (processingPresetWritePending && !error) {
@@ -2758,6 +2768,13 @@ function saveProcessingPresetStore() {
 }
 
 function syncProcessingPresetUi() {
+  if (processingSettings.eq.engine === "standard") {
+    standardEqPresets?.sync();
+    const summary = document.querySelector<HTMLElement>("#eq-preset-summary");
+    if (summary) summary.textContent = standardEqPresetState.selected?.name || processingSettings.eq.name;
+    settingsSelectControls?.sync();
+    return;
+  }
   const select = document.querySelector<HTMLSelectElement>("#processing-preset-select");
   const selectedId = processingPresetStore.activeId || "current";
   if (select) {
@@ -2824,6 +2841,7 @@ function setProcessingSettings(value: ProcessingSettings, committed = true) {
     return false;
   }
   (preferences.output as OutputWithProcessing).processing = processingSettings;
+  if (before.eq.engine !== processingSettings.eq.engine) syncEqModePanels();
   document.querySelectorAll<HTMLInputElement>('[data-processing-field="eq.enabled"]').forEach(control => { control.checked = processingSettings.eq.enabled; });
   savePrefs();
   updateOutputUI();
@@ -3069,6 +3087,8 @@ function renderSettingsPage() {
   settingsSelectControls = undefined;
   void eqControls?.destroy().catch((error: Error) => notify(error.message));
   eqControls = undefined;
+  standardEqPresets?.destroy();
+  standardEqPresets = undefined;
   lyricsSettings?.destroy();
   lyricsSettings = undefined;
   content.innerHTML =
@@ -3155,12 +3175,55 @@ function syncPunkEqTypography() {
     node.dataset.punkCjk=String(containsCjk(node.textContent??''));
   });
 }
+function syncEqModePanels() {
+  const content = document.querySelector<HTMLElement>("#eq-page-content");
+  if (!content) return;
+  const standard = processingSettings.eq.engine === "standard";
+  const changed = content.dataset.eqPresetEngine !== processingSettings.eq.engine;
+  content.dataset.eqPresetEngine = processingSettings.eq.engine;
+  for (const selector of ["[data-standard-eq-presets-slot]", "#tone-settings"]) {
+    const element = content.querySelector<HTMLElement>(selector);
+    if (element) element.hidden = !standard;
+  }
+  const advanced = content.querySelector<HTMLElement>("[data-processing-presets-slot]");
+  if (advanced) advanced.hidden = standard;
+  standardEqPresets?.sync();
+  if (changed && standard) void standardEqPresets?.refresh();
+  syncProcessingPresetUi();
+}
 function renderEqPage() {
   const content = $("#eq-page-content");
   settingsSelectControls?.destroy();
   void eqControls?.destroy().catch((error: Error) => notify(error.message));
-  content.innerHTML = ui`<details class="eq-preset-disclosure" ${eqPresetsExpanded ? "open" : ""}><summary>预设与保存 <span id="eq-preset-summary">${esc(processingSettings.eq.name)}</span></summary><div data-processing-presets-slot></div></details><p class="processing-support-note" data-processing-apply-status role="status">${esc(processingApplyMessage)}</p><div id="eq-page-editor">${renderEqControls(processingSettings)}</div><section class="eq-tone-section" id="tone-settings" aria-labelledby="eq-tone-title"><h3 id="eq-tone-title">低音与高音</h3><p>独立于均衡器开关；低音和高音增益均为 0 dB 时不改变声音。</p>${renderToneControls(processingSettings)}</section>`;
+  standardEqPresets?.destroy();
+  content.innerHTML = ui`<details class="eq-preset-disclosure" ${eqPresetsExpanded ? "open" : ""}><summary>预设与保存 <span id="eq-preset-summary">${esc(processingSettings.eq.name)}</span></summary><div data-standard-eq-presets-slot ${processingSettings.eq.engine === "standard" ? "" : "hidden"}>${standardEqPresetMarkup()}</div><div data-processing-presets-slot ${processingSettings.eq.engine === "standard" ? "hidden" : ""}></div></details><p class="processing-support-note" data-processing-apply-status role="status">${esc(processingApplyMessage)}</p><div id="eq-page-editor">${renderEqControls(processingSettings)}</div><section class="eq-tone-section" id="tone-settings" aria-labelledby="eq-tone-title" ${processingSettings.eq.engine === "standard" ? "" : "hidden"}><h3 id="eq-tone-title">低音与高音</h3><p>独立于均衡器开关；低音和高音增益均为 0 dB 时不改变声音。</p>${renderToneControls(processingSettings)}</section>`;
   mountProcessingPresets(content);
+  standardEqPresets = setupStandardEqPresets($("#standard-eq-presets"), standardEqPresetState, {
+    request: window.rhineDesktop?.standardEqPresets,
+    getSettings: () => processingSettings,
+    apply: async (parsed) => {
+      if (processingSettings.eq.engine !== "standard") return;
+      await eqControls?.beforeDestroy();
+      const next = normalizeProcessing({ ...processingSettings,
+        eq: { ...parsed.eq, engine: "standard", lsp: processingSettings.eq.lsp },
+        tone: parsed.tone ? { ...processingSettings.tone, ...parsed.tone } : processingDefault.tone,
+      }, { clamp: false });
+      if (!setProcessingSettings(next, true)) throw new Error(lastProcessingError);
+      updateProcessingControlValues();
+    },
+    restore: () => {
+      setProcessingSettings(normalizeProcessing({ ...processingSettings, eq: { ...processingDefault.eq, lsp: processingSettings.eq.lsp }, tone: processingDefault.tone }), true);
+      updateProcessingControlValues();
+    },
+    undo: () => processingPresetAction("undo"),
+    canUndo: () => processingUndoStack.length > 0,
+    legacy: () => processingPresetStore.presets.filter(preset => (preset.eq || preset.imported?.eq || preset.backup?.settings.eq)?.engine !== "lsp").map(preset => ({ id: preset.id, name: preset.name })),
+    loadLegacy: async (id) => {
+      const preset = processingPresetStore.presets.find(preset => preset.id === id);
+      if (preset) applyProcessingPreset(preset);
+    },
+    changed: () => { syncProcessingPresetUi(); syncPunkEqTypography(); },
+  });
   settingsSelectControls = enhanceSettingsSelectControls(content);
   eqControls = setupEqControls(
     $("#processing-eq-controls"),
@@ -3181,6 +3244,7 @@ function renderEqPage() {
     eqResponseSampleRate,
   );
   syncPunkEqTypography();
+  syncEqModePanels();
   content.scrollTop = eqPageScrollTop;
   syncProcessingPresetUi();
   updateProcessingSupportStatus();

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('rhineDesktop',{
  savePreferences:value=>{void ipcRenderer.invoke('rhine:preferences:save',value).then(result=>{if(!result?.ok)ipcRenderer.send('rhine:preferences:error',result?.error||'未收到文件保存确认')}).catch(error=>ipcRenderer.send('rhine:preferences:error',error.message))},
  showKnownIssues:language=>ipcRenderer.invoke('rhine:about:known-issues',language==='en'?'en':'zh-CN'),
  saveAudioProcessingPresets:value=>ipcRenderer.invoke('rhine:audio-presets:save',value),
+ standardEqPresets:request=>ipcRenderer.invoke('rhine:standard-eq-presets',request),
  chooseMusicFolders:options=>ipcRenderer.invoke('rhine:library:choose-folders',{multiple:options?.multiple!==false,language:options?.language==='en'?'en':'zh-CN'}),
  chooseLyricsCacheFolder:language=>ipcRenderer.invoke('rhine:lyrics:choose-cache-folder',language==='en'?'en':'zh-CN')
 });

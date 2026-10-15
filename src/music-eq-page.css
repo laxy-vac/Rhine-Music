@@ -187,6 +187,53 @@
   padding: 0 10px 10px;
 }
 
+.music-app .music-settings-page.music-eq-page [data-standard-eq-presets-slot] {
+  min-width: 0;
+  padding: 0 10px 10px;
+}
+
+.music-app #music-eq-page :is([data-standard-eq-presets-slot], [data-processing-presets-slot], #tone-settings)[hidden] {
+  display: none !important;
+}
+
+.music-app #music-eq-page .standard-eq-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.music-app #music-eq-page [data-standard-eq-directory] {
+  flex: 1 1 280px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-app #music-eq-page .standard-eq-folder button,
+.music-app #music-eq-page .standard-eq-legacy button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.music-app #music-eq-page .standard-eq-legacy {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.music-app #music-eq-page [data-standard-eq-status][data-error="true"] {
+  color: var(--danger, #a05f59);
+}
+
 .music-app .music-settings-page.music-eq-page .eq-preset-disclosure .processing-presets {
   gap: 7px;
   margin: 0;
