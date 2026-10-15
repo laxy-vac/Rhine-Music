@@ -20,6 +20,7 @@ const isRailRegression = process.argv.includes("--rail-regression");
 const isShelfDetailRegression = process.argv.includes("--shelf-detail-regression");
 const isArrayTrayStructure = process.argv.includes("--array-tray-structure");
 const isArrayTray = process.argv.includes("--array-tray") || isArrayTrayStructure;
+const isFloorGuideRegression = process.argv.includes("--floor-guide-regression");
 const isArrayCoverVisibility = process.argv.includes("--array-cover-visibility");
 const arrayCoverPhase = process.argv.includes("--array-cover-after") ? "after" : "before";
 const shelfColorDesign = process.argv.find(argument => argument.startsWith("--design="))?.slice(9) === "rhine" ? "rhine" : "archive";
@@ -38,7 +39,7 @@ const shelfColorOutput = shelfColorPatchLabel
 const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
   : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile;
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile || isFloorGuideRegression;
 const unifiedOutput = isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
   : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
@@ -47,6 +48,10 @@ const arrayTrayOutput = isRailRegression
   ? path.join(project, ".tools", isShelfDetailRegression ? "shelf-color-calibration" : "array-rail-profile",
     "regression", "structure", isShelfDetailRegression && shelfColorCaptureLabel ? shelfColorCaptureLabel : arrayTrayPhase)
   : path.join(project, ".tools", isArrayTrayStructure ? "array-tray-structure" : "array-tray", arrayTrayPhase);
+const floorGuideOutput = path.join(project, ".tools", "shelf-color-calibration", "regression", "floor-guide",
+  shelfColorCaptureLabel ?? "unlabeled");
+if (isFloorGuideRegression) assert.ok(shelfColorCaptureLabel,
+  "--floor-guide-regression requires a distinct --capture-label output directory.");
 const arrayRailPhase = process.argv.includes("--before") ? "before" : "after";
 const arrayRailOutput = isShelfColors ? shelfColorOutput
   : shelfColorCaptureLabel && process.argv.includes("--array-rail-profile")
@@ -204,6 +209,7 @@ import { archiveMusicStyle, defaultMusicStyle, musicStyleMarkup, stylePalette } 
 import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries, getMusicFocusedEntry } from "./src/music-catalog.ts";
 import { getMusicCatalogShelves, getMusicEntryLocation, navigateMusicEntry } from "./src/music-catalog-shelves.ts";
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
+import { MUSIC_ARRAY_VIEW } from "./src/music-display-layout.ts";
 import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
 import { damp } from "./src/motion.ts";
 import { qualityMarkup } from "./src/quality-settings.ts";
@@ -1685,20 +1691,26 @@ async function arraySurfaceVariant(design, floor) {
   }
   const effectiveFloor = scene.musicStyle.floor;
   const sideRails = resources.group.getObjectByName("Music shelf side rails");
-  let integratedChannel = false;
-  sideRails?.traverse(mesh => {
-    if (Array.isArray(mesh.material) && mesh.material.length === 3 && mesh.geometry?.groups.some(group => group.materialIndex === 2))
-      integratedChannel = true;
+  const railGuides = ["Music shelf left guide", "Music shelf right guide"].map(name => {
+    const mesh = sideRails?.getObjectByName(name), geometry = mesh?.geometry;
+    geometry?.computeBoundingBox();
+    const size = geometry?.boundingBox?.getSize(new THREE.Vector3()) ?? null;
+    const triangleCount = geometry ? (geometry.index?.count ?? geometry.attributes.position?.count ?? 0) / 3 : 0;
+    const solidSection = Boolean(mesh?.isInstancedMesh && triangleCount >= 12 && size &&
+      size.x > 1e-4 && size.y > 1e-4 && size.z > 1e-4 && mesh.count > 0);
+    return { name, present: !!mesh, instancedMesh: !!mesh?.isInstancedMesh, geometry: geometry?.type ?? null,
+      triangleCount, boundsSize: size?.toArray?.() ?? null, instanceCount: mesh?.count ?? 0, solidSection };
   });
+  const closedRailGuides = railGuides.length === 2 && railGuides.every(value => value.solidSection);
   const detail = { design, floor, effectiveFloor, map: !!material.map, roughnessMap: !!material.roughnessMap, normalMap: !!material.normalMap,
     normalScale: material.normalScale?.toArray(), roughness: material.roughness, metalness: material.metalness,
     recessedBed: !!resources.group.getObjectByName("Record shelf recessed bed"),
-    guides: integratedChannel || !!resources.group.getObjectByName("Record shelf guide grooves"), integratedChannel,
+    guides: closedRailGuides, railGuides,
     floorPanelsVisible: resources.floorPanels?.visible, textures: [material.map?.uuid, material.roughnessMap?.uuid, material.normalMap?.uuid] };
   if (design === "rhine") expect(effectiveFloor === "plain", "Future retains its established normalized plain floor.");
   if (effectiveFloor === "plain" || effectiveFloor === "deck") {
     expect(detail.map && detail.roughnessMap && detail.normalMap, "Plain/deck floor uses its local color, roughness and normal textures: " + JSON.stringify(detail));
-    const expected = effectiveFloor === "plain" ? [.1, .94, .025] : [.12, .76, .12];
+    const expected = effectiveFloor === "plain" ? [.1, .94, .025] : [.055, .86, .03];
     expect(Math.abs(detail.normalScale[0] - expected[0]) < 1e-12 && Math.abs(detail.roughness - expected[1]) < 1e-12 &&
       Math.abs(detail.metalness - expected[2]) < 1e-12, "Physical floor finish retains restrained surface parameters: " + JSON.stringify(detail));
     expect(detail.recessedBed && detail.guides && detail.floorPanelsVisible === false,
@@ -2035,6 +2047,179 @@ async function prepareArrayTray(design, theme, floor, layout = "shelf") {
   archiveScene.resize(); archiveScene.setReduced(true); arrayMotionSelect(0, 9); stepArchiveScene(1); archiveScene.setReduced(false);
   stepArchiveScene(120); archiveScene.composer.render();
   return arrayTrayStructureSnapshot();
+}
+const floorGuideRendererIds = new WeakMap();
+let nextFloorGuideRendererId = 0;
+async function prepareFloorGuideCase(theme, floor, scheme = "archive", layout = "shelf") {
+  await prepareArrayTray("archive", theme, floor, layout);
+  archiveHost.dataset.design = "archive";
+  archiveHost.dataset.mode = theme;
+  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, topTitles: true, floor, scheme });
+  archiveScene.setTheme(theme);
+  await new Promise(resolve => setTimeout(resolve, 750));
+  stepArchiveScene(45);
+  archiveScene.composer.render();
+  return floorGuideSnapshot();
+}
+async function setFloorGuideScheme(theme, scheme) {
+  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, topTitles: true, floor: "deck", scheme });
+  archiveScene.setTheme(theme);
+  await new Promise(resolve => setTimeout(resolve, 750));
+  stepArchiveScene(45);
+  archiveScene.composer.render();
+  return floorGuideSnapshot();
+}
+function floorGuideSnapshot() {
+  const scene = archiveScene, group = scene.sceneResources?.group;
+  expect(!!scene && !!group, "Floor-guide regression requires the live shared Scene resources.");
+  scene.scene.updateMatrixWorld(true);
+  scene.composer.render();
+  const guide = group.getObjectByName("Music lab floor orange guide");
+  const rightGuide = group.getObjectByName("Music shelf right guide");
+  const base = group.getObjectByName("Music shelf base");
+  const renderer = scene.renderer, source = renderer.domElement, rect = source.getBoundingClientRect();
+  if (!floorGuideRendererIds.has(renderer)) floorGuideRendererIds.set(renderer, ++nextFloorGuideRendererId);
+  const material = scene.floor.material, guideMaterial = guide?.material;
+  const texture = value => value ? { uuid: value.uuid, width: value.image?.width ?? value.source?.data?.width ?? null,
+    height: value.image?.height ?? value.source?.data?.height ?? null, repeat: value.repeat?.toArray?.() ?? null,
+    offset: value.offset?.toArray?.() ?? null, rotation: value.rotation ?? null, colorSpace: value.colorSpace ?? null } : null;
+  const worldBounds = object => {
+    if (!object?.geometry) return null;
+    object.geometry.computeBoundingBox();
+    return object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld);
+  };
+  const aggregateInstances = object => {
+    if (!object?.isInstancedMesh) return { count: 0, bounds: null };
+    object.geometry.computeBoundingBox();
+    const matrix = new THREE.Matrix4(), bounds = new THREE.Box3();
+    let count = 0;
+    for (let index = 0; index < object.count; index++) {
+      object.getMatrixAt(index, matrix);
+      if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) continue;
+      const world = matrix.clone().premultiply(object.matrixWorld);
+      bounds.union(object.geometry.boundingBox.clone().applyMatrix4(world));
+      count++;
+    }
+    return { count, bounds: count ? bounds : null };
+  };
+  const guideBounds = worldBounds(guide), rightGuideInstances = aggregateInstances(rightGuide), baseInstances = aggregateInstances(base);
+  const guidePosition = guide?.getWorldPosition(new THREE.Vector3()) ?? null;
+  const guideScale = guide?.getWorldScale(new THREE.Vector3()) ?? null;
+  const guideNormal = guide ? new THREE.Vector3(0, 0, 1).applyQuaternion(guide.getWorldQuaternion(new THREE.Quaternion())).normalize() : null;
+  const modelCenter = scene.model?.getWorldPosition(new THREE.Vector3()) ?? null;
+  // Palette comparisons must observe one world point, not chase a moving
+  // selected model into a different depth-of-field region.
+  const frontReferenceZ = (scene.caseLayout?.center?.z ?? 0) + MUSIC_ARRAY_VIEW.inspectionZ;
+  const nearGuideZ = guideBounds ? Math.min(guideBounds.max.z - .01, Math.max(guideBounds.min.z + .01, frontReferenceZ)) : null;
+  const nearGuidePoint = guidePosition && nearGuideZ !== null ? new THREE.Vector3(guidePosition.x, guidePosition.y, nearGuideZ) : null;
+  const groundRay = guidePosition ? new THREE.Raycaster(new THREE.Vector3(guidePosition.x, guidePosition.y + 20, guidePosition.z),
+    new THREE.Vector3(0, -1, 0)) : null;
+  const groundHit = groundRay?.intersectObject(scene.floor, false)[0] ?? null;
+  const actualGroundY = groundHit?.point.y ?? scene.floor.getWorldPosition(new THREE.Vector3()).y;
+  const canvas = document.createElement("canvas"); canvas.width = source.width; canvas.height = source.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true }); context.drawImage(source, 0, 0);
+  const project = point => {
+    const projected = point.clone().project(scene.camera);
+    const px = (projected.x + 1) * source.width / 2, py = (1 - projected.y) * source.height / 2;
+    return { x: px, y: py, clientX: rect.left + px * rect.width / source.width,
+      clientY: rect.top + py * rect.height / source.height, visible: projected.z >= -1 && projected.z <= 1 &&
+        px >= 4 && py >= 4 && px < source.width - 4 && py < source.height - 4 };
+  };
+  const medianProbe = (point, radius = 3) => {
+    const screen = project(point);
+    if (!screen.visible) return { screen, median: null, samples: 0 };
+    const x = Math.round(screen.x), y = Math.round(screen.y), left = Math.max(0, x - radius), top = Math.max(0, y - radius);
+    const width = Math.min(source.width, x + radius + 1) - left, height = Math.min(source.height, y + radius + 1) - top;
+    const data = context.getImageData(left, top, width, height).data, channels = [[], [], []];
+    for (let index = 0; index < data.length; index += 4) for (let channel = 0; channel < 3; channel++) channels[channel].push(data[index + channel]);
+    const median = channels.map(values => { values.sort((a, b) => a - b); return values[Math.floor(values.length / 2)] ?? null; });
+    const center = context.getImageData(x, y, 1, 1).data;
+    return { screen, median, centerPixel: Array.from(center).slice(0, 3), samples: channels[0].length };
+  };
+  let groundProbe = null, guideProbe = null, farCenterProbe = null;
+  if (guidePosition && nearGuidePoint && guide?.visible && groundHit) {
+    const candidates = [nearGuidePoint.x + .16, nearGuidePoint.x - .16].map(x => {
+      const ray = new THREE.Raycaster(new THREE.Vector3(x, guidePosition.y + 20, nearGuidePoint.z), new THREE.Vector3(0, -1, 0));
+      const hit = ray.intersectObject(scene.floor, false)[0];
+      const world = new THREE.Vector3(x, (hit?.point.y ?? actualGroundY) + .001, nearGuidePoint.z);
+      return { hit, world, screen: project(world) };
+    }).filter(value => value.hit && value.screen.visible);
+    const sample = candidates[0];
+    if (sample) groundProbe = { world: sample.world.toArray(), groundY: sample.hit.point.y, ...medianProbe(sample.world) };
+    const projectedGuidePoint = nearGuidePoint.clone().project(scene.camera), guideRaycaster = new THREE.Raycaster();
+    guideRaycaster.setFromCamera(new THREE.Vector2(projectedGuidePoint.x, projectedGuidePoint.y), scene.camera);
+    const lineHit = guideRaycaster.intersectObject(guide, false).find(hit => hit.object === guide) ?? null;
+    const guideCenter = medianProbe(nearGuidePoint, 0);
+    guideProbe = { world: nearGuidePoint.toArray(), raycast: { hit: !!lineHit, objectName: lineHit?.object?.name ?? null,
+      point: lineHit?.point?.toArray?.() ?? null, uv: lineHit?.uv?.toArray?.() ?? null, distance: lineHit?.distance ?? null },
+      ...medianProbe(nearGuidePoint, 1), centerPixel: guideCenter.centerPixel, broadMedian: medianProbe(nearGuidePoint, 3).median };
+    const farCenter = medianProbe(guidePosition, 0);
+    farCenterProbe = { world: guidePosition.toArray(), ...medianProbe(guidePosition, 1), centerPixel: farCenter.centerPixel,
+      broadMedian: medianProbe(guidePosition, 3).median, observation: "Long-guide geometric center; retained as depth-of-field context, not pigment acceptance." };
+  }
+  const rowCenters = [];
+  if (scene.caseHitProxy?.isInstancedMesh && scene.caseLayout?.center) {
+    const matrix = new THREE.Matrix4();
+    scene.cells.forEach((cell, index) => {
+      if (cell.lane !== scene.selectedCell.lane) return;
+      scene.caseHitProxy.getMatrixAt(index, matrix);
+      if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) return;
+      const center = new THREE.Vector3(scene.caseLayout.center.x, scene.caseLayout.center.y, scene.caseLayout.center.z)
+        .applyMatrix4(matrix).applyMatrix4(scene.caseHitProxy.matrixWorld);
+      rowCenters.push({ row: cell.row, point: center });
+    });
+  }
+  rowCenters.sort((left, right) => left.row - right.row);
+  const rowSteps = rowCenters.slice(1).flatMap((value, index) => value.row - rowCenters[index].row === 1
+    ? [Math.abs(value.point.z - rowCenters[index].point.z)] : []).sort((left, right) => left - right);
+  const rowSlotSpacing = rowSteps.length ? rowSteps[Math.floor(rowSteps.length / 2)] : null;
+  const guideEndpoints = guideBounds ? [guideBounds.min.z, guideBounds.max.z].map(z => {
+    const point = new THREE.Vector3(guidePosition.x, guidePosition.y, z);
+    return { world: point.toArray(), screen: project(point) };
+  }) : [];
+  const countNamed = [];
+  group.traverse(object => { if (object.name === "Music lab floor orange guide") countNamed.push(object); });
+  let groupVisible = true;
+  for (let object = group; object; object = object.parent) groupVisible &&= object.visible;
+  const accent = group.getObjectByName("Music shelf continuous edge lines")?.material;
+  const fogUniforms = material.userData?.musicGroundFogUniforms;
+  const colorOf = value => value?.getHexString?.() ?? null;
+  const boxData = value => value ? { min: value.min.toArray(), max: value.max.toArray(), size: value.getSize(new THREE.Vector3()).toArray() } : null;
+  return { design: scene.musicStyle.design, theme: scene.theme, floor: scene.musicStyle.floor, requestedLayout: scene.displayLayout.effective,
+    shelf: scene.musicStyle.shelf, guide: guide ? { name: guide.name, isMesh: guide.isMesh, isInstancedMesh: guide.isInstancedMesh === true,
+      visible: guide.visible, worldVisible: guide.visible && groupVisible, countNamed: countNamed.length,
+      position: guidePosition.toArray(), scale: guideScale.toArray(), normal: guideNormal.toArray(), bounds: boxData(guideBounds),
+      material: { type: guideMaterial?.constructor?.name ?? null, color: colorOf(guideMaterial?.color), opacity: guideMaterial?.opacity ?? null,
+        transparent: guideMaterial?.transparent ?? null, depthWrite: guideMaterial?.depthWrite ?? null, toneMapped: guideMaterial?.toneMapped ?? null,
+        fog: guideMaterial?.fog ?? null, map: texture(guideMaterial?.map) } } : null,
+    ground: { actualY: actualGroundY, guideGap: guidePosition ? guidePosition.y - actualGroundY : null,
+      rayHit: !!groundHit, floorColor: colorOf(material.color), map: texture(material.map), roughnessMap: texture(material.roughnessMap),
+      normalMap: texture(material.normalMap), roughness: material.roughness, metalness: material.metalness,
+      normalScale: material.normalScale?.toArray?.() ?? null,
+      fogUniforms: fogUniforms ? { enabled: fogUniforms.enabled?.value ?? null, color: colorOf(fogUniforms.color?.value) } : null,
+      floorPosition: scene.floor.getWorldPosition(new THREE.Vector3()).toArray(), probe: groundProbe },
+    guideProbe, farCenterProbe, modelCenter: modelCenter?.toArray() ?? null, nearGuideZ,
+    rightRail: { count: rightGuideInstances.count, bounds: boxData(rightGuideInstances.bounds) },
+    shelfBase: { count: baseInstances.count, bounds: boxData(baseInstances.bounds) }, rowSlotSpacing,
+    guideEndpoints, accentColor: colorOf(Array.isArray(accent) ? accent[0]?.color : accent?.color),
+    sceneBackground: colorOf(scene.scene.background), rendererId: floorGuideRendererIds.get(renderer), canvasCount: document.querySelectorAll("canvas").length,
+    canvasSize: [source.width, source.height], imageUrl: source.toDataURL("image/png") };
+}
+function floorGuideClickTarget() {
+  const scene = archiveScene, guide = scene.sceneResources?.group.getObjectByName("Music lab floor orange guide");
+  if (!guide) return null;
+  scene.scene.updateMatrixWorld(true);
+  const point = guide.getWorldPosition(new THREE.Vector3()).project(scene.camera), rect = scene.renderer.domElement.getBoundingClientRect();
+  const x = rect.left + (point.x + 1) * rect.width / 2, y = rect.top + (1 - point.y) * rect.height / 2;
+  const selected = { ...scene.selectedCell }, focusedKey = getMusicFocusedEntry(selected.recordIndex)?.key ?? "";
+  return { x, y, visible: point.z >= -1 && point.z <= 1 && x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom,
+    selected, focusedKey };
+}
+function moveFloorGuideSelection(lane, slot) {
+  const scene = archiveScene;
+  scene.setReduced(true); arrayMotionSelect(lane, slot); stepArchiveScene(1); scene.setReduced(false);
+  stepArchiveScene(240); scene.composer.render();
+  return { snapshot: floorGuideSnapshot(), composition: arrayCompositionRenderSnapshot() };
 }
 function captureEmptyArrayTray(zoomFactor = 2.25, focus = "browse") {
   const scene = archiveScene, oldZoom = scene.camera.zoom;
@@ -4204,6 +4389,11 @@ window.caseCheck = {
   get arrayTrayTextureDisposals() { return arrayTrayTextureDisposals.slice(); },
   arrayHoverSnapshot,
   arraySurfaceVariant,
+  prepareFloorGuideCase,
+  setFloorGuideScheme,
+  floorGuideSnapshot,
+  floorGuideClickTarget,
+  moveFloorGuideSelection,
   unifiedRenderVariant,
   unifiedPointerTarget,
   unifiedRenderResult() { return { clicks: unifiedClicks, opens: unifiedOpens, snapshot: unifiedSnapshot() }; },
@@ -7090,7 +7280,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -7472,8 +7662,180 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
+    await mkdir(isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isFloorGuideRegression) {
+      const captures = [];
+      const visualIssues = [];
+      let rendererId = null;
+      const withoutImage = snapshot => { const { imageUrl: _imageUrl, ...data } = snapshot; return data; };
+      const saveCapture = async (name, snapshot) => {
+        const imageUrl = snapshot.imageUrl;
+        await writeFile(path.join(floorGuideOutput, name), pngBuffer(imageUrl, name));
+        const data = withoutImage(snapshot);
+        const capture = { name, ...data };
+        captures.push(capture);
+        return capture;
+      };
+      const prepareCapture = async (theme, floor, scheme = "archive", name = `archive-${theme}-${floor}.png`) => {
+        const snapshot = await evaluate("window.caseCheck.prepareFloorGuideCase(" + [theme, floor, scheme].map(JSON.stringify).join(",") + ")");
+        return saveCapture(name, snapshot);
+      };
+      const assertCommon = (snapshot, floor, visible) => {
+        if (rendererId === null) rendererId = snapshot.rendererId;
+        assert.equal(snapshot.design, "archive");
+        assert.equal(snapshot.floor, floor);
+        assert.equal(snapshot.guide?.name, "Music lab floor orange guide");
+        assert.equal(snapshot.guide?.isMesh, true, "The ground guide is one ordinary Mesh.");
+        assert.equal(snapshot.guide?.isInstancedMesh, false, "The ground guide is not duplicated per lane.");
+        assert.equal(snapshot.guide?.countNamed, 1, "The shared Scene contains exactly one named ground guide.");
+        assert.equal(snapshot.guide?.worldVisible, visible, `The guide visibility must be ${visible} for ${floor}.`);
+        assert.equal(snapshot.canvasCount, 1, "The shared Scene continues to own the only rendered canvas.");
+        assert.equal(snapshot.rendererId, rendererId, "The check reuses the production Scene renderer.");
+      };
+      const assertDeckSurface = (snapshot, theme, checkInitialHue = false) => {
+        const expected = theme === "night" ? "44423f" : "e3e7ec";
+        const fog = theme === "night" ? "050607" : "c0c3c6";
+        assert.equal(snapshot.floor, "deck");
+        assert.equal(snapshot.ground.floorColor, expected, "The deck floor tint is fixed by day/night theme.");
+        assert.ok(snapshot.ground.map && snapshot.ground.roughnessMap && snapshot.ground.normalMap,
+          "Deck ground uses its color, roughness and normal maps.");
+        assert.ok(Math.abs(snapshot.ground.roughness - .86) < 1e-12 && Math.abs(snapshot.ground.metalness - .03) < 1e-12 &&
+          snapshot.ground.normalScale?.every(value => Math.abs(value - .055) < 1e-12),
+        "Deck ground keeps the current restrained material values.");
+        assert.ok(snapshot.ground.fogUniforms && snapshot.ground.fogUniforms.enabled === 1 && snapshot.ground.fogUniforms.color === fog,
+          "The compiled depth-fog shader uses its fixed theme fog uniform.");
+        const guide = snapshot.guide;
+        assert.equal(guide.material.type, "MeshBasicMaterial");
+        assert.equal(guide.material.color, "ff7a01");
+        assert.ok(Math.abs(guide.material.opacity - (theme === "night" ? .58 : .72)) < 1e-12);
+        assert.equal(guide.material.fog, false);
+        assert.equal(guide.material.toneMapped, false);
+        assert.ok(guide.material.map, "The guide keeps its soft alpha map.");
+        assert.ok(snapshot.ground.rayHit && Math.abs(snapshot.ground.guideGap - .001) <= .001,
+          "The guide sits 0.001 world units above the actual production ground plane.");
+        assert.ok(Math.abs(guide.normal[1]) > .999 && guide.bounds.size[1] < .001 && guide.bounds.size[2] > guide.bounds.size[0],
+          "The guide plane stays parallel to the ground with its long axis along the shelf rows.");
+        assert.ok(snapshot.rightRail.count > 0 && snapshot.shelfBase.count > 0 &&
+          guide.bounds.min[0] >= snapshot.rightRail.bounds.max[0] - .02,
+        "The single guide sits outside the right side of the submitted rack.");
+        assert.ok(snapshot.rowSlotSpacing > 0 && guide.bounds.size[2] > 20 * snapshot.rowSlotSpacing,
+          "The fixed ground guide spans more than twenty measured shelf slots.");
+        assert.ok(snapshot.guideProbe?.screen.visible && snapshot.guideProbe.samples > 0 &&
+          snapshot.ground.probe?.screen.visible && snapshot.ground.probe.samples > 0,
+        "The guide center and an adjacent exposed ground point are visible pixel probes.");
+        assert.ok(snapshot.guideProbe.raycast?.hit && snapshot.guideProbe.raycast.objectName === "Music lab floor orange guide" &&
+          snapshot.guideProbe.raycast.uv && Math.abs(snapshot.guideProbe.raycast.uv[0] - .5) < .05,
+        "The near visual probe raycasts to the same guide Mesh at the painted cross-section center.");
+        const [red, green, blue] = snapshot.guideProbe.centerPixel;
+        snapshot.guideHuePass = red > green + 15 && green > blue + 15;
+        if (checkInitialHue && !snapshot.guideHuePass)
+          visualIssues.push(`Rendered initial ${theme} guide is weakly chromatic: ${JSON.stringify(snapshot.guideProbe)}`);
+      };
+      const dayPlain = await prepareCapture("day", "plain");
+      assertCommon(dayPlain, "plain", false);
+      const dayDeck = await prepareCapture("day", "deck");
+      assertCommon(dayDeck, "deck", true); assertDeckSurface(dayDeck, "day", true);
+      console.log(JSON.stringify({ floorGuideDayDeckPreview: {
+        screenshot: path.relative(project, path.join(floorGuideOutput, dayDeck.name)),
+        world: dayDeck.guideProbe.world, raycast: dayDeck.guideProbe.raycast,
+        centerPixel1x1: dayDeck.guideProbe.centerPixel, medianPixel3x3: dayDeck.guideProbe.median,
+        farCenterDofPixel1x1: dayDeck.farCenterProbe.centerPixel,
+      } }, null, 2));
+
+      const interaction = await evaluate("window.caseCheck.prepareArrayCompositionInteraction()");
+      const interactionGuide = withoutImage(await evaluate("window.caseCheck.floorGuideSnapshot()"));
+      assertCommon(interactionGuide, "deck", true); assertDeckSurface(interactionGuide, "day");
+      const samePosition = (left, right) => Math.max(...left.map((value, index) => Math.abs(value - right[index])));
+      assert.ok(samePosition(dayDeck.guide.position, interactionGuide.guide.position) <= 1e-6,
+        "Changing selected column does not move the guide in world space.");
+      const activeLane = interaction.composition.lanes.find(value => value.lane === interaction.composition.selectedLane);
+      const activeRightGuide = activeLane?.meshes.find(value => value.kind === "Music shelf right guide");
+      const hiddenRightLane = interaction.composition.lanes.find(value => value.lane === 0);
+      const hiddenRightGuide = hiddenRightLane?.meshes.find(value => value.kind === "Music shelf right guide");
+      assert.ok(activeLane?.appearance.alpha > .99 && activeRightGuide?.instances.some(value => value.drawn),
+        "The selected column's physical right guide follows the active lane alpha.");
+      assert.ok(hiddenRightLane?.appearance.alpha < .0001 &&
+        (!hiddenRightGuide?.instances.length || hiddenRightGuide.instances.every(value => !value.drawn)),
+      "The hidden-right lane guard still hides that lane's physical right guide.");
+
+      const clickTarget = await evaluate("window.caseCheck.floorGuideClickTarget()");
+      assert.ok(clickTarget?.visible, "The rendered guide center must be a valid on-screen click target.");
+      await command("Input.dispatchMouseEvent", { type: "mousePressed", x: clickTarget.x, y: clickTarget.y, button: "left", clickCount: 1 });
+      await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: clickTarget.x, y: clickTarget.y, button: "left", clickCount: 1 });
+      await new Promise(resolve => setTimeout(resolve, 80));
+      const clickAfter = await evaluate("window.caseCheck.floorGuideClickTarget()");
+      assert.deepEqual(clickAfter.selected, clickTarget.selected, "Clicking the ground guide cannot change selected entry.");
+      assert.equal(clickAfter.focusedKey, clickTarget.focusedKey, "Clicking the ground guide cannot change focused entry.");
+      const movedRaw = await evaluate("window.caseCheck.moveFloorGuideSelection(1,18)");
+      const moved = { ...movedRaw, snapshot: withoutImage(movedRaw.snapshot) };
+      assert.ok(samePosition(interactionGuide.guide.position, moved.snapshot.guide.position) <= 1e-6,
+        "Scrolling rows after selection keeps the guide fixed in world space.");
+
+      const schemeArchive = await saveCapture("archive-day-deck-scheme-archive.png",
+        await evaluate("window.caseCheck.setFloorGuideScheme(\"day\",\"archive\")"));
+      const schemeField = await saveCapture("archive-day-deck-scheme-field.png",
+        await evaluate("window.caseCheck.setFloorGuideScheme(\"day\",\"field\")"));
+      const schemeHazard = await saveCapture("archive-day-deck-scheme-hazard.png",
+        await evaluate("window.caseCheck.setFloorGuideScheme(\"day\",\"hazard\")"));
+      for (const snapshot of [schemeArchive, schemeField, schemeHazard]) {
+        assertCommon(snapshot, "deck", true); assertDeckSurface(snapshot, "day");
+      }
+      const groundDelta = (left, right) => Math.max(...left.ground.probe.median.map((value, index) => Math.abs(value - right.ground.probe.median[index])));
+      const guideDelta = (left, right) => Math.max(...left.guideProbe.median.map((value, index) => Math.abs(value - right.guideProbe.median[index])));
+      const fixedSurface = snapshot => ({ floorColor: snapshot.ground.floorColor, map: snapshot.ground.map,
+        roughnessMap: snapshot.ground.roughnessMap, normalMap: snapshot.ground.normalMap, roughness: snapshot.ground.roughness,
+        metalness: snapshot.ground.metalness, normalScale: snapshot.ground.normalScale, fogUniforms: snapshot.ground.fogUniforms,
+        guideColor: snapshot.guide.material.color, guideOpacity: snapshot.guide.material.opacity,
+        guideMap: snapshot.guide.material.map, guidePosition: snapshot.guide.position });
+      if (JSON.stringify(fixedSurface(schemeField)) !== JSON.stringify(fixedSurface(schemeArchive)) ||
+        JSON.stringify(fixedSurface(schemeHazard)) !== JSON.stringify(fixedSurface(schemeArchive)))
+        visualIssues.push("Color Studio changed fixed deck/guide material state; full snapshots are in schemeComparison.");
+      if (groundDelta(schemeArchive, schemeField) > 2 || groundDelta(schemeArchive, schemeHazard) > 2)
+        visualIssues.push("Ground pixel median exceeded the 2 RGB-level palette-invariance threshold.");
+      if (guideDelta(schemeArchive, schemeField) > 2 || guideDelta(schemeArchive, schemeHazard) > 2)
+        visualIssues.push("Guide pixel median exceeded the 2 RGB-level palette-invariance threshold.");
+      if (new Set([schemeArchive.accentColor, schemeField.accentColor, schemeHazard.accentColor]).size !== 3)
+        visualIssues.push("The three requested schemes did not produce three distinct shelf edge accents.");
+
+      const nightPlain = await prepareCapture("night", "plain");
+      assertCommon(nightPlain, "plain", false);
+      const nightDeck = await prepareCapture("night", "deck");
+      assertCommon(nightDeck, "deck", true); assertDeckSurface(nightDeck, "night", true);
+      const real = withoutImage(await evaluate("window.caseCheck.prepareFloorGuideCase(\"day\",\"real\",\"archive\")"));
+      assertCommon(real, "real", false);
+      const matrixState = await evaluate("window.caseCheck.prepareArrayTray(\"archive\",\"day\",\"deck\",\"array\")");
+      const matrix = withoutImage(await evaluate("window.caseCheck.floorGuideSnapshot()"));
+      assert.equal(matrix.requestedLayout, "array"); assert.equal(matrix.guide.worldVisible, false,
+        "The guide stays hidden in MATRIX layout.");
+      const futureState = await evaluate("window.caseCheck.prepareArrayTray(\"rhine\",\"day\",\"deck\",\"shelf\")");
+      const future = withoutImage(await evaluate("window.caseCheck.floorGuideSnapshot()"));
+      assert.equal(future.design, "rhine"); assert.equal(future.guide.worldVisible, false,
+        "Future keeps its own finish and does not show the Archive orange guide.");
+      assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
+      assert.deepEqual(shaderErrors, [], "The production Scene render must not emit WebGL shader errors.");
+      assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
+      const report = { ok: visualIssues.length === 0, label: shelfColorCaptureLabel, output: path.relative(project, floorGuideOutput),
+        expected: { guide: "single Archive deck+shelf world-space Mesh; fixed orange; hidden in plain/real/MATRIX/Future",
+          deckDayColor: "#e3e7ec", deckNightColor: "#44423f", schemePixelMedianTolerance: 2 },
+        captures, selectedColumnInteraction: { snapshot: interactionGuide, composition: interaction.composition,
+          hiddenVoid: interaction.hiddenVoid, activeTarget: interaction.activeTarget, rearProbe: interaction.rearProbe },
+        clickGuard: { before: clickTarget, after: clickAfter }, rowScroll: moved.snapshot,
+        schemeComparison: { archive: schemeArchive, field: schemeField, hazard: schemeHazard,
+          groundDelta: { field: groundDelta(schemeArchive, schemeField), hazard: groundDelta(schemeArchive, schemeHazard) },
+          guideDelta: { field: guideDelta(schemeArchive, schemeField), hazard: guideDelta(schemeArchive, schemeHazard) },
+          accents: [schemeArchive.accentColor, schemeField.accentColor, schemeHazard.accentColor] },
+        hiddenStates: { real, matrix, future, matrixState, futureState }, visualIssues, screenshots: captures.map(value => value.name),
+        runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(floorGuideOutput, "floor-guide-regression-report.json"), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: report.ok, label: shelfColorCaptureLabel,
+        report: path.relative(project, path.join(floorGuideOutput, "floor-guide-regression-report.json")),
+        screenshots: captures.map(value => value.name),
+        schemePixelMedianDelta: { ground: report.schemeComparison.groundDelta, guide: report.schemeComparison.guideDelta,
+          accents: report.schemeComparison.accents }, visualIssues, rendererId, canvasCount: dayDeck.canvasCount }, null, 2));
+      if (!report.ok) throw new Error("Floor-guide visual regression did not pass: " + JSON.stringify(visualIssues));
+      return;
+    }
     if (isShelfColors) {
       const normal = await evaluate("window.caseCheck.prepareArrayTray(" + [shelfColorDesign, shelfColorTheme, "plain"].map(JSON.stringify).join(",") + ")");
       const active = await evaluate("window.caseCheck.settleArrayTrayLane(4,4)");
@@ -9092,7 +9454,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

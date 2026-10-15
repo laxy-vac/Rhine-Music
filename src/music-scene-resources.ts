@@ -4,8 +4,8 @@ import { MusicArrayAppearance } from "./music-array-appearance";
 import type { MusicStyle, StylePalette } from "./music-style";
 import { MusicShelf, musicShelfFinish } from "./music-shelf";
 import { createMusicShelfRailGeometry, MUSIC_SHELF_TRAY_THICKNESS } from "./music-shelf-rail";
-import { MUSIC_SHELF_VIEW } from "./music-display-layout";
-import { createMusicSurfaceTextures, disposeMusicSurfaceTextures } from "./music-surface-textures";
+import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout";
+import { createMusicSurfaceTextures, disposeMusicSurfaceTextures, musicLabFloorColor } from "./music-surface-textures";
 
 export type MusicSceneSlot = {
   x: number;
@@ -27,6 +27,8 @@ export type MusicSceneResourceUpdate = {
   floorY: number;
   environment?: THREE.Texture | null;
   environmentIntensity?: number;
+  guideOriginX?: number;
+  guideOriginZ?: number;
 };
 
 type Lane = { x: number; minZ: number; maxZ: number; minRow: number; maxRow: number; alpha: number; tint: number };
@@ -81,6 +83,18 @@ export class MusicSceneResources {
     color: "#d2d5cd", roughness: .82, metalness: .04, transparent: true,
     opacity: .14, depthWrite: false,
   });
+  private readonly floorGuideMaterial = new THREE.MeshBasicMaterial({
+    color: "#ff7a01", transparent: true, opacity: .72, depthWrite: false,
+    fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+  });
+  private readonly floorGuide: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly labFogColor = { value: new THREE.Color("#c0c3c6") };
+  private readonly labFogEnabled = { value: 0 };
+  private readonly groundHooks = new Map<THREE.MeshStandardMaterial, {
+    previousCompile: THREE.Material["onBeforeCompile"]; previousKey: THREE.Material["customProgramCacheKey"];
+    compile: THREE.Material["onBeforeCompile"]; key: THREE.Material["customProgramCacheKey"];
+  }>();
+  private night = false;
   private readonly laneBase: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly laneLeftGuide: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material[]>;
   private readonly laneRightGuide: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material[]>;
@@ -173,6 +187,13 @@ export class MusicSceneResources {
     this.floorPanels.receiveShadow = false;
     this.group.add(this.floorPanels);
     this.floorTicks = makeBoxes("Music floor seams and locator marks", this.floorLineMaterial);
+    this.floorGuideMaterial.map = this.surfaceTextures.guide;
+    this.floorGuide = new THREE.Mesh(this.plane, this.floorGuideMaterial);
+    this.floorGuide.name = "Music lab floor orange guide";
+    this.floorGuide.quaternion.copy(this.horizontal);
+    this.floorGuide.frustumCulled = false;
+    this.floorGuide.visible = false;
+    this.group.add(this.floorGuide);
     this.createRowLabels();
     this.group.add(this.trays.group);
     this.group.name = "Music shelf and floor resources";
@@ -181,6 +202,9 @@ export class MusicSceneResources {
 
   setStyle(style: MusicStyle, night: boolean, palette: StylePalette): void {
     this.style = { ...style };
+    this.night = night;
+    this.labFogEnabled.value = style.floor === "deck" ? 1 : 0;
+    this.labFogColor.value.set(night ? "#050607" : "#c0c3c6");
     const archive = style.design === "archive";
     if (this.ownsAppearance) {
       this.appearanceBackground.set(palette.bg);
@@ -221,13 +245,15 @@ export class MusicSceneResources {
     this.floorMaterial.metalness = .035;
     this.floorMaterial.roughness = .78;
     this.floorMaterial.needsUpdate = true;
-    this.floorLineMaterial.color.set(palette.line);
+    this.floorLineMaterial.color.set(style.floor === "deck" ? (night ? "#3f444a" : "#afb4b9") : palette.line);
     this.floorLineMaterial.opacity = .14;
+    this.floorGuideMaterial.opacity = night ? .58 : .72;
   }
 
   /** Apply the selected finish to the large, stationary scene floor. */
   applyGroundFinish(material: THREE.MeshStandardMaterial): void {
     const floor = this.style?.floor ?? "plain";
+    this.patchGroundFog(material);
     material.map = floor === "real" ? null : floor === "deck"
       ? this.surfaceTextures.deckColor : this.surfaceTextures.plainColor;
     material.roughnessMap = floor === "real" ? null : this.surfaceTextures.roughness;
@@ -237,9 +263,10 @@ export class MusicSceneResources {
       material.roughness = .95;
       material.metalness = 0;
     } else if (floor === "deck") {
-      material.normalScale.set(.12, .12);
-      material.roughness = .76;
-      material.metalness = .12;
+      material.color.set(musicLabFloorColor(this.night));
+      material.normalScale.set(.055, .055);
+      material.roughness = .86;
+      material.metalness = .03;
     } else {
       material.normalScale.set(.1, .1);
       material.roughness = .94;
@@ -248,11 +275,31 @@ export class MusicSceneResources {
     material.needsUpdate = true;
   }
 
+  /** Retain depth fading without tinting the fixed lab surface with UI paper. */
+  private patchGroundFog(material: THREE.MeshStandardMaterial) {
+    if (this.groundHooks.has(material)) return;
+    const previousCompile = material.onBeforeCompile, previousKey = material.customProgramCacheKey;
+    const compile: THREE.Material["onBeforeCompile"] = (shader, renderer) => {
+      previousCompile.call(material, shader, renderer);
+      shader.uniforms.musicLabFogColor = this.labFogColor;
+      shader.uniforms.musicLabFogEnabled = this.labFogEnabled;
+      shader.fragmentShader = "uniform vec3 musicLabFogColor;\nuniform float musicLabFogEnabled;\n" +
+        shader.fragmentShader.replace("#include <fog_fragment>", THREE.ShaderChunk.fog_fragment.replace(
+          /\bfogColor\b/g, "mix(fogColor, musicLabFogColor, musicLabFogEnabled)"));
+      material.userData.musicGroundFogUniforms = { enabled: this.labFogEnabled, color: this.labFogColor };
+    };
+    const key = () => previousKey.call(material) + ":music-lab-fixed-fog-v1";
+    this.groundHooks.set(material, { previousCompile, previousKey, compile, key });
+    material.onBeforeCompile = compile;
+    material.customProgramCacheKey = key;
+  }
+
   update(options: MusicSceneResourceUpdate): void {
     const style = this.style;
     if (!style || !options.shelf) {
       this.group.visible = false;
       this.trays.group.visible = false;
+      this.floorGuide.visible = false;
       return;
     }
 
@@ -283,6 +330,12 @@ export class MusicSceneResources {
     const rowSpacing = Math.max(positive(options.rowSpacing, .62), depth + .2);
     const floorY = Number.isFinite(options.floorY) ? options.floorY : -4.6;
     const groundY = floorY - MUSIC_SHELF_VIEW.floorDrop;
+    // Like the original fixed floor plate, this is one world-space line. It
+    // never travels with a column's remembered slot position or row alpha.
+    this.floorGuide.visible = style.design === "archive" && style.floor === "deck";
+    this.floorGuide.position.set((options.guideOriginX ?? 0) + width / 2 + .8, groundY + .001,
+      (options.guideOriginZ ?? 0) + MUSIC_ARRAY_VIEW.inspectionZ - 22 * rowSpacing);
+    this.floorGuide.scale.set(.10, 51 * rowSpacing, 1);
     this.trays.setDimensions(width, depth, rowSpacing);
     this.laneEndPlatforms.geometry = this.trays.bedGeometry;
 
@@ -452,6 +505,14 @@ export class MusicSceneResources {
     this.contactShadowMaterial.dispose();
     this.floorMaterial.dispose();
     this.floorLineMaterial.dispose();
+    this.floorGuideMaterial.dispose();
+    for (const [material, hooks] of this.groundHooks) {
+      if (material.onBeforeCompile === hooks.compile) material.onBeforeCompile = hooks.previousCompile;
+      if (material.customProgramCacheKey === hooks.key) material.customProgramCacheKey = hooks.previousKey;
+      delete material.userData.musicGroundFogUniforms;
+      material.needsUpdate = true;
+    }
+    this.groundHooks.clear();
     this.group.clear();
   }
 

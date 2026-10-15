@@ -46,6 +46,7 @@ import { getMusicCatalogShelves } from "./music-catalog-shelves";
 import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW, musicArrayPosition, musicPointerDragThreshold, resolveMusicDisplayLayout } from "./music-display-layout";
 import { musicSpatialCell, musicSpatialEntry, musicSpatialSelectionCell, musicShelfPoolCell } from "./music-spatial-layout";
 import { MusicSceneResources } from "./music-scene-resources";
+import { musicLabFloorColor } from "./music-surface-textures";
 import { MusicCaseTitles } from "./music-case-titles";
 import { defaultCaseSettings, normalizeCaseSettings, activeCaseAppearance, type CaseSettings } from "./case-settings";
 import { setCaseAlbumOcclusion, setCaseGlassFrost } from "./case-materials";
@@ -580,7 +581,9 @@ export class ArchiveScene {
     const background = punkPalette?.bg ?? (theme === "night" ? "#07111f" : theme === "dusk" ? "#b9c7cc" : "#eae5e1");
     targets.color(this.scene.background as THREE.Color, background);
     targets.color((this.scene.fog as THREE.Fog).color, background);
-    targets.color(this.floor.material.color, punkPalette?.well ?? (theme === "night" ? "#0b1828" : theme === "dusk" ? "#a6b8c0" : "#d8c9b9"));
+    targets.color(this.floor.material.color, this.catalogView && this.musicStyle.floor === "deck"
+      ? musicLabFloorColor(theme === "night")
+      : punkPalette?.well ?? (theme === "night" ? "#0b1828" : theme === "dusk" ? "#a6b8c0" : "#d8c9b9"));
     targets.number(this.renderer, "toneMappingExposure", theme === "night" ? 1.08 : 1.05);
     targets.number(this.scene, "environmentIntensity", theme === "night" ? .68 : .48);
     targets.color(this.light.color, theme === "night" ? "#e5f0ff" : theme === "dusk" ? "#eff8ff" : "#fff7ed");
@@ -712,6 +715,7 @@ export class ArchiveScene {
     const previousCanvas = this.displayLayout.canvas;
     const previousDesign = this.musicStyle.design;
     const previousScheme = this.musicStyle.scheme;
+    const previousFloor = this.musicStyle.floor;
     this.musicStyle = normalizeMusicStyle(value);
     this.displayLayout = resolveMusicDisplayLayout(getMusicCatalogOptions().layout, ["shelf", "array", "grid"]);
     // All music layouts resolve public entry identities; only the array wraps.
@@ -728,7 +732,8 @@ export class ArchiveScene {
     this.syncViewCanvases();
     this.syncDisplayViewportClip();
     if (previousView !== this.catalogView || previousCanvas !== this.displayLayout.canvas) this.syncDisplayCatalog();
-    if (previousView !== this.catalogView || previousDesign !== this.musicStyle.design || previousScheme !== this.musicStyle.scheme)
+    if (previousView !== this.catalogView || previousDesign !== this.musicStyle.design || previousScheme !== this.musicStyle.scheme ||
+      previousFloor !== this.musicStyle.floor)
       this.setTheme(this.theme, _animate);
   }
 
@@ -2380,6 +2385,7 @@ export class ArchiveScene {
         : [],
       width: this.caseLayout.width, depth: this.caseLayout.depth, rowSpacing: Math.abs(spacing.row), floorY: shelfBottom,
       environment: this.scene.environment, environmentIntensity: this.scene.environmentIntensity,
+      guideOriginX: this.caseLayout.center.x, guideOriginZ: this.caseLayout.center.z,
     });
     const shadowCamera = this.light.shadow.camera;
     const shelfShadowExtent = this.shelfView
