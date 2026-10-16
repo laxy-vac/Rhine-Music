@@ -18,6 +18,9 @@ const expectedArrayNeighborLift = distance => {
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
+const isArrayDetail = process.argv.includes("--array-detail");
+const isArrayDetailSmoke = process.argv.includes("--array-detail-smoke");
+const isArrayDetailFutureSmoke = process.argv.includes("--array-detail-future-smoke");
 const isArrayBump = process.argv.includes("--array-bump");
 const isCoverFlicker = process.argv.includes("--cover-flicker");
 const coverFlickerAssertMode = process.argv.includes("--cover-flicker-assert");
@@ -51,8 +54,9 @@ const shelfColorOutput = shelfColorPatchLabel
 const arrayTrayPhase = process.argv.includes("--structure-preview") ? "preview"
   : process.argv.includes("--baseline-only") || process.argv.includes("--before") ? "before" : "after";
 // Retain the old command as an explicit alias of the current common renderer audit.
-const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile || isFloorGuideRegression || isCoverFlicker;
+const isUnifiedRender = process.argv.includes("--unified-render") || process.argv.includes("--punk-view") || isArrayDetail || isArrayComposition || isArrayCoverVisibility || isArrayBump || isArrayTray || isArrayRailProfile || isFloorGuideRegression || isCoverFlicker;
 const coverFlickerOutput = path.join(project, ".tools", "flicker-fix", "probe");
+const arrayDetailOutput = path.join(project, ".tools", "array-detail");
 const unifiedOutput = isCoverFlicker ? coverFlickerOutput : isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
   : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
@@ -3524,6 +3528,285 @@ async function exercisePunkArrayMotion(screenshotsOnly = false, hoverMixedParent
     idleBefore, idleAfter, idleInactive, idleActiveYDelta, guards, tail, tailSlots, detailChecks };
 }
 
+let arrayDetailPanes;
+let arrayDetailBoundaryRatio = .65;
+function ensureArrayDetailPanes() {
+  if (arrayDetailPanes?.browse.isConnected && arrayDetailPanes?.panel.isConnected) return arrayDetailPanes;
+  archiveHost.querySelectorAll(".album-callout, .album-panel").forEach(node => node.remove());
+  const browse = document.createElement("aside");
+  browse.className = "album-callout";
+  const panel = document.createElement("aside");
+  panel.className = "album-panel";
+  const content = document.createElement("div");
+  content.id = "album-detail-content";
+  content.textContent = "Synthetic detail panel boundary fixture";
+  content.style.cssText = "padding:8px;font:12px sans-serif;color:rgba(80,80,80,.7)";
+  panel.append(content);
+  const veil = document.createElement("div");
+  veil.className = "album-panel-veil";
+  archiveHost.append(browse, panel, veil);
+  arrayDetailPanes = { browse, panel, content, veil };
+  return arrayDetailPanes;
+}
+
+function setArrayDetailPane(boundaryRatio, mode) {
+  const { browse, panel } = ensureArrayDetailPanes();
+  arrayDetailBoundaryRatio = boundaryRatio;
+  const width = Math.max(1, archiveHost.clientWidth);
+  const left = Math.round(width * boundaryRatio + 24);
+  const style = "position:absolute;left:" + left + "px;right:0;top:0;height:100%;box-sizing:border-box;pointer-events:none;background:transparent;border-left:1px solid rgba(120,120,120,.45)";
+  browse.style.cssText = style;
+  panel.style.cssText = style;
+  browse.style.display = mode === "browse" ? "block" : "none";
+  panel.style.display = mode === "detail" ? "block" : "none";
+  return { left, expectedWidth: Math.max(1, left - 24), boundaryRatio };
+}
+
+function arrayDetailGap() {
+  const scene = archiveScene;
+  const selectedKey = scene.selectedCell.foobarEntryKey;
+  if (!selectedKey) return null;
+  scene.scene.updateMatrixWorld(true);
+  scene.caseHitProxy.geometry.computeBoundingBox();
+  const matrix = new THREE.Matrix4();
+  const localBounds = new THREE.Box3(new THREE.Vector3(...scene.caseLayout.bounds.min),
+    new THREE.Vector3(...scene.caseLayout.bounds.max)).applyMatrix4(scene.model.matrixWorld);
+  const neighbors = scene.cells.flatMap((cell, index) => {
+    const entry = musicSpatialEntry(cell, true);
+    if (!entry || entry.key === selectedKey || cell.lane !== scene.selectedCell.lane) return [];
+    scene.caseHitProxy.getMatrixAt(index, matrix);
+    if (Math.hypot(matrix.elements[0], matrix.elements[1], matrix.elements[2]) < 1e-12) return [];
+    const bounds = scene.caseHitProxy.geometry.boundingBox.clone().applyMatrix4(matrix).applyMatrix4(scene.caseHitProxy.matrixWorld);
+    return [{ key: entry.key, lane: cell.lane, row: cell.row, bounds,
+      rowDistance: Math.abs(cell.row - scene.selectedCell.row) }];
+  }).sort((left, right) => left.rowDistance - right.rowDistance);
+  const neighbor = neighbors[0];
+  if (!neighbor) return null;
+  return { gap: localBounds.min.y - neighbor.bounds.max.y, caseBottom: localBounds.min.y,
+    neighborTop: neighbor.bounds.max.y, neighborKey: neighbor.key, neighborLane: neighbor.lane,
+    neighborRow: neighbor.row, rowDistance: neighbor.rowDistance };
+}
+
+function arrayDetailKinematics() {
+  const scene = archiveScene, stats = scene.getStats();
+  return { cameraPosition: stats.cameraPosition, cameraAim: stats.cameraAim, modelPosition: stats.modelPosition,
+    fieldOfView: stats.fieldOfView, phase: stats.musicPresentationPhase,
+    placement: { ...stats.musicPlacement } };
+}
+
+function arrayDetailProjection() {
+  const scene = archiveScene;
+  scene.scene.updateMatrixWorld(true);
+  scene.camera.updateMatrixWorld(true);
+  const corners = [];
+  for (const x of [scene.caseLayout.bounds.min[0], scene.caseLayout.bounds.max[0]])
+    for (const y of [scene.caseLayout.bounds.min[1], scene.caseLayout.bounds.max[1]])
+      for (const z of [scene.caseLayout.bounds.min[2], scene.caseLayout.bounds.max[2]]) {
+        const point = new THREE.Vector3(x, y, z).applyMatrix4(scene.model.matrixWorld).project(scene.camera);
+        corners.push({ x: (point.x + 1) * archiveHost.clientWidth / 2,
+          y: (1 - point.y) * archiveHost.clientHeight / 2 });
+      }
+  const center = new THREE.Vector3(scene.caseLayout.center.x, scene.caseLayout.center.y, scene.caseLayout.center.z)
+    .applyMatrix4(scene.model.matrixWorld).project(scene.camera);
+  const bounds = { minX: Math.min(...corners.map(point => point.x)), maxX: Math.max(...corners.map(point => point.x)),
+    minY: Math.min(...corners.map(point => point.y)), maxY: Math.max(...corners.map(point => point.y)) };
+  return { center: { x: (center.x + 1) * archiveHost.clientWidth / 2,
+      y: (1 - center.y) * archiveHost.clientHeight / 2 },
+    size: { width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY }, bounds };
+}
+
+function arrayDetailSnapshot() {
+  const scene = archiveScene;
+  scene.scene.updateMatrixWorld(true);
+  const stats = scene.getStats(), motion = punkArrayMotionSnapshot();
+  const projection = arrayDetailProjection();
+  const bounds = unifiedSnapshot().selectedScreenBounds;
+  const detailActive = stats.musicPresentationPhase === "presented" || scene.targetDetail > 0 || scene.musicPresentation.holdsDetail;
+  const leftWidth = detailActive ? (scene.arrayDetailWidthRatio || .65) * archiveHost.clientWidth
+    : scene.musicStyle.design === "archive" ? scene.displayViewportWidth || archiveHost.clientWidth * .65 : archiveHost.clientWidth;
+  bounds.availableWidth = leftWidth;
+  const panel = archiveHost.querySelector(".album-panel");
+  const panelLeft = panel?.getBoundingClientRect().left ?? 0;
+  const gapInfo = arrayDetailGap();
+  const anchorRows = [...new Map(motion.values.filter(value => Number.isFinite(value.anchorRow))
+    .map(value => [value.lane, { lane: value.lane, anchorRow: value.anchorRow }])).values()];
+  return { design: scene.musicStyle.design, structure: stats.caseStructure, layout: stats.displayLayout.effective,
+    viewport: { width: archiveHost.clientWidth, height: archiveHost.clientHeight }, leftWidth,
+    paneLeft: panelLeft - archiveHost.getBoundingClientRect().left,
+    center: projection.center, projection, selectedBounds: bounds, gapInfo, gap: gapInfo?.gap ?? null,
+    identity: { ...stats.selectedCell, selectedSlot: stats.selectedSlot,
+      selectedLane: stats.selectedLane, selectedAnchorRow: motion.selectedAnchorRow, anchorRows },
+    stats: { musicPresentationPhase: stats.musicPresentationPhase, musicPlacement: { ...stats.musicPlacement },
+      cameraPosition: stats.cameraPosition, cameraAim: stats.cameraAim, fieldOfView: stats.fieldOfView,
+      cameraDetail: stats.cameraDetail, rotation: stats.rotation, columnCamera: stats.columnCamera,
+      laneFocus: stats.laneFocus, rail: stats.rail, modelPosition: stats.modelPosition,
+      displayLayout: stats.displayLayout }, kinematics: arrayDetailKinematics() };
+}
+
+async function prepareArrayDetailCase(design, boundaryRatio = .65) {
+  if (!archiveScene || !arrayMotionPrepare) await exercisePunkArrayMotion(true);
+  const scene = archiveScene;
+  archiveHost.style.cssText = "position:relative;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;overflow:hidden";
+  archiveHost.dataset.design = design;
+  archiveHost.dataset.foobarLayout = "array";
+  archiveHost.dataset.albumPanel = "true";
+  archiveHost.dataset.page = "music";
+  archiveHost.classList.add("music-app");
+  archiveHost.style.setProperty("--veil", "rgba(236,233,225,.72)");
+  archiveHost.style.setProperty("--page-bg", stylePalette(design === "archive" ? archiveMusicStyle : defaultMusicStyle, "day").bg);
+  setArrayDetailPane(boundaryRatio, "browse");
+  const width = archiveHost.clientWidth, height = archiveHost.clientHeight;
+  await arrayMotionPrepare(design, "shelf", "full");
+  await scene.setCaseSettings(sceneCaseSettings(design === "archive" ? "punk" : "rhine"));
+  await scene.rhineInfo?.ready;
+  scene.resize();
+  scene.setReduced(true);
+  stepArchiveScene(1);
+  scene.setReduced(false);
+  const baselineStart = arrayDetailProjection();
+  for (let frame = 0; frame < 30; frame++) stepArchiveScene(1);
+  const baselineEnd = arrayDetailProjection();
+  const baselineDrift = Math.max(
+    Math.hypot(baselineStart.center.x - baselineEnd.center.x, baselineStart.center.y - baselineEnd.center.y),
+    Math.hypot(baselineStart.size.width - baselineEnd.size.width, baselineStart.size.height - baselineEnd.size.height));
+  expect(baselineDrift < 1, "The actual selected case geometry must settle before capturing the browse baseline: " + baselineDrift);
+  const snapshot = arrayDetailSnapshot();
+  expect(snapshot.viewport.width === width && snapshot.viewport.height === height,
+    "ARRAY detail fixture must match the active browser viewport: " + JSON.stringify(snapshot.viewport));
+  expect(snapshot.layout === "shelf", "The detail regression is scoped to the shared ARRAY layout.");
+  return { ...snapshot, baselineDrift };
+}
+
+function arrayDetailSetBoundary(boundaryRatio) {
+  const boundary = setArrayDetailPane(boundaryRatio, "detail");
+  archiveScene.resize();
+  stepArchiveScene(1);
+  return { boundary, snapshot: arrayDetailSnapshot() };
+}
+
+function arrayDetailHidePane() {
+  const { panel } = ensureArrayDetailPanes();
+  panel.style.display = "none";
+  archiveScene.resize();
+  stepArchiveScene(1);
+  return arrayDetailSnapshot();
+}
+
+function arrayDetailRefreshAfterResize() {
+  archiveScene.resize();
+  stepArchiveScene(1);
+  return arrayDetailSnapshot();
+}
+
+function setArrayDetailVeilVisible(visible) {
+  const { veil } = ensureArrayDetailPanes();
+  veil.style.display = visible ? "" : "none";
+  return { visible: getComputedStyle(veil).display !== "none",
+    background: getComputedStyle(veil).backgroundImage,
+    veil: getComputedStyle(archiveHost).getPropertyValue("--veil").trim(),
+    pageBackground: getComputedStyle(archiveHost).getPropertyValue("--page-bg").trim() };
+}
+
+function arrayDetailBeginOpen() {
+  const scene = archiveScene, browse = arrayDetailSnapshot();
+  const beforeProjection = arrayDetailProjection();
+  setArrayDetailPane(arrayDetailBoundaryRatio, "detail");
+  scene.setMode("detail");
+  scene.resize();
+  return { kinematics: arrayDetailKinematics(), projection: arrayDetailProjection(), beforeProjection };
+}
+
+function arrayDetailFinishOpen() {
+  const scene = archiveScene, samples = [arrayDetailProjection()];
+  for (let frame = 0; frame < 300 && !scene.musicPresentationReady; frame++) {
+    stepArchiveScene(1);
+    samples.push(arrayDetailProjection());
+  }
+  expect(scene.musicPresentationReady, "ARRAY detail must reach its presented endpoint.");
+  for (let frame = 0; frame < 30; frame++) { stepArchiveScene(1); samples.push(arrayDetailProjection()); }
+  const endpointStart = arrayDetailProjection();
+  for (let frame = 0; frame < 30; frame++) { stepArchiveScene(1); samples.push(arrayDetailProjection()); }
+  const endpointEnd = arrayDetailProjection();
+  return { opened: arrayDetailSnapshot(), trajectory: samples, endpointStart, endpointEnd };
+}
+
+function arrayDetailBeginReturn() {
+  const scene = archiveScene, beforeProjection = arrayDetailProjection();
+  setArrayDetailPane(arrayDetailBoundaryRatio, "browse");
+  scene.setMode("archive");
+  scene.resize();
+  return { kinematics: arrayDetailKinematics(), projection: arrayDetailProjection(), beforeProjection };
+}
+
+function arrayDetailFinishReturn() {
+  const scene = archiveScene, samples = [arrayDetailProjection()];
+  for (let frame = 0; frame < 300 && !scene.musicArchiveReady; frame++) {
+    stepArchiveScene(1);
+    samples.push(arrayDetailProjection());
+  }
+  expect(scene.musicArchiveReady, "Returning from ARRAY detail must reach its archive endpoint.");
+  for (let frame = 0; frame < 30; frame++) { stepArchiveScene(1); samples.push(arrayDetailProjection()); }
+  const endpointStart = arrayDetailProjection();
+  for (let frame = 0; frame < 30; frame++) { stepArchiveScene(1); samples.push(arrayDetailProjection()); }
+  const endpointEnd = arrayDetailProjection();
+  return { returned: arrayDetailSnapshot(), trajectory: samples, endpointStart, endpointEnd };
+}
+
+function arrayDetailRapidReverse() {
+  const scene = archiveScene;
+  const openRequest = arrayDetailBeginOpen();
+  let beforeReversePrior, beforeReverse, beforeReversePriorProjection, beforeReverseProjection;
+  for (let frame = 0; frame < 12; frame++) {
+    stepArchiveScene(1);
+    const sample = arrayDetailKinematics(), projected = arrayDetailProjection();
+    if (frame === 10) { beforeReversePrior = sample; beforeReversePriorProjection = projected; }
+    if (frame === 11) { beforeReverse = sample; beforeReverseProjection = projected; }
+  }
+  setArrayDetailPane(arrayDetailBoundaryRatio, "browse");
+  scene.setMode("archive");
+  scene.resize();
+  const afterReverseRequest = arrayDetailKinematics();
+  const afterReverseProjection = arrayDetailProjection();
+  stepArchiveScene(1);
+  const afterReverseFrame = arrayDetailKinematics();
+  const afterReverseFrameProjection = arrayDetailProjection();
+  for (let frame = 0; frame < 300 && !scene.musicArchiveReady; frame++) stepArchiveScene(1);
+  expect(scene.musicArchiveReady, "A rapid mid-transition reverse must settle back into ARRAY browsing.");
+  return { openRequest, beforeReversePrior, beforeReverse, beforeReversePriorProjection, beforeReverseProjection,
+    afterReverseRequest, afterReverseProjection, afterReverseFrame, afterReverseFrameProjection, reversed: arrayDetailSnapshot() };
+}
+
+function arrayDetailTrajectory(samples) {
+  const centerDelta = (left, right) => Math.hypot(left.center.x - right.center.x, left.center.y - right.center.y);
+  const sizeDelta = (left, right) => Math.hypot(left.size.width - right.size.width, left.size.height - right.size.height);
+  let maxCenterStep = 0, maxSizeStep = 0, maxCenterStepIndex = -1, maxSizeStepIndex = -1;
+  const centerSteps = [], sizeSteps = [];
+  for (let index = 1; index < samples.length; index++) {
+    const centerStep = centerDelta(samples[index - 1], samples[index]);
+    const sizeStep = sizeDelta(samples[index - 1], samples[index]);
+    centerSteps.push(centerStep); sizeSteps.push(sizeStep);
+    if (centerStep > maxCenterStep) { maxCenterStep = centerStep; maxCenterStepIndex = index; }
+    if (sizeStep > maxSizeStep) { maxSizeStep = sizeStep; maxSizeStepIndex = index; }
+  }
+  let maxCenterAcceleration = 0, maxSizeAcceleration = 0;
+  for (let index = 2; index < samples.length; index++) {
+    const centerAcceleration = Math.hypot(
+      samples[index].center.x - 2 * samples[index - 1].center.x + samples[index - 2].center.x,
+      samples[index].center.y - 2 * samples[index - 1].center.y + samples[index - 2].center.y);
+    const sizeAcceleration = Math.hypot(
+      samples[index].size.width - 2 * samples[index - 1].size.width + samples[index - 2].size.width,
+      samples[index].size.height - 2 * samples[index - 1].size.height + samples[index - 2].size.height);
+    maxCenterAcceleration = Math.max(maxCenterAcceleration, centerAcceleration);
+    maxSizeAcceleration = Math.max(maxSizeAcceleration, sizeAcceleration);
+  }
+  return { maxCenterStep, maxSizeStep, maxCenterAcceleration, maxSizeAcceleration,
+    centerStepIndex: maxCenterStepIndex, sizeStepIndex: maxSizeStepIndex,
+    centerStepNeighborhood: centerSteps.slice(Math.max(0, maxCenterStepIndex - 3), maxCenterStepIndex + 2),
+    sizeStepNeighborhood: sizeSteps.slice(Math.max(0, maxSizeStepIndex - 3), maxSizeStepIndex + 2), samples: samples.length,
+    beforeCenterStep: maxCenterStepIndex > 0 ? samples[maxCenterStepIndex - 1] : null,
+    afterCenterStep: maxCenterStepIndex > 0 ? samples[maxCenterStepIndex] : null };
+}
+
 async function prepareArrayCompositionInteraction() {
   await arrayMotionPrepare("archive", "shelf", "full");
   archiveScene.setReduced(true); arrayMotionSelect(1, 12); stepArchiveScene(1); archiveScene.setReduced(false); stepArchiveScene(120);
@@ -4920,6 +5203,18 @@ window.caseCheck = {
   captureRhineAlbumInfo,
   capturePunkAlbumInfo,
   exerciseUnifiedRender,
+  prepareArrayDetailCase,
+  arrayDetailSnapshot,
+  arrayDetailSetBoundary,
+  arrayDetailHidePane,
+  arrayDetailRefreshAfterResize,
+  setArrayDetailVeilVisible,
+  arrayDetailBeginOpen,
+  arrayDetailFinishOpen,
+  arrayDetailBeginReturn,
+  arrayDetailFinishReturn,
+  arrayDetailRapidReverse,
+  arrayDetailTrajectory,
   prepareArrayCoverVisibility,
   coverFlickerProbe,
   restoreArrayCoverVisibilityTint,
@@ -7707,11 +8002,12 @@ window.caseReference = {
 window.caseReferenceReady = true;
 `;
 
-const fixtureHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/case-editor.css"><style>
+const fixtureHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/case-editor.css">${isArrayDetail ? '<link rel="stylesheet" href="/album-panel.css">' : ""}<style>
 html,body{margin:0;background:#101923;color:#e8edf2;font:14px sans-serif}body{padding:24px}#editor-host{width:1450px;min-height:900px}.case-editor__workspace{grid-template-columns:minmax(360px,1fr) minmax(500px,1.15fr)}.case-editor__preview-stage{height:560px;min-height:560px}.case-editor__canvas,.case-editor__canvas canvas{width:100%;height:100%}.case-editor__canvas canvas{display:block}
 </style></head><body><div id="editor-host"></div><script type="module" src="/case-check.js"></script></body></html>`;
 
 const referenceHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=1000,initial-scale=1"><style>html,body{margin:0;width:1000px;height:1000px;overflow:hidden;background:#dedbd7}#reference-stage,#reference-stage canvas{display:block;width:1000px;height:1000px}</style></head><body><div id="reference-stage"></div><script type="module" src="/case-check.js"></script></body></html>`;
+const arrayDetailPanelCss = isArrayDetail ? await readFile(path.join(project, "src", "album-panel.css"), "utf8") : "";
 
 const assetPaths = new Map(isReference
   ? [
@@ -7770,6 +8066,11 @@ const server = http.createServer((request, response) => {
   if (route === "/case-editor.css" && request.method === "GET") {
     response.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-store" });
     response.end(bundleCss);
+    return;
+  }
+  if (route === "/album-panel.css" && isArrayDetail && request.method === "GET") {
+    response.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-store" });
+    response.end(arrayDetailPanelCss);
     return;
   }
   if (assetBuffers.has(route) && request.method === "GET") {
@@ -7850,7 +8151,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isArrayDetail ? arrayDetailOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -8232,8 +8533,179 @@ async function main() {
   }
 
   if (isUnifiedRender) {
-    await mkdir(isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
+    await mkdir(isArrayDetail ? arrayDetailOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : unifiedOutput, { recursive: true });
     await command("Emulation.setDeviceMetricsOverride", { width: 1450, height: 840, deviceScaleFactor: 1, mobile: false });
+    if (isArrayDetail) {
+      const allCases = [
+        ["archive", 1920, 1080], ["rhine", 1920, 1080],
+        ["archive", 1920, 1440], ["rhine", 1920, 1440],
+        ["archive", 2520, 1080], ["rhine", 2520, 1080],
+      ];
+      const cases = isArrayDetailFutureSmoke ? [allCases[1]] : isArrayDetailSmoke ? allCases.slice(0, 1) : allCases;
+      const runs = [];
+      const samePose = (left, right) => ["cameraPosition", "cameraAim", "modelPosition", "fieldOfView"]
+        .every(key => JSON.stringify(left[key]) === JSON.stringify(right[key]));
+      const sameProjection = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+      const maxPoseDelta = (left, right) => Math.max(...["cameraPosition", "cameraAim", "modelPosition"].map(key =>
+        Math.hypot(...left[key].map((value, index) => value - right[key][index]))));
+      const projectedDelta = (left, right) => Math.max(
+        Math.hypot(left.center.x - right.center.x, left.center.y - right.center.y),
+        Math.hypot(left.size.width - right.size.width, left.size.height - right.size.height));
+      const assertTrajectoryBounds = (samples, width, height, label) => assert.ok(samples.every(point =>
+        point.bounds.minX >= 0 && point.bounds.maxX <= width && point.bounds.minY >= 0 && point.bounds.maxY <= height),
+      `${label} projection must remain fully inside its available stage: ` + JSON.stringify(samples.filter(point =>
+        point.bounds.minX < 0 || point.bounds.maxX > width || point.bounds.minY < 0 || point.bounds.maxY > height).slice(0, 3)));
+      const assertIdentity = (expected, actual, phase) => assert.deepEqual(actual.identity, expected.identity,
+        `ARRAY ${phase} must restore the same entry, cell, slot and column anchors: ${JSON.stringify({ expected: expected.identity, actual: actual.identity })}`);
+      const assertBounds = snapshot => {
+        const bounds = snapshot.selectedBounds;
+        assert.ok(bounds.minX >= 0 && bounds.maxX <= snapshot.leftWidth && bounds.minY >= 0 &&
+          bounds.maxY <= snapshot.viewport.height,
+        "The selected ARRAY case must stay inside the left display area and the viewport: " + JSON.stringify(snapshot));
+        assert.ok(snapshot.paneLeft > snapshot.leftWidth && Math.abs(snapshot.leftWidth - (snapshot.paneLeft - 24)) < 2,
+          "The left display width must follow the measured right-panel boundary with the 24px inset: " + JSON.stringify(snapshot));
+      };
+      const saveViewportScreenshot = async (design, width, height, state) => {
+        const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } });
+        const name = `array-detail-${design}-${width}x${height}-${state}.png`;
+        await writeFile(path.join(arrayDetailOutput, name), Buffer.from(screen.data, "base64"));
+        return name;
+      };
+      for (const [design, width, height] of cases) {
+        await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+        const prepared = await evaluate("window.caseCheck.prepareArrayDetailCase(" + JSON.stringify(design) + ",0.65)");
+        assert.deepEqual(prepared.viewport, { width, height }, "The test stage must match the requested viewport.");
+        assert.equal(prepared.design, design);
+        assert.equal(prepared.structure, design === "archive" ? "punk" : "rhine",
+          "ARRAY detail uses Archive Punk and Future Rhine's actual default box types.");
+        assert.equal(prepared.layout, "shelf", "The regression only exercises ARRAY.");
+        const expectedBrowseRatio = design === "archive" ? .65 : 1;
+        assert.ok(Math.abs(prepared.leftWidth / width - expectedBrowseRatio) < .002,
+          "The browse stage must preserve its design's existing left-area composition: " + JSON.stringify(prepared));
+        const browseScreenshot = await saveViewportScreenshot(design, width, height, "browse");
+
+        const openRequest = await evaluate("window.caseCheck.arrayDetailBeginOpen()");
+        const openBefore = prepared.kinematics;
+        assert.ok(samePose(openBefore, openRequest.kinematics) && sameProjection(openRequest.beforeProjection, openRequest.projection),
+          "Opening detail must not teleport the camera, selected case, or its projection at the mode boundary.");
+        const openedResult = await evaluate("window.caseCheck.arrayDetailFinishOpen()");
+        const opened = openedResult.opened;
+        const detailScreenshot = await saveViewportScreenshot(design, width, height, "detail");
+        let veilDiagnostic = null;
+        if (design === "rhine" && width === 1920 && height === 1080) {
+          const veilState = await evaluate("window.caseCheck.setArrayDetailVeilVisible(true)");
+          assert.ok(veilState.visible && veilState.background.includes("linear-gradient") &&
+            veilState.veil.replace(/\s/g, "") === "rgba(236,233,225,.72)" && veilState.pageBackground,
+          "Future visual diagnostic must use the production veil rule with its real CSS variables: " + JSON.stringify(veilState));
+          await evaluate("window.caseCheck.setArrayDetailVeilVisible(false)");
+          const rawNoVeil = await saveViewportScreenshot(design, width, height, "detail-no-veil");
+          await evaluate("window.caseCheck.setArrayDetailVeilVisible(true)");
+          veilDiagnostic = { veilState, screenshotWithVeil: detailScreenshot, screenshotWithoutVeil: rawNoVeil,
+            note: "Synthetic Scene and panel boundary fixture; not a full application screenshot or manual visual acceptance." };
+        }
+        assert.equal(opened.stats.musicPresentationPhase, "presented");
+        assertIdentity(prepared, opened, "detail open");
+        assertBounds(opened);
+        assert.ok(Math.abs(opened.center.x - opened.leftWidth / 2) <= 2 &&
+          Math.abs(opened.center.y - height * .48) <= 2,
+        "ARRAY detail centers the actual case in the measured left area near 48% height: " + JSON.stringify(opened));
+        assert.ok(Number.isFinite(opened.gap) && Math.abs(opened.gap - .5) < 2e-5,
+          "The opened case must leave about 0.5 world units above the nearest occupied neighboring box top in its column: " + JSON.stringify(opened));
+        assert.ok(opened.stats.fieldOfView > 0 && Number.isFinite(opened.stats.fieldOfView),
+          "The existing perspective camera must retain a finite FOV during detail.");
+        const cameraAngles = (snapshot) => {
+          const vector = snapshot.stats.cameraPosition.map((value, index) => value - snapshot.stats.cameraAim[index]);
+          const length = Math.hypot(...vector);
+          const direction = vector.map(value => value / length);
+          return { elevation: Math.asin(direction[1]) * 180 / Math.PI,
+            yaw: Math.atan2(-direction[0], direction[2]) * 180 / Math.PI };
+        };
+        const detailAngles = cameraAngles(opened);
+        assert.ok(Math.abs(detailAngles.elevation - 20) < .25 && Math.abs(detailAngles.yaw - 8) < .25,
+          "ARRAY detail must retain its established 20-degree elevation and 8-degree yaw: " + JSON.stringify(detailAngles));
+        assert.ok(opened.stats.musicPlacement.settled && Math.abs(opened.stats.musicPlacement.velocity) < .001,
+          "The opened placement must reach a settled endpoint without residual drift.");
+        const openEndpointDrift = projectedDelta(openedResult.endpointStart, openedResult.endpointEnd);
+        assert.ok(openEndpointDrift < 1,
+          "The opened case's projected center and screen size must drift by less than one pixel after settling: " + JSON.stringify({ openEndpointDrift }));
+        const openTrajectory = await evaluate("window.caseCheck.arrayDetailTrajectory(" + JSON.stringify(openedResult.trajectory) + ")");
+        assertTrajectoryBounds(openedResult.trajectory, width, height, "ARRAY detail");
+
+        const returnRequest = await evaluate("window.caseCheck.arrayDetailBeginReturn()");
+        assert.ok(samePose(opened.kinematics, returnRequest.kinematics) && sameProjection(returnRequest.beforeProjection, returnRequest.projection),
+          "Returning from detail must not teleport the camera, selected case, or its projection at the mode boundary.");
+        const returnedResult = await evaluate("window.caseCheck.arrayDetailFinishReturn()");
+        const returned = returnedResult.returned;
+        const returnScreenshot = await saveViewportScreenshot(design, width, height, "return");
+        assert.equal(returned.stats.musicPresentationPhase, "archive");
+        assertIdentity(prepared, returned, "detail return");
+        assert.ok(Math.abs(returned.center.x - prepared.center.x) <= 2 && Math.abs(returned.center.y - prepared.center.y) <= 2,
+          "Returning must restore the original browse composition: " + JSON.stringify({ design, width, height,
+            before: prepared.center, returned: returned.center, beforeStats: prepared.stats, returnedStats: returned.stats }));
+        const returnedPoseDelta = maxPoseDelta(prepared.kinematics, returned.kinematics);
+        const returnedFovDelta = Math.abs(returned.stats.fieldOfView - prepared.stats.fieldOfView);
+        assert.ok(returnedFovDelta < .001 && returnedPoseDelta < .04,
+          "Returning must restore the original browse camera and selected-case pose: " + JSON.stringify({ returnedPoseDelta, returnedFovDelta,
+            before: prepared.kinematics, returned: returned.kinematics }));
+        assert.ok(returned.stats.musicPlacement.settled && Math.abs(returned.stats.musicPlacement.velocity) < .001,
+          "The returned placement must settle without endpoint drift.");
+        const returnEndpointDrift = projectedDelta(returnedResult.endpointStart, returnedResult.endpointEnd);
+        assert.ok(returnEndpointDrift < 1,
+          "The returned case's projected center and screen size must drift by less than one pixel after settling: " + JSON.stringify({ returnEndpointDrift }));
+        const returnTrajectory = await evaluate("window.caseCheck.arrayDetailTrajectory(" + JSON.stringify(returnedResult.trajectory) + ")");
+        assertTrajectoryBounds(returnedResult.trajectory, width, height, "ARRAY return");
+
+        const reverse = await evaluate("window.caseCheck.arrayDetailRapidReverse()");
+        assert.ok(samePose(reverse.beforeReverse, reverse.afterReverseRequest),
+          "A mid-transition reverse must preserve the exact camera and model pose at the request boundary.");
+        assert.ok(sameProjection(reverse.beforeReverseProjection, reverse.afterReverseProjection),
+          "A mid-transition reverse must leave the projected case unchanged at the request boundary.");
+        const reversePriorStep = projectedDelta(reverse.beforeReversePriorProjection, reverse.beforeReverseProjection);
+        const reverseFirstStep = projectedDelta(reverse.beforeReverseProjection, reverse.afterReverseFrameProjection);
+        assert.ok(Math.abs(reverseFirstStep - reversePriorStep) < 12,
+          "A rapid mid-transition reverse must preserve the projected case path without a one-frame jump: " + JSON.stringify({ reversePriorStep, reverseFirstStep, reverse }));
+        assertIdentity(prepared, reverse.reversed, "rapid reverse");
+        runs.push({ design, width, height, prepared, opened, returned, reverse: {
+          beforeReversePrior: reverse.beforeReversePrior, beforeReverse: reverse.beforeReverse, afterReverseRequest: reverse.afterReverseRequest,
+          beforeReversePriorProjection: reverse.beforeReversePriorProjection, beforeReverseProjection: reverse.beforeReverseProjection,
+          afterReverseProjection: reverse.afterReverseProjection, afterReverseFrameProjection: reverse.afterReverseFrameProjection,
+          afterReverseFrame: reverse.afterReverseFrame, reversed: reverse.reversed,
+        }, reversePriorStep, reverseFirstStep, openEndpointDrift,
+        returnEndpointDrift, openTrajectory, openTrajectorySamples: openedResult.trajectory,
+        returnTrajectory, returnTrajectorySamples: returnedResult.trajectory, veilDiagnostic,
+        screenshots: [browseScreenshot, detailScreenshot, ...(veilDiagnostic ? [veilDiagnostic.screenshotWithoutVeil] : []), returnScreenshot] });
+        if (isArrayDetailSmoke || isArrayDetailFutureSmoke) break;
+      }
+
+      let boundaryFallback = null;
+      if (!isArrayDetailSmoke && !isArrayDetailFutureSmoke) {
+        await command("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
+        await evaluate('window.caseCheck.prepareArrayDetailCase("archive",0.65)');
+        await evaluate("window.caseCheck.arrayDetailBeginOpen()");
+        await evaluate("window.caseCheck.arrayDetailFinishOpen()");
+        const moved = await evaluate("window.caseCheck.arrayDetailSetBoundary(0.58)");
+        assert.ok(Math.abs(moved.snapshot.leftWidth - moved.boundary.expectedWidth) < 2 &&
+          Math.abs(moved.snapshot.leftWidth / moved.snapshot.viewport.width - .58) < .002,
+        "Moving the detail panel boundary must update the left-area width proportionally: " + JSON.stringify(moved));
+        await evaluate("window.caseCheck.arrayDetailHidePane()");
+        await command("Emulation.setDeviceMetricsOverride", { width: 2240, height: 1080, deviceScaleFactor: 1, mobile: false });
+        const fallback = await evaluate("window.caseCheck.arrayDetailRefreshAfterResize()");
+        assert.ok(fallback.viewport.width === 2240 && Math.abs(fallback.leftWidth / 2240 - .58) < .003,
+          "A temporarily hidden detail pane must retain the measured proportion after resize: " + JSON.stringify(fallback));
+        boundaryFallback = { moved, fallback };
+      }
+
+      assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
+      assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
+      assert.deepEqual(blockedRoutes, [], "The offline detail fixture must use only its exact local route whitelist.");
+      const report = { ok: true, smoke: isArrayDetailSmoke || isArrayDetailFutureSmoke,
+        scope: "Production ArchiveScene and real GLBs; synthetic track catalog; ARRAY only; no player, audio ports, or personal library.",
+        cases: runs, boundaryFallback, runtimeErrors, shaderErrors, blockedRoutes };
+      await writeFile(path.join(arrayDetailOutput, "array-detail-report.json"), JSON.stringify(report, null, 2));
+      console.log(JSON.stringify({ ok: true, smoke: isArrayDetailSmoke || isArrayDetailFutureSmoke, cases: runs.map(item => `${item.design}/${item.width}x${item.height}`),
+        boundaryFallback: !!boundaryFallback, report: path.relative(project, path.join(arrayDetailOutput, "array-detail-report.json")) }, null, 2));
+      return;
+    }
     if (isCoverFlicker) {
       const design = shelfColorDesign;
       const layoutName = coverFlickerLayout === "shelf" ? "array" : "matrix";
@@ -10247,7 +10719,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isArrayDetail ? arrayDetailOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

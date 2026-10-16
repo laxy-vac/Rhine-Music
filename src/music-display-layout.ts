@@ -13,6 +13,7 @@ export const MUSIC_SHELF_VIEW = {
   slots: 20, rowSpacing: 1, columnSpacing: 4.7, originX: 0.37, bottomInset: 87,
   referenceWidth: 936, referenceHeight: 731, pixelsPerUnit: .54 * 98, previewSlot: 4,
   floorDrop: .51, // Original deck-light/real-dark floor.json: floor_z = -0.51.
+  detailY: .48, inspectionGap: .5,
 } as const;
 
 export interface MusicDisplayLayout {

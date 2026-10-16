@@ -123,6 +123,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | `scripts/check-music-spatial.mjs` | 第三阶段有限20槽映射、TRACKS稳定身份、越界/空过滤及阵列委托；纯合成 |
 | `scripts/check-quality-detection.mjs` | 完整四档/双场景、样本门槛、最高稳定推荐及低帧档回退；纯计算 |
 | `scripts/check-case-system.mjs --unified-render` | 真实Scene/GLB、两主题货架、分页/命中/开盒/裁切/非对称变换支撑与详情可见；隔离图形 |
+| `node scripts/check-case-system.mjs --array-detail` | 两主题实际默认盒型、1920×1080/1920×1440/2520×1080六组ARRAY详情构图；常驻右栏边界、48%高度、邻盒间隙`.5±2e-5`、整盒留界、开/返及快速反向连续性、原条目/槽位/列位置恢复，另查右栏暂隐藏后的resize比例回退。可加`--array-detail-smoke`仅跑首组。真实Scene/GLB与生产面板CSS、合成曲目/右栏DOM，不是完整播放器或个人曲库验收。报告/截图在`.tools/array-detail`，Future保留veil对照；本轮`--array-composition`兼容回归也通过 |
 | `node scripts/check-cover-flicker.mjs --design=archive --cover-flicker-assert --cover-flicker-frames=4` | 本轮封面闪烁专项；真实Scene/GLB、合成封面、固定姿态和微移逐帧对照。`--design=rhine`切Future；默认ARRAY，`--cover-layout=array`检查MATRIX；`--cover-quality=balanced`使用完整均衡参数；`--cover-legacy-gap`主动恢复旧间距/顺序作正对照，仅在已知可复现场景要求触发。报告和图在`.tools/flicker-fix/probe`，不访问个人数据/音频设备；细节见[修复报告](COVER-FLICKER-FIX-2026-10-16.md) |
 | `scripts/check-quality-benchmark.mjs` | 先构建源码预览；生产检测UI+编译iframe，固定960×540/DPR1、Future简单款合成曲库、四档结果/取消/采用/键盘/独立存储和父状态；独立Chrome profile，不是Electron或设备FPS保证 |
 | `scripts/check-case-system.mjs` | 当前模型、真实编辑器、预设、纸卡/铭牌、查看器与退场材质/纹理生命周期；退役sprite专属实现断言已移除，产品保护迁到真实Scene/GLB |

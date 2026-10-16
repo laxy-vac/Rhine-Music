@@ -21,6 +21,19 @@ export function foobarArchiveWidth(container: HTMLElement, width: number, detail
   return Math.min(width, Math.max(300, previousWidth || width * 0.65));
 }
 
+/** Frame ARRAY against the persistent reading pane, including while its content is hidden. */
+export function albumDetailWidth(container: HTMLElement, width: number, previousWidth = 0) {
+  if (width <= 720) return width;
+  const root = container.closest(".music-app") ?? container.parentElement;
+  const scene = container.getBoundingClientRect();
+  const pane = root?.querySelector<HTMLElement>(".album-panel")?.getBoundingClientRect();
+  if (pane && pane.width > 0 && scene.width > 0) {
+    const left = (pane.left - scene.left) * width / scene.width;
+    return Math.min(width, Math.max(300, left - 24));
+  }
+  return foobarArchiveWidth(container, width, 1, previousWidth);
+}
+
 /** Reference coordinates remain exact during the film and at 1920 × 1080. */
 export function viewportLayout(width: number, height: number, coarse: boolean, cinematic = false) {
   width = Math.max(1, width);

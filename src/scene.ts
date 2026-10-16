@@ -37,7 +37,7 @@ import {
   type ArchiveNavigation,
 } from "./archive-loop";
 import { labelMarkSvg } from "./brand";
-import { archiveFraming, foobarArchiveWidth, swipeDirection } from "./viewport-layout";
+import { albumDetailWidth, archiveFraming, foobarArchiveWidth, swipeDirection } from "./viewport-layout";
 import { assetUrl as publicAsset } from "./asset-url";
 import { ThemeTransition } from "./theme-transition";
 import { defaultMusicStyle, normalizeMusicStyle, stylePalette, type MusicStyle } from "./music-style";
@@ -180,6 +180,7 @@ export class ArchiveScene {
   private displayLayout = resolveMusicDisplayLayout("array", ["array"]);
   private displayCatalogVersion = -1;
   private displayViewportWidth = 0;
+  private arrayDetailWidthRatio = .65;
   onStyleError?: (message: string) => void;
   private labelCanvas = document.createElement("canvas");
   private labelTexture?: THREE.CanvasTexture;
@@ -191,7 +192,9 @@ export class ArchiveScene {
   private caseGeometryKey = "";
   private caseRevision = 0;
   private caseLayout = structuredClone(minimalCaseLayout);
-  private get inspectionLift() { return this.caseLayout.height + .12; }
+  private get inspectionLift() {
+    return this.caseLayout.height + (this.shelfView ? MUSIC_SHELF_VIEW.inspectionGap : .12);
+  }
   private smaa = new SMAAPass();
   private aoKernelSize = 32;
   private displayHeight = 0;
@@ -2215,6 +2218,10 @@ export class ArchiveScene {
     this.syncDisplayViewportClip();
     const framing = archiveFraming(width, height, span, detail,
       this.container.closest<HTMLElement>("[data-layout]")?.dataset.layout === "compact");
+    if (localArray && !framing.portrait && (this.musicPresentation.holdsDetail || detail > 0)) {
+      const availableWidth = albumDetailWidth(this.container, width, this.arrayDetailWidthRatio * width);
+      this.arrayDetailWidthRatio = availableWidth / Math.max(1, width);
+    }
     if (this.shelfView) framing.span /= THREE.MathUtils.lerp(this.musicStyle.arrayScale, this.musicStyle.inspectScale, detail);
     if (arrayComposition && !framing.portrait) {
       const inspectSpan = archiveFraming(width, height, span, 1, false).span / this.musicStyle.inspectScale;
@@ -2266,9 +2273,11 @@ export class ArchiveScene {
           -4.6 + (localArray ? localArrayBase : restHeight) + this.inspectionLift + this.caseLayout.center.y,
           -2.17 + (this.shelfView ? this.caseLayout.center.z : 0))
         : this.model.position.clone().add(new THREE.Vector3(0, 1.85, 0));
-      const detailX = musicLibrary ? framing.portrait ? 0.5 : 0.25 : framing.detailX;
+      const detailX = musicLibrary ? framing.portrait ? .5
+        : localArray ? this.arrayDetailWidthRatio / 2 : .25 : framing.detailX;
+      const detailY = localArray && !framing.portrait ? MUSIC_SHELF_VIEW.detailY : framing.detailY;
       detailAim.addScaledVector(right, (0.5 - detailX) * width / pixelScale);
-      detailAim.addScaledVector(up, (framing.detailY - 0.5) * height / pixelScale);
+      detailAim.addScaledVector(up, (detailY - 0.5) * height / pixelScale);
       cameraAim.lerp(detailAim, detail);
     }
     const cameraPosition = cameraAim
