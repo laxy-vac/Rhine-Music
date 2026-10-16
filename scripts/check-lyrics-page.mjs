@@ -9,7 +9,8 @@ import { build, preview } from 'vite';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
 const desktopEntry = path.join(projectRoot, 'desktop', 'lyrics-page-check.cjs');
-const artifactRoot = path.join(projectRoot, '.tools', 'lyrics-source-refinement');
+const headerScrollbarMode = process.argv.includes('--header-scrollbar');
+const artifactRoot = path.join(projectRoot, '.tools', headerScrollbarMode ? 'header-scrollbar' : 'lyrics-source-refinement');
 const cacheDirectory = path.join(artifactRoot, 'vite-cache');
 const runDirectory = path.join(artifactRoot, 'run-' + Date.now() + '-' + randomUUID().slice(0, 8));
 const bundleRoot = path.join(runDirectory, 'vite-harness');
@@ -436,6 +437,7 @@ let report = {
   apiFullyMocked: true,
   externalNetworkRequestsMadeByCheck: false,
   browserWindowShown: false,
+  mode: headerScrollbarMode ? 'header-scrollbar' : 'full-lyrics-page',
   cacheDirectory,
   artifactDirectory: runDirectory,
 };
@@ -521,6 +523,7 @@ try {
     RHINE_LYRICS_CHECK_PROFILE: profileDirectory,
     RHINE_LYRICS_CHECK_REPORT: reportPath,
     RHINE_LYRICS_CHECK_ARTIFACTS: runDirectory,
+    ...(headerScrollbarMode ? { RHINE_LYRICS_CHECK_MODE: 'header-scrollbar' } : {}),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
 

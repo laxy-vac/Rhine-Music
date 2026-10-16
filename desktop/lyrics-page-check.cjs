@@ -10,8 +10,10 @@ const checkUrl = process.env.RHINE_LYRICS_CHECK_URL;
 const profileDirectory = process.env.RHINE_LYRICS_CHECK_PROFILE;
 const reportPath = process.env.RHINE_LYRICS_CHECK_REPORT;
 const artifactDirectory = process.env.RHINE_LYRICS_CHECK_ARTIFACTS;
+const checkMode = process.env.RHINE_LYRICS_CHECK_MODE || 'full';
 const report = {
   ok: false,
+  mode: checkMode,
   checks: {},
   viewports: [],
   screenshots: [],
@@ -303,11 +305,15 @@ async function transportTitleSnapshot() {
     const measure=label?.querySelector('.transport-title-measure'),reel=label?.querySelector('.transport-title-reel');
     const rect=node=>{if(!node)return null;const r=node.getBoundingClientRect();return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
     const controls=nav?[...nav.children].flatMap(node=>node.matches('.minimal-transport')?[node,...node.querySelectorAll('button')]:[node]).map(node=>({name:node.id||node.dataset.action||node.classList[0]||node.tagName,rect:rect(node)})):[];
-    const style=label?getComputedStyle(label):null,slotStyle=slot?getComputedStyle(slot):null,navStyle=nav?getComputedStyle(nav):null;
+    const style=label?getComputedStyle(label):null,slotStyle=slot?getComputedStyle(slot):null,navStyle=nav?getComputedStyle(nav):null,scrollbarStyle=nav?getComputedStyle(nav,'::-webkit-scrollbar'):null;
+    const horizontalScrollbarHeight=nav&&navStyle?Math.max(0,nav.offsetHeight-nav.clientHeight-(parseFloat(navStyle.borderTopWidth)||0)-(parseFloat(navStyle.borderBottomWidth)||0)):NaN;
     return {
       design:root?.dataset.design??null,theme:root?.dataset.theme??null,viewport:{width:innerWidth,height:innerHeight},
       cap:slot?slot.getBoundingClientRect().width:NaN,configuredCap:navStyle?.getPropertyValue('--song-cap').trim()??null,
       flexBasis:slotStyle?.flexBasis??null,maxWidth:slotStyle?.maxWidth??null,
+      navOverflowX:navStyle?.overflowX??null,navScrollbarWidth:navStyle?.scrollbarWidth??null,navWebkitScrollbarDisplay:scrollbarStyle?.display??null,
+      navPaddingRight:navStyle?parseFloat(navStyle.paddingRight):NaN,navMarginRight:navStyle?parseFloat(navStyle.marginRight):NaN,
+      navScrollWidth:nav?.scrollWidth??0,navClientWidth:nav?.clientWidth??0,navScrollLeft:nav?.scrollLeft??0,horizontalScrollbarHeight,
       baseSize:style?parseFloat(style.getPropertyValue('--transport-title-base-size')):NaN,
       renderedSize:style?parseFloat(style.fontSize):NaN,
       fullTitle:slot?.getAttribute('aria-label')??null,titleTooltip:slot?.title??null,
@@ -424,6 +430,74 @@ async function inspectTransportTitles() {
   report.transportTitleFailures=failures;
   report.transportTitleFitSkips=fitSkips;
   report.checks.transportTitleRealModuleResponsiveFitVisibilityAndTheme=failures.length===0;
+}
+
+async function inspectHeaderScrollbar() {
+  const samples=[];
+  const sameControls=(left,right)=>Array.isArray(left)&&Array.isArray(right)&&left.length===right.length&&left.every((item,index)=>{
+    const other=right[index];return item.name===other.name&&['left','top','width','height'].every(key=>Math.abs(item.rect[key]-other.rect[key])<0.5);
+  });
+  const viewports=[{width:1920,height:840,overflowExpected:false},{width:1280,height:840,overflowExpected:true},{width:1100,height:840,overflowExpected:true}];
+  for(const viewport of viewports)for(const theme of ['day','night']){
+    currentViewport={width:viewport.width,height:viewport.height};
+    await resizeViewport(viewport.width,viewport.height);
+    await browser('(() => {const root=document.querySelector("#stage"),nav=document.querySelector(".music-topnav");root.dataset.design="rhine";root.dataset.theme='+JSON.stringify(theme)+';nav.scrollLeft=0;window.__lyricsCheckTerminalLighting?.refresh();window.__lyricsCheckUpdateTransportTitle("短曲",true);return true})()');
+    await pause(240);
+    await waitForPaintStable('header-scrollbar-'+viewport.width+'-'+theme+'-short');
+    const short=await transportTitleSnapshot();
+    assert(short.design==='rhine'&&short.theme===theme&&short.navOverflowX==='auto'
+        &&short.navScrollbarWidth==='none'&&short.navWebkitScrollbarDisplay==='none'
+        &&Math.abs(short.navPaddingRight-48)<0.5&&Math.abs(short.navMarginRight+48)<0.5
+        &&short.horizontalScrollbarHeight<1,
+      'Future '+theme+' navigation must hide the horizontal scrollbar while retaining its 48px light gutter: '+JSON.stringify({viewport,short}));
+    assert((short.navScrollWidth>short.navClientWidth)===viewport.overflowExpected,
+      'Future '+viewport.width+'px navigation overflow must match the expected full/scrollable header state: '+JSON.stringify({viewport,short}));
+    await captureScreenshot('header-scrollbar-'+viewport.width+'-'+theme+'-short');
+
+    const veryLong=('横向可达性标题 · '.repeat(48));
+    await browser('window.__lyricsCheckUpdateTransportTitle('+JSON.stringify(veryLong)+',true)');
+    await pause(420);
+    await waitForPaintStable('header-scrollbar-'+viewport.width+'-'+theme+'-long');
+    const long=await transportTitleSnapshot();
+    assert(long.navScrollbarWidth==='none'&&long.navWebkitScrollbarDisplay==='none'&&long.horizontalScrollbarHeight<1
+        &&long.reelText.endsWith('…')&&long.reelRect.width<=long.labelRect.width+0.5
+        &&Math.abs(long.slotRect.width-short.slotRect.width)<0.5&&sameControls(short.controls,long.controls)
+        &&Math.abs(long.navScrollWidth-short.navScrollWidth)<0.5&&Math.abs(long.navClientWidth-short.navClientWidth)<0.5,
+      'Changing from short to long title must keep the scrollbar hidden and all Future header controls fixed: '+JSON.stringify({viewport,short,long}));
+    await captureScreenshot('header-scrollbar-'+viewport.width+'-'+theme+'-long');
+
+    const endState=await browser('(() => {const nav=document.querySelector(".music-topnav"),stop=document.querySelector("#stop-playback"),play=document.querySelector("#lyrics-check-transport-anchor"),r=nav.getBoundingClientRect(),port={left:r.left+nav.clientLeft,right:r.left+nav.clientLeft+nav.clientWidth};nav.scrollLeft=nav.scrollWidth;const s=stop.getBoundingClientRect(),p=play.getBoundingClientRect();return{scrollLeft:nav.scrollLeft,scrollWidth:nav.scrollWidth,clientWidth:nav.clientWidth,port,stop:{left:s.left,right:s.right},play:{left:p.left,right:p.right},stopVisible:s.left>=port.left-.5&&s.right<=port.right+.5,playVisible:p.left>=port.left-.5&&p.right<=port.right+.5,rightGutter:port.right-s.right,scrollbarWidth:getComputedStyle(nav).scrollbarWidth,webkitScrollbar:getComputedStyle(nav,"::-webkit-scrollbar").display,paddingRight:parseFloat(getComputedStyle(nav).paddingRight)}})()');
+    assert(endState.stopVisible&&endState.playVisible&&endState.scrollbarWidth==='none'&&endState.webkitScrollbar==='none'
+        &&Math.abs(endState.paddingRight-48)<0.5&&(!viewport.overflowExpected||endState.rightGutter>=40),
+      'Scrolling to the far right must expose play/stop and keep the 48px soft-light gutter: '+JSON.stringify({viewport,endState}));
+    await browser('document.querySelector(".music-topnav [data-action=\\"settings\\"]").focus()');
+    await pause(60);
+    const focusedSettings=await browser('(() => {const nav=document.querySelector(".music-topnav"),node=nav.querySelector("[data-action=settings]"),r=nav.getBoundingClientRect(),port={left:r.left+nav.clientLeft,right:r.left+nav.clientLeft+nav.clientWidth},b=node.getBoundingClientRect();return{active:document.activeElement===node,visible:b.left>=port.left-.5&&b.right<=port.right+.5,scrollLeft:nav.scrollLeft}})()');
+    browserWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'TAB'});
+    browserWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'TAB'});
+    await pause(70);
+    const focusedTitle=await browser('document.activeElement?.id??null');
+    browserWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'TAB'});
+    browserWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'TAB'});
+    await pause(70);
+    const focusedPlay=await browser('document.activeElement?.id??null');
+    browserWindow.webContents.sendInputEvent({type:'keyDown',keyCode:'TAB'});
+    browserWindow.webContents.sendInputEvent({type:'keyUp',keyCode:'TAB'});
+    await pause(70);
+    const focusedStop=await browser('document.activeElement?.id??null');
+    const focusedState=await browser('(() => {const nav=document.querySelector(".music-topnav"),settings=nav.querySelector("[data-action=settings]"),stop=document.querySelector("#stop-playback"),r=nav.getBoundingClientRect(),port={left:r.left+nav.clientLeft,right:r.left+nav.clientLeft+nav.clientWidth},rect=node=>{const b=node.getBoundingClientRect();return{left:b.left,right:b.right}};const a=rect(settings),b=rect(stop);return{settingsVisible:a.left>=port.left-.5&&a.right<=port.right+.5,stopVisible:b.left>=port.left-.5&&b.right<=port.right+.5,scrollLeft:nav.scrollLeft,scrollbarWidth:getComputedStyle(nav).scrollbarWidth}})()');
+    assert(focusedTitle==='lyrics-check-transport-title'&&focusedPlay==='lyrics-check-transport-anchor'&&focusedStop==='stop-playback'
+        &&focusedSettings.active&&focusedSettings.visible&&focusedState.stopVisible&&focusedState.scrollbarWidth==='none',
+      'Keyboard focus from Settings must reach title, Play, and Stop inside the scrollable header: '+JSON.stringify({viewport,focusedSettings,focusedTitle,focusedPlay,focusedStop,focusedState}));
+
+    samples.push({viewport:viewport.width,theme,overflow:short.navScrollWidth>short.navClientWidth,
+      scrollbar:{standard:short.navScrollbarWidth,webkit:short.navWebkitScrollbarDisplay,horizontalHeight:short.horizontalScrollbarHeight},
+      gutter:{paddingRight:short.navPaddingRight,marginRight:short.navMarginRight,endAtScrollRight:endState.rightGutter},
+      title:{shortSlotWidth:short.slotRect.width,longSlotWidth:long.slotRect.width,longRenderedSize:long.renderedSize,longText:long.reelText},
+      keyboard:{focusedSettings:focusedSettings.active,focusedTitle,focusedPlay,focusedStop,settingsVisible:focusedSettings.visible,stopVisible:focusedState.stopVisible}});
+  }
+  report.headerScrollbarSamples=samples;
+  report.checks.futureHeaderScrollbarHiddenAndOverflowKeyboardReachable=true;
 }
 
 async function saveFailureScreenshot() {
@@ -550,6 +624,16 @@ async function run() {
 
   assert(!browserWindow.isVisible(), 'The isolated test BrowserWindow must stay hidden.');
   report.checks.hiddenElectronWindow = true;
+
+  if(checkMode==='header-scrollbar'){
+    await inspectHeaderScrollbar();
+    assert(report.externalNetworkRequests.length===0,'The isolated header-scrollbar check attempted an external network request: '+JSON.stringify(report.externalNetworkRequests));
+    const headerState=await mockState();
+    report.mockApiPaths=Array.from(new Set(headerState.requests.map(item=>item.path)));
+    report.checks.headerScrollbarModeOnly=true;
+    report.ok=true;
+    return;
+  }
 
   await inspectViewport(1920, 1080, 'day');
   await inspectViewport(1920, 1080, 'night');

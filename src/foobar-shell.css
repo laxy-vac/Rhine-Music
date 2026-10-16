@@ -15,7 +15,8 @@
   background:color-mix(in srgb,var(--surface) 38%,transparent);backdrop-filter:blur(12px) saturate(135%);
   box-shadow:inset 0 1px 0 rgb(255 255 255 / .32);
 }
-.music-app[data-design="rhine"] .music-header .music-topnav { min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--line) 70%,transparent) transparent;flex-shrink:1;flex-wrap:nowrap; }
+.music-app[data-design="rhine"] .music-header .music-topnav { min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;flex-shrink:1;flex-wrap:nowrap; }
+.music-app[data-design="rhine"] .music-header .music-topnav::-webkit-scrollbar { display:none;width:0;height:0; }
 .music-app[data-design="rhine"] .music-header .music-topnav > :is(button,.theme-switch,.foobar-clock,.minimal-transport) { flex-shrink:0; }
 .music-app[data-design="rhine"] .music-header .theme-switch span { display:inline; }
 .music-app[data-design="rhine"][data-layout="portrait"] .music-header .music-topnav {
