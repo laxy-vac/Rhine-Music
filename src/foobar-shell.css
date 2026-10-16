@@ -222,7 +222,6 @@
 .music-app[data-design="archive"] .foobar-footer .playback-buttons button { width:34px;height:34px;min-width:34px;min-height:34px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:0;padding:8px; }
 .music-app[data-design="archive"] .foobar-footer #playback-toggle { width:34px;height:34px;min-width:34px;margin:0;background:var(--ink);color:var(--page-bg); }
 .music-app[data-design="archive"] .foobar-transport-controls { display:contents; }
-.music-app[data-design="archive"] .foobar-stop { grid-column:2;grid-row:1;justify-self:end;width:34px;height:34px;min-width:34px;min-height:34px;padding:0;border:1px solid var(--line);background:none;color:var(--ink); }
 .music-app[data-design="archive"] .foobar-footer .playback-timeline { position:relative;grid-column:3;grid-row:1;display:grid;grid-template-columns:48px minmax(30px,1fr) 52px;grid-template-rows:18px 26px;column-gap:10px;row-gap:0;align-items:center;min-width:0;padding:0; }
 .music-app[data-design="archive"] .foobar-footer #playback-duration { display:none; }
 .music-app[data-design="archive"] .foobar-footer #playback-elapsed { grid-column:1;grid-row:2; }

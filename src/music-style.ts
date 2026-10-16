@@ -109,7 +109,9 @@ export function normalizeDesignProfiles(value: unknown, active: MusicStyle, mode
     const baseline = design === "archive" ? archiveMusicStyle : defaultMusicStyle;
     profiles[design] = {
       style: normalizeMusicStyle({ ...baseline, ...(entry && typeof entry.style === "object" ? entry.style : {}), design }),
-      mode: entry?.mode === "night" || entry?.mode === "day" ? entry.mode : mode,
+      // Retain the legacy field as a compatibility mirror, never as a
+      // per-design preference that can overwrite the global day/night mode.
+      mode,
     };
   }
   profiles[active.design] = { style: normalizeMusicStyle(active), mode };
@@ -458,13 +460,18 @@ function schemeCardMarkup(scheme: ColourScheme, style: MusicStyle) {
   </button>`;
 }
 
-function archiveThemeChoiceMarkup(style: MusicStyle, design: "rhine" | "archive") {
-  const selected = style.design === design;
-  const label = design === "rhine" ? "Future" : "Punk";
-  const index = design === "rhine" ? "01" : "02";
-  return `<button type="button" class="foobar-theme-choice${selected ? " is-selected" : ""}" data-style-design="${design}" aria-pressed="${selected}" aria-label="${escapeHtml(label)}">
-    <small>${index}</small><span>${label}</span><b>${escapeHtml(design === "rhine" ? t("玻璃播放器", "GLASS PLAYER") : t("音频档案", "AUDIO ARCHIVE"))}</b><i aria-hidden="true">${selected ? "●" : "↗"}</i>
-  </button>`;
+function designFamilyMarkup(style: MusicStyle, mode: "day" | "night") {
+  const choices = (["rhine", "archive"] as const).map(design => {
+    const selected = style.design === design;
+    const label = design === "rhine" ? "Future" : "Punk";
+    const preview = selected ? style : design === "rhine" ? defaultMusicStyle : archiveMusicStyle;
+    const palette = stylePalette(preview, mode);
+    return `<button type="button" class="design-family-card${selected ? " is-selected" : ""}" data-style-design="${design}" aria-pressed="${selected}" aria-label="${label}">
+      <span class="theme-choice-preview" data-preview-design="${design}" data-preview-mode="${mode}" style="${escapeHtml(paletteStyle(palette))}" aria-hidden="true"><i class="theme-choice-nav"></i><span class="theme-choice-scene"><i></i><i></i><i></i></span><span class="theme-choice-info"><i></i><i></i><i></i></span><i class="theme-choice-deck"></i></span>
+      <span class="theme-choice-copy"><strong>${label}</strong><small>${escapeHtml(design === "rhine" ? t("轻透材质与柔和层次", "TRANSLUCENT · SPATIAL") : t("仪表排版与档案细节", "INSTRUMENT · ARCHIVE"))}</small></span><i class="theme-choice-check" aria-hidden="true">${selected ? "✓" : ""}</i>
+    </button>`;
+  }).join("");
+  return `<section class="design-family-section" aria-label="${escapeHtml(t("完整主题", "Complete themes"))}"><div class="style-section-heading"><div><small>COMPLETE THEMES</small><h2>${escapeHtml(t("选择主题", "Choose a theme"))}</h2></div><span class="theme-choice-mode">${mode === "night" ? "DARK" : "LIGHT"}</span></div><div class="design-family-grid">${choices}</div></section>`;
 }
 
 function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): string {
@@ -480,11 +487,7 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): stri
         <p>${escapeHtml(t("配色与显示设置实时生效。", "COLOUR SCHEMES AND DISPLAY SETTINGS APPLY LIVE."))}</p>
       </div>
       <div class="foobar-style-heading-tools">
-        <button type="button" class="foobar-play-intro" data-action="foobar-intro">▶ PLAY INTRO</button>
         <span class="foobar-style-current" title="${escapeHtml(current)}"><i></i>${escapeHtml(current)}</span>
-        <nav class="foobar-theme-switch" aria-label="${escapeHtml(t("完整主题", "Complete themes"))}">
-          ${archiveThemeChoiceMarkup(style, "rhine")}${archiveThemeChoiceMarkup(style, "archive")}
-        </nav>
         <div class="foobar-style-mode-toggle" role="group" aria-label="${escapeHtml(t("界面模式", "Interface mode"))}">
           <span>${escapeHtml(t("模式", "MODE"))}</span>
           <button type="button" data-theme="day" aria-pressed="${mode === "day"}">LIGHT</button>
@@ -492,11 +495,12 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): stri
         </div>
       </div>
     </header>
+    ${designFamilyMarkup(style, mode)}
     <div class="foobar-style-rule" aria-hidden="true"></div>
     <div class="foobar-style-main">
       <div class="foobar-style-library">
         <section class="foobar-style-section" aria-labelledby="style-scheme-heading">
-          <div class="foobar-style-section-heading"><div><small>01&nbsp; / &nbsp;COLOUR STUDIES</small><h2 id="style-scheme-heading">${escapeHtml(t("COLOUR SCHEME · 配色", "COLOUR SCHEME"))}</h2></div><span>06</span></div>
+          <div class="foobar-style-section-heading"><div><small>01&nbsp; / &nbsp;COLOUR STUDIES</small><h2 id="style-scheme-heading">COLOUR SCHEME</h2></div><span>06</span></div>
           <div class="style-scheme-grid foobar-scheme-grid">${SCHEMES.map((scheme) => schemeCardMarkup(scheme, style)).join("")}</div>
         </section>
         <section class="foobar-style-display" aria-labelledby="style-display-heading">
@@ -522,17 +526,11 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): stri
 export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night"): string {
   const style = normalizeMusicStyle(styleValue);
   if (style.design === "archive") return archiveMusicStyleMarkup(style, mode);
-  const modeName = mode === "day" ? t("日光模式", "DAY MODE") : t("夜色模式", "NIGHT MODE");
-  const heading = `<header class="music-style-heading"><div><small>STYLE&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">${escapeHtml(t("主题与外观", "STYLE & APPEARANCE"))}</h1><p>${escapeHtml(t("选择 Future 或 Punk；Punk 保留独立的 Style 设置。", "Choose Future or Punk; Punk keeps its own Style settings."))}</p></div><span class="style-mode-indicator"><i></i>${escapeHtml(modeName)}</span></header>`;
-  const themeSelector = `<section class="design-family-section" aria-label="${escapeHtml(t("完整主题", "Complete themes"))}">
-      <div class="style-section-heading"><div><small>00 / COMPLETE THEMES</small><h2>${escapeHtml(t("选择主题", "CHOOSE A THEME"))}</h2></div></div>
-      <div class="design-family-grid">
-        <button type="button" class="design-family-card" data-style-design="rhine" aria-pressed="${style.design === "rhine"}"><small>01 / GLASS PLAYER</small><strong>Future</strong><span>${escapeHtml(t("原播放器的玻璃外观与日夜配色。", "The original glass player with its day and night colours."))}</span><i>${style.design === "rhine" ? escapeHtml(t("使用中", "IN USE")) : "↗"}</i></button>
-        <button type="button" class="design-family-card" data-style-design="archive" aria-pressed="false"><small>02 / AUDIO ARCHIVE</small><strong>Punk</strong><span>${escapeHtml(t("foobar 音频档案主题与完整 Style 设置。", "The foobar Audio Archive theme with its full Style settings."))}</span><i>↗</i></button>
-      </div>
-    </section>`;
+  const modeName = mode === "day" ? "LIGHT" : "DARK";
+  const heading = `<header class="music-style-heading"><div><small>STYLE&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">STYLE</h1><p>${escapeHtml(t("调整界面外观、唱片盒与画质。", "Adjust the appearance, album case and render quality."))}</p></div><span class="style-mode-indicator"><i></i>${modeName}</span></header>`;
+  const themeSelector = designFamilyMarkup(style, mode);
   const pageStart = `<section class="music-style-page" aria-labelledby="music-style-title">${heading}${themeSelector}`;
-  return `${pageStart}<p class="style-current-theme">${escapeHtml(t("当前使用 Future 主题，保留原有玻璃外观和日夜配色。", "Future keeps the original glass appearance and day/night colours."))}</p><div id="theme-quality-slot" class="style-native-quality"></div></section>`;
+  return `${pageStart}<div id="theme-quality-slot" class="style-native-quality"></div></section>`;
 }
 
 type PreviewChoice = { kind: "scheme"; id: ColourScheme };

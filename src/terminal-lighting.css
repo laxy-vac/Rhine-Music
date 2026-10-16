@@ -11,25 +11,31 @@ html
     color-mix(in srgb, var(--surface) 64%, var(--accent))
       var(--terminal-light-edge, 0%)
   );
+}
+
+html
+  .music-app[data-design="rhine"]:is([data-terminal-lighting="local"], [data-terminal-lighting="full"])
+  [data-terminal-receiver="surface"] {
   --terminal-receiver-shadow:
     inset var(--terminal-light-x, 0px) var(--terminal-light-y, 0px) 0
-      color-mix(
-        in srgb,
-        var(--surface) var(--terminal-light-highlight, 0%),
-        transparent
-      ),
-    0 2px 10px
-      color-mix(
-        in srgb,
-        var(--ink) var(--terminal-light-shadow, 0%),
-        transparent
-      ),
-    0 0 var(--terminal-light-spread, 0px)
-      color-mix(
-        in srgb,
-        var(--accent) var(--terminal-light-halo, 0%),
-        transparent
-      );
+      color-mix(in srgb, var(--surface) var(--terminal-light-highlight, 0%), transparent),
+    inset 0 -2px 6px
+      color-mix(in srgb, var(--ink) var(--terminal-light-shadow, 0%), transparent),
+    inset 0 0 var(--terminal-light-spread, 0px)
+      color-mix(in srgb, var(--accent) var(--terminal-light-halo, 0%), transparent);
+  box-shadow: var(--terminal-receiver-shadow);
+}
+
+html
+  .music-app[data-design="rhine"]:is([data-terminal-lighting="local"], [data-terminal-lighting="full"])
+  [data-terminal-receiver="control"] {
+  --terminal-receiver-shadow:
+    inset var(--terminal-light-x, 0px) var(--terminal-light-y, 0px) 0
+      color-mix(in srgb, var(--surface) var(--terminal-light-highlight, 0%), transparent),
+    inset 0 -1px 1px
+      color-mix(in srgb, var(--ink) var(--terminal-light-shadow, 0%), transparent),
+    inset 0 0 4px
+      color-mix(in srgb, var(--accent) var(--terminal-light-control-halo, 0%), transparent);
   box-shadow: var(--terminal-receiver-shadow);
 }
 

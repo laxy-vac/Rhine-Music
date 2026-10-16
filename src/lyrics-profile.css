@@ -1,0 +1,49 @@
+.music-app #music-lyrics-page .lyrics-archive-profile {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  padding: 16px; border: 1px solid var(--line); border-radius: 16px;
+  color: var(--ink); background: color-mix(in srgb,var(--surface) 72%,transparent);
+}
+.music-app #music-lyrics-page .lyrics-archive-profile-heading,
+.music-app #music-lyrics-page .lyrics-archive-queue-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-bottom:8px;border-bottom:1px solid var(--line);color:var(--muted);
+  font:10px/1.4 var(--design-mono,monospace);letter-spacing:.1em;
+}
+.music-app #music-lyrics-page .lyrics-archive-file { padding:3px 7px;background:var(--ink);color:var(--page-bg);border:0;font-size:9px; }
+.music-app #music-lyrics-page .lyrics-archive-cover { display:block;align-self:center;width:100%;max-width:300px;margin:2px 0 6px;padding:0;border:0;background:transparent;box-shadow:none;cursor:pointer; }
+.music-app #music-lyrics-page .lyrics-archive-cover:focus-visible { outline:2px solid var(--accent);outline-offset:4px;border-radius:8px; }
+.music-app #music-lyrics-page .lyrics-archive-cover-frame { position:relative;display:grid;width:100%;aspect-ratio:1;border:0;background:transparent;overflow:visible; }
+.music-app #music-lyrics-page .lyrics-archive-cover-image,
+.music-app #music-lyrics-page .lyrics-archive-cover-placeholder { grid-area:1/1;width:100%;height:100%;object-fit:contain; }
+.music-app #music-lyrics-page .lyrics-archive-cover-placeholder { display:grid;place-items:center;font-size:48px;color:var(--line);background:color-mix(in srgb,var(--surface) 50%,transparent);border-radius:10px; }
+.music-app #music-lyrics-page .lyrics-case-preview { position:absolute;inset:0;display:block;pointer-events:none; }
+.music-app #music-lyrics-page .lyrics-case-preview canvas { display:block;width:100%;height:100%;pointer-events:none; }
+.music-app #music-lyrics-page .has-case-preview > :is(.lyrics-archive-cover-image,.lyrics-archive-cover-placeholder) { visibility:hidden; }
+.music-app #music-lyrics-page .lyrics-archive-profile-tags { display:flex;flex-wrap:wrap;gap:7px; }
+.music-app #music-lyrics-page .lyrics-archive-tag { padding:4px 7px;border:1px solid var(--line);border-radius:5px;color:var(--muted);font:9px/1.3 var(--design-mono,monospace);letter-spacing:.05em; }
+.music-app #music-lyrics-page .lyrics-archive-tag:first-child { color:var(--page-bg);background:var(--ink);border-color:var(--ink); }
+.music-app #music-lyrics-page .lyrics-archive-tag:nth-child(2) { color:var(--accent);border-color:color-mix(in srgb,var(--accent) 65%,var(--line)); }
+.music-app #music-lyrics-page .lyrics-archive-title { margin:1px 0 0;font-size:22px;line-height:1.3;font-weight:600;color:var(--ink);overflow-wrap:anywhere; }
+.music-app #music-lyrics-page .lyrics-archive-artist { margin:0;color:var(--muted);font-size:12px;line-height:1.4; }
+.music-app #music-lyrics-page .lyrics-archive-loaded { display:grid;gap:5px;margin-top:5px;padding:10px 0 0;border-top:1px solid var(--line); }
+.music-app #music-lyrics-page .lyrics-archive-loaded small { color:var(--muted);font:9px/1.4 var(--design-mono,monospace);letter-spacing:.1em; }
+.music-app #music-lyrics-page .lyrics-archive-loaded-value { color:var(--ink);font-size:11px;line-height:1.6;overflow-wrap:anywhere; }
+.music-app #music-lyrics-page .lyrics-archive-table-heading { display:flex;justify-content:space-between;gap:10px;margin-top:4px;padding:5px 8px;background:var(--ink);color:var(--page-bg);font:9px/1.4 var(--design-mono,monospace);letter-spacing:.05em; }
+.music-app #music-lyrics-page .lyrics-archive-table { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;border:0; }
+.music-app #music-lyrics-page .lyrics-archive-table-row { display:grid;gap:4px;min-width:0;padding:0;border:0; }
+.music-app #music-lyrics-page .lyrics-archive-table-row[hidden] { display:none; }
+.music-app #music-lyrics-page .lyrics-archive-key { color:var(--muted);font:9px/1.4 var(--design-mono,monospace);letter-spacing:.05em; }
+.music-app #music-lyrics-page .lyrics-archive-value { color:var(--ink);font-size:12px;line-height:1.5;overflow-wrap:anywhere; }
+.music-app #music-lyrics-page .lyrics-archive-pager[hidden] { display:none; }
+.music-app #music-lyrics-page .lyrics-archive-queue { margin-top:16px;padding:12px 14px;min-width:0;border:1px solid var(--line);border-radius:12px; }
+.music-app #music-lyrics-page .lyrics-archive-queue-count { font-size:10px; }
+.music-app #music-lyrics-page .lyrics-archive-queue-list { display:flex;flex-direction:column;gap:0;margin-top:6px; }
+.music-app #music-lyrics-page .lyrics-queue-row { display:grid;grid-template-columns:30px minmax(0,1fr) 42px;align-items:center;gap:7px;width:100%;min-height:36px;padding:7px 0;border:0;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);border-radius:0;background:transparent;box-shadow:none;color:var(--ink);font-size:12px;text-align:left; }
+.music-app #music-lyrics-page .lyrics-queue-row:hover { color:var(--accent); }
+.music-app #music-lyrics-page .lyrics-queue-position,
+.music-app #music-lyrics-page .lyrics-queue-duration { color:var(--muted);font:10px var(--design-mono,monospace); }
+.music-app #music-lyrics-page .lyrics-queue-title { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.music-app #music-lyrics-page .lyrics-archive-queue-empty { color:var(--muted);font-size:10px; }
+.music-app[data-design="archive"] #music-lyrics-page .lyrics-archive-profile { border-color:color-mix(in srgb,var(--accent) 75%,var(--line));border-radius:0;background:transparent; }
+.music-app[data-design="archive"] #music-lyrics-page :is(.lyrics-archive-queue,.lyrics-archive-tag,.lyrics-archive-cover-placeholder) { border-radius:0; }
+.music-app[data-design="archive"] #music-lyrics-page .lyrics-archive-title { font-family:var(--design-mono); }

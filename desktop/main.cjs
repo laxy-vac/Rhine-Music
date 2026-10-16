@@ -91,6 +91,68 @@ async function listen() {
  throw new Error('本地播放服务端口均被占用，请关闭多余的播放器实例。');
 }
 function ownedEvent(event){return window&&!window.isDestroyed()&&event.sender===window.webContents}
+// HIDDEN_STARTUP_GATE_FACTORY_BEGIN
+function createHiddenStartupGate({ipcMain,app,dialog,getWindow}){
+ let generation=0,readyGeneration=-1,failureGeneration=-1,pendingFocus=false,origin='';
+ const isOwnedMainFrameEvent=event=>{
+  const target=getWindow();
+  if(!target||target.isDestroyed()||event.sender!==target.webContents)return false;
+  const frame=event.senderFrame;
+  if(!frame||frame!==target.webContents.mainFrame)return false;
+  const frameUrl=frame.url;
+  if(!origin||!frameUrl)return false;
+  try{if(new URL(frameUrl).origin!==origin)return false}catch{return false}
+  return true;
+ };
+ const isReady=()=>readyGeneration===generation;
+ const revealIfReady=({focus=false}={})=>{
+  const target=getWindow();
+  if(!target||target.isDestroyed())return false;
+  if(focus)pendingFocus=true;
+  if(!isReady())return false;
+  const wasMinimized=target.isMinimized();
+  if(wasMinimized)target.restore();
+  if(wasMinimized||!target.isVisible())target.show();
+  if(pendingFocus){target.focus();pendingFocus=false}
+  return true;
+ };
+ const reportFailure=message=>{
+  if(failureGeneration===generation)return false;
+  failureGeneration=generation;
+  const detail=String(message||'Rhine Music 前端初始化失败').slice(0,2000);
+  try{dialog.showErrorBox('Rhine Music 启动失败',detail)}finally{app.quit()}
+  return true;
+ };
+ const attachWindow=(target,url)=>{
+  origin=new URL(url).origin;
+  generation++;readyGeneration=-1;failureGeneration=-1;
+  target.webContents.on('did-start-navigation',(_event,_destination,inPlace,isMainFrame)=>{
+   if(!isMainFrame||inPlace)return;
+   generation++;readyGeneration=-1;failureGeneration=-1;
+   target.hide();
+  });
+  target.webContents.on('did-fail-load',(_event,code,description,validatedURL,isMainFrame)=>{
+   if(!isMainFrame||Number(code)===-3)return;
+   reportFailure(`网页加载失败（${code}）：${description}\n${validatedURL}`);
+  });
+  target.webContents.on('render-process-gone',(_event,details)=>{
+   reportFailure(`页面渲染进程已退出：${details?.reason||details?.exitCode||'未知原因'}`);
+  });
+ };
+ ipcMain.on('rhine:frontend-ready',event=>{
+  if(!isOwnedMainFrameEvent(event)||isReady())return;
+  readyGeneration=generation;
+  revealIfReady();
+ });
+ ipcMain.on('rhine:frontend-failed',(event,message)=>{
+  if(!isOwnedMainFrameEvent(event))return;
+  reportFailure(message);
+ });
+ app.on('second-instance',()=>{revealIfReady({focus:true})});
+ app.on('activate',()=>{revealIfReady({focus:true})});
+ return{attachWindow,revealIfReady,reportFailure,isReady:()=>isReady()};
+}
+// HIDDEN_STARTUP_GATE_FACTORY_END
 const standardEqPresetStore=createStandardEqPresetStore({home:storage.home,audioPresetFile,projectRoot:root,dialog,shell,getWindow:()=>window});
 registerStandardEqPresetIpc({ipcMain,store:standardEqPresetStore,ownedEvent});
 ipcMain.handle('rhine:about:known-issues',async(event,language)=>{
@@ -156,7 +218,7 @@ ipcMain.handle('rhine:audio-presets:save',async(event,value)=>{
 });
 if(!selfTest&&!settingsCheck&&!previewUICheck&&!app.requestSingleInstanceLock()){app.quit()}
 else {
- app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus()}});
+ const startupGate=!selfTest&&!settingsCheck&&!previewUICheck?createHiddenStartupGate({ipcMain,app,dialog,getWindow:()=>window}):null;
  app.whenReady().then(async()=>{
   try {
    windowAspectModel=await import(pathToFileURL(path.join(root,'src/window-aspect-model.mjs')).href);
@@ -187,6 +249,7 @@ else {
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
    window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e6e8e3',show:false,autoHideMenuBar:true,icon:sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
    windowAspectController=attachWindowAspect(window,{screen:require('electron').screen,initialAspect:preferences.windowAspect});
+   startupGate?.attachWindow(window,origin);
    {const title=sourcePreview?'Rhine Music · 源码验证':`Rhine Music · ${app.getVersion()}`;window.setTitle(title);window.webContents.on('page-title-updated',event=>{event.preventDefault();window.setTitle(title)})}
    // Restore the intended CSS proportions on startup/reload, including profiles
    // with an older saved page zoom. Windows DPI scaling remains under the OS.
@@ -194,7 +257,6 @@ else {
    window.webContents.on('will-navigate',(event,url)=>{if(new URL(url).origin!==origin)event.preventDefault()});
    window.webContents.setWindowOpenHandler(({url})=>{try{const parsed=new URL(url);if(parsed.protocol==='https:')void shell.openExternal(url)}catch{}return {action:'deny'}});
    window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-   window.once('ready-to-show',()=>window.show());
    if(sourcePreview)window.once('show',()=>{void fs.writeFile(path.join(app.getPath('userData'),'desktop-preview.json'),JSON.stringify({mode:'desktop',pid:process.pid,projectDir:root,interfaceDir:process.env.RHINE_SOURCE_INTERFACE||path.join(root,'dist'),origin,dataDir,title:window.getTitle(),visible:window.isVisible()},null,2)+'\n').catch(error=>console.error(error.message))});
    window.on('closed',()=>{windowAspectController?.destroy();windowAspectController=undefined;window=undefined});
    try{await window.loadURL(origin)}catch(error){
@@ -203,7 +265,7 @@ else {
     // proceeds; it must not tear down the service or display a startup error.
     if(error.code!=='ERR_ABORTED'&&error.errno!==-3)throw error;
    }
-  }catch(error){if(settingsCheck){await fs.writeFile(path.join(app.getPath('userData'),'settings-review-report.json'),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{});console.error(error.stack)}else if(!selfTest)dialog.showErrorBox('Rhine Music 启动失败',error.message);else {const i=args.indexOf('--report');if(i>=0&&args[i+1])await fs.writeFile(path.resolve(args[i+1]),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{})}app.exit(1)}
+  }catch(error){if(settingsCheck){await fs.writeFile(path.join(app.getPath('userData'),'settings-review-report.json'),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{});console.error(error.stack)}else if(!selfTest&&!previewUICheck)startupGate?.reportFailure(error.message);else if(!selfTest)dialog.showErrorBox('Rhine Music 启动失败',error.message);else {const i=args.indexOf('--report');if(i>=0&&args[i+1])await fs.writeFile(path.resolve(args[i+1]),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{})}if(!startupGate)app.exit(1)}
  });
  app.on('window-all-closed',()=>{if(!previewUICheck)app.quit()});
  app.on('before-quit',event=>{

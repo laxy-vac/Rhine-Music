@@ -608,3 +608,55 @@
 .music-app[data-layout="portrait"][data-page="eq"][data-playback-visible="true"] .music-settings-page.music-eq-page {
   bottom: calc(var(--playback-height, 80px) + 44px);
 }
+
+/* The band-bank navigator is a quiet horizontal position handle, separate
+   from the colored vertical gain faders. */
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 16px;
+  writing-mode: horizontal-tb;
+  direction: ltr;
+  accent-color: transparent;
+  background: transparent;
+}
+
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll]::-webkit-slider-runnable-track {
+  height: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-edge) 36%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 7px;
+  margin-top: -2.5px;
+  border: 1px solid color-mix(in srgb, var(--future-eq-edge) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-label) 48%, var(--future-eq-panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 48%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll]::-moz-range-track {
+  height: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-edge) 36%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll]::-moz-range-thumb {
+  width: 18px;
+  height: 7px;
+  border: 1px solid color-mix(in srgb, var(--future-eq-edge) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-label) 48%, var(--future-eq-panel));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 48%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page .eq-strip-navigation input[type="range"][data-eq-strip-scroll]:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--future-eq-edge-hi) 70%, transparent);
+  outline-offset: 2px;
+}

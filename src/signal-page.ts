@@ -190,7 +190,7 @@ export function setupSignalPage(
   function syncDesign() {
     const archive = musicApp?.dataset.design === "archive";
     root.dataset.design = archive ? "archive" : "rhine";
-    signalLabel.textContent = archive ? "SIGNAL MONITOR · 04" : "信号监视 · 04";
+    signalLabel.textContent = "SIGNAL MONITOR · 04";
   }
 
   function setMode(next: Mode) {

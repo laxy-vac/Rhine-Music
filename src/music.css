@@ -1270,35 +1270,6 @@
   font-size: 11px;
   color: var(--accent);
 }
-#music-loading {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  gap: 14px;
-  background: var(--page-bg);
-}
-#music-loading strong {
-  font-size: 11px;
-  letter-spacing: 3px;
-  font-weight: 500;
-}
-#music-loading small {
-  font-size: 10px;
-  color: var(--muted);
-}
-.loading-orbit {
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: music-orbit 1.5s linear infinite;
-  margin-bottom: 12px;
-}
 #music-toast {
   position: absolute;
   bottom: 24px;
@@ -2150,10 +2121,6 @@
   color: var(--ink);
 }
 
-.music-app .music-boot-overlay .boot {
-  opacity: 1;
-  visibility: visible;
-}
 .music-app .viewer-surface {
   top: 125px;
   right: 40px;

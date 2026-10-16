@@ -1,6 +1,6 @@
 # 歌词页与真实矩形频谱
 
-> 来源/缓存/API规则仍按本文维护；当前Future/Punk均使用共同三栏与选项弹窗，视觉和页面组织见 [THEME-PAGE](THEME-PAGE.md)。2026-10-10的查询与界面检查是旧手动查找流程的历史记录，不代表当前自动匹配行为或全部歌曲、页面和设备验收；当前验证边界见 [PROJECT-STATUS](PROJECT-STATUS.md)。
+> 更新：2026-10-17。来源/缓存/API规则仍按本文维护；Future/Punk共用三栏与选项弹窗，页面视觉见 [THEME-PAGE](THEME-PAGE.md)。歌词右侧播放卡展示当前曲目的真实盒体预览与同专辑后续队列；Future夜间当前行使用文字与小标记强调，不绘制整行外晕。整体UI最终复核见[本轮报告](../.tools/unified-ui-2026-10-17/unified-ui-report.json)，批准范围见[说明](UI-UNIFICATION-2026-10-17.md)，隐藏绘制专项见[本地报告](../.tools/unified-ui-2026-10-17/hidden-paint/run-1792178372961-43504/report.json)。2026-10-10的查询与界面检查是旧手动查找流程的历史记录，不代表当前自动匹配行为或全部歌曲、页面和设备验收；当前验证边界见 [PROJECT-STATUS](PROJECT-STATUS.md)。
 
 **历史实现记录（2026-10-10）：** 当时QQ使用smartbox搜索，网易云/QQ以曲名和歌手检索、多源请求分别回报成功/无匹配/错误，并由用户选择候选。旧公开演示查询和隔离mock只代表当时接口样例与手动流程；它们不验证当前自动匹配、当前平台状态或所有曲目。接口和内容供应仍可能变化。
 
@@ -12,11 +12,11 @@
 
 点击Cloud会显式选择Cloud、显示该bank并开始搜索；此选择跨页面保存，之后不会自动回退到Local。默认provider来自全局设置，弹窗中的临时provider选择不保存为本曲默认。导入或选用候选后弹窗保持打开，方便调整当前bank的偏移。来源管理位于全局设置，其按钮高38px、使用统一材质和主题圆角，悬停不加下划线，Punk保持方角。Esc关闭弹窗而不切页，音乐继续播放。
 
-顶栏“歌词”与音乐库、EQ平级。左侧播放信息可独立滚动，底部频谱固定保留完整高度；中央阅读歌词，右侧只保留封面与曲目信息。
+顶栏“歌词”与音乐库、EQ平级。左侧播放信息可独立滚动，底部频谱固定保留完整高度；中央阅读歌词，右侧播放卡展示当前曲目及其真实盒体3D预览，并列出同专辑后续队列。盒体配置随当前主题的已保存设置，内容绑定播放中的专辑，不随唱片浏览选择漂移；普通封面图在此卡隐藏。
 
 两主题底部进度条上方显示当前播放的原文歌词句。`setupLyricsPage().currentLine(position?)`复用当前文档、解析结果与页面活动行的偏移判断，歌词页隐藏时仍可读取；状态推进和`lyrics-content-changed`事件同步底栏，不额外搜索或下载。文档加载/切源/校准后立即刷新，换曲时拒绝旧track文档；无定时歌词或首句尚未到达时留空。固定18px歌词槽单行省略，完整文本保留在title中。
 
-Future歌词选项弹窗整体作为一块玻璃承接环境光；内部仅hover/focus-visible/selected/expanded控件显示inset表面亮边，不逐按钮生成外投光晕。弹窗打开时暂停背后接收器，关闭后恢复。该规则保留off/local/full光效质量档与Punk皮肤。
+Future歌词选项弹窗整体作为一块玻璃承接环境光；内部仅hover/focus-visible/selected/expanded控件显示inset表面亮边，不逐按钮生成外投光晕。弹窗打开时暂停背后接收器，关闭后恢复。夜间当前行以字重、颜色和小标记突出，不使用大胶囊或整行受光。该规则保留off/local/full光效质量档与Punk皮肤。
 
 1. 每曲缓存为一个按曲目ID的SHA-256命名V3 JSON容器，包含独立的`local`/`cloud` bank，以及`userSelected`和`selectionRevision`。每个bank最多一份歌词内容和一份偏移。选择偏好与有效内容类型分开：Local缺失时可以使用Cloud缓存或自动解析的Cloud结果，但实际`effectiveKind`为Cloud并设`usingCloudFallback=true`；回退不改变`activeKind`、`userSelected`或revision。显式选择Cloud后保持Cloud，即使Local文档随后出现也不会自动切回。
 2. 播放器识别当前曲目后立即后台解析，即使歌词页未打开也会开始。Local偏好下，本地bank有文档则直接显示；缺失时读取Cloud bank，未命中才按全局provider执行云端解析，最多20秒逐源回退。Cloud也没有可靠结果时正文为空。自动匹配要求曲名可靠匹配，艺人可用时同时核对艺人；艺人未知时再用专辑或时长辅助。每个来源最多尝试三个候选，来源错误或候选不可靠时继续回退。服务区分“未找到可靠匹配”和“来源暂时不可用”，无法保证每首歌曲都有可用歌词。
@@ -69,9 +69,9 @@ URL模板支持`{query}`、`{title}`、`{artist}`、`{album}`、`{id}`，各值�
 
 频谱连续运动修正：TypeScript与1662模块interface-only构建通过，日志在`.tools/lyrics-spectrum-motion/build.log`。`node scripts/check-lyrics-page.mjs --spectrum-motion`最终报告11项全通过，报告/四张稳定绘制截图在`.tools/lyrics-spectrum-motion/run-1792159827778-859aa4c4/`。同一快照约162ms内有10个不同生产DOM中间值；近等长上升/回落窗口的目标剩余差比例为0.0357/0.3963，确认快起慢落。静止32频段收敛后恒定，NaN/越界、暂停/不可用归零、切歌清峰、减少动态、页/文档显隐和销毁均通过。真实NativeAudio类配合全mock请求及惰性计时器探针确认250→100→250ms需求切换与signal共存；没有访问设备或真实原生服务，不证明实际网络延迟/FFT吞吐。两主题使用有效`rhine/archive` key与生产日夜颜色，等待离屏paint后核验三栏/32柱；主Agent复核Future日间与Punk夜间截图。无外网请求，未启动个人播放器或验证硬件FPS/实际歌曲观感。下列歌词来源/光效检查属于此前完成的功能验证。
 
-2026-10-16当前Local fallback与Future歌词弹窗光效修正验证完成，产物位于`.tools/lyrics-local-fallback`。TypeScript和1662模块interface-only Vite build通过，日志为`build.log`。`node --test scripts/check-lyrics-library.mjs`最终29/29通过，0失败/取消/跳过，日志为`library-check.log`；首次28/29失败是Windows测试夹具清理临时目录时遇到`ENOTEMPTY`，脚本增加library队列等待和有限重试后复跑通过。
+2026-10-16历史单项：Local fallback与Future歌词弹窗光效修正验证完成，产物位于`.tools/lyrics-local-fallback`。TypeScript和1662模块interface-only Vite build通过，日志为`build.log`。`node --test scripts/check-lyrics-library.mjs`最终29/29通过，0失败/取消/跳过，日志为`library-check.log`；首次28/29失败是Windows测试夹具清理临时目录时遇到`ENOTEMPTY`，脚本增加library队列等待和有限重试后复跑通过。
 
-`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`最终`ok=true`，报告11项检查均为true，18张截图位于`.tools/lyrics-local-fallback/run-1792158440496-eaab20df/`。覆盖手动Import、Local的Cloud缓存/自动解析成功与失败回退、bank独立偏移、显式Cloud保持、慢速切源跨页、弹窗开关时背后receiver暂停/恢复，以及Future日夜Manage/Search/Use空闲/悬停/焦点、local/off几何和Punk方角。主Agent复核day空闲、Manage悬停、Search焦点、night Manage焦点、Use悬停、Punk悬停及Local fallback截图。
+上述历史单项的`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`报告为`ok=true`，11项检查均为true，18张截图位于`.tools/lyrics-local-fallback/run-1792158440496-eaab20df/`。覆盖手动Import、Local的Cloud缓存/自动解析成功与失败回退、bank独立偏移、显式Cloud保持、慢速切源跨页、弹窗开关时背后receiver暂停/恢复，以及Future日夜Manage/Search/Use空闲/悬停/焦点、local/off几何和Punk方角。主Agent复核day空闲、Manage悬停、Search焦点、night Manage焦点、Use悬停、Punk悬停及Local fallback截图。
 
 UI检查使用既有Electron隐藏窗口、全部mock且无外部请求。Windows文件选择器仅拦截调用意图，focus-visible使用CDP伪状态；没有验证真实Windows选择器/键盘、线上歌词服务、个人播放器整窗或音频设备。以下`8581466`、`a684885`记录仍仅作历史，不计入本轮验收。
 

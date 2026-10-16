@@ -102,7 +102,7 @@ function findEnabledOptionByValue(select: HTMLSelectElement, value: string) {
   return -1;
 }
 
-export function enhanceSettingsSelectControls(container: HTMLElement): {
+export function enhanceSettingsSelectControls(container: HTMLElement, options: { menuMinWidth?: number } = {}): {
   sync(): void;
   close(): void;
   destroy(): void;
@@ -148,7 +148,7 @@ export function enhanceSettingsSelectControls(container: HTMLElement): {
     const viewportHeight = window?.innerHeight || document.documentElement.clientHeight;
     const edge = 12;
     const gap = 7;
-    const menuWidth = Math.max(0, Math.min(Math.max(rect.width, Math.min(296, viewportWidth - edge * 2)), viewportWidth - edge * 2));
+    const menuWidth = Math.max(0, Math.min(Math.max(rect.width, Math.min(options.menuMinWidth ?? 296, viewportWidth - edge * 2)), viewportWidth - edge * 2));
     control.menu.style.width = `${menuWidth}px`;
 
     const above = Math.max(0, rect.top - edge - gap);

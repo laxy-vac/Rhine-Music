@@ -2,6 +2,15 @@ const {contextBridge,ipcRenderer}=require('electron');
 const preferences=ipcRenderer.sendSync('rhine:preferences:get');
 try{if(Object.keys(preferences).length)localStorage.setItem('rhine-music-preferences',JSON.stringify(preferences))}catch{}
 try{if(preferences.language==='zh-CN'||preferences.language==='en')localStorage.setItem('rhine-ui-language',preferences.language)}catch{}
+let frontendReady=false,frontendFailureSent=false;
+function reportFrontendFailure(message){
+ if(frontendReady||frontendFailureSent)return;
+ frontendFailureSent=true;
+ const detail=String(message||'前端初始化失败').slice(0,2000);
+ ipcRenderer.send('rhine:frontend-failed',detail);
+}
+window.addEventListener('error',event=>reportFrontendFailure(event.error?.stack||event.message||'前端脚本发生错误'));
+window.addEventListener('unhandledrejection',event=>reportFrontendFailure(event.reason?.stack||event.reason||'前端异步任务失败'));
 let audioPresetPersistenceError='';
 let audioPresetStoreExists=false;
 try{
@@ -11,6 +20,8 @@ try{
 }catch(error){audioPresetPersistenceError=`无法恢复本机音频预设：${error.message}`}
 contextBridge.exposeInMainWorld('rhineDesktop',{
  native:true,
+ frontendReady:()=>{frontendReady=true;ipcRenderer.send('rhine:frontend-ready')},
+ frontendFailed:reportFrontendFailure,
  audioPresetPersistenceError,
  audioPresetStoreExists,
  savePreferences:value=>{void ipcRenderer.invoke('rhine:preferences:save',value).then(result=>{if(!result?.ok)ipcRenderer.send('rhine:preferences:error',result?.error||'未收到文件保存确认')}).catch(error=>ipcRenderer.send('rhine:preferences:error',error.message))},

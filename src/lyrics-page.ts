@@ -3,6 +3,7 @@ import type { MusicPlayerState } from "./music-player";
 import type { MusicAlbum } from "./music-types";
 import { audioStageName, pcmConsistencyStatus } from "./audio-info";
 import { setSpectrumDemand } from "./native-audio";
+import "./lyrics-profile.css";
 
 export type SpectrumSnapshot = {
   available: boolean;
@@ -69,6 +70,8 @@ export interface LyricsPageCallbacks {
   spectrum: () => SpectrumSnapshot | undefined;
   notify: (message: string) => void;
   openSettings: () => void;
+  albumOrdinal?: (album?: MusicAlbum) => number | undefined;
+  createCasePreview?: (host: HTMLElement) => { refresh(): void; setVisible(visible: boolean): void; destroy(): void };
 }
 
 interface LyricsGlobalSettings {
@@ -259,7 +262,7 @@ async function responseJson<T>(response: Response): Promise<T> {
 export function setupLyricsPage(
   host: HTMLElement,
   callbacks: LyricsPageCallbacks,
-): { currentLine(position?: number): string; update(state: MusicPlayerState, album?: MusicAlbum): void; setVisible(visible: boolean): void; destroy(): void } {
+): { currentLine(position?: number): string; refreshCasePreview(): void; update(state: MusicPlayerState, album?: MusicAlbum): void; setVisible(visible: boolean): void; destroy(): void } {
   let latestState: MusicPlayerState | undefined;
   let latestAlbum: MusicAlbum | undefined;
   let visible = false;
@@ -456,7 +459,7 @@ export function setupLyricsPage(
   const albumArtist = element("p", "lyrics-album-artist", "");
   const albumMeta = element("p", "lyrics-album-meta", "—");
 
-  const archiveProfile = element("section", "lyrics-archive-profile");
+  const archiveProfile = element("section", "lyrics-archive-profile lyrics-archive-record");
   archiveProfile.hidden = true;
   const archiveProfileHeading = element("div", "lyrics-archive-profile-heading");
   archiveProfileHeading.append(element("span", "", "SIGNAL PROFILE"));
@@ -471,7 +474,13 @@ export function setupLyricsPage(
   archiveCoverImage.alt = trUi("专辑封面，点击定位当前歌曲");
   archiveCoverImage.hidden = true;
   const archiveCoverPlaceholder = element("span", "lyrics-archive-cover-placeholder", "R");
-  archiveCoverFrame.append(archiveCoverImage, archiveCoverPlaceholder);
+  const casePreviewHost = element("span", "lyrics-case-preview");
+  archiveCoverFrame.append(archiveCoverImage, archiveCoverPlaceholder, casePreviewHost);
+  const casePreview = callbacks.createCasePreview?.(casePreviewHost);
+  const syncCasePreviewState = () => archiveCoverFrame.classList.toggle("has-case-preview", casePreviewHost.dataset.casePreviewState === "ready");
+  casePreviewHost.addEventListener("case-preview-state", syncCasePreviewState);
+  const syncCasePreviewVisibility = () => casePreview?.setVisible(visible && right.open && !!latestState?.currentTrack);
+  right.addEventListener("toggle", syncCasePreviewVisibility);
   archiveCoverButton.append(archiveCoverFrame);
   const archiveProfileTags = element("div", "lyrics-archive-profile-tags");
   const archiveTransportTag = element("span", "lyrics-archive-tag", trUi("待机"));
@@ -491,6 +500,9 @@ export function setupLyricsPage(
     element("div", "lyrics-archive-table-row"),
   ];
   archiveProfileTable.append(...archiveProfileValues);
+  const archiveTableHeading = element("div", "lyrics-archive-table-heading");
+  const archiveAlbumOrdinal = element("span", "", "—");
+  archiveTableHeading.append(element("span", "", "PROFILE"), archiveAlbumOrdinal);
   const archivePager = element("div", "lyrics-archive-pager");
   const archivePrevious = element("button", "lyrics-archive-pager-button", "‹");
   archivePrevious.type = "button";
@@ -507,13 +519,14 @@ export function setupLyricsPage(
   archiveNext.title = trUi("下一曲");
   archiveNext.setAttribute("aria-label", trUi("下一曲"));
   archivePager.append(archivePrevious, archiveCurrent, archiveNext);
+  archivePager.hidden = true;
   const archiveQueue = element("section", "lyrics-archive-queue");
   const archiveQueueHeading = element("div", "lyrics-archive-queue-heading");
   const archiveQueueCount = element("small", "lyrics-archive-queue-count", "00");
   archiveQueueHeading.append(element("span", "", trUi("QUEUE / NEXT")), archiveQueueCount);
   const archiveQueueList = element("div", "lyrics-archive-queue-list");
   archiveQueue.append(archiveQueueHeading, archiveQueueList);
-  archiveProfile.append(archiveProfileHeading, archiveCoverButton, archiveProfileTags, archiveTitle, archiveArtist, archiveLoaded, archiveProfileTable, archivePager, archiveQueue);
+  archiveProfile.append(archiveProfileHeading, archiveCoverButton, archiveProfileTags, archiveTitle, archiveArtist, archiveLoaded, archiveTableHeading, archiveProfileTable, archivePager);
 
   const offsetSection = element("section", "lyrics-offset-section");
   const offsetHeading = element("div", "lyrics-data-heading", trUi("云歌词校准"));
@@ -622,7 +635,7 @@ export function setupLyricsPage(
   preferencePanel.append(preferenceDialogHeader, preferenceTrack, preferenceTabs, currentSourceLabel, localPanel, sourceSection, offsetSection, preferenceDialogStatus);
   preferenceDialog.append(preferencePanel);
 
-  rightBody.append(archiveProfile, coverFrame, albumTitle, albumArtist, albumMeta);
+  rightBody.append(archiveProfile, archiveQueue, coverFrame, albumTitle, albumArtist, albumMeta);
   right.append(rightBody);
   archiveLayout.append(left, main, right);
   workspace.append(archiveLayout, preferenceDialog);
@@ -673,9 +686,8 @@ export function setupLyricsPage(
   function renderArchiveProfile(): void {
     const state = latestState;
     const track = state?.currentTrack;
-    const queue = state?.queue ?? [];
-    const reportedIndex = state?.currentIndex ?? -1;
-    const trackIndex = reportedIndex >= 0 ? reportedIndex : queue.findIndex((item) => item.id === track?.id);
+    const queue = latestAlbum?.tracks ?? (track?.albumId ? state?.queue.filter(item => item.albumId === track.albumId) ?? [] : track ? [track] : []);
+    const trackIndex = queue.findIndex((item) => item.id === track?.id);
     archiveFileChip.textContent = trackIndex >= 0 ? `QUEUE ${String(trackIndex + 1).padStart(3, "0")}` : "QUEUE —";
     archiveTransportTag.textContent = state?.transport === "playing"
       ? trUi("播放中")
@@ -713,15 +725,17 @@ export function setupLyricsPage(
       archiveCoverPlaceholder.hidden = false;
     }
 
-    const gain = track?.replayGain?.trackGainDb;
+    const ordinal = callbacks.albumOrdinal?.(latestAlbum);
+    archiveAlbumOrdinal.textContent = ordinal && Number.isSafeInteger(ordinal) ? `ARC-${String(ordinal).padStart(4, "0")}` : "—";
     const profileValues = [
-      [trUi("格式"), track ? [track.codec, track.format].filter(Boolean).join(" · ") || "—" : "—"],
-      [trUi("码率"), track?.bitrate ? `${Math.round(track.bitrate / 1000)} kb/s` : "—"],
-      [trUi("播放次数"), "—"],
-      ["REPLAYGAIN", typeof gain === "number" && Number.isFinite(gain) ? `${gain.toFixed(2)} dB` : "—"],
+      ["FORMAT", track ? [...new Set([track.codec, track.format].filter(Boolean))].join(" · ") || "—" : "—"],
+      ["BITRATE", track?.bitrate ? `${Math.round(track.bitrate / 1000)} kb/s` : "—"],
+      ["RESOLUTION", track ? [track.bitsPerSample ? `${track.bitsPerSample} bit` : "", track.sampleRate ? formatRate(track.sampleRate) : ""].filter(Boolean).join(" / ") || "—" : "—"],
+      ["DURATION", track?.duration ? formatTime(track.duration) : "—"],
     ];
     profileValues.forEach(([key, value], index) => {
       const row = archiveProfileValues[index];
+      row.hidden = value === "—";
       if (row.children.length === 2 && row.children[0].textContent === key && row.children[1].textContent === value) return;
       row.replaceChildren(element("span", "lyrics-archive-key", key), element("span", "lyrics-archive-value", value));
     });
@@ -751,6 +765,8 @@ export function setupLyricsPage(
         });
       }
     }
+    syncCasePreviewVisibility();
+    casePreview?.refresh();
     renderArchiveReadouts();
   }
 
@@ -759,17 +775,17 @@ export function setupLyricsPage(
     workspace.dataset.design = archive ? "archive" : "rhine";
     // Punk now uses the complete existing Future workspace; only its skin differs.
     archiveLayout.style.display = "contents";
-    leftSummaryLabel.textContent = trUi("播放与解码");
-    rightSummaryLabel.textContent = trUi("曲目信息");
-    lyricsEyebrow.textContent = trUi("02 / 同步文本");
+    leftSummaryLabel.textContent = "PLAYBACK / DECODE";
+    rightSummaryLabel.textContent = "TRACK PROFILE";
+    lyricsEyebrow.textContent = "02 / SYNC TEXT";
     sourceReadouts.hidden = true;
     sourceAnalysis.hidden = true;
     archiveLineIndex.hidden = true;
-    archiveProfile.hidden = true;
-    coverFrame.hidden = false;
-    albumTitle.hidden = false;
-    albumArtist.hidden = false;
-    albumMeta.hidden = false;
+    archiveProfile.hidden = false;
+    coverFrame.hidden = true;
+    albumTitle.hidden = true;
+    albumArtist.hidden = true;
+    albumMeta.hidden = true;
     const compact = activeMobileQuery?.matches ?? window.matchMedia("(max-width: 980px)").matches;
     left.open = !compact;
     right.open = !compact;
@@ -1611,6 +1627,7 @@ export function setupLyricsPage(
   syncArchiveLayout();
 
   return {
+    refreshCasePreview: () => casePreview?.refresh(),
     currentLine(position?: number): string {
       const index = currentLyricIndex(position);
       return index >= 0 ? parsedLyrics!.lines[index].text : "";
@@ -1667,6 +1684,7 @@ export function setupLyricsPage(
     setVisible(nextVisible) {
       if (disposed || visible === nextVisible) return;
       visible = nextVisible;
+      syncCasePreviewVisibility();
       if (visible) {
         resetFollow();
         startVisibleRefresh();
@@ -1687,6 +1705,9 @@ export function setupLyricsPage(
     destroy() {
       if (disposed) return;
       disposed = true;
+      casePreview?.destroy();
+      casePreviewHost.removeEventListener("case-preview-state", syncCasePreviewState);
+      right.removeEventListener("toggle", syncCasePreviewVisibility);
       stopVisibleRefresh();
       document.removeEventListener("visibilitychange", syncSpectrumVisibility);
       sourceRequest?.abort();

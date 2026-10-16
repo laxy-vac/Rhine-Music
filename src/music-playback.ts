@@ -1,6 +1,8 @@
 import { trUi, ui } from "./i18n";
 import type { MusicPlayerState } from "./music-player";
 import type { MusicTrack } from "./music-types";
+import { enhanceSettingsSelectControls } from "./settings-select-controls";
+import "./playback-select.css";
 
 const glyph = (path: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
@@ -17,6 +19,7 @@ export const playbackMarkup = () => ui`
       ${icon('<rect x="7" y="5" width="3" height="14" rx=".8" fill="currentColor" stroke="none"/><rect x="14" y="5" width="3" height="14" rx=".8" fill="currentColor" stroke="none"/>', "playback-pause")}
     </button>
     <button data-action="track-next" aria-label="下一曲" title="下一曲">${icon('<path d="m5 5 11 7-11 7Z" fill="currentColor" stroke="none"/><path d="M20 5v14"/>')}</button>
+    <button type="button" id="playback-stop" data-action="stop" aria-label="停止播放" title="停止播放">${icon('<rect x="6" y="6" width="12" height="12" rx=".7" fill="currentColor" stroke="none"/>')}</button>
   </div>
   <button class="playback-song" data-action="locate-playing" aria-label="定位当前歌曲">
     <span class="playback-cover" aria-hidden="true">${glyph('<path d="M15 5v11a3 3 0 1 1-2-2.83V7l6-1v8a3 3 0 1 1-2-2.83V5"/>')}<img class="playback-cover-image" alt=""><img class="playback-cover-image" alt=""></span>
@@ -65,6 +68,7 @@ export function setupMusicPlayback(
   const toggle = query("#playback-toggle");
   const order = query<HTMLSelectElement>(".playback-order select");
   const currentLyric = query(".playback-current-lyric");
+  const selectControls = enhanceSettingsSelectControls(host, { menuMinWidth: 190 });
   const coverImages = [
     ...host.querySelectorAll<HTMLImageElement>(".playback-cover-image"),
   ];
@@ -183,6 +187,8 @@ export function setupMusicPlayback(
 
   return {
     refreshLyric,
+    closeMenu: () => selectControls.close(),
+    destroy: () => { selectControls.destroy(); resize.disconnect(); textAnimation?.cancel(); },
     update(state: MusicPlayerState) {
       const changed = trackId !== state.currentTrack?.id;
       const canSeek =
@@ -190,7 +196,9 @@ export function setupMusicPlayback(
         ["playing", "paused"].includes(state.transport) &&
         state.duration > 0;
       latest = state;
+      query<HTMLButtonElement>("#playback-stop").disabled = !state.currentTrack;
       order.value = state.playbackOrder;
+      selectControls.sync();
       refreshLyric();
       if (changed || !canSeek) cancel();
       trackId = state.currentTrack?.id;
@@ -203,6 +211,7 @@ export function setupMusicPlayback(
         query(".playback-song").setAttribute("aria-label", trUi(coverActive ? "查看正在播放的专辑" : "查看所选专辑"));
       } else query(".playback-song").setAttribute("aria-label", trUi("定位当前歌曲"));
       host.hidden = !state.currentTrack && app.dataset.design !== "archive";
+      if (host.hidden) selectControls.close();
       app.dataset.playbackVisible = String(!host.hidden);
       if (!state.currentTrack) {
         if (app.dataset.design === "archive") {

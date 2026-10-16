@@ -408,12 +408,6 @@
   background: var(--surface);
 }
 
-.music-app[data-design="archive"] .music-boot-overlay {
-  border: 1px solid var(--design-edge);
-  border-radius: 2px;
-  background: var(--page-bg);
-  backdrop-filter: none;
-}
 
 .music-app[data-design="archive"] .signal-workspace {
   border-left: 3px solid var(--accent);
@@ -515,109 +509,6 @@
 .music-app[data-design="archive"] .music-panel [aria-invalid="true"] {
   border-color: #a05f59;
   box-shadow: 0 0 0 2px color-mix(in srgb, #a05f59 20%, transparent);
-}
-
-/* The two-family chooser is a button card, not a wrapper around a button. */
-.music-app #music-theme-page .design-family-section {
-  margin: 0 0 24px;
-}
-
-.music-app #music-theme-page .design-family-section > .style-section-heading {
-  margin-bottom: 14px;
-}
-
-.music-app #music-theme-page .design-family-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design] {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  align-content: start;
-  gap: 9px;
-  width: 100%;
-  min-width: 0;
-  min-height: 174px;
-  box-sizing: border-box;
-  padding: 17px 18px 42px;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  text-align: left;
-  background: var(--panel);
-  transition: border-color 160ms ease, background-color 160ms ease;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design] > small {
-  display: block;
-  color: var(--muted);
-  font-family: var(--design-mono, ui-monospace, Consolas, monospace);
-  font-size: 10px;
-  line-height: 1.35;
-  letter-spacing: 0.08em;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design] > strong {
-  display: block;
-  color: var(--ink);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design] > span {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design] > i {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: inline-grid;
-  min-height: 22px;
-  place-items: center;
-  box-sizing: border-box;
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  background: var(--surface);
-  font-family: var(--design-mono, ui-monospace, Consolas, monospace);
-  font-size: 9px;
-  font-style: normal;
-  line-height: 1.2;
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design]:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design][aria-pressed="true"] {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
-
-.music-app #music-theme-page button.design-family-card[data-style-design][aria-pressed="true"] > i {
-  border-color: var(--accent);
-  color: var(--on-accent, var(--surface));
-  background: var(--accent);
-}
-
-@media (max-width: 700px) {
-  .music-app #music-theme-page .design-family-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .music-app #music-theme-page button.design-family-card[data-style-design] {
-    min-height: 150px;
-  }
 }
 
 /* The live monitor keeps its original canvas and image treatment; these rules
@@ -1070,12 +961,7 @@
   font-family: var(--design-mono);
 }
 
-.music-app[data-design="archive"] #music-loading {
-  background: var(--page-bg);
-  backdrop-filter: none;
-}
-
-.music-app[data-design="archive"] :is(#music-loading strong, #music-loading small, .library-status, .music-bottomline) {
+.music-app[data-design="archive"] :is(.library-status, .music-bottomline) {
   font-family: var(--design-mono);
   letter-spacing: 0.08em;
 }

@@ -24,8 +24,10 @@ const albumHeaderMode = process.argv.includes('--album-header');
 const albumLabelMotionMode = process.argv.includes('--album-label-motion');
 const unifiedAlbumActionsMode = process.argv.includes('--unified-album-actions');
 const playbackLyricsMode = process.argv.includes('--playback-lyrics');
+const unifiedUiMode = process.argv.includes('--unified-ui');
 const output = path.join(project, playbackLyricsMode ? ".tools/playback-lyrics"
-  : unifiedAlbumActionsMode ? ".tools/unified-album-actions"
+  : unifiedUiMode ? ".tools/unified-ui-2026-10-17"
+    : unifiedAlbumActionsMode ? ".tools/unified-album-actions"
   : albumLabelMotionMode ? ".tools/album-label-motion"
     : albumHeaderMode ? ".tools/album-header" : ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
@@ -45,14 +47,14 @@ const styleTokensJson = JSON.parse(await readFile(path.join(project, "src/assets
 assert.match(main,/case "open":\s*setMode\("detail"\);/,"The source open-album action must enter detail mode.");
 assert.match(main,/scene\.onOpenAlbum\s*=\s*index\s*=>\s*\{[^}]*setMode\("detail"\);/,"The source scene callback must open the selected album.");
 assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{[\s\S]*?setMode\("detail"\);/,"The source left-scene double-click handler must reach detail mode.");
-const displayMode = process.argv.includes('--display');
+const displayMode = process.argv.includes('--display') || unifiedUiMode;
 const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode || albumHeaderMode || albumLabelMotionMode || unifiedAlbumActionsMode;
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
 if (playbackLyricsMode) await mkdir(output, { recursive: true });
 if (albumActionsMode) await mkdir(albumActionsOutput, { recursive: true });
-const sharedMode = process.argv.includes('--panel') || albumActionsMode || navigationMode || displayMode || glassMode || eqMode || playbackLyricsMode;
+const sharedMode = process.argv.includes('--panel') || albumActionsMode || navigationMode || displayMode || glassMode || eqMode || playbackLyricsMode || unifiedUiMode;
 const navigationBootstrap = navigationMode ? createManagementNavigationBootstrap(main) : '';
 const hiResURL='data:image/svg+xml;base64,'+(await readFile(path.join(project,'public/audio-tech/hi-res.svg'))).toString('base64');
 let css = await readFile(path.join(project, "node_modules/@kitlangton/rolling-number/dist/styles.css"), "utf8");
@@ -60,7 +62,9 @@ const rollingEntry = await readFile(path.join(project, "node_modules/@kitlangton
 const rollingChunkName = rollingEntry.match(/from"\.\/(.+?)"/)[1];
 const rollingChunk = await readFile(path.join(project, "node_modules/@kitlangton/rolling-number/dist", rollingChunkName), "utf8");
 const rollingURL = `data:text/javascript;base64,${Buffer.from(rollingChunk).toString("base64")}`;
+const loadedCssImports=new Set();
 for (const [, relative] of main.matchAll(/^import "(\.\/.+\.css)";/gm)) {
+  loadedCssImports.add(relative);
   let source = await readFile(path.join(project, "src", relative), "utf8");
   // Embed the existing Archive fonts; remove other URLs to keep the fixture offline.
   if (relative === "./music-design-fonts.css") {
@@ -75,7 +79,21 @@ for (const [, relative] of main.matchAll(/^import "(\.\/.+\.css)";/gm)) {
   }
   css += source + "\n";
 }
+if(unifiedUiMode)for(const relative of ['./music-theme-choice.css','./playback-select.css','./future-controls.css','./lyrics-profile.css']){
+  if(!loadedCssImports.has(relative))css+=await readFile(path.join(project,'src',relative),'utf8')+'\n';
+}
 const parsed = ts.createSourceFile("music-app.ts", main, ts.ScriptTarget.Latest, true);
+const declaredMainNames = new Set();
+for (const statement of parsed.statements) {
+  if (ts.isFunctionDeclaration(statement) && statement.name) declaredMainNames.add(statement.name.text);
+  if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations)
+    declaredMainNames.add(declaration.name.getText(parsed));
+}
+const mainFixtureExports = ['time','genreName','formatList','albumDuration','valueRange','albumFormatSummary','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncThemeButtons','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','setFoobarOrder','shuffleFoobarLibrary','currentLyricsAlbum','$','svg','icons'];
+const unifiedMainFixtureExports = unifiedUiMode
+  ? ['switchDesign','setTheme','normalizeDesignProfiles'].filter(name => declaredMainNames.has(name))
+  : [];
+const allMainFixtureExports = [...new Set([...mainFixtureExports,...unifiedMainFixtureExports])];
 css += await readFile(path.join(project,'src/album-queue.css'),'utf8');
 let template;
 function find(node) {
@@ -88,6 +106,7 @@ assert.ok(template && ts.isTemplateExpression(template), "Use the actual music a
 const markup = template.head.text + template.templateSpans.map(span =>
   (span.expression.getText(parsed) === "playbackMarkup()" ? "__PLAYBACK__"
     : span.expression.getText(parsed) === "icons.play" ? "__PLAY_ICON__" : "") + span.literal.text).join("");
+if(unifiedUiMode)assert.match(markup,/id="music-theme-page"/,'The offline fixture must include the real theme page DOM.');
 function productionListener(eventName) {
   const callbacks = [];
   for (const statement of parsed.statements) {
@@ -134,11 +153,25 @@ function productionPlaybackCallbacks() {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
 }
-const productionViewEvents = displayMode
+function productionLyricsPageCallbacks() {
+  let callbacks;
+  function find(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(parsed) === 'setupLyricsPage')
+      callbacks = node.arguments[1];
+    ts.forEachChild(node, find);
+  }
+  find(parsed);
+  assert.ok(callbacks && ts.isObjectLiteralExpression(callbacks),
+    'The production setupLyricsPage callbacks must remain extractable.');
+  return ts.transpileModule(`const lyricsPageCallbackOptions = ${callbacks.getText(parsed)};`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+}
+const productionViewEvents = displayMode || unifiedUiMode
   ? ['click', 'input', 'change', 'keydown'].map(productionListener).join('\n')
   : albumActionsMode || playbackLyricsMode ? productionListener('click') : '';
-const productionLyricsEvents = playbackLyricsMode ? productionStageListener('lyrics-content-changed') : '';
-const productionPlaybackCallbacksSource = playbackLyricsMode ? 'playbackCallbackOptions' : '{seek(){},volume(){},cover(){return coverURL;},order:value=>setFoobarOrder(value)}';
+const productionLyricsEvents = playbackLyricsMode || unifiedUiMode ? productionStageListener('lyrics-content-changed') : '';
+const productionPlaybackCallbacksSource = playbackLyricsMode || unifiedUiMode ? 'playbackCallbackOptions' : '{seek(){},volume(){},cover(){return coverURL;},order:value=>setFoobarOrder(value)}';
 async function moduleFunctions(name, exports, selectedOnly = false) {
   let source = name === '$main' ? main : await readFile(path.join(project, `src/${name}.ts`), "utf8");
   if(name==='hi-res')source=source.replaceAll('audio-tech/hi-res.svg',hiResURL);
@@ -155,11 +188,18 @@ async function moduleFunctions(name, exports, selectedOnly = false) {
   return `const {${exports.join(",")}} = (()=>{${code};return {${exports.join(",")}};})();`;
 }
 const modules = (await Promise.all([
+  unifiedUiMode ? moduleFunctions("i18n-main-en", ["mainEnglish"]) : Promise.resolve(""),
+  unifiedUiMode ? moduleFunctions("i18n-panels-en", ["panelsEnglish"]) : Promise.resolve(""),
+  unifiedUiMode ? moduleFunctions("i18n-lsp-en", ["lspEnglish"]) : Promise.resolve(""),
+  unifiedUiMode ? moduleFunctions("i18n", ["trUi", "ui", "uiLanguage", "saveUiLanguage", "readUiLanguage", "lyricSourceLabel"]) : Promise.resolve(""),
+  unifiedUiMode ? moduleFunctions("music-interface-labels", ["musicInterfaceLabels", "musicCountLabel"]) : Promise.resolve(""),
   moduleFunctions("html", ["escapeHtml", "containsCjk"]),
   moduleFunctions("music-title-reels", ["createTitleReels"]),
   moduleFunctions("music-title", ["setupMusicTitleLayout"]),
   moduleFunctions("music-text-motion", ["setupMusicTextMotion"]),
+  unifiedUiMode ? moduleFunctions("settings-select-controls", ["enhanceSettingsSelectControls"]) : Promise.resolve(""),
   moduleFunctions("music-playback", ["playbackMarkup", "playbackTime", "setupMusicPlayback"]),
+  unifiedUiMode ? moduleFunctions("lyrics-page", ["setupLyricsPage"]) : Promise.resolve(""),
   moduleFunctions("editable-range-controls", ["setupEditableRanges"]),
   moduleFunctions("hi-res", ["hiResBadgeMarkup", "dsdBadgeMarkup", "isDsdTrack", "isHiResTrack"]),
   moduleFunctions("viewport-layout", ["foobarArchiveWidth"]),
@@ -167,7 +207,7 @@ const modules = (await Promise.all([
   moduleFunctions("audio-info", ["setupAudioInfoPopup"]),
   moduleFunctions("foobar-shell", ["setupFoobarShell"]),
   moduleFunctions("music-view-settings", ["legacyCatalogOptions", "musicGridPageSizes"]),
-  moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle", "stylePalette", "applyStylePalette"]),
+  moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle", "stylePalette", "applyStylePalette", "normalizeDesignProfiles", "normalizeMusicStyle"]),
   moduleFunctions("music-view-controls", ["musicBrowseControlsMarkup", "syncMusicViewControls"]),
   moduleFunctions("music-catalog-grid", ["setupMusicCatalogGrid"]),
   moduleFunctions("music-grid-page", ["paginateMusicGridGroups", "getMusicGridPage", "revealMusicGridEntry"]),
@@ -177,16 +217,23 @@ const modules = (await Promise.all([
   moduleFunctions("music-presentation", ["MusicPresentation"]),
   moduleFunctions("album-interaction", ["setupAlbumInteraction"]),
   moduleFunctions("album-queue", ["setupAlbumQueue"]),
-  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumFormatSummary','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','setFoobarOrder','shuffleFoobarLibrary','$','svg','icons'],true),
+  moduleFunctions('$main',allMainFixtureExports,true),
 ])).join("\n");
 const initialize = `(async () => {
-  const trUi = value => value;
-  const ui = (strings,...values) => strings.reduce((text,part,index) => text + part + (values[index] ?? ""), "");
-  const uiLanguage = () => "en";
+  const fixtureLanguageStorage=new Map();
+  const fixtureLocalStorage={getItem(key){return fixtureLanguageStorage.get(String(key))??null;},setItem(key,value){fixtureLanguageStorage.set(String(key),String(value));},removeItem(key){fixtureLanguageStorage.delete(String(key));},clear(){fixtureLanguageStorage.clear();}};
+  if(${unifiedUiMode}){
+    fixtureLocalStorage.setItem('rhine-ui-language','en');
+    try{Object.defineProperty(window,'localStorage',{configurable:true,value:fixtureLocalStorage})}catch{}
+  }
+  ${unifiedUiMode ? '' : 'const trUi=value=>value;'}
+  ${unifiedUiMode ? '' : 'const ui=(strings,...values)=>strings.reduce((text,part,index)=>text+part+(values[index]??""),"");'}
+  ${unifiedUiMode ? '' : 'const uiLanguage=()=>"en";'}
   const styleTokensJson = ${JSON.stringify(styleTokensJson)};
   const records=[];
   let catalogGrid;
-  let page='music', panel=false, musicFilterTimer, mockCatalogVersion=0;
+  let page='music', panel=false, musicFilterTimer, mockCatalogVersion=0, onlineSnapshot;
+  const albums=[];
   const musicApplication={selectedIndex:0,selectedAlbumId:'fixture-album',selectedTrackId:'fixture-flac',catalogFocus:{entryKey:'track|fixture-album|fixture-flac',albumId:'fixture-album',trackId:'fixture-flac'},gridPage:0,setGridPage(page){this.gridPage=page;},spatialLayout:'shelf',mode:'archive',activeTab:'tracks',infoScrollTop:0,query:'',view:Object.freeze({layout:'shelf',show:'albums',group:'genre',sort:'artist',gridPageSize:36})};
   let useGeneratedCatalog=false;
   const mockEntries=[
@@ -242,19 +289,48 @@ const initialize = `(async () => {
   const boot=undefined, viewer=undefined;
   const isLibrarySettings=()=>false;
   const openPanel=()=>{};
-  const syncThemeButtons=()=>{};
   const fit=()=>{};
+  const applyWindowAspect=()=>{};
   const notify=()=>{};
+  let renderThemePage=()=>{};
+  const openLyricsSettings=()=>{};
+  ${unifiedUiMode ? '' : "const lyricSourceLabel=source=>source?.name||'Fixture';"}
+  const audioStageName=stage=>stage?.name||String(stage||'');
+  const pcmConsistencyStatus=()=>'';
+  const setSpectrumDemand=()=>{};
+  const casePreviewFactoryCalls=[];
+  function setupAlbumCasePreview(host,options={}) {
+    const instance={host,options,visible:false,destroyed:false,refreshCalls:0,lastAlbumId:undefined,lastState:undefined,
+      refresh(){const album=options.getAlbum?.();this.refreshCalls++;this.lastAlbumId=album?.record?.album?.id||album?.record?.id||album?.album?.id||album?.id;this.lastState={settings:options.getSettings?.(),quality:options.getQuality?.(),theme:options.getTheme?.(),design:options.getDesign?.(),album};},
+      setVisible(visible){this.visible=Boolean(visible);if(this.visible)this.refresh();},
+      destroy(){this.destroyed=true;}};
+    casePreviewFactoryCalls.push(instance);
+    return instance;
+  }
+  const lyricsFetchCalls=[];
+  if(${unifiedUiMode})window.fetch=async(input,options={})=>{
+    const pathname=new URL(typeof input==='string'?input:input.url,'http://fixture.invalid').pathname;
+    lyricsFetchCalls.push({pathname,method:options.method||'GET',body:options.body||''});
+    let payload;
+    if(pathname==='/api/lyrics/resolve'){
+      const trackId=JSON.parse(options.body||'{}').trackId||'fixture-flac';
+      payload={lyric:{trackId,lrc:'[00:00.00]Current fixture lyric\\n[00:02.00]Next fixture lyric',offsetMs:0,source:{id:'fixture-cloud',name:'Fixture Cloud'},savedAt:'2026-10-17T00:00:00.000Z'},activeKind:'cloud',variants:{local:false,cloud:true},sources:[]};
+    }else if(pathname==='/api/lyrics/settings'){
+      payload={settings:{defaultSourceId:'fixture-cloud',cacheDirectory:'/fixture',defaultCacheDirectory:'/fixture'},sources:[]};
+    }else payload={};
+    return{ok:true,status:200,json:async()=>payload};
+  };
   const themeNames={day:'LIGHT',night:'DARK'};
   const sortLabel={code:'GENRE'};
   const designProfiles={rhine:{},archive:{}};
   const caseProfiles={rhine:{},archive:{}};
+  const renderQuality={marker:'fixture-render-quality',scale:1,pixelRatio:1,antialias:'smaa'};
   const processingSettings={};
   let savedPreferenceCount=0;
   const save=()=>{savedPreferenceCount++;};
   const settingsSelectControls=undefined;
-  const detailTransition={dispose(){}};
-  const browseTransition={dispose(){}};
+  const detailTransition={dispose(){},finish(){}};
+  const browseTransition={dispose(){},finish(){}};
   const libraryRebuilding=false, libraryIntent=undefined, presentation={pendingSelection:undefined,openCalls:0,backCalls:0,
     open(){this.openCalls++;document.querySelector('#music-browse').hidden=true;document.querySelector('#music-detail').hidden=false;renderSharedTab('tracks');sharedPanel.setOpen(true);if(!${albumLabelMotionMode}&&!${unifiedAlbumActionsMode})sharedPanel.finish();},
     back(){this.backCalls++;document.querySelector('#music-browse').hidden=false;document.querySelector('#music-detail').hidden=true;sharedPanel.setOpen(false);if(!${albumLabelMotionMode}&&!${unifiedAlbumActionsMode})sharedPanel.finish();}};
@@ -270,10 +346,10 @@ const initialize = `(async () => {
   const {c:createRollingNumber,d:createRollingText}=await import(${JSON.stringify(rollingURL)});
   const normalizeProcessing = () => structuredClone(${JSON.stringify(normalizeProcessing(undefined))});
   ${modules}
-  const esc=escapeHtml,genres=[{id:'pop',name:'流行'}],demo=false,shelf='local',introductionsStarting=false,library={introductions:{running:false}};
+  const esc=escapeHtml,genres=[{id:'pop',name:'流行'}],demo=false,shelf='local',introductionsStarting=false,library={albums:[],introductions:{running:false}};
   const introductionAlbumStatus=()=>'';
-  const played=[],playCalls=[],orderCalls=[],seekCalls=[],volumeCalls=[];let playbackControls;
-  const player={state:undefined,play(id,tracks){played.push(id);playCalls.push({id,tracks});return Promise.resolve();},seek(position){seekCalls.push(position);},setPlaybackOrder(value){orderCalls.push(value);if(player.state){player.state.playbackOrder=value;playerState=player.state;playbackControls?.update(player.state);}},setVolume(value){volumeCalls.push(value);if(player.state)player.state.volume=value;}};
+  const played=[],playCalls=[],orderCalls=[],seekCalls=[],volumeCalls=[],stopCalls=[];let playbackControls;
+  const player={state:undefined,play(id,tracks){played.push(id);playCalls.push({id,tracks});return Promise.resolve();},seek(position){seekCalls.push(position);},readSpectrum(){return undefined;},stop(){stopCalls.push(player.state?.currentTrack?.id);},toggle(){},setPlaybackOrder(value){orderCalls.push(value);if(player.state){player.state.playbackOrder=value;playerState=player.state;playbackControls?.update(player.state);}},setVolume(value){volumeCalls.push(value);if(player.state)player.state.volume=value;}};
   const stage = document.querySelector('#stage');
   stage.innerHTML = ${JSON.stringify(markup)}.replace('__PLAYBACK__', playbackMarkup()).replaceAll('__PLAY_ICON__', icons.play);
   // DOM fixture boundary: mount the production browse-control markup and use
@@ -282,7 +358,6 @@ const initialize = `(async () => {
   if(${displayMode})stage.querySelector('#music-browse').insertAdjacentHTML('afterbegin',musicBrowseControlsMarkup(musicApplication.view));
   stage.querySelector('.open-album').dataset.cjk='true';
   stage.addEventListener('album-panel-layout',()=>syncTabIndicator(false));
-  stage.querySelector('#music-loading').hidden=true;
   stage.querySelector('.theme-switch').innerHTML=['day','night'].map((mode,index)=>'<button data-theme="'+mode+'" aria-pressed="'+!index+'"><i class="theme-dot '+mode+'"></i><span>'+['LIGHT','DARK'][index]+'</span></button>').join('');
   stage.dataset.design='rhine';stage.dataset.page='music';stage.dataset.mode='archive';stage.dataset.theme='day';stage.dataset.styleTextScale='1';
   stage.querySelector('#selection-code').firstChild.textContent='ALBUM NO. ';
@@ -303,6 +378,7 @@ const initialize = `(async () => {
   const preferences={style:{scheme:'flare',caseStyle:'white',get design(){return stage.dataset.design;}},theme:'day',reduced:false,view:musicApplication.view,foobarArchive:legacyCatalogOptions(musicApplication.view),output:{}};
   const scene={
     get musicDisplayLayout(){return {effective:musicApplication.view.layout};},
+    setTheme(){},
     setMusicStyle(){},
     setCaseSettings(){return Promise.resolve();},
   };
@@ -313,6 +389,7 @@ const initialize = `(async () => {
   const albumMock={id:'fixture-album',title:'18 Plus',artist:'G.E.M.邓紫棋',year:2010,genreId:'pop',rawGenres:['流行'],discCount:1,folder:'example',producers:[],description:'一段用于检查专辑介绍和滚动焦点的示例文字。'.repeat(50),tracks:Array.from({length:30},(_,index)=>({id:'track-'+index,albumId:'fixture-album',title:['写不完的温柔','All About U','Game Over'][index%3]+' '+(index+1),artist:'G.E.M.邓紫棋',duration:180,trackNumber:index+1,format:'FLAC',sampleRate:192000,bitsPerSample:24,numberOfChannels:2,bitrate:4500000,lossless:true,browserPlayable:true}))};
   records.push({id:albumMock.id,album:albumMock},{id:'fixture-album-2',album:{...albumMock,id:'fixture-album-2',title:'Other Album'}});
   library.albums=records.map(record=>record.album);
+  albums.push(...library.albums);
   const currentAlbum=()=>records[musicApplication.selectedIndex]?.album||albumMock;
   const profileMarkup=design=>'<div class="selection-profile-heading"><span>PROFILE</span><span>ARC-'+String(musicApplication.selectedIndex+1).padStart(4,'0')+'</span></div><dl>'+albumProfileFields(currentAlbum()).map(([label,value])=>'<div><dt>'+esc(design==='archive'?label.split(' / ')[0]:label)+'</dt><dd data-cjk="'+containsCjk(value)+'">'+esc(value)+'</dd></div>').join('')+'</dl>';
   const installGridPaginationEntries=()=>{
@@ -377,11 +454,13 @@ const initialize = `(async () => {
     if(visible){page='theme';stage.dataset.page='theme';}
     stage.dataset.design=design;
     const themePage=stage.querySelector('#music-theme-page'),content=stage.querySelector('#theme-page-content');
+    if(!themePage)throw new Error('Theme page fixture node is missing; source='+stage.innerHTML.includes('id="music-theme-page"')+', document='+!!document.querySelector('#music-theme-page')+', children='+[...stage.children].map(node=>node.id||node.className||node.tagName).join(','));
     themePage.hidden=!visible;themePage.inert=!visible;
-    const style=design==='archive'?archiveMusicStyle:defaultMusicStyle;
-    content.innerHTML=musicStyleMarkup(style,'day');
+    const style=design===preferences.style.design?preferences.style:design==='archive'?archiveMusicStyle:defaultMusicStyle;
+    content.innerHTML=musicStyleMarkup(style,preferences.theme);
     stylePageContent=content;
   };
+  renderThemePage=()=>renderProductionStylePage(preferences.style.design,true);
   if(${displayMode}) {
     renderProductionStylePage('archive',false);
     // This mock settings select drives the real production change listener;
@@ -392,7 +471,7 @@ const initialize = `(async () => {
   }
   const ranges=setupEditableRanges(stage);
   let coverURL;
-  ${playbackLyricsMode ? productionPlaybackCallbacks() : ''}
+  ${playbackLyricsMode || unifiedUiMode ? productionPlaybackCallbacks() : ''}
   playbackControls=setupMusicPlayback(document.querySelector('#music-playback'),${productionPlaybackCallbacksSource});
   ${productionLyricsEvents}
   let refreshed=0,navigated='',coverInspection;
@@ -417,11 +496,32 @@ const initialize = `(async () => {
   const selection={number:4,total:20,code:1,genreIndex:1,genresTotal:3,genre:'2000s · 2010s',genreName:'2000s · 2010s',format:'FLAC',artist:'G.E.M.邓紫棋',meta:'2010 / 14 首曲目 / 51:25'};
   textMotion.update(selection,true);
   playerState=state;
+  if(${unifiedUiMode}) {
+    ${unifiedUiMode ? productionLyricsPageCallbacks() : ''}
+    lyricsPage=setupLyricsPage(document.querySelector('#lyrics-page-content'),lyricsPageCallbackOptions);
+    lyricsPage.update(state,currentLyricsAlbum(state));
+  }
   catalogGrid.setDesign(preferences.style.design);
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,albumFormatSummary,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,orderCalls,seekCalls,volumeCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode || playbackLyricsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,defaultMusicStyle,archiveMusicStyle,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},get lyricsController(){return lyricsPage;},set lyricsController(value){lyricsPage=value;},updatePlayback(value){playerState=value;player.state=value;this.state=value;lyricsPage?.update?.(value,albumMock);playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,albumFormatSummary,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,orderCalls,seekCalls,volumeCalls,stopCalls,casePreviewFactoryCalls,lyricsFetchCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode || playbackLyricsMode || unifiedUiMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,defaultMusicStyle,archiveMusicStyle,stylePalette,applyStylePalette,normalizeDesignProfiles,renderProductionStylePage,renderThemePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,designProfiles,caseProfiles,processingSettings,renderQuality,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;if(${unifiedUiMode})lyricsPage.setVisible(value==='lyrics');},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},get lyricsController(){return lyricsPage;},set lyricsController(value){lyricsPage=value;},updatePlayback(value){playerState=value;player.state=value;this.state=value;lyricsPage?.update?.(value,currentLyricsAlbum(value));playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;},...{${unifiedMainFixtureExports.join(',')}}};
+  if(${unifiedUiMode}){
+    window.fixture.musicInterfaceLabels=musicInterfaceLabels;
+    window.fixture.musicCountLabel=musicCountLabel;
+    window.fixture.normalizeMusicStyle=normalizeMusicStyle;
+    window.fixture.albums=albums;
+    window.fixture.library=library;
+    Object.defineProperty(window.fixture,'onlineSnapshot',{configurable:true,get(){return onlineSnapshot;},set(value){onlineSnapshot=value;}});
+    window.fixture.i18n={uiLanguage,trUi,ui,saveUiLanguage,readUiLanguage,fixtureLanguageStorage};
+    window.fixture.setPage=value=>{
+      page=value;stage.dataset.page=value;
+      for(const [id,pageName] of [['music-settings','settings'],['music-eq-page','eq'],['music-lyrics-page','lyrics'],['music-signal-page','signal'],['music-theme-page','theme']]){
+        const element=document.getElementById(id);if(element){element.hidden=pageName!==value;element.inert=pageName!==value;}
+      }
+      lyricsPage.setVisible(value==='lyrics');
+    };
+  }
   ${navigationBootstrap}
 })();`;
 
@@ -470,10 +570,23 @@ try {
     return result.result.value;
   }
   await command("Page.enable",{});
+  if(unifiedUiMode)await command("Emulation.setDeviceMetricsOverride",{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
   const {frameTree}=await command("Page.getFrameTree",{});
   await command("Page.setDocumentContent",{frameId:frameTree.frame.id,html:`<!doctype html><style>${css}</style><main id="stage" class="music-app"></main>`});
-  await evaluate(initialize);
-  if(playbackLyricsMode) {
+  if(unifiedUiMode){
+    try{await evaluate(initialize)}catch(error){
+      const diagnostics=await evaluate(`(()=>({themePage:!!document.querySelector('#music-theme-page'),themeContent:!!document.querySelector('#theme-page-content'),
+        stageTheme:!!document.querySelector('#stage')?.querySelector('#music-theme-page'),stageHtmlLength:document.querySelector('#stage')?.innerHTML.length,
+        stageTail:document.querySelector('#stage')?.innerHTML.slice(-500),stageChildCount:document.querySelector('#stage')?.children.length}))()`).catch(()=>null);
+      const generatedLines=initialize.split(/\r?\n/),lineContext=generatedLines.slice(10003,10010).map((line,index)=>`${10004+index}: ${line}`).join('\n');
+      throw new Error(`${error.message}\\nUnified fixture DOM: ${JSON.stringify(diagnostics)}\\nGenerated initialization near line 10007:\\n${lineContext}`);
+    }
+  }else await evaluate(initialize);
+  if(unifiedUiMode) {
+    const {runUnifiedUiChecks}=await import('./check-unified-ui.mjs');
+    await runUnifiedUiChecks({command,evaluate,output,project});
+    console.log(`Passed unified UI checks; report and screenshots saved under ${path.relative(project,output).replaceAll('\\','/')}.`);
+  } else if(playbackLyricsMode) {
     await checkPlaybackLyrics({command,evaluate,output,project});
     console.log('Passed focused playback lyrics, shared shuffle/order, seek and desktop geometry checks; report and screenshots saved under .tools/playback-lyrics.');
   } else if(eqMode) {

@@ -1,0 +1,29 @@
+.music-app .music-style-page .design-family-section { margin: 18px 0 24px; max-width: 740px; }
+.music-app .music-style-page .design-family-section .style-section-heading { display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px; }
+.music-app .music-style-page .theme-choice-mode { color:var(--muted);font:10px var(--design-mono,monospace);letter-spacing:.12em; }
+.music-app .music-style-page .design-family-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px; }
+html .music-app #music-theme-page .music-style-page button.design-family-card[data-style-design] { position:relative;display:flex;flex-direction:column;gap:12px;width:100%;min-width:0;min-height:0;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--surface) 64%,transparent);text-align:left;color:var(--ink);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--surface) 65%,transparent); }
+html .music-app #music-theme-page .music-style-page button.design-family-card[data-style-design][aria-pressed="true"] { border-color:color-mix(in srgb,var(--accent) 48%,var(--line));background:color-mix(in srgb,var(--accent) 4%,var(--surface)); }
+html .music-app #music-theme-page .music-style-page button.design-family-card[data-style-design]:focus-visible { outline:2px solid color-mix(in srgb,var(--accent) 65%,transparent);outline-offset:3px; }
+.music-app .music-style-page .theme-choice-copy { display:flex;flex-direction:column;gap:3px;padding:0 28px 0 2px; }
+.music-app .music-style-page .theme-choice-copy strong { font-size:16px;font-weight:600; }
+.music-app .music-style-page .theme-choice-copy small { color:var(--muted);font-size:11px; }
+.music-app .music-style-page .theme-choice-check { position:absolute;right:16px;bottom:23px;width:18px;height:18px;display:grid;place-items:center;border:0;border-radius:50%;font-size:12px;font-style:normal;color:var(--page-bg);background:var(--accent); }
+.music-app .music-style-page .design-family-card[aria-pressed="false"] .theme-choice-check { visibility:hidden; }
+.music-app .theme-choice-preview { position:relative;display:block;width:100%;height:126px;border:1px solid var(--mini-line);border-radius:10px;overflow:hidden;background:var(--mini-bg);color:var(--mini-fg); }
+.music-app .theme-choice-nav { position:absolute;left:10px;right:10px;top:10px;height:9px;border-bottom:1px solid var(--mini-line); }
+.music-app .theme-choice-nav::before { content:"";display:block;width:22%;height:4px;background:var(--mini-fg);opacity:.5; }
+.music-app .theme-choice-scene { position:absolute;inset:30px 39% 26px 14px;display:flex;gap:5px;align-items:center;justify-content:center;transform:perspective(100px) rotateY(-12deg); }
+.music-app .theme-choice-scene i { display:block;width:25%;height:72%;border:2px solid var(--mini-line);background:linear-gradient(140deg,var(--mini-surface),var(--mini-panel));box-shadow:2px 3px 4px color-mix(in srgb,var(--mini-fg) 8%,transparent); }
+.music-app .theme-choice-scene i:nth-child(2) { height:86%;border-color:var(--mini-accent); }
+.music-app .theme-choice-info { position:absolute;inset:34px 12px 36px 67%;display:flex;flex-direction:column;gap:8px; }
+.music-app .theme-choice-info i { height:4px;background:var(--mini-fg);opacity:.25; }
+.music-app .theme-choice-info i:first-child { height:9px;opacity:.7; }
+.music-app .theme-choice-deck { position:absolute;bottom:9px;left:18%;right:18%;height:12px;border:1px solid var(--mini-line);border-radius:20px;background:var(--mini-panel); }
+.music-app .theme-choice-preview[data-preview-design="archive"] { border-radius:0; }
+.music-app .theme-choice-preview[data-preview-design="archive"] .theme-choice-deck { left:9px;right:9px;border-radius:0;height:9px;border-color:var(--mini-fg); }
+html .music-app[data-design="archive"] #music-theme-page .music-style-page button.design-family-card[data-style-design] { border-radius:0;background:transparent;box-shadow:none; }
+.music-app[data-design="archive"] .music-style-page .theme-choice-check { border-radius:0; }
+#music-startup-error { position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;background:var(--page-bg);color:var(--ink); }
+#music-startup-error[hidden] { display:none; }
+@media(max-width:620px) { .music-app .music-style-page .design-family-grid { grid-template-columns:1fr; } }

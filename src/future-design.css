@@ -73,18 +73,26 @@
   border-color: var(--future-edge);
   border-radius: 22px;
   background: color-mix(in srgb, var(--surface) 42%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
 }
 .music-app[data-design="rhine"] .music-header .theme-switch::before {
   border-radius: 18px;
-  background: var(--surface);
-  box-shadow: 0 3px 10px color-mix(in srgb, var(--future-shadow) 12%, transparent), inset 0 1px 0 var(--future-highlight);
+  background: linear-gradient(150deg, var(--surface), color-mix(in srgb, var(--surface) 88%, var(--page-bg)));
+  box-shadow: inset 0 1px 0 var(--future-highlight), inset 0 -1px 0 color-mix(in srgb, var(--future-edge) 54%, transparent);
 }
 .music-app[data-design="rhine"] .music-header .theme-switch button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
   border-radius: 18px;
   color: var(--future-label);
+  background: transparent;
+  box-shadow: none;
 }
 .music-app[data-design="rhine"] .music-header .theme-switch button[aria-pressed="true"] {
   color: var(--ink);
+  background: transparent;
+  box-shadow: none;
 }
 /* Precision readout integrated into the header, with the same existing node/timer. */
 .music-app[data-design="rhine"] .music-header .music-topnav > .foobar-clock {

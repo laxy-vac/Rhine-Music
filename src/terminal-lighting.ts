@@ -9,27 +9,40 @@ type ReceiverState = {
 };
 
 const RECEIVER_SELECTOR = [
+  // Surface receivers carry the broad environment response; small controls
+  // receive the directional inset only while active or being used.
+  ".music-settings-page :is(.settings-category, .panel-section)",
+  ".music-panel:has(#online-body)",
   // Transparent navigation labels do not have a surface to cast a card shadow.
   ".music-topnav > button:is([aria-pressed=true], :hover, :focus-visible)",
   // Light the glass switch once; its moving selection pill already has its own edge.
   ".music-topnav .theme-switch",
-  ".music-style-page button",
-  ".music-settings-page button:not(.lyrics-line-button)",
-  ".music-settings-page select",
-  ".music-settings-page input:is([type=checkbox], [type=number], [type=range])",
-  ".music-settings-page [role=slider]",
-  "#music-eq-page button",
-  "#music-eq-page select",
-  "#music-eq-page input:is([type=checkbox], [type=number], [type=range])",
-  "#music-eq-page [role=slider]",
-  "#music-lyrics-page button:not(.lyrics-line-button)",
-  "#music-lyrics-page .lyrics-line.is-active",
+  ".music-style-page button:is([aria-pressed=true], :hover, :focus-visible)",
+  ".music-settings-page button:not(.lyrics-line-button):is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], [aria-current]:not([aria-current=false]), :hover, :focus-visible)",
+  ".music-settings-page select:is(:hover, :focus-visible, [aria-expanded=true])",
+  ".music-settings-page input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
+  ".music-settings-page [role=slider]:is(:hover, :focus-visible)",
+  "#music-eq-page button:is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], :hover, :focus-visible)",
+  "#music-eq-page select:is(:hover, :focus-visible, [aria-expanded=true])",
+  "#music-eq-page input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
+  "#music-eq-page [role=slider]:is(:hover, :focus-visible)",
+  "#music-lyrics-page button:not(.lyrics-line-button):is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], :hover, :focus-visible)",
   "#music-lyrics-page .lyrics-preference-dialog",
-  "#music-lyrics-page select",
-  "#music-lyrics-page input:is([type=checkbox], [type=number], [type=range])",
-  "#music-signal-page .signal-models button",
-  "#music-signal-page .signal-trace input[type=range]",
-  "#playback-toggle",
+  "#music-lyrics-page select:is(:hover, :focus-visible, [aria-expanded=true])",
+  "#music-lyrics-page input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
+  ".music-panel:has(#online-body) button:is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], :hover, :focus-visible)",
+  ".music-panel:has(#online-body) select:is(:hover, :focus-visible, [aria-expanded=true])",
+  ".music-panel:has(#online-body) input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
+  "#music-signal-page .signal-models button:is([aria-pressed=true], :hover, :focus-visible)",
+  "#music-signal-page .signal-trace input[type=range]:is(:hover, :focus-visible)",
+  "#playback-toggle:is([aria-pressed=true], :hover, :focus-visible)",
+].join(",");
+
+const TERMINAL_SURFACE_SELECTOR = [
+  ".music-settings-page :is(.settings-category, .panel-section)",
+  ".music-panel:has(#online-body)",
+  ".music-topnav .theme-switch",
+  "#music-lyrics-page .lyrics-preference-dialog",
 ].join(",");
 
 const STATE_SOURCE_SELECTOR = [
@@ -67,6 +80,7 @@ const LIGHT_STYLE_PROPERTIES = [
   "--terminal-light-highlight",
   "--terminal-light-shadow",
   "--terminal-light-halo",
+  "--terminal-light-control-halo",
   "--terminal-light-spread",
   "--terminal-light-x",
   "--terminal-light-y",
@@ -130,7 +144,10 @@ export function setupTerminalLighting(stage: HTMLElement): {
       receiverAttribute: element.getAttribute("data-terminal-receiver"),
       styles,
     });
-    element.setAttribute("data-terminal-receiver", "true");
+    element.setAttribute(
+      "data-terminal-receiver",
+      element.matches(TERMINAL_SURFACE_SELECTOR) ? "surface" : "control",
+    );
   }
 
   function restoreReceiver(element: HTMLElement) {
@@ -261,6 +278,7 @@ export function setupTerminalLighting(stage: HTMLElement): {
     set("--terminal-light-highlight", `${(10 + level * 32).toFixed(1)}%`);
     set("--terminal-light-shadow", `${(3 + level * 8).toFixed(1)}%`);
     set("--terminal-light-halo", `${(3 + level * 13).toFixed(1)}%`);
+    set("--terminal-light-control-halo", `${(1 + level * 2.6).toFixed(1)}%`);
     set("--terminal-light-spread", `${(7 + level * 15).toFixed(1)}px`);
     set("--terminal-light-x", `${(-x * (0.5 + level * 1.8)).toFixed(2)}px`);
     set("--terminal-light-y", `${(-y * (0.5 + level * 1.8)).toFixed(2)}px`);
@@ -296,8 +314,10 @@ export function setupTerminalLighting(stage: HTMLElement): {
             falloff: 4.6,
             gain: 0.86,
           };
-    const dialogNode = root.querySelector<HTMLElement>("#music-lyrics-page .lyrics-preference-dialog");
-    const dialog = dialogNode && isVisible(dialogNode) ? dialogNode : undefined;
+    const dialog = [
+      root.querySelector<HTMLElement>("#music-lyrics-page .lyrics-preference-dialog"),
+      root.querySelector<HTMLElement>(".music-panel:has(#online-body)"),
+    ].find((candidate): candidate is HTMLElement => !!candidate && isVisible(candidate));
     const sources = collectSources(bounds, limits, dialog);
 
     const ranked = [...root.querySelectorAll<HTMLElement>(RECEIVER_SELECTOR)]
@@ -307,7 +327,9 @@ export function setupTerminalLighting(stage: HTMLElement): {
         if (element === dialog) return true;
         // The modal is one glass surface. Its inner controls receive only
         // interaction highlights, instead of each casting an ambient halo.
-        return dialog.contains(element) && element.matches(":hover, :focus-visible, [aria-selected=true], [aria-expanded=true]");
+        return dialog.contains(element) && element.matches(
+          ":hover, :focus-visible, [aria-selected=true], [aria-pressed=true], [aria-expanded=true], [aria-current]:not([aria-current=false]), :checked, [aria-checked=true]",
+        );
       })
       .map((element) => ({
         element,

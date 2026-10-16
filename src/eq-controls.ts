@@ -242,6 +242,11 @@ function drawResponse(root: HTMLElement, settings: ProcessingSettings, reference
     legend.innerHTML = trUi('<span class="eq-legend-total">总响应</span>') + settings.eq.bands.map((band, index) => ui`<button type="button" class="eq-legend-item${band.enabled ? "" : " is-inactive"}" data-eq-focus-band="${index}" style="--band-color:${band.color}" aria-label="定位第 ${index + 1} 段 ${band.frequency} Hz${band.enabled ? "" : trUi("，未启用")}"><i aria-hidden="true"></i>${String(index + 1).padStart(2, "0")} · ${Number(band.frequency.toFixed(2))} Hz${band.channels === 0 ? "" : band.channels === 1 ? " · L" : " · R"}${band.enabled ? "" : trUi(" · 关闭")}</button>`).join("");
   }
   root.querySelectorAll<HTMLElement>("[data-eq-band-card]").forEach(card => card.classList.toggle("is-selected", Number(card.dataset.eqBandCard) === selected));
+  legend?.querySelectorAll<HTMLElement>("[data-eq-focus-band]").forEach(item => {
+    const active = Number(item.dataset.eqFocusBand) === selected;
+    item.classList.toggle("is-selected", active);
+    item.setAttribute("aria-pressed", String(active));
+  });
   const nodes = svg.querySelector<SVGGElement>("[data-eq-nodes]");
   if (!nodes) return;
   nodes.replaceChildren(...(settings.eq.mode === "graphic" ? settings.eq.bands.map((band, index) => {
@@ -250,7 +255,7 @@ function drawResponse(root: HTMLElement, settings: ProcessingSettings, reference
     circle.setAttribute("cx", String(hzX(band.frequency, width)));
     circle.setAttribute("cy", String(dbY(actualGain)));
     circle.setAttribute("r", band.locked ? "4.3" : "5.2");
-    circle.setAttribute("class", `eq-response-node${band.locked ? " is-locked" : ""}`);
+    circle.setAttribute("class", `eq-response-node${index === selected ? " is-selected" : ""}${band.locked ? " is-locked" : ""}`);
     circle.setAttribute("fill", band.color);
     circle.setAttribute("data-eq-node", String(index));
     circle.setAttribute("aria-label", ui`${index + 1} 段，${Math.round(band.frequency)} Hz，${band.gain.toFixed(1)} dB${band.locked ? trUi("，已锁定") : ""}`);

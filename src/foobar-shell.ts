@@ -4,6 +4,8 @@ import { musicCatalogToolsMarkup } from "./music-catalog-markup";
 import { getMusicCatalogOptions, getMusicCatalogRecords } from "./music-catalog";
 import { musicApplication } from "./music-application-state";
 import { legacyCatalogOptions } from "./music-view-settings";
+import { trUi } from "./i18n";
+import { musicInterfaceLabels } from "./music-interface-labels";
 
 type Callbacks = {
   search: (query: string) => void;
@@ -79,17 +81,17 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
   },{passive:false});
   const playback = stage.querySelector<HTMLElement>("#music-playback")!;
   const labels = new Map<HTMLButtonElement, string>();
-  const names: Record<string, [string, string]> = { library: ["01", "ARCHIVE"], eq: ["02", "EQ"], lyrics: ["03", "LYRICS"], signal: ["04", "SIGNAL"], theme: ["05", "STYLE"] };
+  const navigationLabels = musicInterfaceLabels.navigation;
+  const names: Record<string, [string, string]> = { library: ["01", navigationLabels.archive], eq: ["02", navigationLabels.equalizer], lyrics: ["03", navigationLabels.lyrics], signal: ["04", navigationLabels.signal], theme: ["05", navigationLabels.style] };
   const clock = document.createElement("time"); clock.className = "foobar-clock";
-  clock.setAttribute("aria-label", "当前日期和时间");
+  clock.setAttribute("aria-label", trUi("当前日期和时间"));
   const settingsButton = normalNav.querySelector<HTMLButtonElement>('[data-action="settings"]')!;
   normalNav.insertBefore(clock, settingsButton);
   const search = document.createElement("input"); search.type = "search"; search.className = "foobar-header-search";
-  search.placeholder = "SEARCH ARCHIVE"; search.setAttribute("aria-label", "搜索音乐库");
+  search.placeholder = "SEARCH ARCHIVE"; search.setAttribute("aria-label", trUi("搜索音乐库"));
   const searchButton = normalNav.querySelector<HTMLButtonElement>('[data-action="search"]')!;
   const utilities = document.createElement("div"); utilities.className = "foobar-transport-controls";
-  utilities.innerHTML = `<button class="foobar-stop" data-action="stop" aria-label="停止播放">■</button>
-    <span class="foobar-mode-slot"></span>`;
+  utilities.innerHTML = `<span class="foobar-mode-slot"></span>`;
   const remaining = document.createElement("output"); remaining.className = "foobar-remaining"; remaining.textContent = "−00:00";
   const ports: { node: HTMLElement; marker: Comment; parent: Node }[] = [];
   let active = false, playing = false, lastEmblem = -Infinity;
@@ -159,9 +161,9 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
           if (!nav && button !== settingsButton && button !== searchButton && button.dataset.action !== "online") continue;
           labels.set(button, button.innerHTML);
           if (nav) button.innerHTML = `<small class="foobar-nav-number">${nav[0]}</small><span>${nav[1]}</span>`;
-          if (button === settingsButton) button.innerHTML = `<svg class="foobar-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/></svg><span>SETTINGS</span>`;
+          if (button === settingsButton) button.innerHTML = `<svg class="foobar-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/></svg><span>${navigationLabels.settings}</span>`;
           if (button === searchButton) button.innerHTML = "⌕";
-          if (button.dataset.action === "online") button.innerHTML = "ONLINE";
+          if (button.dataset.action === "online") button.innerHTML = navigationLabels.online;
         }
         normalNav.insertBefore(search, searchButton);
         playback.append(utilities); playback.querySelector(".playback-timeline")!.append(remaining);
