@@ -12,6 +12,15 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
     "Playing an album must stay independent of navigation, presentation, and scene callbacks.");
   const selectionSource = main.match(/function updateSelection\([\s\S]*?\n\}/)?.[0];
   assert.ok(selectionSource, "The production selection updater must remain extractable.");
+  const formatSummarySource = main.match(/function albumFormatSummary\([\s\S]*?\n\}/)?.[0];
+  assert.ok(formatSummarySource, "The production album format summary must remain extractable.");
+  assert.match(formatSummarySource, /valueRange\(/,
+    "Album metadata ranges use the production valueRange helper.");
+  assert.match(selectionSource,
+    /const formatLabel\s*=\s*demo\s*\?\s*"DEMO"\s*:\s*albumFormatSummary\(sourceAlbum,\s*foobar\)/,
+    "Selection text uses the focused source album and the design-specific format summary.");
+  assert.match(selectionSource, /format:\s*formatLabel/,
+    "The real text-motion controller receives the computed format label.");
   assert.match(selectionSource,
     /\$<HTMLButtonElement>\("\.browse-play-album"\)\.disabled = !a\?\.tracks\.length \|\| !!a\.offline;/,
     "The play button is disabled for empty and offline albums.");
@@ -210,6 +219,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
 
   const punkPaletteChecks = [];
   const futurePaletteResets = [];
+  const formatFixtureAlbum = { tracks: [{ format: "FLAC", sampleRate: 88_200, bitsPerSample: 24, lossless: true }] };
   for (const scheme of ["archive", "field", "hazard"]) {
     for (const theme of ["day", "night"]) {
       const check = await evaluate(`(async()=>{
@@ -220,15 +230,22 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         for(const element of [play,open])element.style.setProperty('transition','none','important');
         const palette=f.stylePalette(style,theme);
         f.applyStylePalette(f.stage,style,theme);f.syncDesignIdentity();
+        const formatAlbum=${JSON.stringify(formatFixtureAlbum)},formatLabel=f.albumFormatSummary(formatAlbum,true),formatNode=document.querySelector('#selection-format');
+        f.textMotion.update({...f.selection,format:formatLabel},false);formatNode.hidden=!formatLabel;
         await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         const color=value=>{const probe=document.createElement('span');probe.style.color=value;f.stage.append(probe);const resolved=getComputedStyle(probe).color;probe.remove();return resolved;};
         const border=getComputedStyle(open),arrow=getComputedStyle(open.querySelector('.open-album-punk-arrow'));
+        const formatStyle=getComputedStyle(formatNode),formatDot=getComputedStyle(formatNode,'::before'),formatRect=formatNode.getBoundingClientRect();
         const playStyle=getComputedStyle(play),actions=document.querySelector('.album-actions').getBoundingClientRect();
         return {scheme:${JSON.stringify(scheme)},theme,transitionBefore,expected:{accent:color(palette.accent),ink:color(palette.fg),pageBg:color(palette.bg)},
           computed:{outline:border.outlineColor,arrow:arrow.color,borders:[border.borderTopColor,border.borderRightColor,border.borderBottomColor,border.borderLeftColor],
-            playBackground:playStyle.backgroundColor,playColor:playStyle.color},
+            playBackground:playStyle.backgroundColor,playColor:playStyle.color,format:{text:formatNode.innerText.trim(),display:formatStyle.display,
+              rects:formatNode.getClientRects().length,borders:[formatStyle.borderTopWidth,formatStyle.borderRightWidth,formatStyle.borderBottomWidth,formatStyle.borderLeftWidth],
+              borderColor:formatStyle.borderTopColor,color:formatStyle.color,background:formatStyle.backgroundColor,width:formatRect.width,height:formatRect.height,
+              dot:{content:formatDot.content,display:formatDot.display,width:formatDot.width,height:formatDot.height,background:formatDot.backgroundColor}}},
           clip:{x:Math.max(0,Math.floor(actions.x-16)),y:Math.max(0,Math.floor(actions.y-16)),
-            width:Math.ceil(actions.width+32),height:Math.ceil(actions.height+32),scale:3}};
+            width:Math.ceil(actions.width+32),height:Math.ceil(actions.height+32),scale:3},
+          formatClip:(()=>{const r=document.querySelector('.selection-rule').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.x-8)),y:Math.max(0,Math.floor(r.y-5)),width:Math.ceil(r.width+16),height:Math.ceil(r.height+10),scale:3};})()};
       })()`);
       assert.equal(check.computed.outline, check.expected.accent,
         `${scheme}/${theme}: Punk open outline follows the real stylePalette accent.`);
@@ -240,10 +257,27 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         `${scheme}/${theme}: Punk play uses the real stylePalette ink as its solid fill.`);
       assert.equal(check.computed.playColor, check.expected.pageBg,
         `${scheme}/${theme}: Punk play text uses the real stylePalette page background.`);
+      assert.equal(check.computed.format.text, "FLAC 24/88.2", `${scheme}/${theme}: Punk uses the compact source summary.`);
+      assert.ok(["flex", "inline-flex"].includes(check.computed.format.display), `${scheme}/${theme}: Punk format summary is a compact framed label.`);
+      assert.equal(check.computed.format.rects, 1, `${scheme}/${theme}: Punk format summary occupies one compact label.`);
+      assert.ok(check.computed.format.width < 160 && check.computed.format.height <= 24,
+        `${scheme}/${theme}: Punk format frame stays compact (${JSON.stringify(check.computed.format)}).`);
+      assert.deepEqual(check.computed.format.borders, Array(4).fill("1px"),
+        `${scheme}/${theme}: Punk format summary keeps its small border.`);
+      assert.equal(check.computed.format.borderColor, check.expected.accent,
+        `${scheme}/${theme}: Punk format frame follows the active stylePalette accent.`);
+      assert.equal(check.computed.format.color, check.expected.ink,
+        `${scheme}/${theme}: Punk format text follows the active ink.`);
+      assert.equal(check.computed.format.dot.width, "5px");assert.equal(check.computed.format.dot.height, "5px");
+      assert.equal(check.computed.format.dot.background, check.expected.accent,
+        `${scheme}/${theme}: Punk format square follows the active stylePalette accent.`);
       if (scheme === "field" && theme === "day") {
         const image = await command("Page.captureScreenshot", { format: "png", clip: check.clip });
         check.detailScreenshot = "punk-actions-field-day.png";
         await writeFile(path.join(output, check.detailScreenshot), Buffer.from(image.data, "base64"));
+        const headerImage = await command("Page.captureScreenshot", { format: "png", clip: check.formatClip });
+        check.formatScreenshot = "album-header-punk-field-day.png";
+        await writeFile(path.join(output, check.formatScreenshot), Buffer.from(headerImage.data, "base64"));
       }
       punkPaletteChecks.push(check);
 
@@ -253,10 +287,16 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         f.applyStylePalette(f.stage,style,${JSON.stringify(theme)});f.syncDesignIdentity();
         await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         const actions=document.querySelector('.album-actions'),play=document.querySelector('.browse-play-album'),open=document.querySelector('.open-album');
+        const formatAlbum=${JSON.stringify(formatFixtureAlbum)},formatLabel=f.albumFormatSummary(formatAlbum,false),formatNode=document.querySelector('#selection-format');
+        f.textMotion.update({...f.selection,format:formatLabel},false);formatNode.hidden=!formatLabel;
+        const formatStyle=getComputedStyle(formatNode),formatDot=getComputedStyle(formatNode,'::before');
         return {design:f.stage.dataset.design,inlineAccent:f.stage.style.getPropertyValue('--accent'),
           direction:getComputedStyle(actions).flexDirection,playBackground:getComputedStyle(play).backgroundColor,
           playWidth:play.getBoundingClientRect().width,playLabel:getComputedStyle(play.querySelector('.play-album-access-label')).display,
-          openLabel:getComputedStyle(open.querySelector('.open-album-access-label')).display};
+          openLabel:getComputedStyle(open.querySelector('.open-album-access-label')).display,
+          format:{text:formatNode.innerText.trim(),display:formatStyle.display,rects:formatNode.getClientRects().length,
+            borders:[formatStyle.borderTopWidth,formatStyle.borderRightWidth,formatStyle.borderBottomWidth,formatStyle.borderLeftWidth],
+            color:formatStyle.color,background:formatStyle.backgroundColor,outline:formatStyle.outlineWidth,shadow:formatStyle.boxShadow,dotContent:formatDot.content}};
       })()`);
       assert.equal(future.design, "rhine", `${scheme}/${theme}: real Future palette application follows Punk checks.`);
       assert.equal(future.inlineAccent, "", `${scheme}/${theme}: Future clears inline Punk palette tokens.`);
@@ -265,6 +305,18 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
       assert.ok(Math.abs(future.playWidth - 188) <= 1);
       assert.notEqual(future.playLabel, "none");
       assert.notEqual(future.openLabel, "none");
+      assert.equal(future.format.text, "FLAC · 24 bit / 88.2 kHz", `${theme}: Future retains depth and kHz in the plain text summary.`);
+      assert.notEqual(future.format.display, "none");assert.equal(future.format.rects, 1);
+      assert.deepEqual(future.format.borders, Array(4).fill("0px"), `${theme}: Future format remains unframed.`);
+      assert.equal(future.format.background, "rgba(0, 0, 0, 0)");
+      assert.equal(future.format.outline, "0px");assert.equal(future.format.shadow, "none");
+      assert.ok(["none", "normal"].includes(future.format.dotContent), `${theme}: Future has no format square.`);
+      if (theme === "day" && scheme === "field") {
+        const clip = await evaluate(`(()=>{const r=document.querySelector('.selection-rule').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.x-8)),y:Math.max(0,Math.floor(r.y-5)),width:Math.ceil(r.width+16),height:Math.ceil(r.height+10),scale:3};})()`);
+        const image = await command("Page.captureScreenshot", { format: "png", clip });
+        future.formatScreenshot = "album-header-future-day.png";
+        await writeFile(path.join(output, future.formatScreenshot), Buffer.from(image.data, "base64"));
+      }
       futurePaletteResets.push({ scheme, theme, ...future });
       await evaluate(`(()=>{
         const elements=[document.querySelector('.browse-play-album'),document.querySelector('.open-album')],snapshots=${JSON.stringify(check.transitionBefore)};
@@ -279,6 +331,44 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
   assert.ok(futureDay && futureNight);
   assert.notEqual(futureNight.ink.stage.resolved, futureDay.ink.stage.resolved,
     `Future night text must resolve to the night --ink color, not the day color. Day=${JSON.stringify(futureDay.ink)} Night=${JSON.stringify(futureNight.ink)}`);
+
+  const metadataCases = {
+    flac24: { tracks: [{ format: "FLAC", sampleRate: 88_200, bitsPerSample: 24, lossless: true }] },
+    mixedRange: { tracks: [
+      { format: "FLAC", sampleRate: 96_000, bitsPerSample: 24, lossless: true },
+      { format: "FLAC", sampleRate: 44_100, bitsPerSample: 16, lossless: true },
+    ] },
+    unknownFields: { tracks: [{ format: "FLAC", lossless: true }] },
+    allUnknown: { tracks: [{ format: "", lossless: true }] },
+    lossyNominalDepth: { tracks: [{ format: "AAC", sampleRate: 96_000, bitsPerSample: 24, lossless: false }] },
+    dsd: { tracks: [{ format: "DSF", sampleRate: 2_822_400, bitsPerSample: 1, lossless: true }] },
+  };
+  const metadata = await evaluate(`(()=>{
+    const f=fixture,format=document.querySelector('#selection-format'),cases=${JSON.stringify(metadataCases)},result={};
+    for(const [name,album] of Object.entries(cases)){
+      const compact=f.albumFormatSummary(album,true),plain=f.albumFormatSummary(album,false);
+      f.stage.dataset.design='archive';f.textMotion.update({...f.selection,format:compact},false);format.hidden=!compact;
+      const compactText=format.innerText.trim(),compactHidden=format.hidden;
+      f.stage.dataset.design='rhine';f.textMotion.update({...f.selection,format:plain},false);format.hidden=!plain;
+      result[name]={compact,plain,compactText,plainText:format.innerText.trim(),compactHidden};
+    }
+    return result;
+  })()`);
+  assert.equal(metadata.flac24.compact, "FLAC 24/88.2");
+  assert.equal(metadata.flac24.plain, "FLAC · 24 bit / 88.2 kHz");
+  assert.equal(metadata.flac24.compactText, metadata.flac24.compact);
+  assert.equal(metadata.flac24.plainText, metadata.flac24.plain);
+  assert.equal(metadata.mixedRange.compact, "FLAC 16–24/44.1–96");
+  assert.equal(metadata.mixedRange.plain, "FLAC · 16–24 bit / 44.1–96 kHz");
+  assert.equal(metadata.mixedRange.compactText, metadata.mixedRange.compact);
+  assert.equal(metadata.unknownFields.compact, "FLAC");assert.equal(metadata.unknownFields.plain, "FLAC");
+  assert.equal(metadata.allUnknown.compact, "");assert.equal(metadata.allUnknown.plain, "");assert.equal(metadata.allUnknown.compactHidden, true);
+  assert.equal(metadata.lossyNominalDepth.compact, "AAC 96 kHz");assert.equal(metadata.lossyNominalDepth.plain, "AAC · 96 kHz");
+  assert.doesNotMatch(metadata.lossyNominalDepth.compact, /24/);assert.doesNotMatch(metadata.lossyNominalDepth.plain, /24 bit/);
+  assert.equal(metadata.dsd.compact, "DSF 1/2822.4");assert.equal(metadata.dsd.plain, "DSF · 1 bit / 2822.4 kHz");
+  assert.equal(metadata.dsd.compactText, metadata.dsd.compact);assert.equal(metadata.dsd.plainText, metadata.dsd.plain);
+  await writeFile(path.join(output, "album-format-summary.json"), JSON.stringify({ metadata, punkPaletteChecks: punkPaletteChecks.map(({scheme,theme,expected,computed,formatScreenshot})=>({scheme,theme,expected,format:computed.format,formatScreenshot})),
+    futurePaletteResets:futurePaletteResets.map(({scheme,theme,format,formatScreenshot})=>({scheme,theme,format,formatScreenshot})) }, null, 2));
 
   await evaluate(`(()=>{
     const f=fixture;f.setPage('music');f.stage.dataset.design='archive';f.stage.dataset.theme='day';f.preferences.theme='day';
@@ -430,6 +520,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
     guards,
     punkPaletteChecks,
     futurePaletteResets,
+    metadata,
   };
   await writeFile(path.join(output, "album-actions-report.json"), JSON.stringify(report, null, 2));
 }

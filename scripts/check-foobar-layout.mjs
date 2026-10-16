@@ -19,10 +19,12 @@ import ts from "typescript";
 import { normalizeProcessing } from "../src/audio-processing-model.mjs";
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const output = path.join(project, ".tools/foobar-layout-check");
+const albumHeaderMode = process.argv.includes('--album-header');
+const output = path.join(project, albumHeaderMode ? ".tools/album-header" : ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
 const punkAlbumActionsMode = process.argv.includes('--punk-album-actions');
-const albumActionsOutput = path.join(project, punkAlbumActionsMode ? ".tools/punk-album-actions" : ".tools/album-actions");
+const albumActionsOutput = path.join(project, albumHeaderMode ? ".tools/album-header"
+  : punkAlbumActionsMode ? ".tools/punk-album-actions" : ".tools/album-actions");
 const candidates = [process.env.LAYOUT_BROWSER,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean);
@@ -35,7 +37,7 @@ assert.match(main,/case "open":\s*setMode\("detail"\);/,"The source open-album a
 assert.match(main,/scene\.onOpenAlbum\s*=\s*index\s*=>\s*\{[^}]*setMode\("detail"\);/,"The source scene callback must open the selected album.");
 assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{[\s\S]*?setMode\("detail"\);/,"The source left-scene double-click handler must reach detail mode.");
 const displayMode = process.argv.includes('--display');
-const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode;
+const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode || albumHeaderMode;
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
@@ -133,7 +135,7 @@ const modules = (await Promise.all([
   moduleFunctions("music-presentation", ["MusicPresentation"]),
   moduleFunctions("album-interaction", ["setupAlbumInteraction"]),
   moduleFunctions("album-queue", ["setupAlbumQueue"]),
-  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$','svg','icons'],true),
+  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumFormatSummary','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$','svg','icons'],true),
 ])).join("\n");
 const initialize = `(async () => {
   const trUi = value => value;
@@ -372,7 +374,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,albumFormatSummary,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -730,11 +732,12 @@ try {
       if(design==='archive') {
         const formatBadge=await evaluate(`(()=>{const format=document.querySelector('#selection-format');return {design:fixture.stage.dataset.design,theme:fixture.stage.dataset.theme,mode:fixture.musicApplication.mode,
           formatFound:!!format,formatDisplay:format?getComputedStyle(format).display:null,formatRects:format?.getClientRects().length??null,
-          chipPresent:document.querySelector('.foobar-format-chip')!==null};})()`);
+          formatCount:document.querySelectorAll('#selection-format').length,formatText:format?.innerText.trim()??''};})()`);
         assert.equal(formatBadge.design,'archive');assert.equal(formatBadge.theme,'day');assert.equal(formatBadge.mode,'archive');
-        assert.equal(formatBadge.formatFound,true);assert.equal(formatBadge.formatDisplay,'none','Punk hides the format text without leaving a layout box.');
-        assert.equal(formatBadge.formatRects,0,'Punk format text has no layout rect or flex gap.');
-        assert.equal(formatBadge.chipPresent,false,'Punk does not render the orange format badge frame.');
+        assert.equal(formatBadge.formatFound,true);assert.notEqual(formatBadge.formatDisplay,'none','Punk keeps its compact format label visible.');
+        assert.equal(formatBadge.formatRects,1,'Punk keeps one compact format label layout box.');
+        assert.equal(formatBadge.formatCount,1,'Punk uses a single format label without a duplicate id.');
+        assert.ok(formatBadge.formatText,'Punk keeps the source format text in its single label.');
         formatBadgeChecks.push(formatBadge);
         const screenshot='display-punk-day-browse.png';
         const {data}=await command('Page.captureScreenshot',{format:'png',clip:{x:0,y:0,width:1920,height:1080,scale:1}});
@@ -1075,12 +1078,12 @@ try {
   }
   const typography=await evaluate(`(()=>{
     const slots=[...document.querySelectorAll('.foobar-shell .rn-slot')];
-    const format=document.querySelector('#selection-format'),chip=document.querySelector('.foobar-format-chip'),shelf=document.querySelector('.genre-stepper'),name=document.querySelector('#genre-name'),random=document.querySelector('.foobar-random'),workspace=document.querySelector('.foobar-workspace');
+    const format=document.querySelector('#selection-format'),shelf=document.querySelector('.genre-stepper'),name=document.querySelector('#genre-name'),random=document.querySelector('.foobar-random'),workspace=document.querySelector('.foobar-workspace');
     const r=random.getBoundingClientRect(),w=workspace.getBoundingClientRect();
-    return {slotsContent:slots.every(element=>getComputedStyle(element).boxSizing==='content-box'),formatDisplay:getComputedStyle(format).display,formatRects:format.getClientRects().length,chipPresent:chip!==null,shelfBorder:getComputedStyle(name).borderTopWidth,shelfBackground:getComputedStyle(name).backgroundColor,shelfName:name.querySelector('.rn-value').textContent,shelfColor:getComputedStyle(document.querySelector('#genre-position')).color,muted:getComputedStyle(fixture.stage).getPropertyValue('--muted'),artistFont:getComputedStyle(document.querySelector('#selection-artist')).fontFamily,randomX:r.x-w.x,randomY:r.y-w.y,randomHeight:r.height,dice:random.querySelectorAll('svg path').length,shortcut:random.querySelector('kbd').textContent};
+    return {slotsContent:slots.every(element=>getComputedStyle(element).boxSizing==='content-box'),formatDisplay:getComputedStyle(format).display,formatRects:format.getClientRects().length,formatCount:document.querySelectorAll('#selection-format').length,formatText:format.innerText.trim(),shelfBorder:getComputedStyle(name).borderTopWidth,shelfBackground:getComputedStyle(name).backgroundColor,shelfName:name.querySelector('.rn-value').textContent,shelfColor:getComputedStyle(document.querySelector('#genre-position')).color,muted:getComputedStyle(fixture.stage).getPropertyValue('--muted'),artistFont:getComputedStyle(document.querySelector('#selection-artist')).fontFamily,randomX:r.x-w.x,randomY:r.y-w.y,randomHeight:r.height,dice:random.querySelectorAll('svg path').length,shortcut:random.querySelector('kbd').textContent};
   })()`);
   assert.equal(typography.slotsContent,true,'Global shell sizing must not crop rolling slots');
-  assert.equal(typography.formatDisplay,'none','Punk hides the format text without leaving a layout box');assert.equal(typography.formatRects,0);assert.equal(typography.chipPresent,false,'Punk must not render the format badge frame');
+  assert.notEqual(typography.formatDisplay,'none','Punk keeps the compact format label visible.');assert.equal(typography.formatRects,1);assert.equal(typography.formatCount,1,'Punk uses one format label without a duplicate id.');assert.equal(typography.formatText,'FLAC');
   assert.equal(typography.shelfBorder,'0px');assert.equal(typography.shelfBackground,'rgba(0, 0, 0, 0)');
   assert.equal(typography.shelfName,'2010s · 2020s');
   assert.ok(typography.artistFont.startsWith('"Archive Mono"') && typography.artistFont.includes('"Microsoft YaHei UI"'),'Mixed artist text must retain Geist Mono with YaHei for CJK');

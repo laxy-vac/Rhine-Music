@@ -146,17 +146,14 @@
   overflow: hidden;
 }
 
-/* Keep container focus rings quiet while preserving focus on buttons and tracks. */
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel:focus,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel:focus-visible,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel:focus-within,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel-scroll:focus,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel-scroll:focus-visible,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel-scroll:focus-within,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel #album-detail-content:focus,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel #album-detail-content:focus-visible,
-:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel #album-detail-content:focus-within {
+/* Containers never draw a focus frame; buttons and tracks keep their own focus. */
+:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel,
+:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel-scroll,
+:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel .album-callout,
+:is(.music-app[data-design="archive"], .music-app[data-design="rhine"]) .album-panel #album-detail-content,
+.music-app[data-design="archive"] .foobar-home-info {
   outline: 0 !important;
+  border: 0;
   box-shadow: none !important;
 }
 

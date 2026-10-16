@@ -662,6 +662,19 @@ function valueRange(
       : `${format(n[0])}–${format(n[n.length - 1])}`
     : trUi("未提供");
 }
+function albumFormatSummary(a: MusicAlbum, compact: boolean) {
+  const formats = [...new Set(a.tracks.map(track => track.format.trim()).filter(Boolean))].join(" / ");
+  const bits = a.tracks.filter(track => track.lossless !== false).map(track => track.bitsPerSample)
+    .filter((value): value is number => !!value && Number.isFinite(value) && value > 0);
+  const rates = a.tracks.map(track => track.sampleRate)
+    .filter((value): value is number => !!value && Number.isFinite(value) && value > 0);
+  const depth = bits.length ? valueRange(bits, String) : "";
+  const rate = rates.length ? valueRange(rates, value => String(Number((value / 1000).toFixed(1)))) : "";
+  const resolution = compact && depth && rate
+    ? `${depth}/${rate}`
+    : [depth ? `${depth} bit` : "", rate ? `${rate} kHz` : ""].filter(Boolean).join(" / ");
+  return [formats, resolution].filter(Boolean).join(compact ? " " : " · ");
+}
 function cover(a: MusicAlbum, className = "") {
   return a.coverUrl
     ? ui`<img class="${className}" src="${esc(a.coverUrl)}" alt="${esc(a.title)}专辑封面" loading="lazy">`
@@ -1096,6 +1109,8 @@ function updateSelection(navigation?: ArchiveNavigation) {
   const entry=getMusicFocusedEntry(musicApplication.selectedIndex);
   const track=entry?.track;
   const sourceAlbum=track?{...a,artist:track.artist||a.artist,tracks:[track]}:a;
+  const formatLabel = demo ? "DEMO" : albumFormatSummary(sourceAlbum, foobar);
+  $("#selection-format").hidden = !formatLabel;
   const shelves = getMusicCatalogShelves();
   const shelfLocation = getMusicRecordLocation(musicApplication.selectedIndex);
   const files = shelfLocation ? shelves[shelfLocation.shelf].entryKeys.flatMap(key => {
@@ -1113,9 +1128,7 @@ function updateSelection(navigation?: ArchiveNavigation) {
       genreIndex: shelfLocation ? shelfLocation.shelf + 1 : 0,
       genre: shelfLocation ? shelves[shelfLocation.shelf].name : "NO MATCHES",
       genreName: shelfLocation ? shelves[shelfLocation.shelf].name : "NO MATCHES",
-      format: demo
-        ? "DEMO"
-        : [...new Set(sourceAlbum.tracks.map((t) => t.format))].join(" / "),
+      format: formatLabel,
       artist: sourceAlbum.artist,
       meta: (track?[a.title,a.year?String(a.year):trUi("年份未提供"),time(track.duration)]:[
         a.year ? String(a.year) : trUi("年份未提供"),

@@ -134,6 +134,18 @@
 .music-app[data-design="rhine"] .album-panel .selection-rule {
   border-bottom-color: var(--future-edge-hi);
 }
+.music-app[data-design="rhine"] .album-panel #selection-format {
+  align-self: center;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font: 500 9px/1.4 "Archive Mono", MiSans, sans-serif;
+  letter-spacing: .055em;
+}
+.music-app[data-design="rhine"] .album-panel #selection-format::before { content: none; }
 .music-app[data-design="rhine"] .album-panel .selection-profile-heading {
   background: none;
   border-top-color: transparent;

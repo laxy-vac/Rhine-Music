@@ -12,6 +12,47 @@ export async function checkAlbumPanel({command,evaluate,output}) {
     const closed=await evaluate(`(()=>{const f=fixture,p=f.sharedPanel,a=document.querySelector('#album-detail-content'),b=document.querySelector('.open-album'),v=p.scrollTarget();p.element.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));const count=f.played.length;p.element.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));return{hidden:a.hidden,inert:a.inert,rowsHidden:[...a.querySelectorAll('.track-row')].every(x=>x.getClientRects().length===0),button:!b.hidden&&!b.inert,buttons:document.querySelectorAll('.open-album').length,playButtons:document.querySelectorAll('.browse-play-album').length,noHiddenPlay:f.played.length===count,whole:v===document.querySelector('.album-panel-scroll'),focusStyle:getComputedStyle(p.element).outlineStyle,shadow:getComputedStyle(p.element).boxShadow};})()`);
     for(const key of ['hidden','inert','rowsHidden','button','noHiddenPlay','whole'])assert.equal(closed[key],true,`${design} closed ${key}`);
     assert.equal(closed.buttons,1);assert.equal(closed.playButtons,1);assert.equal(closed.focusStyle,'none');assert.equal(closed.shadow,'none');
+    const titleRect=await evaluate(`(()=>{const r=document.querySelector('.album-callout h1').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:titleRect.x,y:titleRect.y});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:titleRect.x,y:titleRect.y,button:'left',clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:titleRect.x,y:titleRect.y,button:'left',clickCount:1});
+    const mouseFocus=await evaluate(`(()=>{
+      const f=fixture,p=f.sharedPanel,host=p.element.closest('.foobar-home-info')||(p.element.parentElement!==f.stage?p.element.parentElement:null),nodes=[...(host?[['host',host]]:[]),['panel',p.element],['scroll',p.scrollTarget()],['callout',document.querySelector('.album-callout')],['article',document.querySelector('#album-detail-content')]];
+      const style=node=>{const s=getComputedStyle(node);return{outlineStyle:s.outlineStyle,outlineWidth:s.outlineWidth,boxShadow:s.boxShadow,borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};};
+      return{active:document.activeElement===p.element?'panel':document.activeElement===host?'host':document.activeElement?.className||document.activeElement?.id||'',state:p.element.dataset.panelState,
+        hostName:host?.id||host?.className||'stage excluded',styles:nodes.map(([name,node])=>({name,...style(node)}))};
+    })()`);
+    assert.equal(mouseFocus.active,'panel',`${design}: a real pointer click in the information area focuses its panel host.`);
+    assert.equal(mouseFocus.state,'browse');
+    for(const sample of mouseFocus.styles){
+      assert.ok(sample.outlineStyle==='none'||sample.outlineWidth==='0px',`${design} mouse ${sample.name} outline: ${JSON.stringify(sample)}`);
+      assert.equal(sample.boxShadow,'none',`${design} mouse ${sample.name} ring: ${JSON.stringify(sample)}`);
+      assert.deepEqual(sample.borders,Array(4).fill('0px'),`${design} mouse ${sample.name} border: ${JSON.stringify(sample)}`);
+    }
+    const containerFocus=await evaluate(`(()=>{
+      const f=fixture,p=f.sharedPanel,host=p.element.closest('.foobar-home-info')||(p.element.parentElement!==f.stage?p.element.parentElement:null),nodes=[...(host?[['host',host]]:[]),['panel',p.element],['scroll',p.scrollTarget()],['callout',document.querySelector('.album-callout')]],saved=nodes.map(([,node])=>node.getAttribute('tabindex'));
+      for(const [,node] of nodes)if(!node.hasAttribute('tabindex'))node.setAttribute('tabindex','-1');
+      const style=node=>{const s=getComputedStyle(node);return{outlineStyle:s.outlineStyle,outlineWidth:s.outlineWidth,boxShadow:s.boxShadow,borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};};
+      const states=[];
+      for(const [name,target] of nodes){target.focus({preventScroll:true});states.push({target:name,focused:document.activeElement===target,styles:nodes.map(([name,node])=>({name,...style(node)}))});}
+      nodes.forEach(([,node],index)=>{const value=saved[index];if(value===null)node.removeAttribute('tabindex');else node.setAttribute('tabindex',value);});
+      return{states,temporaryTabindex:nodes.filter(([,node],index)=>saved[index]===null).map(([name])=>name)};
+    })()`);
+    for(const state of containerFocus.states){assert.equal(state.focused,true,`${design} ${state.target} can be focused for the style guard.`);
+      for(const sample of state.styles){assert.ok(sample.outlineStyle==='none'||sample.outlineWidth==='0px',`${design} keyboard ${state.target}/${sample.name} outline: ${JSON.stringify(sample)}`);
+        assert.equal(sample.boxShadow,'none',`${design} keyboard ${state.target}/${sample.name} ring: ${JSON.stringify(sample)}`);
+        assert.deepEqual(sample.borders,Array(4).fill('0px'),`${design} keyboard ${state.target}/${sample.name} border: ${JSON.stringify(sample)}`);}}
+    await evaluate(`document.querySelector('.browse-play-album').focus({preventScroll:true})`);
+    await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    const keyboardOpen=await evaluate(`(()=>{const f=fixture,b=document.querySelector('.open-album'),s=getComputedStyle(b),probe=document.createElement('span');probe.style.color=getComputedStyle(f.stage).getPropertyValue('--accent');f.stage.append(probe);const accent=getComputedStyle(probe).color;probe.remove();const r=b.getBoundingClientRect(),p=f.sharedPanel.element.getBoundingClientRect();return{active:document.activeElement===b,outline:s.outlineStyle,width:s.outlineWidth,color:s.outlineColor,accent,offset:s.outlineOffset,rect:{width:r.width,height:r.height},panel:{width:p.width,height:p.height}};})()`);
+    assert.equal(keyboardOpen.active,true,`${design}: keyboard Tab reaches the open button.`);
+    assert.equal(keyboardOpen.outline,'solid',`${design}: the keyboard-focused open button keeps its accent frame.`);
+    assert.ok(parseFloat(keyboardOpen.width)>0,`${design}: keyboard focus has a visible outline.`);
+    assert.equal(keyboardOpen.color,keyboardOpen.accent,`${design}: keyboard focus outline follows the current accent.`);
+    assert.ok(parseFloat(keyboardOpen.offset)>0,`${design}: keyboard focus remains distinct from the small button border.`);
+    assert.ok(keyboardOpen.rect.width<keyboardOpen.panel.width/2&&keyboardOpen.rect.height<keyboardOpen.panel.height/2,
+      `${design}: the focus frame stays on the small open button.`);
     const opening=await evaluate(`(async()=>{const f=fixture,p=f.sharedPanel,a=document.querySelector('#album-detail-content'),b=document.querySelector('.open-album'),surface=b.closest('.album-actions')??b,h=document.querySelector('.album-callout');b.focus({preventScroll:true});f.stage.dataset.mode='detail';p.setOpen(true);const shots=[],take=()=>{
       const buttonFrames=surface.getAnimations().flatMap(animation=>animation.effect?.getKeyframes()??[]);
       const hasClip=node=>node.getAnimations().some(animation=>animation.effect?.getKeyframes().some(frame=>typeof frame.clipPath==='string'));
@@ -31,6 +72,17 @@ export async function checkAlbumPanel({command,evaluate,output}) {
       assert.notEqual(opening[0].buttonBackground,'rgb(0, 0, 0)','Future button animation does not paint a black placeholder.');
       assert.equal(opening[2].fieldClipReveal,true,'Future detail fields reveal with clip masks while the article expands.');
     }
+    const articleFocus=await evaluate(`(()=>{
+      const f=fixture,p=f.sharedPanel,host=p.element.closest('.foobar-home-info')||(p.element.parentElement!==f.stage?p.element.parentElement:null),nodes=[...(host?[['host',host]]:[]),['panel',p.element],['scroll',p.scrollTarget()],['callout',document.querySelector('.album-callout')],['article',document.querySelector('#album-detail-content')]],article=nodes.at(-1)[1],saved=article.getAttribute('tabindex');
+      if(!article.hasAttribute('tabindex'))article.setAttribute('tabindex','-1');article.focus({preventScroll:true});
+      const focused=document.activeElement===article,styles=nodes.map(([name,node])=>{const s=getComputedStyle(node);return{name,outlineStyle:s.outlineStyle,outlineWidth:s.outlineWidth,boxShadow:s.boxShadow,borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth]};});
+      if(saved===null)article.removeAttribute('tabindex');else article.setAttribute('tabindex',saved);
+      return{focused,styles,temporaryTabindex:saved===null};
+    })()`);
+    assert.equal(articleFocus.focused,true,`${design}: keyboard focus can reach the expanded article surface.`);
+    for(const sample of articleFocus.styles){assert.ok(sample.outlineStyle==='none'||sample.outlineWidth==='0px',`${design} article ${sample.name} outline: ${JSON.stringify(sample)}`);
+      assert.equal(sample.boxShadow,'none',`${design} article ${sample.name} ring: ${JSON.stringify(sample)}`);
+      assert.deepEqual(sample.borders,Array(4).fill('0px'),`${design} article ${sample.name} border: ${JSON.stringify(sample)}`);}
     const focus=await evaluate(`(()=>{const f=fixture,p=f.sharedPanel,v=p.scrollTarget(),left=document.querySelector('#three-scene');const point=x=>x.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})),wheel=x=>x.dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true})),key=(x,k)=>x.dispatchEvent(new KeyboardEvent('keydown',{key:k,bubbles:true,cancelable:true}));point(left);const start=f.albumSteps,shelf=f.shelfSteps;wheel(v);const leftSafe=f.albumSteps===start+1&&f.shelfSteps===shelf;point(v);const after=f.albumSteps;v.scrollTop=0;wheel(left);const rightSafe=v.scrollTop>0&&f.albumSteps===after;v.scrollTop=v.scrollHeight;wheel(left);const edge=f.albumSteps===after;p.element.focus({preventScroll:true});key(p.element,'ArrowDown');const row=document.activeElement;key(row,'Enter');const played=f.played.at(-1);f.renderSharedTab('about');const hasClip=node=>node.getAnimations().some(animation=>animation.effect?.getKeyframes().some(frame=>typeof frame.clipPath==='string'));const futureTabClipReveal=[...p.element.querySelectorAll('.music-tabs,.album-about > *')].some(hasClip);p.element.focus({preventScroll:true});key(p.element,'ArrowDown');const aboutSafe=f.albumSteps===after;f.renderSharedTab('tracks');const tab=document.querySelector('#tab-tracks');tab.focus({preventScroll:true});key(tab,'ArrowDown');const tabSafe=document.activeElement.classList.contains('track-row')&&f.albumSteps===after;return{leftSafe,rightSafe,edge,aboutSafe,tabSafe,played,mode:f.stage.dataset.mode,outline:getComputedStyle(p.element).outlineStyle,shadow:getComputedStyle(p.element).boxShadow,futureTabClipReveal};})()`);
     for(const key of ['leftSafe','rightSafe','edge','aboutSafe','tabSafe'])assert.equal(focus[key],true,`${design} focus ${key}`);
     if(design==='rhine')assert.equal(focus.futureTabClipReveal,true,'Future tab changes reveal individual content segments with clip masks.');
@@ -115,7 +167,7 @@ export async function checkAlbumPanel({command,evaluate,output}) {
       }
       for(const key of ['hidden','settings','punk'])assert.equal(readingBackground[key],'none',`Future veil must be absent: ${key}`);
     }
-    report.push({design,closed,opening,focus,skin,closing,rapid,layoutPersistence,readingBackground});
+    report.push({design,closed,mouseFocus,containerFocus,keyboardOpen,opening,articleFocus,focus,skin,closing,rapid,layoutPersistence,readingBackground});
     for(const open of [false,true]) {
       await evaluate(`fixture.sharedPanel.setOpen(${open});fixture.sharedPanel.finish();fixture.sharedPanel.scrollTarget().scrollTop=0`);
       const clip=await evaluate(`(()=>{const r=fixture.sharedPanel.element.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,scale:1};})()`);
