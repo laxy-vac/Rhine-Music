@@ -910,6 +910,288 @@ async function saveFailureScreenshot() {
   }
 }
 
+function motionBands(value) {
+  return Array.from({ length: 32 }, () => value);
+}
+
+async function setMotionSpectrum(bands, available = true) {
+  return browser('window.__lyricsCheckSetSpectrumSnapshot(' + JSON.stringify(bands) + ',' + JSON.stringify(available) + ')');
+}
+
+async function readMotionSpectrum() {
+  return browser('window.__lyricsCheckReadSpectrumLevels()');
+}
+
+async function readMotionProbe() {
+  return browser('window.__lyricsCheckReadSpectrumProbe()');
+}
+
+async function readMotionRafProbe() {
+  return browser('window.__lyricsCheckReadSpectrumRafProbe()');
+}
+
+let reducedMotionDebuggerAttachedHere = false;
+
+function assertMotionLevels(levels, label) {
+  assert(Array.isArray(levels) && levels.length === 32,
+    label + ' must expose exactly 32 production spectrum bars: ' + JSON.stringify({ count: levels?.length }));
+  assert(levels.every((value) => Number.isFinite(value) && value >= 0 && value <= 1),
+    label + ' must keep each rendered level finite and within [0, 1]: ' + JSON.stringify(levels));
+}
+
+async function emulateReducedMotion(reduced) {
+  const debuggerApi = browserWindow.webContents.debugger;
+  if (!debuggerApi.isAttached()) {
+    debuggerApi.attach();
+    reducedMotionDebuggerAttachedHere = true;
+  }
+  try {
+    await debuggerApi.sendCommand('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: reduced ? 'reduce' : 'no-preference' }],
+    });
+    const matches = await browser('matchMedia("(prefers-reduced-motion: reduce)").matches');
+    assert(matches === reduced, 'Electron did not apply the requested reduced-motion media preference: ' + JSON.stringify({ reduced, matches }));
+  } finally {
+    if (!reduced && reducedMotionDebuggerAttachedHere && debuggerApi.isAttached()) {
+      debuggerApi.detach();
+      reducedMotionDebuggerAttachedHere = false;
+    }
+  }
+}
+
+async function inspectSpectrumMotion() {
+  assert(await browser('typeof window.__lyricsCheckSetSpectrumSnapshot === "function"'),
+    'The spectrum-motion harness must provide a synthetic snapshot controller.');
+  assert(await browser('typeof window.__lyricsCheckCaptureSpectrumFrames === "function"'),
+    'The spectrum-motion harness must capture real requestAnimationFrame samples.');
+
+  const transition = await browser('Array.from(document.querySelectorAll(".lyrics-spectrum-bar")).map(node=>({property:getComputedStyle(node).transitionProperty,duration:getComputedStyle(node).transitionDuration}))');
+  assert(transition.length === 32 && transition.every((item) => item.property === 'none' || item.duration.split(',').every((value) => Number.parseFloat(value) === 0)),
+    'Production spectrum bars must not apply a second CSS transition: ' + JSON.stringify(transition));
+  report.spectrumMotion ??= {};
+  report.spectrumMotion.transition = transition[0] ?? null;
+
+  await browser('window.__lyricsCheckSetPlayback(true)');
+  await setMotionSpectrum(motionBands(0.12));
+  await pause(650);
+  const baseline = await readMotionSpectrum();
+  assertMotionLevels(baseline.levels, 'settled baseline');
+
+  const probeBeforeAttack = await readMotionProbe();
+  await setMotionSpectrum(motionBands(0.88));
+  const attack = await browser('window.__lyricsCheckCaptureSpectrumFrames(160)');
+  const probeAfterAttack = await readMotionProbe();
+  const attackValues = attack.frames.map((frame) => frame.levels[0]);
+  const attackDistinct = Array.from(new Set(attackValues.map((value) => Number(value).toFixed(4))));
+  assert(attack.frames.length >= 6 && attackDistinct.length >= 3,
+    'A stable synthetic snapshot must produce multiple distinct intermediate production DOM values across rAF samples: ' + JSON.stringify({ durationMs: attack.durationMs, frames: attack.frames.length, values: attackValues }));
+  assert(probeAfterAttack.snapshotUpdates === probeBeforeAttack.snapshotUpdates + 1
+      && probeAfterAttack.callbackCalls - probeBeforeAttack.callbackCalls >= 3,
+    'Intermediate motion must come from repeated rAF reads of one unchanged snapshot: ' + JSON.stringify({ probeBeforeAttack, probeAfterAttack }));
+  assert(attackValues.every((value, index) => index === 0 || value + 0.0001 >= attackValues[index - 1]),
+    'Attack should rise monotonically for a constant target: ' + JSON.stringify(attackValues));
+  assertMotionLevels(attack.frames.at(-1).levels, 'attack');
+
+  const probeBeforeRelease = await readMotionProbe();
+  await setMotionSpectrum(motionBands(0.12));
+  await waitBrowser('window.__lyricsCheckReadSpectrumProbe().callbackCalls > ' + probeBeforeRelease.callbackCalls,
+    'the low spectrum snapshot to be sampled', 1000);
+  const release = await browser('window.__lyricsCheckCaptureSpectrumFrames(160)');
+  const releaseValues = release.frames.map((frame) => frame.levels[0]);
+  assert(releaseValues.every((value, index) => index === 0 || value <= releaseValues[index - 1] + 0.0001),
+    'Release should fall monotonically for a constant low target: ' + JSON.stringify(releaseValues));
+  const attackDistance = attackValues.at(-1) - attackValues[0];
+  const releaseDistance = releaseValues[0] - releaseValues.at(-1);
+  const attackRemaining = (0.88 - attackValues.at(-1)) / (0.88 - attackValues[0]);
+  const releaseRemaining = (releaseValues.at(-1) - 0.12) / (releaseValues[0] - 0.12);
+  const attackReleaseDurationDeltaMs = Math.abs(attack.durationMs - release.durationMs);
+  assert(attackDistance > 0.2 && releaseDistance > 0
+      && attackReleaseDurationDeltaMs <= 30
+      && Number.isFinite(attackRemaining) && Number.isFinite(releaseRemaining)
+      && attackRemaining < releaseRemaining * 0.5,
+    'Attack must close a substantially larger fraction of its initial target gap than release in near-equal windows: ' + JSON.stringify({ attackDistance, releaseDistance, attackRemaining, releaseRemaining, attackDurationMs: attack.durationMs, releaseDurationMs: release.durationMs, attackValues, releaseValues }));
+  report.spectrumMotion.attack = { durationMs: attack.durationMs, frames: attack.frames.length, distinctValues: attackDistinct.length, values: attackValues, remainingFraction: attackRemaining };
+  report.spectrumMotion.release = { durationMs: release.durationMs, frames: release.frames.length, values: releaseValues, remainingFraction: releaseRemaining, attackDistance, releaseDistance, durationDeltaMs: attackReleaseDurationDeltaMs };
+
+  const stillTargets = Array.from({ length: 32 }, (_, index) => index === 0 ? 0.37 : index === 2 ? 0.73 : index % 3 === 0 ? 0 : index % 3 === 1 ? 0.2 : 0.4);
+  await setMotionSpectrum(stillTargets);
+  const still = await browser('window.__lyricsCheckCaptureSpectrumFrames(2200)');
+  const stillTail = still.frames.filter((frame) => frame.at >= still.durationMs - 220);
+  const stillMonotonicBands = stillTargets.map((_target, band) => {
+    const values = still.frames.map((frame) => frame.levels[band]);
+    return values.every((value, index) => index === 0 || value >= values[index - 1] - 1e-9)
+      || values.every((value, index) => index === 0 || value <= values[index - 1] + 1e-9);
+  });
+  const settledValues = stillTail.at(-1)?.levels ?? [];
+  const stableTail = stillTail.length >= 8 && stillTargets.every((target, band) => {
+    const expected = Number(target.toFixed(4));
+    return stillTail.every((frame) => frame.levels[band] === expected);
+  });
+  assert(still.frames.length >= 80 && stillTail.length >= 8 && stillMonotonicBands.every(Boolean) && stableTail,
+    'A constant input must converge monotonically, then remain fixed at the target across the final 220 ms, including zero-valued neighboring bands: ' + JSON.stringify({ durationMs: still.durationMs, frames: still.frames.length, tailFrames: stillTail.length, monotonicBandCount: stillMonotonicBands.filter(Boolean).length, settledValues: settledValues.slice(0, 4), expectedValues: stillTargets.slice(0, 4) }));
+  assertMotionLevels(still.frames.at(-1).levels, 'settled multi-band input');
+  report.spectrumMotion.stillInput = { durationMs: still.durationMs, frames: still.frames.length, tailFrames: stillTail.length, settledValues: settledValues.slice(0, 4), targets: stillTargets.slice(0, 4) };
+
+  await browser('window.__lyricsCheckSetSpectrumSnapshot(Array.from({length:32},(_,index)=>index===0?-8:index===1?8:index===2?Number.NaN:index===3?Number.POSITIVE_INFINITY:0.42),true)');
+  await pause(220);
+  const bounded = await readMotionSpectrum();
+  assertMotionLevels(bounded.levels, 'NaN and out-of-range input');
+  report.spectrumMotion.bounds = { count: bounded.count, minimum: Math.min(...bounded.levels), maximum: Math.max(...bounded.levels), invalidInputs: [-8, 8, 'NaN', 'Infinity'] };
+
+  await setMotionSpectrum(motionBands(0.92));
+  await pause(480);
+  const beforePause = await readMotionSpectrum();
+  assert(Math.max(...beforePause.levels) > 0.8, 'The active synthetic snapshot should raise the bars before pause decay.');
+  await browser('window.__lyricsCheckSetPlayback(false)');
+  await browser('window.__lyricsCheckSetSpectrumSnapshot(Array.from({length:32},()=>0.92),false,"paused")');
+  await pause(1700);
+  const afterPause = await readMotionSpectrum();
+  assert(Math.max(...afterPause.levels) <= 0.01,
+    'Pausing playback must let the spectrum envelope decay naturally to zero: ' + JSON.stringify(afterPause.levels));
+
+  await browser('window.__lyricsCheckSetPlayback(true)');
+  await setMotionSpectrum(motionBands(0.84));
+  await pause(480);
+  const beforeUnavailable = await readMotionSpectrum();
+  await setMotionSpectrum(motionBands(0.84), false);
+  await pause(1700);
+  const afterUnavailable = await readMotionSpectrum();
+  assert(Math.max(...beforeUnavailable.levels) > 0.7 && Math.max(...afterUnavailable.levels) <= 0.01,
+    'Unavailable spectrum must decay its previous peak naturally to zero: ' + JSON.stringify({ before: beforeUnavailable.levels, after: afterUnavailable.levels }));
+  report.spectrumMotion.decay = { pausedPeak: Math.max(...beforePause.levels), pausedFinal: Math.max(...afterPause.levels), unavailablePeak: Math.max(...beforeUnavailable.levels), unavailableFinal: Math.max(...afterUnavailable.levels) };
+
+  await setMotionSpectrum(motionBands(0.94));
+  await pause(600);
+  const previousTrackPeak = Math.max(...(await readMotionSpectrum()).levels);
+  await setMotionSpectrum(motionBands(0.08));
+  await browser('window.__lyricsCheckSetTrack("synthetic-spectrum-next-track")');
+  const trackChangeFrames = await browser('window.__lyricsCheckCaptureSpectrumFrames(90)');
+  const firstTrackChangePeak = Math.max(...trackChangeFrames.frames[0].levels);
+  assert(previousTrackPeak > 0.85 && firstTrackChangePeak < previousTrackPeak * 0.45,
+    'Changing tracks must clear the old peak before the new track envelope builds: ' + JSON.stringify({ previousTrackPeak, firstTrackChangePeak, firstFrame: trackChangeFrames.frames[0] }));
+  report.spectrumMotion.trackChange = { previousTrackPeak, firstTrackChangePeak, frames: trackChangeFrames.frames.length };
+
+  const themeLayouts = [];
+  for (const design of [{ skin: 'future', key: 'rhine' }, { skin: 'punk', key: 'archive' }]) {
+    for (const theme of ['day', 'night']) {
+      await browser('window.__lyricsCheckSetDesignTheme(' + JSON.stringify(design.key) + ',' + JSON.stringify(theme) + ')');
+      const label = 'lyrics-spectrum-' + design.skin + '-' + theme;
+      const paint = await waitForPaintStable(label);
+      assert(paint.paintWait?.stabilized === true,
+        'The offscreen renderer must paint the requested skin/theme before layout sampling: ' + JSON.stringify({ design, theme, paint: paint.paintWait }));
+      const layout = await browser('(() => {const stage=document.querySelector("#stage"),style=getComputedStyle(stage),side=document.querySelector(".lyrics-left"),main=document.querySelector(".lyrics-main"),right=document.querySelector(".lyrics-right"),host=document.querySelector(".lyrics-spectrum-bars"),bars=Array.from(host?.children??[]),r=node=>{const x=node?.getBoundingClientRect();return x?{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}:null;},s=r(side),m=r(main),q=r(right),b=r(host),pressed=Array.from(document.querySelectorAll(".theme-switch [data-theme]")).find(button=>button.dataset.theme===stage.dataset.theme)?.getAttribute("aria-pressed");return{design:stage.dataset.design,theme:stage.dataset.theme,pageBg:style.getPropertyValue("--page-bg").trim().toLowerCase(),stageBackground:style.backgroundColor,stageColor:style.color,themePressed:pressed,count:bars.length,side:s,main:m,right:q,bars:b,barsInside:!!(s&&b&&b.left>=s.left-1&&b.right<=s.right+1&&b.top>=s.top-1&&b.bottom<=s.bottom+1),threeColumns:!!(s&&m&&q&&s.right<=m.left+1&&m.right<=q.left+1),noHorizontalOverflow:document.documentElement.scrollWidth<=innerWidth};})()');
+      layout.skin = design.skin;
+      const expectedPageBackground = theme === 'night' ? 'rgb(8, 18, 31)' : 'rgb(232, 229, 225)';
+      const expectedStageBackground = theme === 'night' ? 'rgb(8, 18, 31)' : 'rgb(232, 229, 225)';
+      assert(layout.design === design.key && layout.theme === theme && layout.pageBg === expectedPageBackground
+          && layout.stageBackground === expectedStageBackground && layout.themePressed === 'true'
+          && layout.count === 32 && layout.barsInside && layout.threeColumns && layout.noHorizontalOverflow,
+        'The requested production skin must paint the correct day/night colors and preserve the lyrics layout: ' + JSON.stringify({ expectedPageBackground, expectedStageBackground, layout }));
+      layout.paintWait = paint.paintWait;
+      themeLayouts.push(layout);
+      await captureScreenshot(label);
+    }
+  }
+  report.spectrumMotion.themeLayouts = themeLayouts;
+
+  await browser('window.__lyricsCheckSetDesignTheme("rhine","day")');
+  await setMotionSpectrum(motionBands(0.2));
+  await pause(650);
+  await emulateReducedMotion(true);
+  await setMotionSpectrum(motionBands(0.85));
+  const reduced = await browser('window.__lyricsCheckCaptureSpectrumFrames(260)');
+  const reducedValues = reduced.frames.map((frame) => frame.levels[0]);
+  const reducedDistinct = Array.from(new Set(reducedValues.map((value) => Number(value).toFixed(4))));
+  assert(Math.abs(reducedValues.at(-1) - 0.85) <= 0.001 && reducedDistinct.length <= 2
+      && reducedValues.every((value) => Math.abs(value - 0.2) <= 0.001 || Math.abs(value - 0.85) <= 0.001),
+    'Reduced motion must follow the sampled value directly without interpolation: ' + JSON.stringify({ durationMs: reduced.durationMs, reducedValues, reducedDistinct }));
+  await emulateReducedMotion(false);
+  report.spectrumMotion.reducedMotion = { frames: reduced.frames.length, values: reducedValues, distinctValues: reducedDistinct.length };
+
+  await browser('window.__lyricsCheckSetDocumentHidden(false)');
+  await setMotionSpectrum(motionBands(0.66));
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await pause(150);
+  const beforeHide = await readMotionProbe();
+  const beforeHideRaf = await readMotionRafProbe();
+  await browser('window.__lyricsCheckSetVisible(false)');
+  await pause(200);
+  const afterHide = await readMotionProbe();
+  const afterHideRaf = await readMotionRafProbe();
+  await pause(140);
+  const stableHidden = await readMotionProbe();
+  const stableHiddenRaf = await readMotionRafProbe();
+  const hiddenLevels = await readMotionSpectrum();
+  assert(afterHide.callbackCalls === stableHidden.callbackCalls
+      && stableHidden.callbackCalls <= beforeHide.callbackCalls + 1
+      && afterHideRaf.pending === 0 && stableHiddenRaf.pending === 0
+      && afterHideRaf.invoked === stableHiddenRaf.invoked
+      && afterHideRaf.scheduled === stableHiddenRaf.scheduled
+      && Math.max(...hiddenLevels.levels) === 0,
+    'Leaving the lyrics page must cancel the production rAF loop and clear all old levels: ' + JSON.stringify({ beforeHide, afterHide, stableHidden, beforeHideRaf, afterHideRaf, stableHiddenRaf, hiddenLevels }));
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await pause(170);
+  const afterReentry = await readMotionProbe();
+  const afterReentryRaf = await readMotionRafProbe();
+  const reentryFrameDelta = afterReentryRaf.invoked - stableHiddenRaf.invoked;
+  assert(afterReentry.callbackCalls > stableHidden.callbackCalls
+      && reentryFrameDelta >= 6 && reentryFrameDelta <= 15 && afterReentryRaf.pending === 1,
+    'Re-entering must restart exactly one production rAF loop: ' + JSON.stringify({ stableHidden, afterReentry, stableHiddenRaf, afterReentryRaf, reentryFrameDelta }));
+  await browser('window.__lyricsCheckSetDocumentHidden(true)');
+  await pause(200);
+  const afterDocumentHidden = await readMotionProbe();
+  const afterDocumentHiddenRaf = await readMotionRafProbe();
+  await pause(140);
+  const stableDocumentHidden = await readMotionProbe();
+  const stableDocumentHiddenRaf = await readMotionRafProbe();
+  assert(afterDocumentHidden.callbackCalls === stableDocumentHidden.callbackCalls
+      && afterDocumentHiddenRaf.pending === 0 && stableDocumentHiddenRaf.pending === 0
+      && afterDocumentHiddenRaf.invoked === stableDocumentHiddenRaf.invoked
+      && afterDocumentHiddenRaf.scheduled === stableDocumentHiddenRaf.scheduled,
+    'A hidden document must cancel the production spectrum loop: ' + JSON.stringify({ afterDocumentHidden, stableDocumentHidden, afterDocumentHiddenRaf, stableDocumentHiddenRaf }));
+  await browser('window.__lyricsCheckSetDocumentHidden(false)');
+  await pause(170);
+  const afterDocumentVisible = await readMotionProbe();
+  const afterDocumentVisibleRaf = await readMotionRafProbe();
+  const documentVisibleFrameDelta = afterDocumentVisibleRaf.invoked - stableDocumentHiddenRaf.invoked;
+  assert(afterDocumentVisible.callbackCalls > stableDocumentHidden.callbackCalls
+      && documentVisibleFrameDelta >= 6 && documentVisibleFrameDelta <= 15 && afterDocumentVisibleRaf.pending === 1,
+    'A visible document must restart exactly one production spectrum loop: ' + JSON.stringify({ stableDocumentHidden, afterDocumentVisible, stableDocumentHiddenRaf, afterDocumentVisibleRaf, documentVisibleFrameDelta }));
+  report.spectrumMotion.visibility = { beforeHide, afterHide, stableHidden, beforeHideRaf, afterHideRaf, stableHiddenRaf, afterReentry, afterReentryRaf, afterDocumentHidden, afterDocumentHiddenRaf, stableDocumentHidden, stableDocumentHiddenRaf, afterDocumentVisible, afterDocumentVisibleRaf };
+
+  const nativeDemand = await browser('window.__lyricsCheckProbeNativeDemand()');
+  const expectedNativePhases = { noDemand: 250, lyricsVisible: 100, signalKeepsDemand: 100, allDemandReleased: 250, reentered: 100, documentHidden: 250, documentVisible: 100, pageHidden: 250, destroyed: 250 };
+  assert(Object.entries(expectedNativePhases).every(([key, value]) => nativeDemand.phases[key] === value),
+    'The real NativeAudio poll must switch 250→100→250 ms with lyrics visibility, document visibility, signal owner coexistence, and destroy cleanup: ' + JSON.stringify(nativeDemand));
+  assert(nativeDemand.nativeRequests.length === 3
+      && nativeDemand.nativeRequests.every((item) => item.url.startsWith('/api/native/'))
+      && !nativeDemand.nativeRequests.some((item) => item.url.includes('status')),
+    'NativeAudio probing must mock all native API calls and never reach a real device or host: ' + JSON.stringify(nativeDemand.nativeRequests));
+  await pause(220);
+  const afterDestroy = await readMotionProbe();
+  const afterDestroyRaf = await readMotionRafProbe();
+  assert(afterDestroy.callbackCalls === nativeDemand.callbackCalls
+      && nativeDemand.rafAfterDestroy.pending === 0
+      && afterDestroyRaf.pending === 0
+      && afterDestroyRaf.invoked === nativeDemand.rafAfterDestroy.invoked
+      && afterDestroyRaf.scheduled === nativeDemand.rafAfterDestroy.scheduled,
+    'Destroy must cancel the production rAF loop and leave no repeated callbacks: ' + JSON.stringify({ nativeDemand, afterDestroy, afterDestroyRaf }));
+  report.spectrumMotion.nativeDemand = nativeDemand;
+  report.spectrumMotion.afterDestroy = afterDestroy;
+  report.spectrumMotion.afterDestroyRaf = afterDestroyRaf;
+  report.checks = {
+    ...report.checks,
+    spectrumMotionFramesWithinSnapshot: true,
+    spectrumAttackReleaseAndConvergence: true,
+    spectrumBoundsAndDecay: true,
+    spectrumTrackChangeClearsPeak: true,
+    spectrumReducedMotion: true,
+    spectrumVisibilityAndDestroyLifecycle: true,
+    nativeSpectrumDemandCadenceAndMocking: true,
+    futurePunkDayNightLayout: true,
+  };
+}
+
 async function run() {
   assert(checkUrl && profileDirectory && reportPath && artifactDirectory, 'The isolated check environment is incomplete.');
   assert(report.electronMainMode, 'Electron must run as an app process; ELECTRON_RUN_AS_NODE must be unset.');
@@ -1021,6 +1303,18 @@ async function run() {
 
   assert(!browserWindow.isVisible(), 'The isolated test BrowserWindow must stay hidden.');
   report.checks.hiddenElectronWindow = true;
+
+  if (checkMode === 'spectrum-motion') {
+    await inspectSpectrumMotion();
+    assert(report.externalNetworkRequests.length === 0,
+      'The isolated spectrum-motion check attempted an external network request: ' + JSON.stringify(report.externalNetworkRequests));
+    const motionState = await mockState();
+    report.mockApiPaths = Array.from(new Set(motionState.requests.map((item) => item.path)));
+    report.checks.spectrumMotionModeOnly = true;
+    report.checks.externalNetworkBlocked = true;
+    report.ok = true;
+    return;
+  }
 
   if(checkMode==='header-scrollbar'){
     await inspectHeaderScrollbar();

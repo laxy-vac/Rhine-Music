@@ -113,6 +113,8 @@ V3歌词缓存不会随Git回滚降级。只支持V2的旧源码会保留但无�
 
 ## 检查索引与边界
 
+歌词页频谱连续运动修正的TypeScript与1662模块interface-only构建通过，日志`.tools/lyrics-spectrum-motion/build.log`；`node scripts/check-lyrics-page.mjs --spectrum-motion`最终11项全通过，报告/四张稳定绘制截图在`run-1792159827778-859aa4c4`。验证连续中间帧、快起慢落、收敛/边界/归零、切歌/显隐/销毁、减少动态、有效Future/Punk日夜皮肤与原生需求100/250ms切换；真实NativeAudio类的请求/计时器全mock，无外网或设备访问，不代表个人整窗/硬件FPS。详情见[歌词验证](LYRICS.md)。
+
 2026-10-16当前Local fallback与Future歌词弹窗光效验证完成：TSC及1662模块interface-only build通过（`.tools/lyrics-local-fallback/build.log`）；`node --test scripts/check-lyrics-library.mjs`为29/29通过、0失败/取消/跳过（`library-check.log`）；`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`为`ok=true`、11项全true、18张截图（`run-1792158440496-eaab20df/report.json`）。UI全用mock且无外部请求；Windows选择器只拦截意图、focus-visible为CDP伪状态，未验证线上服务、个人播放器或设备。细节与历史边界见[歌词验证](LYRICS.md)。
 
 历史记录：提交`8581466`的28/26/40检查验证旧语义（Local无文时直接开导入选择器且不回退Cloud），不覆盖当前fallback规则；`a684885`的24/18检查为V2旧弹窗历史。详细说明见[歌词验证](LYRICS.md)。

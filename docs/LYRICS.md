@@ -50,6 +50,7 @@ URL模板支持`{query}`、`{title}`、`{artist}`、`{album}`、`{id}`，各值�
 - WASAPI/ASIO PCM：`native/pcm-spectrum.h`收集真实PCM，在DSP、SRC和队列混音之后、主音量/淡变/量化之前取样。实时回调仅复制固定容量原子环形缓冲，FFT在status线程最多每100ms计算一次；不修改音乐样本。切曲/定位/暂停/停止重置历史，切轨或环形窗口覆盖时丢弃分析结果。
 - 显示使用32个对数频段，范围20Hz至min(20kHz,Nyquist)，左右声道取较大能量，映射约-72至0dBFS。FFT窗口随采样率在4096至32768帧之间选择。这是视觉近似，不是精密频谱测量；取样精度不属于音乐输出处理精度链路。
 - 浏览器兼容播放：歌词页可见时才接入当前歌曲的Web Audio Analyser，8192点FFT、32个对数频段；使用真实当前歌曲数据。分析不包含独立BGM或界面音效。
+- 歌词页与文档可见时通过`setSpectrumDemand("lyrics", true)`启用已有原生100ms状态轮询；离页、文档隐藏和销毁时释放需求，兼容信号页的独立需求。不改PCM分析窗口或音频输出处理。浏览器/原生快照最多约30Hz读取，32柱按`requestAnimationFrame`与实际帧间时间连续绘制：上升时间常数45ms、回落180ms，移除旧160ms CSS过渡。仅对同一频段的显示值做时间平滑，不混合相邻频段或生成虚构波动；静止输入会收敛。暂停/不可用回落至0，切歌/隐藏清旧峰值；系统减少动态时直接跟随100ms采样，不做补间。这是绘制调度规则，不是硬件FPS结论。
 - 原生DSD/DoP直出暂无PCM频谱，不把DSD载荷或DoP容器当成音乐PCM分析；页面明确显示不可用。歌词进度仍可同步。
 
 ## foobar2000参考与接口资料
@@ -61,6 +62,8 @@ URL模板支持`{query}`、`{title}`、`{artist}`、`{album}`、`{id}`，各值�
 来源接口与歌词内容保留各自权利，不改授本项目MIT；歌词缓存只留本机，不分发歌词内容。
 
 ## 当前实现验证状态
+
+频谱连续运动修正：TypeScript与1662模块interface-only构建通过，日志在`.tools/lyrics-spectrum-motion/build.log`。`node scripts/check-lyrics-page.mjs --spectrum-motion`最终报告11项全通过，报告/四张稳定绘制截图在`.tools/lyrics-spectrum-motion/run-1792159827778-859aa4c4/`。同一快照约162ms内有10个不同生产DOM中间值；近等长上升/回落窗口的目标剩余差比例为0.0357/0.3963，确认快起慢落。静止32频段收敛后恒定，NaN/越界、暂停/不可用归零、切歌清峰、减少动态、页/文档显隐和销毁均通过。真实NativeAudio类配合全mock请求及惰性计时器探针确认250→100→250ms需求切换与signal共存；没有访问设备或真实原生服务，不证明实际网络延迟/FFT吞吐。两主题使用有效`rhine/archive` key与生产日夜颜色，等待离屏paint后核验三栏/32柱；主Agent复核Future日间与Punk夜间截图。无外网请求，未启动个人播放器或验证硬件FPS/实际歌曲观感。下列歌词来源/光效检查属于此前完成的功能验证。
 
 2026-10-16当前Local fallback与Future歌词弹窗光效修正验证完成，产物位于`.tools/lyrics-local-fallback`。TypeScript和1662模块interface-only Vite build通过，日志为`build.log`。`node --test scripts/check-lyrics-library.mjs`最终29/29通过，0失败/取消/跳过，日志为`library-check.log`；首次28/29失败是Windows测试夹具清理临时目录时遇到`ENOTEMPTY`，脚本增加library队列等待和有限重试后复跑通过。
 

@@ -2,6 +2,7 @@ import { trUi, ui, lyricSourceLabel } from "./i18n";
 import type { MusicPlayerState } from "./music-player";
 import type { MusicAlbum } from "./music-types";
 import { audioStageName, pcmConsistencyStatus } from "./audio-info";
+import { setSpectrumDemand } from "./native-audio";
 
 export type SpectrumSnapshot = {
   available: boolean;
@@ -284,7 +285,14 @@ export function setupLyricsPage(
   let lyricRequest: AbortController | undefined;
   let currentTrackRequestGeneration = 0;
   let trackOperationControllers: AbortController[] = [];
-  let spectrumTimer = 0;
+  let visibleRefreshTimer = 0;
+  let spectrumFrame: number | null = null;
+  let spectrumFrameAt: number | null = null;
+  let spectrumSampleAt = -Infinity;
+  let latestSpectrum: SpectrumSnapshot | undefined;
+  const spectrumLevels = new Float32Array(32);
+  const spectrumTargets = new Float32Array(32);
+  const spectrumMotionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
   let lyricStatus = trUi("选择一首曲目以读取本机歌词。");
   let lyricNoticeState: LyricsNoticeState = "standby";
   let sourceLoaded = false;
@@ -1419,45 +1427,95 @@ export function setupLyricsPage(
     closePreferenceDialog();
   }
 
-  function renderSpectrum(): void {
+  function sampleSpectrum(): void {
     if (!visible || disposed) return;
     let snapshot: SpectrumSnapshot | undefined;
     try { snapshot = callbacks.spectrum(); } catch { snapshot = undefined; }
+    latestSpectrum = snapshot;
     if (!snapshot?.available || !Array.isArray(snapshot.bands) || snapshot.bands.length === 0) {
-      spectrumSection.classList.add("is-unavailable");
+      if (!spectrumSection.classList.contains("is-unavailable")) spectrumSection.classList.add("is-unavailable");
       const reasons:Record<string,string>={paused:trUi("已暂停"),stopped:trUi("未播放"),buffering:trUi("缓冲中"),"raw DSD/DoP data is not PCM spectrum":trUi("DSD 位流 · 无 PCM 频谱")};
       const reason=snapshot?.reason??'';
-      spectrumMeta.textContent = reasons[reason] || reason || trUi("频谱暂不可用");
-      barNodes.forEach((bar) => { bar.style.transform = "scaleY(0)"; });
-      renderArchiveReadouts(snapshot, true);
+      const label = reasons[reason] || reason || trUi("频谱暂不可用");
+      if (spectrumMeta.textContent !== label) spectrumMeta.textContent = label;
+      spectrumTargets.fill(0);
       return;
     }
-    spectrumSection.classList.remove("is-unavailable");
+    if (spectrumSection.classList.contains("is-unavailable")) spectrumSection.classList.remove("is-unavailable");
     const bands = snapshot.bands;
     for (let index = 0; index < barNodes.length; index += 1) {
       const sourceIndex = Math.min(bands.length - 1, Math.floor(index * bands.length / barNodes.length));
       const value = Number.isFinite(bands[sourceIndex]) ? clamp(bands[sourceIndex], 0, 1) : 0;
-      barNodes[index].style.transform = `scaleY(${value.toFixed(3)})`;
+      spectrumTargets[index] = value;
     }
     const rate=snapshot.sampleRate;
-    spectrumMeta.textContent = rate&&Number.isFinite(rate)&&rate>0?`20 Hz — ${Math.min(20000,rate/2)/1000} kHz · ${formatRate(rate)}`:trUi("32 个实时频段");
-    renderArchiveReadouts(snapshot, true);
+    const label = rate&&Number.isFinite(rate)&&rate>0?`20 Hz — ${Math.min(20000,rate/2)/1000} kHz · ${formatRate(rate)}`:trUi("32 个实时频段");
+    if (spectrumMeta.textContent !== label) spectrumMeta.textContent = label;
+  }
+
+  function resetSpectrum(): void {
+    spectrumLevels.fill(0);
+    spectrumTargets.fill(0);
+    latestSpectrum = undefined;
+    spectrumFrameAt = null;
+    spectrumSampleAt = -Infinity;
+    for (const bar of barNodes) bar.style.transform = "scaleY(0)";
+  }
+
+  function drawSpectrum(time: number): void {
+    spectrumFrame = null;
+    if (!visible || disposed || document.hidden) return;
+    const reducedMotion = spectrumMotionPreference.matches;
+    if (time - spectrumSampleAt >= (reducedMotion ? 100 : 1000 / 30)) {
+      sampleSpectrum();
+      spectrumSampleAt = time;
+    }
+    const elapsed = spectrumFrameAt === null ? 1 / 60 : clamp((time - spectrumFrameAt) / 1000, 0, 0.05);
+    spectrumFrameAt = time;
+    for (let index = 0; index < barNodes.length; index += 1) {
+      const current = spectrumLevels[index], target = spectrumTargets[index];
+      // Bridge actual snapshots at display cadence. Each frequency keeps its
+      // own measured target; the envelope rises quickly and falls naturally.
+      const response = 1 - Math.exp(-elapsed / (target > current ? 0.045 : 0.18));
+      const next = reducedMotion || Math.abs(target - current) < 0.0001
+        ? target : current + (target - current) * response;
+      spectrumLevels[index] = next;
+      const transform = `scaleY(${next.toFixed(4)})`;
+      if (barNodes[index].style.transform !== transform) barNodes[index].style.transform = transform;
+    }
+    spectrumFrame = requestAnimationFrame(drawSpectrum);
+  }
+
+  function syncSpectrumVisibility(): void {
+    const active = visible && !disposed && !document.hidden;
+    setSpectrumDemand("lyrics", active);
+    if (active) {
+      if (spectrumFrame === null) spectrumFrame = requestAnimationFrame(drawSpectrum);
+    } else {
+      if (spectrumFrame !== null) cancelAnimationFrame(spectrumFrame);
+      spectrumFrame = null;
+      resetSpectrum();
+    }
   }
 
   function startVisibleRefresh(): void {
-    if (!visible || disposed || spectrumTimer) return;
-    renderSpectrum();
+    if (!visible || disposed || visibleRefreshTimer) return;
+    syncSpectrumVisibility();
     updateActiveLine(true, true);
-    spectrumTimer = window.setInterval(() => {
-      renderSpectrum();
+    visibleRefreshTimer = window.setInterval(() => {
+      if (document.hidden) return;
+      renderArchiveReadouts(latestSpectrum, true);
       updateActiveLine(true);
     }, 100);
   }
 
   function stopVisibleRefresh(): void {
-    if (spectrumTimer) window.clearInterval(spectrumTimer);
-    spectrumTimer = 0;
+    if (visibleRefreshTimer) window.clearInterval(visibleRefreshTimer);
+    visibleRefreshTimer = 0;
+    syncSpectrumVisibility();
   }
+
+  document.addEventListener("visibilitychange", syncSpectrumVisibility);
 
   followInput.addEventListener("change", () => {
     followEnabled = followInput.checked;
@@ -1557,6 +1615,7 @@ export function setupLyricsPage(
       latestAlbum = album;
       renderPlayerInfo();
       if (trackChanged) {
+        resetSpectrum();
         activeTrackId = nextTrackId;
         currentTrackRequestGeneration += 1;
         abortTrackOperations();
@@ -1618,6 +1677,7 @@ export function setupLyricsPage(
       if (disposed) return;
       disposed = true;
       stopVisibleRefresh();
+      document.removeEventListener("visibilitychange", syncSpectrumVisibility);
       sourceRequest?.abort();
       abortTrackOperations();
       window.removeEventListener("keydown", handlePreferenceEscape, true);

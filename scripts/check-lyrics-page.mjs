@@ -11,8 +11,9 @@ const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron',
 const desktopEntry = path.join(projectRoot, 'desktop', 'lyrics-page-check.cjs');
 const headerScrollbarMode = process.argv.includes('--header-scrollbar');
 const lyricsLocalFallbackMode = process.argv.includes('--lyrics-local-fallback');
-const checkMode = headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'full';
-const artifactDirectoryName = headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'lyrics-source-refinement';
+const spectrumMotionMode = process.argv.includes('--spectrum-motion');
+const checkMode = spectrumMotionMode ? 'spectrum-motion' : headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'full';
+const artifactDirectoryName = spectrumMotionMode ? 'lyrics-spectrum-motion' : headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'lyrics-source-refinement';
 const artifactRoot = path.join(projectRoot, '.tools', artifactDirectoryName);
 const cacheDirectory = path.join(artifactRoot, 'vite-cache');
 const runDirectory = path.join(artifactRoot, 'run-' + Date.now() + '-' + randomUUID().slice(0, 8));
@@ -176,13 +177,26 @@ const harnessHtml = [
   'import { enhanceSettingsSelectControls } from "/src/settings-select-controls.ts";',
   'import { qualityPresets } from "/src/render-quality.ts";',
   'import { setupLyricsPage } from "/src/lyrics-page.ts";',
+  'import { NativeAudio, outputDefault, setSpectrumDemand } from "/src/native-audio.ts";',
+  'const spectrumMotionMode=' + JSON.stringify(spectrumMotionMode) + ';',
   'const track = { id:"synthetic-track", title:"合成歌曲", artist:"测试歌手", album:"测试专辑", duration:180, codec:"FLAC", format:"FLAC", sampleRate:44100, bitsPerSample:16, numberOfChannels:2, bitrate:0, lossless:true };',
   'let state = { currentTrack:track, queue:[track], currentIndex:0, playbackOrder:"default", playing:false, transport:"paused", currentTime:0.5, duration:180, backend:"browser", nativeOutputStatus:undefined, error:"" };',
+  'let syntheticDocumentHidden=false;',
+  'if(spectrumMotionMode) Object.defineProperty(document,"hidden",{configurable:true,get:()=>syntheticDocumentHidden});',
+  'const spectrumMotionProbe={value:{available:true,bands:Array.from({length:32},()=>0),sampleRate:44100,updatedAt:Date.now()},snapshotUpdates:0,callbackCalls:0,rafScheduled:0,rafInvoked:0,rafCancelled:0};',
+  'const spectrumMotionRafIds=new Set();',
+  'window.__lyricsCheckReadSpectrumRafProbe=spectrumMotionMode?()=>({scheduled:spectrumMotionProbe.rafScheduled,invoked:spectrumMotionProbe.rafInvoked,cancelled:spectrumMotionProbe.rafCancelled,pending:spectrumMotionRafIds.size}):undefined;',
+  'if(spectrumMotionMode){const schedule=window.requestAnimationFrame.bind(window),cancel=window.cancelAnimationFrame.bind(window);window.requestAnimationFrame=callback=>{if(callback.name!=="drawSpectrum")return schedule(callback);spectrumMotionProbe.rafScheduled++;let id=0;id=schedule(time=>{spectrumMotionRafIds.delete(id);spectrumMotionProbe.rafInvoked++;callback(time);});spectrumMotionRafIds.add(id);return id;};window.cancelAnimationFrame=id=>{if(spectrumMotionRafIds.delete(id))spectrumMotionProbe.rafCancelled++;return cancel(id);};}',
+  'window.__lyricsCheckSetSpectrumSnapshot=spectrumMotionMode?(bands,available=true,reason="")=>{spectrumMotionProbe.value={available:available===true,bands:Array.isArray(bands)?Array.from(bands):[],sampleRate:44100,updatedAt:Date.now(),...(reason?{reason}: {})};spectrumMotionProbe.snapshotUpdates++;return spectrumMotionProbe.snapshotUpdates;}:undefined;',
+  'window.__lyricsCheckReadSpectrumProbe=spectrumMotionMode?()=>({snapshotUpdates:spectrumMotionProbe.snapshotUpdates,callbackCalls:spectrumMotionProbe.callbackCalls,available:spectrumMotionProbe.value.available,bands:spectrumMotionProbe.value.bands.slice()}):undefined;',
+  'window.__lyricsCheckReadSpectrumLevels=spectrumMotionMode?()=>{const host=document.querySelector(".lyrics-spectrum-bars"),bars=Array.from(host?.children??[]);return{count:bars.length,levels:bars.map(node=>{const text=node.style.transform;return text.startsWith("scaleY(")?Number(text.slice(7,-1)):NaN;}),inline:bars.map(node=>node.getAttribute("style")??"")};}:undefined;',
+  'window.__lyricsCheckCaptureSpectrumFrames=spectrumMotionMode?(durationMs=140)=>new Promise(resolve=>{const started=performance.now(),frames=[];const read=now=>{const host=document.querySelector(".lyrics-spectrum-bars"),bars=Array.from(host?.children??[]);frames.push({at:now-started,levels:bars.map(node=>{const text=node.style.transform;return text.startsWith("scaleY(")?Number(text.slice(7,-1)):NaN;}),styles:bars.map(node=>node.getAttribute("style")??"")});if(now-started<durationMs)requestAnimationFrame(read);else resolve({durationMs:now-started,frames});};requestAnimationFrame(read);}):undefined;',
+  'window.__lyricsCheckSetDocumentHidden=spectrumMotionMode?hidden=>{syntheticDocumentHidden=hidden===true;document.dispatchEvent(new Event("visibilitychange"));return document.hidden;}:undefined;',
   'const album = { title:"测试专辑", artist:"测试歌手", year:"2026" };',
   'const transportTitle = setupTransportTitle(document.querySelector("#lyrics-check-transport-title"), document.querySelector("#lyrics-check-transport-title-label"));',
   'window.__lyricsCheckTransportTitle = transportTitle;',
   'window.__lyricsCheckUpdateTransportTitle = (title,shown) => transportTitle.update(title,shown);',
-  'window.__lyricsCheckSetDesignTheme = (design,theme) => { const root=document.querySelector("#stage");root.dataset.design=design;root.dataset.theme=theme;return true; };',
+  'window.__lyricsCheckSetDesignTheme = (design,theme) => { const root=document.querySelector("#stage");root.dataset.design=design;root.dataset.theme=theme;for(const button of root.querySelectorAll(".theme-switch [data-theme]"))button.setAttribute("aria-pressed",String(button.dataset.theme===theme));return true; };',
   'window.__lyricsCheckSeek = [];',
   'const terminalLighting = setupTerminalLighting(document.querySelector("#stage"));',
   'terminalLighting.setQuality(qualityPresets.original);',
@@ -190,7 +204,7 @@ const harnessHtml = [
   'window.__lyricsCheckSetTerminalFull = () => terminalLighting.setQuality(qualityPresets.ultra);',
   'window.__lyricsCheckSetTerminalLocal = () => terminalLighting.setQuality(qualityPresets.original);',
   'window.__lyricsCheckSetTerminalOff = () => terminalLighting.setQuality(qualityPresets.performance);',
-  'const controller = setupLyricsPage(document.querySelector("#lyrics-page-content"), { seek:(position)=>window.__lyricsCheckSeek.push(position), spectrum:()=>({available:true,bands:Array.from({length:32},(_,i)=>0.25+((i*13)%55)/100),sampleRate:44100,updatedAt:Date.now()}), notify:()=>{}, openSettings:()=>{} });',
+  'const controller = setupLyricsPage(document.querySelector("#lyrics-page-content"), { seek:(position)=>window.__lyricsCheckSeek.push(position), spectrum:()=>{if(spectrumMotionMode){spectrumMotionProbe.callbackCalls++;return spectrumMotionProbe.value;}return {available:true,bands:Array.from({length:32},(_,i)=>0.25+((i*13)%55)/100),sampleRate:44100,updatedAt:Date.now()};}, notify:()=>{}, openSettings:()=>{} });',
   'let settingsSelectControls;',
   'const syncSettingsSelectControls = () => settingsSelectControls?.sync();',
   'controller.update(state, album);',
@@ -199,8 +213,10 @@ const harnessHtml = [
   'window.__lyricsCheckSetTrack = (id) => { const nextTrack = { ...track, id, title:"合成歌曲 " + id }; state = { ...state, currentTrack:nextTrack, queue:[nextTrack], currentIndex:0, currentTime:0.5 }; controller.update(state, album); syncSettingsSelectControls(); return id; };',
   'window.__lyricsCheckRepeatUpdate = () => { state = { ...state, currentTime:state.currentTime + 0.01 }; controller.update(state, album); syncSettingsSelectControls(); return state.currentTrack.id; };',
   'window.__lyricsCheckSetCurrentTime = (value) => { state = { ...state, currentTime:value }; controller.update(state, album); syncSettingsSelectControls(); return value; };',
+  'window.__lyricsCheckSetPlayback=spectrumMotionMode?playing=>{state={...state,playing:playing===true,transport:playing===true?"playing":"paused"};controller.update(state,album);return state.playing;}:undefined;',
   'window.__lyricsCheckSetVisible = (visible) => { const stage=document.querySelector("#stage"), page=document.querySelector("#music-lyrics-page"), host=document.querySelector("#lyrics-page-content"); stage.dataset.page = visible ? "lyrics" : "music"; page.hidden = !visible; page.inert = !visible; controller.setVisible(visible); if(visible){settingsSelectControls=enhanceSettingsSelectControls(host);settingsSelectControls.sync();}else{settingsSelectControls?.close();settingsSelectControls?.destroy();settingsSelectControls=undefined;} return visible; };',
   'window.__lyricsCheckSyncSelects = syncSettingsSelectControls;',
+  'window.__lyricsCheckProbeNativeDemand=spectrumMotionMode?async()=>{const originalFetch=window.fetch,originalSetTimeout=window.setTimeout,delays=[],nativeRequests=[];window.fetch=async(input,init)=>{const url=typeof input==="string"?input:input?.url??String(input);if(url.startsWith("/api/native/")){nativeRequests.push({url,method:init?.method??"GET"});return{ok:true,json:async()=>({duration:180,position:0,playing:url.endsWith("/control")&&JSON.parse(init?.body??"{}").action==="play"})};}return originalFetch(input,init);};window.setTimeout=(callback,delay,...args)=>{if(delay===100||delay===250){delays.push(delay);return originalSetTimeout(()=>{},60000);}return originalSetTimeout(callback,delay,...args);};const audio=new NativeAudio(track,outputDefault);const phases={};try{window.__lyricsCheckSetDocumentHidden(false);window.__lyricsCheckSetVisible(false);await audio.play();phases.noDemand=delays.at(-1);window.__lyricsCheckSetVisible(true);phases.lyricsVisible=delays.at(-1);setSpectrumDemand("signal",true);window.__lyricsCheckSetVisible(false);phases.signalKeepsDemand=delays.at(-1);setSpectrumDemand("signal",false);phases.allDemandReleased=delays.at(-1);window.__lyricsCheckSetVisible(true);phases.reentered=delays.at(-1);window.__lyricsCheckSetDocumentHidden(true);phases.documentHidden=delays.at(-1);window.__lyricsCheckSetDocumentHidden(false);phases.documentVisible=delays.at(-1);window.__lyricsCheckSetVisible(false);phases.pageHidden=delays.at(-1);window.__lyricsCheckSetVisible(true);const beforeDestroy=delays.length,rafBeforeDestroy=window.__lyricsCheckReadSpectrumRafProbe();controller.destroy();phases.destroyed=delays.at(-1);phases.destroyScheduled=delays.length>beforeDestroy;const rafAfterDestroy=window.__lyricsCheckReadSpectrumRafProbe();audio.load();await Promise.resolve();return{phases,delays,nativeRequests,callbackCalls:spectrumMotionProbe.callbackCalls,rafBeforeDestroy,rafAfterDestroy,documentHidden:document.hidden};}finally{window.fetch=originalFetch;window.setTimeout=originalSetTimeout;}}:undefined;',
   'window.__lyricsCheckDestroy = () => { settingsSelectControls?.destroy(); controller.destroy(); terminalLighting.destroy(); transportTitle.destroy(); };',
   'controller.setVisible(true);',
   'settingsSelectControls = enhanceSettingsSelectControls(document.querySelector("#lyrics-page-content"));',
