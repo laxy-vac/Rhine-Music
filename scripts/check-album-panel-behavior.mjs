@@ -45,12 +45,21 @@ export async function checkAlbumPanel({command,evaluate,output}) {
     await evaluate(`document.querySelector('.browse-play-album').focus({preventScroll:true})`);
     await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
     await command('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-    const keyboardOpen=await evaluate(`(()=>{const f=fixture,b=document.querySelector('.open-album'),s=getComputedStyle(b),probe=document.createElement('span');probe.style.color=getComputedStyle(f.stage).getPropertyValue('--accent');f.stage.append(probe);const accent=getComputedStyle(probe).color;probe.remove();const r=b.getBoundingClientRect(),p=f.sharedPanel.element.getBoundingClientRect();return{active:document.activeElement===b,outline:s.outlineStyle,width:s.outlineWidth,color:s.outlineColor,accent,offset:s.outlineOffset,rect:{width:r.width,height:r.height},panel:{width:p.width,height:p.height}};})()`);
+    const keyboardOpen=await evaluate(`(()=>{const f=fixture,b=document.querySelector('.open-album'),g=document.querySelector('.album-actions'),s=getComputedStyle(b),gs=getComputedStyle(g),probe=document.createElement('span');probe.style.color=getComputedStyle(f.stage).getPropertyValue('--accent');f.stage.append(probe);const accent=getComputedStyle(probe).color;probe.remove();const r=b.getBoundingClientRect(),p=f.sharedPanel.element.getBoundingClientRect();return{active:document.activeElement===b,visible:b.matches(':focus-visible'),outline:s.outlineStyle,width:s.outlineWidth,color:s.outlineColor,accent,offset:s.outlineOffset,
+      groupOutline:gs.outlineStyle,groupWidth:gs.outlineWidth,groupColor:gs.outlineColor,groupOffset:gs.outlineOffset,rect:{width:r.width,height:r.height},panel:{width:p.width,height:p.height}};})()`);
     assert.equal(keyboardOpen.active,true,`${design}: keyboard Tab reaches the open button.`);
-    assert.equal(keyboardOpen.outline,'solid',`${design}: the keyboard-focused open button keeps its accent frame.`);
-    assert.ok(parseFloat(keyboardOpen.width)>0,`${design}: keyboard focus has a visible outline.`);
-    assert.equal(keyboardOpen.color,keyboardOpen.accent,`${design}: keyboard focus outline follows the current accent.`);
-    assert.ok(parseFloat(keyboardOpen.offset)>0,`${design}: keyboard focus remains distinct from the small button border.`);
+    assert.equal(keyboardOpen.visible,true,`${design}: keyboard focus remains visible on the native button.`);
+    if(design==='archive') {
+      assert.equal(keyboardOpen.outline,'solid');assert.equal(keyboardOpen.width,'2px');assert.equal(keyboardOpen.color,keyboardOpen.accent);
+      assert.equal(keyboardOpen.offset,'-4px',`${design}: the child focus ring stays inset within the shared group frame.`);
+      assert.equal(keyboardOpen.groupOutline,'solid');assert.equal(keyboardOpen.groupWidth,'1px');
+      assert.equal(keyboardOpen.groupColor,keyboardOpen.accent);assert.equal(keyboardOpen.groupOffset,'4px');
+    } else {
+      assert.equal(keyboardOpen.outline,'solid',`${design}: Future retains its existing focused access button outline.`);
+      assert.ok(parseFloat(keyboardOpen.width)>0,`${design}: keyboard focus has a visible outline.`);
+      assert.equal(keyboardOpen.color,keyboardOpen.accent,`${design}: keyboard focus outline follows the current accent.`);
+      assert.ok(parseFloat(keyboardOpen.offset)>0,`${design}: Future focus remains distinct from the button edge.`);
+    }
     assert.ok(keyboardOpen.rect.width<keyboardOpen.panel.width/2&&keyboardOpen.rect.height<keyboardOpen.panel.height/2,
       `${design}: the focus frame stays on the small open button.`);
     const opening=await evaluate(`(async()=>{const f=fixture,p=f.sharedPanel,a=document.querySelector('#album-detail-content'),b=document.querySelector('.open-album'),surface=b.closest('.album-actions')??b,h=document.querySelector('.album-callout');b.focus({preventScroll:true});f.stage.dataset.mode='detail';p.setOpen(true);const shots=[],take=()=>{
@@ -65,8 +74,14 @@ export async function checkAlbumPanel({command,evaluate,output}) {
     assert.equal(opening[1].hidden,true);assert.equal(opening[1].height,0);
     assert.equal(opening[2].state,'expanding');assert.equal(opening[2].hidden,false);assert.equal(opening[2].buttonHidden,true);
     assert.equal(opening[3].state,'expanded');assert.ok(opening.every(x=>x.same));
-    assert.ok(opening[0].buttonFrames.some(frame=>typeof frame.clipPath==='string'),`${design}: the open button exits through a clip mask.`);
-    if(design==='archive')assert.notEqual(opening[1].clip,'none');else {
+    assert.ok(opening[0].buttonFrames.some(frame=>typeof frame.clipPath==='string'),`${design}: the action surface exits through a clip mask.`);
+    if(design==='archive') {
+      assert.equal(opening[0].buttonDuration,360,'Punk action group exit keeps its 360 ms duration.');
+      assert.equal(opening[0].buttonFrames[0].opacity,1);assert.equal(opening[0].buttonFrames.at(-1).opacity,0);
+      assert.ok(opening[0].buttonFrames.at(-1).transform.includes('translateY(-12px)')&&/scaleY\((?:\.88|0\.88)\)/.test(opening[0].buttonFrames.at(-1).transform));
+      assert.ok(Number(opening[1].opacity)<1&&opening[1].transform!=='none',`${design}: group exit begins fading and compressing immediately.`);
+      assert.notEqual(opening[1].clip,'none');
+    } else {
       assert.notEqual(opening[1].clip,'none');assert.equal(opening[0].buttonDuration,240,'Future button mask keeps its 240 ms timing.');
       assert.ok(opening[0].buttonFrames.every(frame=>!frame.transform),'Future button exit does not rely on transform.');
       assert.notEqual(opening[0].buttonBackground,'rgb(0, 0, 0)','Future button animation does not paint a black placeholder.');
@@ -220,8 +235,8 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   const viewport=await evaluate(`({width:innerWidth,height:innerHeight,deviceScaleFactor:devicePixelRatio})`);
   assert.deepEqual(viewport,{width:1920,height:1080,deviceScaleFactor:1});
   const sampleLabel=`(()=>{
-    const f=fixture,p=f.sharedPanel,label=document.querySelector('.open-album-label'),article=document.querySelector('#album-detail-content');
-    return{state:p.element.dataset.panelState,label:label?.textContent?.trim()??'',panelHidden:p.element.hidden,buttonHidden:document.querySelector('.open-album').hidden,
+    const f=fixture,p=f.sharedPanel,label=document.querySelector('.open-album-label'),playLabel=document.querySelector('.play-album-label'),article=document.querySelector('#album-detail-content');
+    return{state:p.element.dataset.panelState,label:label?.textContent?.trim()??'',playLabel:playLabel?.textContent?.trim()??'',panelHidden:p.element.hidden,buttonHidden:document.querySelector('.open-album').hidden,
       articleHidden:article.hidden,active:p.active,mode:f.musicApplication.mode,theme:f.stage.dataset.theme,design:f.stage.dataset.design,
       openCalls:f.presentation.openCalls,backCalls:f.presentation.backCalls,time:performance.now()};
   })()`;
@@ -230,6 +245,7 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   assert.equal(initial.active,true);assert.equal(initial.mode,'archive');assert.equal(initial.design,'archive');
   assert.equal(initial.panelHidden,false);assert.equal(initial.buttonHidden,false);assert.equal(initial.articleHidden,true);
   assert.equal(initial.label,fullLabel,'The first Punk browse label is complete before any open/close cycle.');
+  assert.equal(initial.playLabel,'播放专辑','The play label is also complete before any open/close cycle.');
 
   const selectionChanges=[];
   for(const design of ['archive','rhine'])for(const theme of ['day','night']){
@@ -250,6 +266,7 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
     for(const frame of frames){
       assert.equal(frame.state,'browse',`${design}/${theme}: contentChanged keeps the panel in browse.`);
       assert.equal(frame.label,fullLabel,`${design}/${theme}: selection/content changes keep the open label complete.`);
+      assert.equal(frame.playLabel,'播放专辑',`${design}/${theme}: selection/content changes keep the play label complete.`);
       assert.equal(frame.buttonHidden,false);assert.equal(frame.articleHidden,true);
     }
     selectionChanges.push({design,theme,frames});
@@ -263,7 +280,7 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   })()`);
   await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
   const beforeFirstClick=await evaluate(sampleLabel);
-  assert.equal(beforeFirstClick.state,'browse');assert.equal(beforeFirstClick.label,fullLabel);
+  assert.equal(beforeFirstClick.state,'browse');assert.equal(beforeFirstClick.label,fullLabel);assert.equal(beforeFirstClick.playLabel,'播放专辑');
   await evaluate(`document.querySelector('.open-album').click()`);
   const opening=[];
   for(let i=0;i<18;i++){
@@ -272,14 +289,14 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
     await new Promise(resolve=>setTimeout(resolve,35));
   }
   assert.equal(opening[0].state,'button-exit','The first real open click must expose the production button-exit stage.');
-  assert.ok(opening.every(frame=>frame.label===fullLabel),`Opening the album must not type or garble the label: ${JSON.stringify(opening)}`);
+  assert.ok(opening.every(frame=>frame.label===fullLabel&&frame.playLabel==='播放专辑'),`Opening the album must not type either label: ${JSON.stringify(opening)}`);
   let opened;
   for(let i=0;i<30;i++){
     opened=await evaluate(sampleLabel);if(opened.state==='expanded')break;
     await new Promise(resolve=>setTimeout(resolve,40));
   }
   assert.equal(opened?.state,'expanded','The actual open exit must complete into the expanded article.');
-  assert.equal(opened.label,fullLabel);
+  assert.equal(opened.label,fullLabel);assert.equal(opened.playLabel,'播放专辑');
   await evaluate(`(()=>{
     fixture.sharedPanel.contentChanged('fixture-album-changed-while-open');
     fixture.textMotion.update({...fixture.selection,format:'FLAC 16/44.1'},true);
@@ -291,6 +308,7 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   for(const frame of openedContentFrames){
     assert.equal(frame.state,'expanded','The selected album can change while the detail panel remains open.');
     assert.equal(frame.label,fullLabel,'A selected-album change while open must not type into the return button.');
+    assert.equal(frame.playLabel,'播放专辑','A selected-album change while open must not type into the play button.');
     assert.equal(frame.buttonHidden,true);assert.equal(frame.articleHidden,false);
   }
 
@@ -299,20 +317,21 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   for(let i=0;i<36;i++){
     await new Promise(resolve=>setTimeout(resolve,35));
     const frame=await evaluate(sampleLabel);returning.push(frame);
-    if(frame.state==='button-enter'&&frame.label!==fullLabel&&!returnScreenshot){
-      const clip=await evaluate(`(()=>{const r=document.querySelector('.open-album').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-18)),y:Math.max(0,Math.floor(r.top-18)),width:Math.ceil(r.width+36),height:Math.ceil(r.height+36),scale:3};})()`);
+    if(frame.state==='button-enter'&&frame.label!==fullLabel&&frame.playLabel!=='播放专辑'&&!returnScreenshot){
+      const clip=await evaluate(`(()=>{const r=document.querySelector('.album-actions').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-18)),y:Math.max(0,Math.floor(r.top-18)),width:Math.ceil(r.width+36),height:Math.ceil(r.height+36),scale:3};})()`);
       const image=await command('Page.captureScreenshot',{format:'png',clip});
-      returnScreenshot='punk-return-button-enter.png';
+      returnScreenshot='punk-return-action-group-enter.png';
       await writeFile(path.join(output,returnScreenshot),Buffer.from(image.data,'base64'));
     }
     if(frame.state==='browse')break;
   }
   const enterFrames=returning.filter(frame=>frame.state==='button-enter');
   assert.ok(enterFrames.length>0,'Returning to browse must run the real button-enter phase.');
-  assert.ok(enterFrames.some(frame=>frame.label!==fullLabel&&/[#%/\\=<>_01]/.test(frame.label)),
-    `Punk label garbling must appear during button-enter: ${JSON.stringify(enterFrames)}`);
+  assert.ok(enterFrames.some(frame=>frame.label!==fullLabel&&frame.playLabel!=='播放专辑'&&/[#%/\\=<>_01]/.test(frame.label)&&/[#%/\\=<>_01]/.test(frame.playLabel)),
+    `Both Punk labels must garble during button-enter: ${JSON.stringify(enterFrames)}`);
   assert.equal(returning.at(-1)?.state,'browse','The return animation must settle back to browse.');
   assert.equal(returning.at(-1)?.label,fullLabel,'The return animation restores the full label.');
+  assert.equal(returning.at(-1)?.playLabel,'播放专辑','The return animation restores the full play label.');
   assert.ok(returnScreenshot,'A screenshot was captured during the real Punk button-enter text animation.');
 
   await evaluate(`document.querySelector('.open-album').click()`);
@@ -329,17 +348,19 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
     if(garbledReturn.state==='button-enter'&&garbledReturn.label!==fullLabel)break;
   }
   assert.equal(garbledReturn?.state,'button-enter');
-  assert.notEqual(garbledReturn?.label,fullLabel,'The interruption scenario begins while the return label is visibly garbled.');
+  assert.notEqual(garbledReturn?.label,fullLabel,'The interruption scenario begins while the open label is visibly garbled.');
+  assert.notEqual(garbledReturn?.playLabel,'播放专辑','The interruption scenario begins while the play label is visibly garbled.');
   await evaluate(`fixture.sharedPanel.setOpen(true)`);
   const interrupted=await evaluate(sampleLabel);
   assert.equal(interrupted.state,'button-exit');
-  assert.equal(interrupted.label,fullLabel,'Reopening during button-enter cancels typing and restores the full label.');
+  assert.equal(interrupted.label,fullLabel,'Reopening during button-enter cancels typing and restores the open label.');
+  assert.equal(interrupted.playLabel,'播放专辑','Reopening during button-enter cancels typing and restores the play label.');
   let interruptedOpen;
   for(let i=0;i<30;i++){
     interruptedOpen=await evaluate(sampleLabel);if(interruptedOpen.state==='expanded')break;
     await new Promise(resolve=>setTimeout(resolve,40));
   }
-  assert.equal(interruptedOpen?.state,'expanded');assert.equal(interruptedOpen.label,fullLabel);
+  assert.equal(interruptedOpen?.state,'expanded');assert.equal(interruptedOpen.label,fullLabel);assert.equal(interruptedOpen.playLabel,'播放专辑');
 
   await evaluate(`(()=>{fixture.sharedPanel.setOpen(false);})()`);
   let interruptedClosed;
@@ -347,7 +368,7 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
     interruptedClosed=await evaluate(sampleLabel);if(interruptedClosed.state==='browse')break;
     await new Promise(resolve=>setTimeout(resolve,40));
   }
-  assert.equal(interruptedClosed?.state,'browse');assert.equal(interruptedClosed.label,fullLabel);
+  assert.equal(interruptedClosed?.state,'browse');assert.equal(interruptedClosed.label,fullLabel);assert.equal(interruptedClosed.playLabel,'播放专辑');
 
   await evaluate(`document.querySelector('.open-album').click()`);
   let reducedOpen;
@@ -359,7 +380,8 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
   await evaluate(`fixture.setReduced(true);document.querySelector('.music-back').click()`);
   const reduced=await evaluate(sampleLabel);
   assert.equal(reduced.state,'browse','Reduced motion settles the return directly into browse.');
-  assert.equal(reduced.label,fullLabel,'Reduced motion leaves no partial or garbled label.');
+  assert.equal(reduced.label,fullLabel,'Reduced motion leaves no partial or garbled open label.');
+  assert.equal(reduced.playLabel,'播放专辑','Reduced motion leaves no partial or garbled play label.');
   assert.equal(reduced.buttonHidden,false);assert.equal(reduced.articleHidden,true);
   await evaluate(`fixture.setReduced(false)`);
 
@@ -367,4 +389,195 @@ export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
     fixture:'First-visible production setupAlbumPanel state, actual extracted production click handler, real button-exit/button-enter animation, offline Chromium.',
     viewport,initial,selectionChanges,beforeFirstClick,opening,opened,openedContentFrames,returning,returnScreenshot,interrupted,interruptedOpen,interruptedClosed,reduced,
   },null,2));
+}
+
+// Focused group animation proof for --unified-album-actions. The runner enters
+// this check after the first real production open click has settled in detail.
+export async function checkUnifiedAlbumActionMotion({command,evaluate,output}) {
+  const evidence = { fixture: "Production album panel controller and extracted click listener; first open is performed by the preceding action check.", returnScreenshot: null };
+  const reportPath = path.join(output, "unified-album-action-motion.json");
+  const saveEvidence = async (status = "in-progress", error = undefined) => {
+    await writeFile(reportPath, JSON.stringify({ status, ...(error ? { error } : {}), evidence }, null, 2));
+  };
+  const sampleExpression = `(()=>{
+    const f=fixture,p=f.sharedPanel,group=document.querySelector('.album-actions'),play=group.querySelector('.browse-play-album'),open=group.querySelector('.open-album');
+    const rect=node=>{const r=node.getBoundingClientRect();return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+    const clipArea=(button,clip)=>{
+      const box=rect(group),target=rect(button),inset=(clip||'').startsWith('inset(')?(clip||'').slice(6,(clip||'').lastIndexOf(')')):'';
+      if(!inset)return Math.max(0,target.width)*Math.max(0,target.height);
+      const values=[];let token='',depth=0;
+      for(const character of inset){
+        if(character==='(')depth++;else if(character===')')depth--;
+        if(/\\s/.test(character)&&depth===0){if(token)values.push(token);token='';}else token+=character;
+      }
+      if(token)values.push(token);
+      const expanded=values.length===1?[values[0],values[0],values[0],values[0]]
+        :values.length===2?[values[0],values[1],values[0],values[1]]
+          :values.length===3?[values[0],values[1],values[2],values[1]]:values.slice(0,4);
+      if(expanded.length!==4)throw new Error('Could not parse computed inset clip-path: '+clip);
+      const size=(value,length)=>{
+        if(value.startsWith('calc(')){
+          const body=value.slice(5,-1).trim(),percentEnd=body.indexOf('%');
+          const percentage=Number.parseFloat(body.slice(0,percentEnd)),rest=body.slice(percentEnd+1).trim(),operator=rest[0],pixels=rest.slice(1).trim();
+          if(percentEnd<0||!Number.isFinite(percentage)||!['+','-'].includes(operator)||!pixels.endsWith('px')||!Number.isFinite(Number.parseFloat(pixels)))
+            throw new Error('Unsupported computed inset length: '+value);
+          return percentage*length/100+(operator==='-'?-1:1)*Number.parseFloat(pixels);
+        }
+        if(value.endsWith('%'))return Number.parseFloat(value)*length/100;
+        if(value.endsWith('px'))return Number.parseFloat(value);
+        if(value==='0')return 0;
+        throw new Error('Unsupported computed inset length: '+value);
+      };
+      const width=group.offsetWidth,height=group.offsetHeight,top=size(expanded[0],height),right=size(expanded[1],width);
+      const bottom=size(expanded[2],height),left=size(expanded[3],width),style=getComputedStyle(group);
+      const matrix=new DOMMatrixReadOnly(style.transform==='none'?'matrix(1,0,0,1,0,0)':style.transform);
+      const visible={left:box.left+left*matrix.a,right:box.left+(width-right)*matrix.a,
+        top:box.top+top*matrix.d,bottom:box.top+(height-bottom)*matrix.d};
+      return Math.max(0,Math.min(target.right,visible.right)-Math.max(target.left,visible.left))*
+        Math.max(0,Math.min(target.bottom,visible.bottom)-Math.max(target.top,visible.top));
+    };
+    const style=getComputedStyle(group),matrix=new DOMMatrixReadOnly(style.transform==='none'?'matrix(1,0,0,1,0,0)':style.transform);
+    const animations=group.getAnimations().map(animation=>({duration:animation.effect?.getComputedTiming().duration??null,
+      currentTime:animation.currentTime,keyframes:animation.effect?.getKeyframes()??[]}));
+    return{state:p.element.dataset.panelState,mode:f.musicApplication.mode,stageMode:f.stage.dataset.mode,time:performance.now(),
+      group:{rect:rect(group),opacity:Number(style.opacity),clip:style.clipPath,transform:style.transform,
+        transformMatrix:[matrix.a,matrix.b,matrix.c,matrix.d,matrix.e,matrix.f],hidden:group.hidden,inert:group.inert,
+        playArea:clipArea(play,style.clipPath),openArea:clipArea(open,style.clipPath),animations},
+      labels:{play:play.querySelector('.play-album-label')?.textContent?.trim()??'',open:open.querySelector('.open-album-label')?.textContent?.trim()??''},
+      buttons:[play,open].map(button=>({action:button.dataset.action,hidden:button.hidden,inert:button.inert,rect:rect(button)})),
+      article:{hidden:document.querySelector('#album-detail-content').hidden,inert:document.querySelector('#album-detail-content').inert}};
+  })()`;
+  const sample = () => evaluate(sampleExpression);
+  const settleState = async (wanted, limit = 70) => {
+    const frames=[];
+    for(let attempt=0;attempt<limit;attempt++){
+      await evaluate("new Promise(resolve=>setTimeout(resolve,20))");
+      const frame=await sample();frames.push(frame);
+      if(frame.state===wanted)return frames;
+    }
+    return frames;
+  };
+  const transformDelta = (left,right) => Math.max(...left.map((value,index)=>Math.abs(value-right[index])));
+  try {
+    await command("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
+    const start=await sample();evidence.start=start;await saveEvidence();
+    assert.equal(start.state,"expanded","The first actual open must settle into detail before return motion is measured.");
+    assert.equal(start.article.hidden,false);assert.equal(start.group.hidden,true);assert.equal(start.group.inert,true);
+    assert.deepEqual(start.labels,{play:"播放专辑",open:"打开专辑"});
+
+    // First return is the first real browse return. Capture the group itself and
+    // both label streams together at each sampled frame.
+    await evaluate("document.querySelector('.music-back').click()");
+    const returning=[];
+    for(let attempt=0;attempt<40;attempt++){
+      await evaluate("new Promise(resolve=>setTimeout(resolve,20))");
+      const frame=await sample();returning.push(frame);
+      const enterTime=frame.group.animations[0]?.currentTime??0;
+      if(frame.state==="button-enter"&&enterTime>=230&&enterTime<=340&&frame.labels.play!=="播放专辑"&&frame.labels.open!=="打开专辑"&&!evidence.returnScreenshot){
+        const clip=await evaluate("(()=>{const r=document.querySelector('.album-actions').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-18)),y:Math.max(0,Math.floor(r.top-18)),width:Math.ceil(r.width+36),height:Math.ceil(r.height+36),scale:3};})()");
+        const image=await command("Page.captureScreenshot",{format:"png",clip});
+        evidence.returnScreenshot="punk-action-group-return-mid.png";
+        evidence.returnMidAnimation={currentTime:enterTime,opacity:frame.group.opacity,clip:frame.group.clip,labels:frame.labels,
+          visibleArea:{play:frame.group.playArea,open:frame.group.openArea}};
+        evidence.screenshots=[...(evidence.screenshots??[]),evidence.returnScreenshot];
+        await writeFile(path.join(output,evidence.returnScreenshot),Buffer.from(image.data,"base64"));
+      }
+      if(frame.state==="browse")break;
+    }
+    evidence.returning=returning;
+    await saveEvidence();
+    const enterFrames=returning.filter(frame=>frame.state==="button-enter");
+    assert.ok(evidence.returnScreenshot,"Capture the Punk return animation at its group midpoint.");
+    assert.ok(enterFrames.length>0,"The first real back click must run group button-enter.");
+    assert.equal(enterFrames[0].group.animations[0]?.duration,560,"Punk return expands over 560ms.");
+    const synchronized=enterFrames.find(frame=>frame.group.opacity>0&&frame.group.opacity<1&&
+      frame.group.playArea>0&&frame.group.openArea>0&&frame.buttons.every(button=>button.rect.width>0&&button.rect.height>0));
+    assert.ok(synchronized,`Both Punk halves must have visible clipped area under the same changing group opacity: ${JSON.stringify(enterFrames.slice(0,4))}`);
+    assert.ok(enterFrames.some(frame=>frame.labels.play!=="播放专辑"&&frame.labels.open!=="打开专辑"),
+      `Both Punk labels should type during return: ${JSON.stringify(enterFrames.slice(0,8).map(frame=>frame.labels))}`);
+    assert.equal(returning.at(-1)?.state,"browse");
+    assert.deepEqual(returning.at(-1)?.labels,{play:"播放专辑",open:"打开专辑"},"Both labels settle to full text together.");
+    assert.ok(returning.at(-1)?.group.opacity>0.99);
+    assert.ok(returning.at(-1)?.buttons.every(button=>!button.hidden&&!button.inert));
+
+    // Content changes while browsing must never start either label reel.
+    await evaluate(`(()=>{const f=fixture;f.musicApplication.selectedIndex=1;f.renderSourceDetail();f.sharedPanel.contentChanged('selection-change-during-browse');})()`);
+    await evaluate("new Promise(resolve=>setTimeout(resolve,120))");
+    evidence.selectionStable=await sample();await saveEvidence();
+    assert.equal(evidence.selectionStable.state,"browse");
+    assert.deepEqual(evidence.selectionStable.labels,{play:"播放专辑",open:"打开专辑"});
+
+    // Start a production exit and return before it finishes. Computed style at
+    // the reversal boundary must continue from the sampled in-flight value.
+    await evaluate("document.querySelector('.open-album').click()");
+    await evaluate("new Promise(resolve=>setTimeout(resolve,80))");
+    const exitBefore=await sample();
+    await evaluate("document.querySelector('.music-back').click()");
+    const exitAfter=await sample();
+    const exitContinuity={opacityDelta:Math.abs(exitAfter.group.opacity-exitBefore.group.opacity),
+      transformDelta:transformDelta(exitAfter.group.transformMatrix,exitBefore.group.transformMatrix),
+      clipBefore:exitBefore.group.clip,clipAfter:exitAfter.group.clip};
+    evidence.exitReversal={before:exitBefore,after:exitAfter,continuity:exitContinuity};await saveEvidence();
+    assert.equal(exitBefore.state,"button-exit");assert.equal(exitAfter.state,"button-enter");
+    assert.ok(exitBefore.group.opacity>0&&exitBefore.group.opacity<1);
+    assert.ok(exitContinuity.opacityDelta<=.03,`Exit-to-return opacity jumped: ${JSON.stringify(evidence.exitReversal)}`);
+    assert.ok(exitContinuity.transformDelta<=.15,`Exit-to-return transform jumped: ${JSON.stringify(evidence.exitReversal)}`);
+    assert.equal(exitContinuity.clipAfter,exitContinuity.clipBefore,"Exit-to-return clip starts from the captured computed clip.");
+    assert.ok(exitAfter.group.animations[0]?.duration>=120&&exitAfter.group.animations[0]?.duration<560,
+      "The reversed return duration follows remaining opacity distance with a 120ms minimum.");
+    const afterExitReversal=await settleState("browse",40);
+    evidence.exitReversal.frames=afterExitReversal;await saveEvidence();
+    assert.equal(afterExitReversal.at(-1)?.state,"browse");
+
+    // Reopen during an unfinished return. The group is still one inert surface,
+    // so reverse the production controller directly and record the exact seam.
+    await evaluate("document.querySelector('.open-album').click()");
+    const expanded=await settleState("expanded",70);
+    evidence.reopened=expanded.at(-1);await saveEvidence();
+    assert.equal(evidence.reopened?.state,"expanded");
+    await evaluate("document.querySelector('.music-back').click()");
+    const entering=await settleState("button-enter",70);
+    evidence.enterStartFrames=entering;await saveEvidence();
+    assert.equal(entering.at(-1)?.state,"button-enter","Wait until article collapse hands off to the real action-group enter phase.");
+    await evaluate("new Promise(resolve=>setTimeout(resolve,80))");
+    const enterBefore=await sample();
+    await evaluate("fixture.sharedPanel.setOpen(true)");
+    const enterAfter=await sample();
+    const enterContinuity={opacityDelta:Math.abs(enterAfter.group.opacity-enterBefore.group.opacity),
+      transformDelta:transformDelta(enterAfter.group.transformMatrix,enterBefore.group.transformMatrix),
+      clipBefore:enterBefore.group.clip,clipAfter:enterAfter.group.clip};
+    evidence.enterReversal={before:enterBefore,after:enterAfter,continuity:enterContinuity};await saveEvidence();
+    assert.equal(enterBefore.state,"button-enter");assert.equal(enterAfter.state,"button-exit");
+    assert.ok(enterContinuity.opacityDelta<=.03,`Enter-to-open opacity jumped: ${JSON.stringify(evidence.enterReversal)}`);
+    assert.ok(enterContinuity.transformDelta<=.15,`Enter-to-open transform jumped: ${JSON.stringify(evidence.enterReversal)}`);
+    assert.equal(enterContinuity.clipAfter,enterContinuity.clipBefore,"Enter-to-open clip starts from the captured computed clip.");
+    assert.ok(enterAfter.group.animations[0]?.duration>=120&&enterAfter.group.animations[0]?.duration<360,
+      "The reversed exit duration follows remaining opacity distance with a 120ms minimum.");
+    const reopened=await settleState("expanded",70);
+    evidence.enterReversal.frames=reopened;await saveEvidence();
+    assert.equal(reopened.at(-1)?.state,"expanded");
+
+    // Future keeps its original horizontal 240ms mask, including when the same
+    // shared action group is used in the full vertical text skin.
+    await evaluate(`(()=>{const f=fixture,style={...f.preferences.style,design:'rhine',scheme:'rhine'};
+      f.preferences.style=style;f.stage.dataset.design='rhine';f.stage.dataset.mode='detail';f.musicApplication.mode='detail';
+      f.applyStylePalette(f.stage,style,f.preferences.theme);f.shell.setActive(false);f.syncDesignIdentity();f.renderSourceDetail();
+      f.sharedPanel.setOpen(true);f.sharedPanel.finish();})()`);
+    await evaluate("document.querySelector('.music-back').click()");
+    const futureBrowse=await settleState("browse",30);evidence.futureBrowse=futureBrowse.at(-1);
+    assert.equal(evidence.futureBrowse?.state,"browse");
+    await evaluate("document.querySelector('.open-album').click()");
+    const futureExit=await sample();evidence.futureExit=futureExit;await saveEvidence();
+    assert.equal(futureExit.state,"button-exit");
+    assert.equal(futureExit.group.animations[0]?.duration,240,"Future retains its original 240ms action mask.");
+    assert.ok(futureExit.group.animations[0]?.keyframes.some(frame=>typeof frame.clipPath==="string"));
+    assert.ok(futureExit.group.animations[0]?.keyframes.every(frame=>frame.transform===undefined),
+      "Future exit remains the original clip mask without Punk vertical compression.");
+    const futureOpened=await settleState("expanded",60);evidence.futureOpened=futureOpened.at(-1);await saveEvidence();
+    assert.equal(evidence.futureOpened?.state,"expanded");
+    await saveEvidence("passed");
+  } catch (error) {
+    await saveEvidence("failed", { name: error?.name, message: error?.message, stack: error?.stack });
+    throw error;
+  }
 }

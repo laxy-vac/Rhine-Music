@@ -65,12 +65,14 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         const arrow=open?.querySelector('.open-album-punk-arrow'),arrowStyle=arrow&&getComputedStyle(arrow),arrowSvg=arrow?.querySelector('svg');
         return{design:f.stage.dataset.design,theme:f.stage.dataset.theme,mode:f.stage.dataset.mode,
           pointer:{coarse:matchMedia('(any-pointer: coarse)').matches},
-          page:f.stage.dataset.page,actions:{count:actions?.children.length,hidden:actions?.hidden,inert:actions?.inert,
+          page:f.stage.dataset.page,actions:{count:actions?.children.length,role:actions?.getAttribute('role'),aria:actions?.getAttribute('aria-label'),hidden:actions?.hidden,inert:actions?.inert,
             display:getComputedStyle(actions).display,flexDirection:getComputedStyle(actions).flexDirection,
             justifyContent:getComputedStyle(actions).justifyContent,columnGap:getComputedStyle(actions).columnGap,rowGap:getComputedStyle(actions).rowGap,rect:rect(actions),
+            style:style(actions),
             order:[...actions.children].map(node=>node.dataset.action)},
           ink:{stage:ink(f.stage),panel:ink(document.querySelector('.album-panel')),play:ink(play),open:ink(open)},
           counts:{play:document.querySelectorAll('.browse-play-album').length,open:document.querySelectorAll('.open-album').length},
+          native:{playTag:play?.tagName,playType:play?.type,playAction:play?.dataset.action,openTag:open?.tagName,openType:open?.type,openAction:open?.dataset.action},
           play:{aria:play?.getAttribute('aria-label'),disabled:play?.disabled,visible:!play?.hidden&&play?.getClientRects().length>0,
             label:play?.querySelector('.play-album-label')?.textContent.trim(),labelDisplay:getComputedStyle(play?.querySelector('.play-album-label')).display,
             labelStyle:labelStyle(play?.querySelector('.play-album-label')),
@@ -97,6 +99,10 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
       assert.equal(appearance.actions.count, 2);
       assert.equal(appearance.actions.hidden, false);
       assert.equal(appearance.actions.inert, false);
+      assert.equal(appearance.actions.role,"group");
+      assert.equal(appearance.actions.aria,"专辑操作");
+      assert.deepEqual(appearance.native,{playTag:"BUTTON",playType:"button",playAction:"play-album",openTag:"BUTTON",openType:"button",openAction:"open"},
+        `${design}/${theme}: play and open remain distinct native button actions.`);
       assert.equal(appearance.actions.order[0], "play-album");
       assert.equal(appearance.actions.order[1], "open");
       assert.equal(appearance.play.disabled, false);
@@ -125,10 +131,24 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
           `${theme}: Punk visible play/open labels share font size and line height.`);
         assert.ok(Math.abs(appearance.play.rect.height - appearance.open.rect.height) <= 1,
           `${theme}: Punk play/open buttons have matching heights.`);
-        assert.ok(appearance.play.rect.right <= appearance.open.rect.x + 1,
-          `${theme}: Punk actions do not overlap.`);
-        assert.equal(appearance.actions.columnGap, "20px", `${theme}: Punk actions keep the compact wrapping group gap.`);
-        assert.equal(appearance.actions.rowGap, "20px", `${theme}: wrapped Punk actions keep the same compact gap.`);
+        assert.ok(Math.abs(appearance.play.rect.right-appearance.open.rect.x)<=.25,
+          `${theme}: the two Punk button halves meet with no gap.`);
+        assert.ok(Math.abs(appearance.actions.rect.x-(appearance.play.rect.x-1))<=.25&&
+          Math.abs(appearance.actions.rect.right-(appearance.open.rect.right+1))<=.25&&
+          Math.abs(appearance.actions.rect.width-(appearance.play.rect.width+appearance.open.rect.width+2))<=.5,
+          `${theme}: the Punk group bounds tightly wrap both buttons and the shared 1px outer frame.`);
+        assert.equal(appearance.actions.columnGap,"0px",`${theme}: the Punk action group has no inter-button gap.`);
+        assert.equal(appearance.actions.rowGap,"0px");
+        assert.deepEqual([appearance.actions.style.borderTopWidth,appearance.actions.style.borderRightWidth,
+          appearance.actions.style.borderBottomWidth,appearance.actions.style.borderLeftWidth],Array(4).fill("1px"),
+          `${theme}: Punk uses one shared fine frame around the complete action group.`);
+        assert.deepEqual([appearance.actions.style.borderTopColor,appearance.actions.style.borderRightColor,
+          appearance.actions.style.borderBottomColor,appearance.actions.style.borderLeftColor],Array(4).fill(appearance.ink.stage.resolved),
+          `${theme}: the shared Punk frame follows the current foreground.`);
+        assert.equal(appearance.actions.style.outlineWidth,"1px");assert.equal(appearance.actions.style.outlineStyle,"solid");
+        assert.equal(appearance.actions.style.outlineColor,appearance.open.arrow.color,
+          `${theme}: the shared Punk outer frame follows the active accent.`);
+        assert.equal(appearance.actions.style.outlineOffset,"4px");
         assert.equal(appearance.play.style.fontSize, "12px", `${theme}: Punk action text stays small.`);
         assert.equal(appearance.play.labelStyle.fontSize, "12px");
         assert.equal(appearance.play.labelStyle.lineHeight, "15px");
@@ -143,19 +163,14 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         assert.ok(appearance.play.svg?.markup.includes("m8 4.5 12 7.5-12 7.5Z"),
           "The Punk play control retains the production triangle icon.");
         assert.equal(appearance.open.style.background, "rgba(0, 0, 0, 0)", `${theme}: Punk open action has a transparent fill.`);
-        assert.deepEqual(
-          [appearance.open.style.borderTopWidth,appearance.open.style.borderRightWidth,appearance.open.style.borderBottomWidth,appearance.open.style.borderLeftWidth],
-          ["1px","1px","1px","1px"],
-          `${theme}: Punk open action keeps a thin frame.`,
-        );
-        assert.deepEqual(
-          [appearance.open.style.borderTopStyle,appearance.open.style.borderRightStyle,appearance.open.style.borderBottomStyle,appearance.open.style.borderLeftStyle],
-          ["solid","solid","solid","solid"],
-          `${theme}: Punk open action uses a solid frame.`,
-        );
-        assert.equal(appearance.open.style.outlineWidth, "1px", `${theme}: Punk open action keeps its accent emphasis outline.`);
-        assert.equal(appearance.open.style.outlineStyle, "solid");
-        assert.equal(appearance.open.style.outlineOffset, "4px");
+        assert.deepEqual([appearance.play.style.borderTopWidth,appearance.play.style.borderRightWidth,
+          appearance.play.style.borderBottomWidth,appearance.play.style.borderLeftWidth],["0px","0px","0px","0px"],
+          `${theme}: the play half does not duplicate the shared outer frame.`);
+        assert.deepEqual([appearance.open.style.borderTopWidth,appearance.open.style.borderRightWidth,
+          appearance.open.style.borderBottomWidth,appearance.open.style.borderLeftWidth],["0px","0px","0px","1px"],
+          `${theme}: open contributes only the single shared divider.`);
+        assert.ok(appearance.open.style.outlineStyle==="none"||appearance.open.style.outlineWidth==="0px",`${theme}: idle open has no independent outer outline.`);
+        assert.ok(appearance.play.style.outlineStyle==="none"||appearance.play.style.outlineWidth==="0px",`${theme}: idle play has no independent outer outline.`);
         assert.ok(["flex","inline-flex"].includes(appearance.open.arrow.display));
         assert.equal(appearance.open.arrow.svg?.width, 18);
         assert.equal(appearance.open.arrow.svg?.height, 18);
@@ -176,10 +191,11 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
           `${theme}: Future action text and icon columns align.`);
         assert.ok(appearance.play.rect.bottom <= appearance.open.rect.y + 1,
           `${theme}: Future actions do not overlap.`);
-        assert.ok(Math.abs(appearance.play.rect.width - 188) <= 1,
-          `${theme}: Future play action uses the shared 188px action width.`);
-        assert.ok(Math.abs(appearance.open.rect.width - 188) <= 1,
-          `${theme}: Future open action retains its 188px width.`);
+        assert.ok(Math.abs(appearance.actions.rect.width - 188) <= 1,
+          `${theme}: Future actions remain a tightly wrapped 188px vertical group.`);
+        assert.ok(Math.abs(appearance.play.rect.width - appearance.actions.rect.width) <= 1 &&
+          Math.abs(appearance.open.rect.width - appearance.actions.rect.width) <= 1,
+          `${theme}: Future action rows retain their established full group width.`);
         assert.equal(appearance.play.style.background, "rgba(0, 0, 0, 0)");
         assert.equal(appearance.play.style.color, appearance.open.style.color,
           `${theme}: Future play/access text share a color. ${JSON.stringify(appearance.ink)}`);
@@ -234,11 +250,13 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         f.textMotion.update({...f.selection,format:formatLabel},false);formatNode.hidden=!formatLabel;
         await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         const color=value=>{const probe=document.createElement('span');probe.style.color=value;f.stage.append(probe);const resolved=getComputedStyle(probe).color;probe.remove();return resolved;};
+        const groupStyle=getComputedStyle(document.querySelector('.album-actions'));
         const border=getComputedStyle(open),arrow=getComputedStyle(open.querySelector('.open-album-punk-arrow'));
         const formatStyle=getComputedStyle(formatNode),formatDot=getComputedStyle(formatNode,'::before'),formatRect=formatNode.getBoundingClientRect();
         const playStyle=getComputedStyle(play),actions=document.querySelector('.album-actions').getBoundingClientRect();
         return {scheme:${JSON.stringify(scheme)},theme,transitionBefore,expected:{accent:color(palette.accent),ink:color(palette.fg),pageBg:color(palette.bg)},
-          computed:{outline:border.outlineColor,arrow:arrow.color,borders:[border.borderTopColor,border.borderRightColor,border.borderBottomColor,border.borderLeftColor],
+          computed:{outline:groupStyle.outlineColor,arrow:arrow.color,groupBorders:[groupStyle.borderTopColor,groupStyle.borderRightColor,groupStyle.borderBottomColor,groupStyle.borderLeftColor],
+            divider:[border.borderTopWidth,border.borderRightWidth,border.borderBottomWidth,border.borderLeftWidth],
             playBackground:playStyle.backgroundColor,playColor:playStyle.color,format:{text:formatNode.innerText.trim(),display:formatStyle.display,
               rects:formatNode.getClientRects().length,borders:[formatStyle.borderTopWidth,formatStyle.borderRightWidth,formatStyle.borderBottomWidth,formatStyle.borderLeftWidth],
               borderColor:formatStyle.borderTopColor,color:formatStyle.color,background:formatStyle.backgroundColor,width:formatRect.width,height:formatRect.height,
@@ -251,8 +269,10 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         `${scheme}/${theme}: Punk open outline follows the real stylePalette accent.`);
       assert.equal(check.computed.arrow, check.expected.accent,
         `${scheme}/${theme}: Punk diagonal arrow follows the real stylePalette accent.`);
-      assert.deepEqual(check.computed.borders, Array(4).fill(check.expected.ink),
-        `${scheme}/${theme}: Punk open base frame follows the real stylePalette ink.`);
+      assert.deepEqual(check.computed.groupBorders, Array(4).fill(check.expected.ink),
+        `${scheme}/${theme}: the shared Punk frame follows the real stylePalette ink.`);
+      assert.deepEqual(check.computed.divider,["0px","0px","0px","1px"],
+        `${scheme}/${theme}: open contributes only the shared group divider.`);
       assert.equal(check.computed.playBackground, check.expected.ink,
         `${scheme}/${theme}: Punk play uses the real stylePalette ink as its solid fill.`);
       assert.equal(check.computed.playColor, check.expected.pageBg,
@@ -292,7 +312,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         const formatStyle=getComputedStyle(formatNode),formatDot=getComputedStyle(formatNode,'::before');
         return {design:f.stage.dataset.design,inlineAccent:f.stage.style.getPropertyValue('--accent'),
           direction:getComputedStyle(actions).flexDirection,playBackground:getComputedStyle(play).backgroundColor,
-          playWidth:play.getBoundingClientRect().width,playLabel:getComputedStyle(play.querySelector('.play-album-access-label')).display,
+          groupWidth:actions.getBoundingClientRect().width,playWidth:play.getBoundingClientRect().width,playLabel:getComputedStyle(play.querySelector('.play-album-access-label')).display,
           openLabel:getComputedStyle(open.querySelector('.open-album-access-label')).display,
           format:{text:formatNode.innerText.trim(),display:formatStyle.display,rects:formatNode.getClientRects().length,
             borders:[formatStyle.borderTopWidth,formatStyle.borderRightWidth,formatStyle.borderBottomWidth,formatStyle.borderLeftWidth],
@@ -302,7 +322,8 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
       assert.equal(future.inlineAccent, "", `${scheme}/${theme}: Future clears inline Punk palette tokens.`);
       assert.equal(future.direction, "column");
       assert.equal(future.playBackground, "rgba(0, 0, 0, 0)");
-      assert.ok(Math.abs(future.playWidth - 188) <= 1);
+      assert.ok(Math.abs(future.groupWidth - 188) <= 1);
+      assert.ok(Math.abs(future.playWidth - future.groupWidth) <= 1);
       assert.notEqual(future.playLabel, "none");
       assert.notEqual(future.openLabel, "none");
       assert.equal(future.format.text, "FLAC · 24 bit / 88.2 kHz", `${theme}: Future retains depth and kHz in the plain text summary.`);
@@ -523,6 +544,244 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
     metadata,
   };
   await writeFile(path.join(output, "album-actions-report.json"), JSON.stringify(report, null, 2));
+}
+
+// Narrow alias for the unified native-button group. It deliberately avoids the
+// legacy responsive matrix and unrelated album-panel regressions.
+export async function checkUnifiedAlbumActions({ command, evaluate, output, main }) {
+  const evidence = { fixture: "Production markup and extracted production click listener with synthetic catalog and recording player.", styles: [], focus: [], screenshots: [] };
+  const reportPath = path.join(output, "unified-album-actions.json");
+  const saveEvidence = async (status = "in-progress", error = undefined) => {
+    await writeFile(reportPath, JSON.stringify({ status, ...(error ? { error } : {}), evidence }, null, 2));
+  };
+  try {
+    const playSource = main.match(/function playSelectedAlbum\(\)\s*\{[\s\S]*?\n\}/)?.[0];
+    assert.ok(playSource, "The production playSelectedAlbum function must remain extractable.");
+    assert.match(playSource, /const album = currentAlbum\(\)/);
+    assert.match(playSource, /if \(!album\?\.tracks\.length \|\| album\.offline\) return/);
+    assert.match(playSource, /player\.play\(album\.tracks\[0\]\.id, album\.tracks\)/);
+    assert.doesNotMatch(playSource, /setMode|presentation|scene\./,
+      "Playing an album stays independent from navigation and presentation.");
+    assert.match(main, /class="album-actions" role="group"/);
+    assert.match(main, /<button type="button" class="browse-play-album" data-action="play-album"/);
+    assert.match(main, /<button type="button" class="open-album" data-action="open"/);
+    assert.match(main, /case "play-album":\s*playSelectedAlbum\(\);\s*break;/);
+    assert.match(main, /case "open":\s*setMode\("detail"\);\s*break;/);
+    const selectionSource = main.match(/function updateSelection\([\s\S]*?\n\}/)?.[0];
+    assert.ok(selectionSource, "The production selection updater must remain extractable.");
+    assert.match(selectionSource, /\.browse-play-album"\)\.disabled = !a\?\.tracks\.length \|\| !!a\.offline;/,
+      "Offline and empty albums disable only the play action through the production selection path.");
+    assert.equal(await evaluate("fixture.productionClickListenerInstalled"), true,
+      "The isolated fixture must install the extracted production click listener.");
+
+    await command("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
+    for (const design of ["archive", "rhine"]) {
+      for (const theme of ["day", "night"]) {
+        await evaluate(`(async()=>{
+          const f=fixture,design=${JSON.stringify(design)},theme=${JSON.stringify(theme)};
+          const style={...f.preferences.style,design,scheme:design==='archive'?'archive':'rhine'};
+          f.setPage('music');f.stage.dataset.layout='desktop';f.preferences.style=style;f.preferences.theme=theme;
+          f.stage.dataset.design=design;f.stage.dataset.theme=theme;f.stage.dataset.mode='archive';f.musicApplication.mode='archive';
+          f.applyStylePalette(f.stage,style,theme);f.shell.setActive(design==='archive');f.syncDesignIdentity();
+          f.sharedPanel.setVisible(true);f.sharedPanel.setOpen(false);f.sharedPanel.finish();f.renderSourceDetail();
+          document.activeElement instanceof HTMLElement&&document.activeElement.blur();
+          await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        })()`);
+        const sample = await evaluate(`(()=>{
+          const f=fixture,group=document.querySelector('.album-panel .album-actions'),play=group?.querySelector('.browse-play-album'),open=group?.querySelector('.open-album');
+          const rect=node=>{const r=node.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+          const style=node=>{const s=getComputedStyle(node);return{display:s.display,flexDirection:s.flexDirection,columnGap:s.columnGap,rowGap:s.rowGap,
+            background:s.backgroundColor,color:s.color,fontSize:s.fontSize,minHeight:s.minHeight,outlineWidth:s.outlineWidth,outlineStyle:s.outlineStyle,
+            outlineColor:s.outlineColor,outlineOffset:s.outlineOffset,borders:[s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth],
+            borderColors:[s.borderTopColor,s.borderRightColor,s.borderBottomColor,s.borderLeftColor]};};
+          const label=node=>({text:node?.textContent?.trim()??'',display:getComputedStyle(node).display});
+          return{design:fixture.stage.dataset.design,theme:fixture.stage.dataset.theme,mode:fixture.musicApplication.mode,
+            viewport:rect(f.sharedPanel.scrollTarget()),
+            group:{role:group?.getAttribute('role'),aria:group?.getAttribute('aria-label'),rect:rect(group),style:style(group),hidden:group?.hidden,inert:group?.inert,
+              children:[...group.children].map(node=>node.dataset.action)},
+            play:{tag:play?.tagName,type:play?.type,action:play?.dataset.action,aria:play?.getAttribute('aria-label'),rect:rect(play),style:style(play),
+              label:label(play?.querySelector('.play-album-label')),access:label(play?.querySelector('.play-album-access-label')),
+              icon:play?.querySelector('.play-album-icon')?.getBoundingClientRect().toJSON(),disabled:play?.disabled},
+            open:{tag:open?.tagName,type:open?.type,action:open?.dataset.action,aria:open?.getAttribute('aria-label'),rect:rect(open),style:style(open),
+              label:label(open?.querySelector('.open-album-label')),access:label(open?.querySelector('.open-album-access-label')),
+              arrow:getComputedStyle(open?.querySelector('.open-album-punk-arrow')).color},
+            article:{hidden:document.querySelector('#album-detail-content').hidden,inert:document.querySelector('#album-detail-content').inert}};
+        })()`);
+        evidence.styles.push(sample);
+        const screenshot = `actions-${design}-${theme}.png`;
+        const groupRect = sample.group.rect;
+        const clip = { x: Math.max(0, Math.floor(groupRect.x - 16)), y: Math.max(0, Math.floor(groupRect.y - 16)),
+          width: Math.ceil(groupRect.width + 32), height: Math.ceil(groupRect.height + 32), scale: 3 };
+        const image = await command("Page.captureScreenshot", { format: "png", clip });
+        await writeFile(path.join(output, screenshot), Buffer.from(image.data, "base64"));
+        evidence.screenshots.push(screenshot);
+        await saveEvidence();
+
+        assert.equal(sample.mode, "archive");
+        assert.equal(sample.group.role, "group");assert.equal(sample.group.aria, "专辑操作");
+        assert.deepEqual(sample.group.children, ["play-album", "open"]);
+        assert.equal(sample.play.tag, "BUTTON");assert.equal(sample.play.type, "button");assert.equal(sample.play.action, "play-album");
+        assert.equal(sample.open.tag, "BUTTON");assert.equal(sample.open.type, "button");assert.equal(sample.open.action, "open");
+        assert.equal(sample.group.hidden, false);assert.equal(sample.group.inert, false);
+        assert.equal(sample.article.hidden, true);assert.equal(sample.article.inert, true);
+        if (design === "archive") {
+          // Chrome blockifies inline-flex when the group is itself a flex item.
+          assert.ok(["flex","inline-flex"].includes(sample.group.style.display));assert.equal(sample.group.style.flexDirection, "row");
+          assert.equal(sample.group.style.columnGap, "0px");
+          assert.equal(sample.play.label.text, "播放专辑");assert.notEqual(sample.play.label.display, "none");
+          assert.equal(sample.open.label.text, "打开专辑");assert.notEqual(sample.open.label.display, "none");
+          assert.equal(sample.play.access.display, "none");assert.equal(sample.open.access.display, "none");
+          assert.ok(Math.abs(sample.play.rect.right - sample.open.rect.x) <= .25,
+            `${theme}: the two Punk halves have no gap.`);
+          assert.ok(Math.abs(sample.group.rect.x - sample.play.rect.x + 1) <= .25 &&
+            Math.abs(sample.group.rect.right - sample.open.rect.right - 1) <= .25 &&
+            Math.abs(sample.group.rect.width - sample.play.rect.width - sample.open.rect.width - 2) <= .5,
+            `${theme}: Punk group bounds tightly wrap both buttons and the shared frame. ${JSON.stringify(sample)}`);
+          assert.ok(sample.group.rect.x-5>=sample.viewport.x-1&&sample.group.rect.right+5<=sample.viewport.right+1,
+            `${theme}: the shared accent outline stays inside the album scroll viewport. ${JSON.stringify(sample)}`);
+          assert.deepEqual(sample.group.style.borders, ["1px", "1px", "1px", "1px"]);
+          assert.ok(sample.group.style.borderColors.every(color => color === sample.open.style.color),
+            `${theme}: the shared fine frame follows the foreground.`);
+          assert.equal(sample.group.style.outlineWidth, "1px");assert.equal(sample.group.style.outlineStyle, "solid");
+          assert.equal(sample.group.style.outlineColor, sample.open.arrow);assert.equal(sample.group.style.outlineOffset, "4px");
+          assert.equal(sample.play.style.background, sample.open.style.color);
+          assert.notEqual(sample.play.style.color, sample.open.style.color);
+          assert.equal(sample.open.style.background, "rgba(0, 0, 0, 0)");
+          assert.deepEqual(sample.play.style.borders, ["0px", "0px", "0px", "0px"]);
+          assert.deepEqual(sample.open.style.borders, ["0px", "0px", "0px", "1px"]);
+          assert.ok(sample.play.style.outlineStyle==="none"||sample.play.style.outlineWidth==="0px");
+          assert.ok(sample.open.style.outlineStyle==="none"||sample.open.style.outlineWidth==="0px");
+        } else {
+          assert.equal(sample.group.style.flexDirection, "column");
+          assert.equal(sample.group.rect.width, 188, `${theme}: Future action group stays naturally packed to 188px.`);
+          assert.ok(sample.play.rect.y < sample.open.rect.y);
+          assert.ok(Math.abs(sample.play.rect.x - sample.open.rect.x) <= 1);
+          assert.ok(Math.abs(sample.play.rect.width - 188) <= 1 && Math.abs(sample.open.rect.width - 188) <= 1);
+          assert.equal(sample.play.label.display, "none");assert.equal(sample.open.label.display, "none");
+          assert.equal(sample.play.access.text, "PLAY ALBUM");assert.notEqual(sample.play.access.display, "none");
+          assert.equal(sample.open.access.text, "ACCESS ALBUM");assert.notEqual(sample.open.access.display, "none");
+          assert.equal(sample.play.style.background, "rgba(0, 0, 0, 0)");
+          assert.equal(sample.open.style.background, "rgba(0, 0, 0, 0)");
+        }
+
+        if (design === "archive") {
+          for (const [name, selector] of [["play", ".browse-play-album"], ["open", ".open-album"]]) {
+            await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+            const focus = await evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)});button.focus({preventScroll:true});const s=getComputedStyle(button);
+              return{active:document.activeElement===button,visible:button.matches(':focus-visible'),outlineWidth:s.outlineWidth,outlineStyle:s.outlineStyle,
+                outlineColor:s.outlineColor,outlineOffset:s.outlineOffset,groupOutline:getComputedStyle(button.parentElement).outlineColor};})()`);
+            evidence.focus.push({design, theme, name, ...focus});await saveEvidence();
+            assert.equal(focus.active, true, `${design}/${theme}: ${name} remains independently focusable.`);
+            assert.equal(focus.visible, true, `${design}/${theme}: ${name} receives keyboard focus-visible styling.`);
+            assert.equal(focus.outlineWidth, "2px");assert.equal(focus.outlineStyle, "solid");
+            assert.equal(focus.outlineOffset, "-4px");assert.equal(focus.outlineColor, focus.groupOutline,
+              `${design}/${theme}: ${name} focus follows the group accent.`);
+          }
+        }
+      }
+    }
+
+    // The first action cycle is a real production click. Do not open/close the
+    // panel beforehand: the initial exit timing is part of the evidence.
+    await evaluate(`(()=>{
+      const f=fixture;f.setPage('music');f.stage.dataset.design='archive';f.stage.dataset.theme='day';f.stage.dataset.mode='archive';
+      f.musicApplication.mode='archive';f.preferences.theme='day';f.preferences.style={...f.preferences.style,design:'archive',scheme:'archive'};
+      f.applyStylePalette(f.stage,f.preferences.style,'day');f.shell.setActive(true);f.syncDesignIdentity();
+      f.sharedPanel.setVisible(true);f.sharedPanel.setOpen(false);f.sharedPanel.finish();f.renderSourceDetail();
+      f.musicApplication.view=Object.freeze({...f.musicApplication.view,show:'tracks'});f.focusMusicEntry('track|fixture-album|fixture-track-2');
+      f.stage.dataset.operationFocus='right';f.presentation.pendingSelection={token:'retain'};
+    })()`);
+    const initial = await evaluate(`(()=>({state:fixture.sharedPanel.element.dataset.panelState,
+      play:document.querySelector('.play-album-label').textContent.trim(),open:document.querySelector('.open-album-label').textContent.trim()}))()`);
+    evidence.initial = initial;await saveEvidence();
+    assert.equal(initial.state, "browse");assert.equal(initial.play, "播放专辑");assert.equal(initial.open, "打开专辑");
+
+    const playback = await evaluate(`(()=>{
+      const f=fixture,button=document.querySelector('.browse-play-album'),album=f.records[0].album;
+      const stable=()=>JSON.stringify({appMode:f.musicApplication.mode,stageMode:f.stage.dataset.mode,page:f.stage.dataset.page,
+        selectedIndex:f.musicApplication.selectedIndex,selectedAlbumId:f.musicApplication.selectedAlbumId,selectedTrackId:f.musicApplication.selectedTrackId,
+        catalogFocus:f.musicApplication.catalogFocus,view:f.musicApplication.view,panelState:f.sharedPanel.element.dataset.panelState,
+        articleHidden:document.querySelector('#album-detail-content').hidden,articleInert:document.querySelector('#album-detail-content').inert,
+        actionsHidden:document.querySelector('.album-actions').hidden,actionsInert:document.querySelector('.album-actions').inert,
+        pendingSelection:f.presentation.pendingSelection,presentationOpen:f.presentation.openCalls,presentationBack:f.presentation.backCalls});
+      button.focus({preventScroll:true});const before=stable(),start=f.playCalls.length;button.click();const calls=f.playCalls.slice(start),last=calls.at(-1);
+      return{focusTrack:f.musicApplication.catalogFocus?.trackId,firstTrack:album.tracks[0].id,calls:calls.length,ids:calls.map(call=>call.id),
+        queueLengths:calls.map(call=>call.tracks.length),sameQueue:calls.every(call=>call.tracks===album.tracks),modeUnchanged:stable()===before,
+        operationFocus:f.stage.dataset.operationFocus,focusRetained:document.activeElement===button,presentationOpen:f.presentation.openCalls,
+        presentationBack:f.presentation.backCalls,complete:last?.tracks?.length===album.tracks.length};
+    })()`);
+    evidence.playback = playback;await saveEvidence();
+    assert.equal(playback.focusTrack, "fixture-track-2");assert.equal(playback.calls, 1);
+    assert.deepEqual(playback.ids, [playback.firstTrack]);assert.deepEqual(playback.queueLengths, [30]);
+    assert.equal(playback.sameQueue, true);assert.equal(playback.complete, true);
+    assert.equal(playback.modeUnchanged, true, "Play starts at the first track and preserves browse, view, and presentation state.");
+    assert.equal(playback.operationFocus, "right");assert.equal(playback.focusRetained, true);
+    assert.equal(playback.presentationOpen, 0);assert.equal(playback.presentationBack, 0);
+
+    const opening = await evaluate(`(()=>{
+      const f=fixture,button=document.querySelector('.open-album'),group=document.querySelector('.album-actions');
+      button.focus({preventScroll:true});const before={state:f.sharedPanel.element.dataset.panelState,opacity:getComputedStyle(group).opacity,
+        transform:getComputedStyle(group).transform,width:group.getBoundingClientRect().width};
+      const calls=f.presentation.openCalls;button.click();const animation=group.getAnimations()[0];
+      return{before,afterClick:{state:f.sharedPanel.element.dataset.panelState,mode:f.musicApplication.mode,stageMode:f.stage.dataset.mode,
+        actionsHidden:group.hidden,actionsInert:group.inert,openCalls:f.presentation.openCalls-calls,
+        currentTime:animation?.currentTime??null,
+        duration:animation?.effect?.getComputedTiming().duration??null,keyframes:animation?.effect?.getKeyframes()??[],
+        opacity:getComputedStyle(group).opacity,transform:getComputedStyle(group).transform,width:group.getBoundingClientRect().width,
+        labels:{play:document.querySelector('.play-album-label').textContent.trim(),open:document.querySelector('.open-album-label').textContent.trim()}}};
+    })()`);
+    const openingTimeline=[opening.afterClick];
+    for(let frame=0;frame<24;frame++){
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      const frameSample=await evaluate(`(()=>{const group=document.querySelector('.album-actions'),style=getComputedStyle(group),m=new DOMMatrixReadOnly(style.transform==='none'?'matrix(1,0,0,1,0,0)':style.transform),animation=group.getAnimations()[0];
+        return{state:fixture.sharedPanel.element.dataset.panelState,time:performance.now(),opacity:Number(style.opacity),clip:style.clipPath,transform:style.transform,
+          matrix:[m.a,m.b,m.c,m.d,m.e,m.f],rect:group.getBoundingClientRect().toJSON(),animationTime:animation?.currentTime??null,
+          labels:{play:document.querySelector('.play-album-label').textContent.trim(),open:document.querySelector('.open-album-label').textContent.trim()}};})()`);
+      openingTimeline.push(frameSample);
+      if(!evidence.exitMiddleScreenshot&&frameSample.animationTime>=140&&frameSample.animationTime<=240){
+        const clip=await evaluate("(()=>{const r=document.querySelector('.album-actions').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-18)),y:Math.max(0,Math.floor(r.top-18)),width:Math.ceil(r.width+36),height:Math.ceil(r.height+36),scale:3};})()");
+        const image=await command("Page.captureScreenshot",{format:"png",clip});
+        evidence.exitMiddleScreenshot="punk-action-group-exit-mid.png";
+        evidence.screenshots.push(evidence.exitMiddleScreenshot);
+        await writeFile(path.join(output,evidence.exitMiddleScreenshot),Buffer.from(image.data,"base64"));
+      }
+      if(frameSample.state!=="button-exit")break;
+    }
+    evidence.opening = openingTimeline;await saveEvidence();
+    assert.equal(opening.before.state, "browse");assert.equal(opening.afterClick.state, "button-exit");
+    assert.equal(opening.afterClick.mode, "detail");assert.equal(opening.afterClick.stageMode, "detail");
+    assert.equal(opening.afterClick.openCalls, 1);assert.equal(opening.afterClick.duration, 360);
+    assert.ok(evidence.exitMiddleScreenshot,"Capture the actual first Punk exit at its animation midpoint.");
+    assert.ok(openingTimeline.every(frame=>frame.labels?.play==="播放专辑"&&frame.labels?.open==="打开专辑"),
+      `Punk labels stay complete throughout the first opening exit: ${JSON.stringify(openingTimeline.map(frame=>frame.labels))}`);
+    const earlyExit=openingTimeline.find(frame=>frame.opacity<.99&&frame.matrix?.[3]<.995&&frame.matrix?.[5]<-.1);
+    assert.ok(earlyExit,`Punk exit must immediately fade, move upward, and compress: ${JSON.stringify(openingTimeline)}`);
+    assert.ok(opening.afterClick.keyframes.length >= 2, "The group exit animation exposes both keyframes.");
+    let opened;
+    for (let attempt = 0; attempt < 70; attempt++) {
+      opened = await evaluate(`(()=>{const f=fixture,a=document.querySelector('.album-actions'),article=document.querySelector('#album-detail-content');return{
+        state:f.sharedPanel.element.dataset.panelState,mode:f.musicApplication.mode,groupHidden:a.hidden,groupInert:a.inert,
+        actions:[...a.querySelectorAll('button')].map(button=>({hidden:button.hidden,inert:button.inert})),articleHidden:article.hidden,articleInert:article.inert,
+        labels:{play:document.querySelector('.play-album-label').textContent.trim(),open:document.querySelector('.open-album-label').textContent.trim()}};})()`);
+      if (opened.state === "expanded") break;
+      await evaluate("new Promise(resolve=>setTimeout(resolve,30))");
+    }
+    evidence.opened = opened;await saveEvidence();
+    assert.equal(opened?.state, "expanded");assert.equal(opened.mode, "detail");
+    assert.equal(opened.groupHidden, true);assert.equal(opened.groupInert, true);
+    assert.ok(opened.actions.every(action=>action.hidden&&action.inert), "Both buttons become hidden and inert together.");
+    assert.equal(opened.articleHidden, false);assert.equal(opened.articleInert, false);
+    assert.deepEqual(opened.labels,{play:"播放专辑",open:"打开专辑"});
+    const openSelection=await evaluate(`(()=>{const f=fixture;f.musicApplication.selectedIndex=1;f.renderSourceDetail();f.sharedPanel.contentChanged('selection-change-while-open');
+      return{state:f.sharedPanel.element.dataset.panelState,play:document.querySelector('.play-album-label').textContent.trim(),open:document.querySelector('.open-album-label').textContent.trim()};})()`);
+    evidence.openSelectionStable=openSelection;await saveEvidence();
+    assert.equal(openSelection.state,"expanded");assert.equal(openSelection.play,"播放专辑");assert.equal(openSelection.open,"打开专辑");
+    await saveEvidence("passed");
+  } catch (error) {
+    await saveEvidence("failed", { name: error?.name, message: error?.message, stack: error?.stack });
+    throw error;
+  }
 }
 
 // Focused regression for the production rolling text inside the framed format label.

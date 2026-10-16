@@ -518,9 +518,9 @@ stage.innerHTML = ui`
       <h1 id="selection-title"></h1><p id="selection-artist" class="selection-artist"></p>
       <div class="selection-meta" id="selection-meta"></div>
       <div id="selection-profile" class="selection-profile" hidden></div>
-      <div class="album-actions">
+      <div class="album-actions" role="group" aria-label="专辑操作">
         <button type="button" class="browse-play-album" data-action="play-album" aria-label="播放专辑" data-cjk="${containsCjk(trUi("播放专辑"))}"><span class="play-album-label">播放专辑</span><span class="play-album-access-label" aria-hidden="true">PLAY ALBUM</span><span class="play-album-icon" aria-hidden="true">${icons.play}</span></button>
-        <button class="open-album" data-action="open" aria-label="打开专辑" data-cjk="${containsCjk(trUi("打开专辑"))}"><span class="open-album-label">打开专辑</span><span class="open-album-access-label" aria-hidden="true">ACCESS ALBUM</span><span class="open-album-arrow" aria-hidden="true">→</span><span class="open-album-punk-arrow" aria-hidden="true"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="m4 14 10-10M5 4h9v9"/></svg></span></button>
+        <button type="button" class="open-album" data-action="open" aria-label="打开专辑" data-cjk="${containsCjk(trUi("打开专辑"))}"><span class="open-album-label">打开专辑</span><span class="open-album-access-label" aria-hidden="true">ACCESS ALBUM</span><span class="open-album-arrow" aria-hidden="true">→</span><span class="open-album-punk-arrow" aria-hidden="true"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="m4 14 10-10M5 4h9v9"/></svg></span></button>
       </div>
     </div>
     <div class="music-navigation">
@@ -587,6 +587,7 @@ stage.addEventListener("lyrics-settings-updated", () => {
 $("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view));
 $(".open-album").setAttribute("aria-label", uiLanguage() === "en" ? "Open album" : "打开专辑");
 $(".browse-play-album").setAttribute("aria-label", uiLanguage() === "en" ? "Play album" : "播放专辑");
+$(".album-actions").setAttribute("aria-label", uiLanguage() === "en" ? "Album actions" : "专辑操作");
 const titleMotion = setupMusicTitleLayout(stage);
 const albumPanel = setupAlbumPanel(stage, () => preferences.reduced);
 albumPanel.setActive(true);

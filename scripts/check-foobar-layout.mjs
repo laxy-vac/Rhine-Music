@@ -1,5 +1,5 @@
-import { checkAlbumPanel, checkAlbumLabelPanelMotion } from './check-album-panel-behavior.mjs';
-import { checkAlbumActions, checkAlbumFormatMotion } from './check-album-actions.mjs';
+import { checkAlbumPanel, checkAlbumLabelPanelMotion, checkUnifiedAlbumActionMotion } from './check-album-panel-behavior.mjs';
+import { checkAlbumActions, checkAlbumFormatMotion, checkUnifiedAlbumActions } from './check-album-actions.mjs';
 import { checkPunkControls } from './check-punk-controls.mjs';
 import { checkPunkEq } from './check-punk-eq.mjs';
 import { checkWindowAspectUi } from './check-window-aspect-ui.mjs';
@@ -21,13 +21,16 @@ import { normalizeProcessing } from "../src/audio-processing-model.mjs";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const albumHeaderMode = process.argv.includes('--album-header');
 const albumLabelMotionMode = process.argv.includes('--album-label-motion');
-const output = path.join(project, albumLabelMotionMode ? ".tools/album-label-motion"
-  : albumHeaderMode ? ".tools/album-header" : ".tools/foobar-layout-check");
+const unifiedAlbumActionsMode = process.argv.includes('--unified-album-actions');
+const output = path.join(project, unifiedAlbumActionsMode ? ".tools/unified-album-actions"
+  : albumLabelMotionMode ? ".tools/album-label-motion"
+    : albumHeaderMode ? ".tools/album-header" : ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
 const punkAlbumActionsMode = process.argv.includes('--punk-album-actions');
 const albumActionsOutput = path.join(project, albumHeaderMode ? ".tools/album-header"
   : albumLabelMotionMode ? ".tools/album-label-motion"
-    : punkAlbumActionsMode ? ".tools/punk-album-actions" : ".tools/album-actions");
+    : unifiedAlbumActionsMode ? ".tools/unified-album-actions"
+      : punkAlbumActionsMode ? ".tools/punk-album-actions" : ".tools/album-actions");
 const candidates = [process.env.LAYOUT_BROWSER,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean);
@@ -40,7 +43,7 @@ assert.match(main,/case "open":\s*setMode\("detail"\);/,"The source open-album a
 assert.match(main,/scene\.onOpenAlbum\s*=\s*index\s*=>\s*\{[^}]*setMode\("detail"\);/,"The source scene callback must open the selected album.");
 assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{[\s\S]*?setMode\("detail"\);/,"The source left-scene double-click handler must reach detail mode.");
 const displayMode = process.argv.includes('--display');
-const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode || albumHeaderMode || albumLabelMotionMode;
+const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode || albumHeaderMode || albumLabelMotionMode || unifiedAlbumActionsMode;
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
@@ -217,8 +220,8 @@ const initialize = `(async () => {
   const detailTransition={dispose(){}};
   const browseTransition={dispose(){}};
   const libraryRebuilding=false, libraryIntent=undefined, presentation={pendingSelection:undefined,openCalls:0,backCalls:0,
-    open(){this.openCalls++;document.querySelector('#music-browse').hidden=true;document.querySelector('#music-detail').hidden=false;renderSharedTab('tracks');sharedPanel.setOpen(true);if(!${albumLabelMotionMode})sharedPanel.finish();},
-    back(){this.backCalls++;document.querySelector('#music-browse').hidden=false;document.querySelector('#music-detail').hidden=true;sharedPanel.setOpen(false);if(!${albumLabelMotionMode})sharedPanel.finish();}};
+    open(){this.openCalls++;document.querySelector('#music-browse').hidden=true;document.querySelector('#music-detail').hidden=false;renderSharedTab('tracks');sharedPanel.setOpen(true);if(!${albumLabelMotionMode}&&!${unifiedAlbumActionsMode})sharedPanel.finish();},
+    back(){this.backCalls++;document.querySelector('#music-browse').hidden=false;document.querySelector('#music-detail').hidden=true;sharedPanel.setOpen(false);if(!${albumLabelMotionMode}&&!${unifiedAlbumActionsMode})sharedPanel.finish();}};
   const select=(index)=>{
     musicApplication.selectedIndex=index;musicApplication.selectedAlbumId=records[index]?.id;
     if(musicApplication.catalogFocus?.albumId!==musicApplication.selectedAlbumId)musicApplication.selectedTrackId=undefined;
@@ -434,6 +437,10 @@ try {
     console.log('Passed focused EQ rendering and tone controls; screenshots and report saved under .tools/foobar-layout-check.');
   } else if(glassMode) {
     await checkTerminalGlassProbe({command,evaluate,output:path.join(output,"terminal-glass",process.argv.includes('--baseline')?'baseline':'current'),project});
+  } else if(unifiedAlbumActionsMode) {
+    await checkUnifiedAlbumActions({command,evaluate,output:albumActionsOutput,main});
+    await checkUnifiedAlbumActionMotion({command,evaluate,output:albumActionsOutput});
+    console.log(`Passed focused unified Punk/Future album actions; report and screenshots saved under ${path.relative(project,albumActionsOutput).replaceAll('\\','/')}.`);
   } else if(albumLabelMotionMode) {
     await checkAlbumLabelPanelMotion({command,evaluate,output:albumActionsOutput});
     await checkAlbumFormatMotion({command,evaluate,output:albumActionsOutput});

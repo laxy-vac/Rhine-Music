@@ -44,7 +44,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   let focusAfterClose = false;
   let buttonAnimation: Animation | undefined;
   let typingFrame = 0;
-  let typingLabel: HTMLElement | undefined;
+  let typingLabels: HTMLElement[] = [];
   const fullLabels = new WeakMap<HTMLElement,string>();
   let sceneTabindex: string | null = null;
   let sceneTabindexCaptured = false;
@@ -128,18 +128,29 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   }
   function cancelTyping() {
     cancelAnimationFrame(typingFrame);typingFrame=0;
-    if(typingLabel){typingLabel.textContent=fullLabels.get(typingLabel)??typingLabel.textContent;typingLabel.style.removeProperty('width');typingLabel=undefined;}
+    for (const label of typingLabels) {
+      label.textContent = fullLabels.get(label) ?? label.textContent;
+      label.style.removeProperty("width");
+    }
+    typingLabels = [];
   }
-  function typeButton(duration=520) {
+  function typeActionLabels(duration=560) {
     cancelTyping();
     if(futureTheme()||instant())return;
-    const label=openButton()?.querySelector<HTMLElement>('.open-album-label');
-    if(!label)return;
-    const text=fullLabels.get(label)??label.textContent??'';fullLabels.set(label,text);
-    const width=label.getBoundingClientRect().width;label.style.width=`${width}px`;typingLabel=label;
-    const glyphs=Array.from(text),noise='#%/\\=<>_01',start=performance.now();
-    const tick=(now:number)=>{const p=Math.min(1,(now-start)/duration),count=Math.min(glyphs.length,Math.floor(p*glyphs.length));
-      label.textContent=glyphs.map((char,i)=>i<count?char:noise[(i*7+Math.floor(now/45))%noise.length]).join('');
+    typingLabels = Array.from(actionSurface()?.querySelectorAll<HTMLElement>(".play-album-label, .open-album-label") ?? []);
+    if (!typingLabels.length) return;
+    const entries = typingLabels.map(label => {
+      const text = fullLabels.get(label) ?? label.textContent ?? "";
+      fullLabels.set(label, text);
+      label.style.width = `${label.getBoundingClientRect().width}px`;
+      return { label, glyphs: Array.from(text) };
+    });
+    const noise='#%/\\=<>_01',start=performance.now();
+    const tick=(now:number)=>{const p=Math.min(1,(now-start)/duration);
+      entries.forEach(({label,glyphs},entry) => {
+        const count=Math.min(glyphs.length,Math.floor(p*glyphs.length));
+        label.textContent=glyphs.map((char,i)=>i<count?char:noise[(i*7+entry*3+Math.floor(now/45))%noise.length]).join('');
+      });
       if(p<1)typingFrame=requestAnimationFrame(tick);else cancelTyping();};
     tick(start);
   }
@@ -236,31 +247,43 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     focusAfterClose = false;
   }
 
-  function animateButton(mode: "exit" | "enter", ticket: number, complete: () => void) {
+  function animateButton(mode: "exit" | "enter", ticket: number, complete: () => void, origin?: Keyframe) {
     const surface = actionSurface();
     if (!surface || instant()) {
       complete();
       return;
     }
 
-    const keyframes: Keyframe[] = futureTheme()
+    const future = futureTheme();
+    const keyframes: Keyframe[] = future
       ? mode === "exit"
         ? [{ opacity: 1, clipPath: "inset(0)" }, { opacity: 0, clipPath: "inset(0 0 0 100%)" }]
         : [{ opacity: .3, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0)" }]
       : mode === "exit"
-        ? [{ opacity: 1, clipPath: "inset(0)" }, { offset:.85,opacity:1,clipPath:"inset(0 92% 0 0)" }, { opacity: 0, clipPath: "inset(0 100% 0 0)" }]
-        : [{ opacity: 0.25, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0)" }];
+        ? [{ opacity: 1, clipPath: "inset(-6px)", transform: "translateY(0px) scaleY(1)" },
+           { opacity: 0, clipPath: "inset(48% -6px)", transform: "translateY(-12px) scaleY(.88)" }]
+        : [{ opacity: 0, clipPath: "inset(48% -6px)", transform: "translateY(10px) scaleY(.88)" },
+           { opacity: 1, clipPath: "inset(-6px)", transform: "translateY(0px) scaleY(1)" }];
+    if (origin) keyframes[0] = origin;
+    const baseDuration = future ? 240 : mode === "exit" ? 360 : 560;
+    const distance = origin ? Math.abs((mode === "enter" ? 1 : 0) - Number(origin.opacity)) : 1;
+    const duration = origin ? Math.max(future ? 80 : 120, Math.round(baseDuration * distance)) : baseDuration;
     const animation = surface.animate(keyframes, {
-      duration: futureTheme()?240:mode==='exit'?360:520,
-      easing: mode === "exit" ? "cubic-bezier(.4,0,.7,.2)" : "cubic-bezier(.2,.7,.2,1)",
+      duration,
+      easing: mode === "exit"
+        ? future ? "cubic-bezier(.4,0,.7,.2)" : "cubic-bezier(.2,.65,.3,1)"
+        : "cubic-bezier(.2,.7,.2,1)",
       fill: "none",
     });
     buttonAnimation = animation;
-    if(mode==='enter')typeButton();else cancelTyping();
+    if(mode==='enter')typeActionLabels(duration);else cancelTyping();
     void animation.finished.then(
       () => {
         if (buttonAnimation === animation) buttonAnimation = undefined;
-        if (active && ticket === revision && wanted === (mode === "exit")) complete();
+        if (active && ticket === revision && wanted === (mode === "exit")) {
+          if (mode === "enter") cancelTyping();
+          complete();
+        }
       },
       () => {
         if (buttonAnimation === animation) buttonAnimation = undefined;
@@ -300,7 +323,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     frame = requestAnimationFrame(tick);
   }
 
-  function beginOpen(ticket: number, from: number) {
+  function beginOpen(ticket: number, from: number, origin?: Keyframe) {
     if (!active || ticket !== revision || !wanted) return;
     if (article.hidden) {
       setActionState("transition");
@@ -309,13 +332,13 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
       animateButton("exit", ticket, () => {
         if (!active || ticket !== revision || !wanted) return;
         revealArticle(ticket, 0);
-      });
+      }, origin);
       return;
     }
     revealArticle(ticket, from);
   }
 
-  function revealButton(ticket: number) {
+  function revealButton(ticket: number, origin?: Keyframe) {
     if (!active || ticket !== revision || wanted) return;
     viewport.scrollTop = 0;
     const surface = actionSurface();
@@ -333,13 +356,14 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
       panel.dataset.panelState = "browse";
       if (focusAfterClose && panel.contains(document.activeElement) && root.dataset.operationFocus === "right") focusOpenButton();
       focusAfterClose = false;
-    });
+    }, origin);
   }
 
-  function collapseArticle(ticket: number, from: number) {
+  function collapseArticle(ticket: number, from: number, origin?: Keyframe) {
     if (!active || ticket !== revision || wanted) return;
     if (article.hidden) {
-      settle(false, false);
+      if (origin) revealButton(ticket, origin);
+      else settle(false, false);
       return;
     }
     article.inert = true;
@@ -494,6 +518,12 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     },
     setOpen(open: boolean) {
       if (!active || wanted === open) return;
+      const surface = actionSurface();
+      const style = buttonAnimation && surface ? getComputedStyle(surface) : undefined;
+      const fullClip = futureTheme() ? "inset(0)" : "inset(-6px)";
+      const origin: Keyframe | undefined = style
+        ? { opacity: style.opacity, clipPath: style.clipPath === "none" ? fullClip : style.clipPath, transform: style.transform }
+        : undefined;
       const from = article.hidden ? 0 : article.getBoundingClientRect().height;
       const wasFocusedInArticle = article.contains(document.activeElement);
       wanted = open;
@@ -508,8 +538,8 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
         settle(open, open ? focusAfterOpen : focusAfterClose);
         return;
       }
-      if (open) beginOpen(ticket, from);
-      else collapseArticle(ticket, from);
+      if (open) beginOpen(ticket, from, origin);
+      else collapseArticle(ticket, from, origin);
     },
     contentChanged(id: string) {
       if (!active || album === id) return;
