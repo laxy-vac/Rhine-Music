@@ -181,42 +181,77 @@
 }
 
 /* Punk / archive skin: black selected tab and a scanned text reveal. */
+.open-album-punk-arrow { display: none; }
 .music-app[data-design="archive"] .album-panel {
   --album-panel-theme: punk;
 }
 .music-app[data-design="archive"] .album-panel .album-actions {
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 20px;
   margin: 14px 0 0;
 }
 .music-app[data-design="archive"] .album-panel :is(.open-album, .browse-play-album) {
   display: inline-flex;
+  box-sizing: border-box;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   width: max-content;
   max-width: 100%;
   align-self: flex-start;
-  min-height: 42px;
+  min-height: 40px;
   margin: 14px 0 0;
-  padding: 7px 10px;
-  border: 0;
+  padding: 0 14px;
+  border: 1px solid transparent;
   border-radius: 0;
   background: var(--ink);
   color: var(--page-bg);
-  font: 600 clamp(18px,1.5vw,25px)/1.28 var(--foobar-text-font, var(--design-font));
-  letter-spacing: 0;
-  gap: 16px;
+  font: 600 12px/1.25 var(--foobar-text-font, var(--design-font));
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  gap: 10px;
 }
 .music-app[data-design="archive"] .album-panel .album-actions > .open-album,
 .music-app[data-design="archive"] .album-panel .album-actions > .browse-play-album {
   margin: 0;
 }
-.music-app[data-design="archive"] .open-album-label { display:inline-block;white-space:nowrap; }
-.music-app[data-design="archive"] .play-album-label { display:inline-block;white-space:nowrap;font-size:24px;line-height:1; }
-.music-app[data-design="archive"] .play-album-access-label,
-.music-app[data-design="archive"] .play-album-icon { display:none; }
-.music-app[data-design="archive"] .foobar-home-info .album-panel .album-callout > .open-album { width:max-content; }
+.music-app[data-design="archive"] :is(.open-album-label, .play-album-label) {
+  display: inline-block;
+  white-space: nowrap;
+  font: inherit;
+}
+.music-app[data-design="archive"] .play-album-access-label { display:none; }
+.music-app[data-design="archive"] .album-panel .browse-play-album { justify-content: flex-start; }
+.music-app[data-design="archive"] .album-panel .open-album {
+  gap: 36px;
+  border-color: var(--ink);
+  background: transparent;
+  color: var(--ink);
+  outline: 1px solid var(--accent);
+  outline-offset: 4px;
+}
+.music-app[data-design="archive"] .album-panel .browse-play-album:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+.music-app[data-design="archive"] .album-panel .open-album:focus-visible { outline-width: 2px; }
+.music-app[data-design="archive"] :is(.play-album-icon, .open-album-punk-arrow) {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+.music-app[data-design="archive"] .play-album-icon { order: -1; }
+.music-app[data-design="archive"] .open-album-punk-arrow { color: var(--accent); }
+.music-app[data-design="archive"] :is(.play-album-icon, .open-album-punk-arrow) svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
 .music-app[data-design="archive"] .open-album-arrow { display:none; }
 .music-app[data-design="archive"] .album-panel .album-actions > button:disabled {
   cursor: not-allowed;

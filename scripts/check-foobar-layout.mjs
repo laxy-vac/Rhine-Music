@@ -21,7 +21,8 @@ import { normalizeProcessing } from "../src/audio-processing-model.mjs";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(project, ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
-const albumActionsOutput = path.join(project, ".tools/album-actions");
+const punkAlbumActionsMode = process.argv.includes('--punk-album-actions');
+const albumActionsOutput = path.join(project, punkAlbumActionsMode ? ".tools/punk-album-actions" : ".tools/album-actions");
 const candidates = [process.env.LAYOUT_BROWSER,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean);
@@ -34,7 +35,7 @@ assert.match(main,/case "open":\s*setMode\("detail"\);/,"The source open-album a
 assert.match(main,/scene\.onOpenAlbum\s*=\s*index\s*=>\s*\{[^}]*setMode\("detail"\);/,"The source scene callback must open the selected album.");
 assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{[\s\S]*?setMode\("detail"\);/,"The source left-scene double-click handler must reach detail mode.");
 const displayMode = process.argv.includes('--display');
-const albumActionsMode = process.argv.includes('--album-actions');
+const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumActionsMode;
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
@@ -122,7 +123,7 @@ const modules = (await Promise.all([
   moduleFunctions("audio-info", ["setupAudioInfoPopup"]),
   moduleFunctions("foobar-shell", ["setupFoobarShell"]),
   moduleFunctions("music-view-settings", ["legacyCatalogOptions", "musicGridPageSizes"]),
-  moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle"]),
+  moduleFunctions("music-style", ["musicStyleMarkup", "defaultMusicStyle", "archiveMusicStyle", "stylePalette", "applyStylePalette"]),
   moduleFunctions("music-view-controls", ["musicBrowseControlsMarkup", "syncMusicViewControls"]),
   moduleFunctions("music-catalog-grid", ["setupMusicCatalogGrid"]),
   moduleFunctions("music-grid-page", ["paginateMusicGridGroups", "getMusicGridPage", "revealMusicGridEntry"]),
@@ -371,7 +372,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -432,7 +433,7 @@ try {
     await mkdir(albumActionsOutput,{recursive:true});
     await checkAlbumActions({command,evaluate,output:albumActionsOutput,project,main});
     await checkAlbumPanel({command,evaluate,output:albumActionsOutput});
-    console.log('Passed focused album action behavior and the full existing album panel behavior regression; report and screenshots saved under .tools/album-actions.');
+    console.log(`Passed focused album action behavior and the full existing album panel behavior regression; report and screenshots saved under ${path.relative(project,albumActionsOutput).replaceAll('\\','/')}.`);
   } else {
   if(sharedMode) {
     const before=await evaluate(`fixture.activationBefore`);
