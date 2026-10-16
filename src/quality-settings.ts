@@ -40,8 +40,8 @@ export function qualityMarkup(
     : trUi(archiveWave ? "水波强度" : "波动效果");
   const waveHint = shelfArray
     ? english
-      ? "One local rise; higher settings lift more neighboring albums in the current column."
-      : "单凸起；档位越高，同列带起的前后专辑越多。"
+      ? "Controls how many albums rise around the selection; hover has its own gentle lift."
+      : "调整选中项带起的前后专辑数量；悬停轻抬独立生效。"
     : trUi(archiveWave ? "阵列仅当前排起伏，矩阵保留连续波动。" : "调整唱片的传播和待机起伏");
   const waveChoices: (readonly [string, string])[] = shelfArray
     ? [

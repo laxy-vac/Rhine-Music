@@ -10,6 +10,11 @@ import { build } from "esbuild";
 import ts from "typescript";
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const expectedArrayHoverLift = distance => Number.isFinite(distance) ? .5 * Math.exp(-distance * distance / 2.2) : 0;
+const expectedArrayNeighborLift = distance => {
+  const offset = Math.abs(distance);
+  return Number.isFinite(offset) && offset <= 4 ? .748 * (1 + Math.cos(Math.PI * offset / 5)) / 2 : 0;
+};
 const output = path.join(project, ".tools", "case-system-check");
 const isReference = process.argv.includes("--reference");
 const isArrayComposition = process.argv.includes("--array-composition") || process.argv.includes("--punk-array-motion");
@@ -51,6 +56,7 @@ const coverFlickerOutput = path.join(project, ".tools", "flicker-fix", "probe");
 const unifiedOutput = isCoverFlicker ? coverFlickerOutput : isRailRegression ? path.join(project, ".tools", "array-rail-profile", "regression", "composition")
   : path.join(project, ".tools", "array-composition");
 const arrayBumpOutput = path.join(project, ".tools", "array-bump");
+const arrayHoverOutput = path.join(project, ".tools", "array-hover");
 const arrayCoverOutput = path.join(project, ".tools", "array-cover-visibility");
 const arrayTrayOutput = isRailRegression
   ? path.join(project, ".tools", isShelfDetailRegression ? "shelf-color-calibration" : "array-rail-profile",
@@ -218,7 +224,7 @@ import { configureMusicCatalog, focusMusicEntry, getMusicDisplayEntries, getMusi
 import { getMusicCatalogShelves, getMusicEntryLocation, navigateMusicEntry } from "./src/music-catalog-shelves.ts";
 import { musicSpatialEntry } from "./src/music-spatial-layout.ts";
 import { MUSIC_ARRAY_VIEW } from "./src/music-display-layout.ts";
-import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
+import { ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT, ARRAY_HOVER_LIFT, arrayHoverLift, arrayNeighborLift, arrayLaneAppearance } from "./src/music-array-motion.ts";
 import { qualityIdleGain } from "./src/quality-motion.ts";
 import { damp } from "./src/motion.ts";
 import { qualityMarkup } from "./src/quality-settings.ts";
@@ -1105,7 +1111,7 @@ function unifiedSnapshot() {
     physicalTraysVisible: !!tray?.parent.visible,
     styleError: archiveStyleError };
 }
-function unifiedPointerTarget(selected = false, sameParent = false) {
+function unifiedPointerTarget(selected = false, sameParent = false, differentParent = false) {
   if (selected) {
     for (let frame = 0; frame < 90 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
     expect(archiveScene.musicArchiveReady, "The real selection animation must settle before accepting album-open input.");
@@ -1124,26 +1130,33 @@ function unifiedPointerTarget(selected = false, sameParent = false) {
     const cell = archiveScene.cells[index], entry = musicSpatialEntry(cell, true);
     if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey) continue;
     if (cell.lane !== archiveScene.selectedCell.lane) continue;
-    if (sameParent && entry.recordIndex !== musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex) continue;
+    const selectedRecordIndex = musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex;
+    if (sameParent && entry.recordIndex !== selectedRecordIndex) continue;
+    if (differentParent && entry.recordIndex === selectedRecordIndex) continue;
     archiveScene.caseHitProxy.getMatrixAt(index, matrix);
     if (matrix.elements[0] === 0 && matrix.elements[5] === 0 && matrix.elements[10] === 0) continue;
     point.copy(archiveScene.caseLayout.center).applyMatrix4(matrix).project(archiveScene.camera);
     const x = (point.x + 1) * archiveHost.clientWidth / 2, y = (1 - point.y) * archiveHost.clientHeight / 2;
-    if (x < 35 || x > archiveScene.displayViewportWidth - 35 || y < 35 || y > archiveHost.clientHeight - 35) continue;
+    if (x < 35 || x > archiveScene.displayViewportWidth - 35 || y < (differentParent ? 80 : 35) || y > archiveHost.clientHeight - 35) continue;
     ray.setFromCamera(new THREE.Vector2(point.x, point.y), archiveScene.camera);
     const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
     if (hit?.instanceId !== index) continue;
-    return { x, y, index: entry.recordIndex, key: entry.key };
+    return { x, y, index: entry.recordIndex, key: entry.key, lane: cell.lane, row: cell.row };
   }
   // A lifted selection can cover case centers while a neighboring spine remains visible.
-  for (let y = 35; y < archiveHost.clientHeight - 35; y += 12) for (let x = 35; x < archiveScene.displayViewportWidth - 35; x += 12) {
+  const firstProbeY = differentParent ? 80 : 35;
+  for (let y = firstProbeY; y < archiveHost.clientHeight - 35; y += 12) for (let x = 35; x < archiveScene.displayViewportWidth - 35; x += 12) {
     ray.setFromCamera(new THREE.Vector2(x * 2 / archiveHost.clientWidth - 1, 1 - y * 2 / archiveHost.clientHeight), archiveScene.camera);
     const hit = ray.intersectObjects([archiveScene.caseHitProxy, archiveScene.model], true)[0];
     if (hit?.instanceId === undefined) continue;
-    const entry = musicSpatialEntry(archiveScene.cells[hit.instanceId], true);
-    if (!entry || entry.key === archiveScene.selectedCell.foobarEntryKey ||
-      (sameParent && entry.recordIndex !== musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex)) continue;
-    return { x, y, index: entry.recordIndex, key: entry.key, sample: "visible raycast spine" };
+    const cell = archiveScene.cells[hit.instanceId], entry = musicSpatialEntry(cell, true);
+    const selectedRecordIndex = musicSpatialEntry(archiveScene.selectedCell, true)?.recordIndex;
+    if (!entry || cell.lane !== archiveScene.selectedCell.lane ||
+      entry.key === archiveScene.selectedCell.foobarEntryKey ||
+      (sameParent && entry.recordIndex !== selectedRecordIndex) ||
+      (differentParent && entry.recordIndex === selectedRecordIndex)) continue;
+    return { x, y, index: entry.recordIndex, key: entry.key, lane: archiveScene.cells[hit.instanceId].lane,
+      row: archiveScene.cells[hit.instanceId].row, sample: "visible raycast spine" };
   }
   throw new Error("No unselected finite shelf case has a visible production raycast target.");
 }
@@ -1636,20 +1649,37 @@ function arrayMotionInputSnapshot() {
 function arrayHoverSnapshot() {
   stepArchiveScene(100);
   const scene = archiveScene;
+  const motion = punkArrayMotionSnapshot();
+  const caseValues = motion.values.filter(value => value.lane === scene.selectedCell.lane).map(value => ({
+    ...value, motionHeight: scene.arrayCaseMotion.sample(value.lane, value.row),
+  }));
+  const anchorRows = [...new Map(motion.values.filter(value => Number.isFinite(value.anchorRow))
+    .map(value => [value.lane, { lane: value.lane, anchorRow: value.anchorRow }])).values()];
   return { y: scene.model.position.y, selected: { ...scene.selectedCell }, phase: scene.musicPresentationPhase,
     catalog: getMusicCatalogShelves().map(value => value.entryKeys.length), clicks: unifiedClicks.length, opens: unifiedOpens.length,
-    bounds: unifiedSnapshot().selectedScreenBounds, input: arrayMotionInputSnapshot() };
+    hoveredEntryKey: scene.hoveredEntryKey ?? "", bounds: unifiedSnapshot().selectedScreenBounds,
+    input: arrayMotionInputSnapshot(), caseValues, anchorRows };
 }
-async function prepareArrayPointer(design) {
+async function prepareArrayCompositionBase(design) {
   await arrayMotionPrepare(design, "shelf", "full");
   arrayMotionSelect(0, 12); archiveScene.setReduced(true); stepArchiveScene(1); archiveScene.setReduced(false);
   for (let frame = 0; frame < 300 && !archiveScene.musicArchiveReady; frame++) stepArchiveScene(1);
+  return arrayHoverSnapshot();
+}
+async function prepareArrayPointer(design) {
+  const baseline = await prepareArrayCompositionBase(design);
   const selected = unifiedPointerTarget(true);
-  const baseline = arrayHoverSnapshot(), other = unifiedPointerTarget(false, true);
+  const other = unifiedPointerTarget(false, true), otherAlbum = unifiedPointerTarget(false, false, true);
   expect(baseline.phase === "archive", "Capture the hover baseline only after the real archive return has settled.");
   expect(other.index === musicSpatialEntry(archiveScene.selectedCell, true).recordIndex && other.key !== selected.key,
     "The hover exclusion target must be another TRACKS entry from the same parent album.");
-  return { baseline, selected, other };
+  expect(otherAlbum.index !== musicSpatialEntry(archiveScene.selectedCell, true).recordIndex && otherAlbum.key !== selected.key,
+    "The independent album hover target must resolve to a different parent album.");
+  return { baseline, selected, other, otherAlbum,
+    selectedRecordIndex: musicSpatialEntry(archiveScene.selectedCell, true).recordIndex };
+}
+function arrayPointerHoverTargets() {
+  return { other: unifiedPointerTarget(false, true), otherAlbum: unifiedPointerTarget(false, false, true) };
 }
 let arrayBumpFrame = 0;
 function arrayBumpSnapshot() {
@@ -1657,9 +1687,12 @@ function arrayBumpSnapshot() {
   const values = snapshot.values.filter(value => value.lane === scene.selectedCell.lane).map(value => ({
     ...value, motionHeight: scene.arrayCaseMotion.sample(value.lane, value.row),
   }));
+  const anchorRows = [...new Map(snapshot.values.filter(value => Number.isFinite(value.anchorRow))
+    .map(value => [value.lane, { lane: value.lane, anchorRow: value.anchorRow }])).values()];
   return { frame: arrayBumpFrame, phase: scene.musicPresentationPhase, interactive: scene.musicArchiveInteractive,
     quality: scene.quality.wave, selected: { ...scene.selectedCell }, input: arrayMotionInputSnapshot(),
     catalog: getMusicCatalogShelves().map(shelf => shelf.entryKeys.length),
+    selectedAnchorRow: snapshot.selectedAnchorRow, anchorRows,
     hoveredEntryKey: scene.hoveredEntryKey ?? "", clicks: unifiedClicks.length, opens: unifiedOpens.length, values };
 }
 async function prepareArrayBump(design = "archive", level = "full", slot = 9) {
@@ -1694,6 +1727,9 @@ function arrayBumpAdvance(frames, sampleEvery = 3) {
   return samples;
 }
 async function prepareArrayBumpHover(design = "archive") {
+  const hoverFixture = await exercisePunkArrayMotion(true, true);
+  expect(hoverFixture.fixtureTrackCounts?.[0] === 10 && hoverFixture.fixtureTrackCounts?.[1] === 75,
+    "The hover acceptance fixture must place two parents in the active twenty-slot column.");
   await prepareArrayBump(design, "full", 9);
   arrayBumpSettleSelection(8); // row 20; the reduced snap leaves a clean, static start.
   arrayBumpFrame = 0;
@@ -1703,20 +1739,35 @@ async function prepareArrayBumpHover(design = "archive") {
   stepArchiveScene(1); arrayBumpFrame++;
   const snapshot = arrayBumpSnapshot(), selectedTarget = arrayBumpSelectedPointerTarget();
   const other = unifiedPointerTarget(false, true);
+  const otherAlbum = unifiedPointerTarget(false, false, true);
   const selectedEntry = musicSpatialEntry(archiveScene.selectedCell, true);
   const otherEntry = getMusicDisplayEntries().find(entry => entry.key === other?.key);
+  const otherAlbumEntry = getMusicDisplayEntries().find(entry => entry.key === otherAlbum?.key);
   const selectedSpring = archiveScene.arrayCaseMotion.heights.get(archiveScene.selectedCell.foobarEntryKey);
   const noHoverSpring = selectedSpring ? { ...selectedSpring } : null;
   if (noHoverSpring) damp(noHoverSpring, ARRAY_SELECTED_BELL_LIFT, 13, 1 / 60);
+  const noHoverPredictions = Object.fromEntries(snapshot.values.map(value => {
+    const spring = archiveScene.arrayCaseMotion.heights.get(value.key);
+    if (!spring) return [value.key, null];
+    const predicted = { ...spring };
+    damp(predicted, arrayNeighborLift(value.row - snapshot.selected.row, snapshot.quality), 13, 1 / 60);
+    return [value.key, predicted.value];
+  }));
   expect(snapshot.phase === "returning-array" && snapshot.interactive && snapshot.selected.row === 21,
     "Bump hover acceptance must begin in interactive returning-array without waiting for archiveReady: " +
       JSON.stringify({ phase: snapshot.phase, interactive: snapshot.interactive, selected: snapshot.selected }));
   expect(selectedTarget?.key === snapshot.selected.foobarEntryKey && other && other.key !== selectedTarget.key &&
-    selectedEntry && otherEntry?.recordIndex === selectedEntry.recordIndex,
-  "Hover acceptance needs the current selected card and a visible different track from the same parent album.");
+    selectedEntry && otherEntry?.recordIndex === selectedEntry.recordIndex && otherAlbum &&
+    otherAlbumEntry?.recordIndex !== selectedEntry.recordIndex,
+  "Hover acceptance needs the selected card, a same-parent TRACKS entry, and a different parent album.");
   expect(noHoverSpring, "The selected entry must expose its current height spring for a hover counterfactual.");
-  return { snapshot, selectedTarget, otherTarget: other, selectedRecordIndex: selectedEntry.recordIndex,
-    otherRecordIndex: otherEntry.recordIndex, noHoverPrediction: noHoverSpring.value };
+  return { snapshot, selectedTarget, otherTarget: other, otherAlbumTarget: otherAlbum,
+    selectedRecordIndex: selectedEntry.recordIndex, otherRecordIndex: otherEntry.recordIndex,
+    otherAlbumRecordIndex: otherAlbumEntry.recordIndex,
+    noHoverPrediction: noHoverSpring.value, noHoverPredictions };
+}
+function arrayBumpHoverTargets() {
+  return { otherTarget: unifiedPointerTarget(false, true), otherAlbumTarget: unifiedPointerTarget(false, false, true) };
 }
 const arraySurfaceDisposed = [];
 const arraySurfaceWatched = new Set();
@@ -3121,7 +3172,7 @@ async function captureShelfColorCalibration(sourceReferenceUrls, runtimePatch = 
   }
 }
 
-async function exercisePunkArrayMotion(screenshotsOnly = false) {
+async function exercisePunkArrayMotion(screenshotsOnly = false, hoverMixedParents = false) {
   if (!archiveScene) {
     await setupArchiveScene(); window.caseCheck.editor.destroy(); document.body.replaceChildren(archiveHost);
     document.body.style.cssText = "margin:0;padding:0;overflow:hidden"; archiveHost.style.margin = "0";
@@ -3129,7 +3180,7 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
   }
   const scene = archiveScene;
   const albums = records.slice(0, 2).map((record, index) => ({ ...record.album,
-    tracks: Array.from({ length: index === 0 ? 40 : 45 }, (_, slot) => ({ id: "motion-" + index + "-" + slot, albumId: record.id,
+    tracks: Array.from({ length: hoverMixedParents ? (index === 0 ? 10 : 75) : (index === 0 ? 40 : 45) }, (_, slot) => ({ id: "motion-" + index + "-" + slot, albumId: record.id,
       title: "Motion Fixture " + index + " / " + slot, trackNumber: slot + 1, artist: record.album.artist,
       format: "FLAC", audioUrl: "", relativePath: "", duration: 120 })) }));
   setMusicAlbums(albums, [{ id: "fixture-a", name: "Fixture A" }, { id: "fixture-b", name: "Fixture B" }], "genre");
@@ -3148,6 +3199,11 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
     await scene.setCaseSettings(sceneCaseSettings("punk"));
     scene.setQuality({ ...qualityPresets.original, wave, modelDetail: "medium", lighting: "high", scale: 80,
       pixelRatio: 1, aoSamples: 0, depthOfField: 0 });
+    if (hoverMixedParents) {
+      scene.setReduced(true);
+      for (let lane = 0; lane < getMusicCatalogShelves().length; lane++) { select(lane, 0); stepArchiveScene(1); }
+      scene.setReduced(false);
+    }
     scene.setReduced(true); select(0, 2); scene.showMusicArchiveImmediately(archiveTime); stepArchiveScene(100);
     scene.setReduced(false);
     scene.pulses = []; scene.scanBlend = 0; scene.idleGain = 0; scene.lastInteraction = archiveTime;
@@ -3222,7 +3278,9 @@ async function exercisePunkArrayMotion(screenshotsOnly = false) {
   const firstCardZ = firstCards.map(value => value.z);
   expect(Math.max(...firstCardZ) - Math.min(...firstCardZ) < 2e-6,
     "Default first cards across all columns must share the same world Z: " + JSON.stringify(firstCards.map(value => ({ lane: value.lane, z: value.z }))));
-  if (screenshotsOnly) return { screenshotsOnly: true, visibleSlots: before.visibleSlots, firstCards: firstCards.map(value => ({ lane: value.lane, z: value.z })) };
+  if (screenshotsOnly) return { screenshotsOnly: true, visibleSlots: before.visibleSlots,
+    fixtureTrackCounts: hoverMixedParents ? [10, 75] : [40, 45],
+    firstCards: firstCards.map(value => ({ lane: value.lane, z: value.z })) };
   const noScrollFirstFive = [];
   scene.setReduced(true);
   for (let slot = 0; slot < 5; slot++) {
@@ -4876,9 +4934,12 @@ window.caseCheck = {
   arrayMotionInputSnapshot,
   prepareArrayCompositionInteraction,
   prepareArrayCompositionScreenshot,
+  prepareArrayCompositionBase,
   prepareArrayPointer,
+  arrayPointerHoverTargets,
   prepareArrayBump,
   prepareArrayBumpHover,
+  arrayBumpHoverTargets,
   arrayBumpSetQuality,
   arrayBumpSettleSelection,
   arrayBumpNavigate,
@@ -7789,7 +7850,7 @@ for (const candidate of browserCandidates) {
 }
 assert.ok(browserExecutable, "An already-installed Chrome or Edge is required; this check never downloads a browser.");
 
-const activeOutput = isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+const activeOutput = isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
 const profile = path.join(activeOutput, `profile-${process.pid}-${Date.now()}`);
 await mkdir(profile, { recursive: true });
 const browser = spawn(browserExecutable, [
@@ -8663,6 +8724,8 @@ async function main() {
     }
     if (isArrayBump) {
       const motionOutput = arrayBumpOutput;
+      await mkdir(motionOutput, { recursive: true });
+      await mkdir(arrayHoverOutput, { recursive: true });
       const radii = { off: 0, basic: 1, reduced: 2, full: 4 };
       const levels = ["off", "basic", "reduced", "full"];
       const keyframes = [];
@@ -8672,10 +8735,42 @@ async function main() {
         const radius = radii[level];
         return distance > radius ? 0 : .748 * (1 + Math.cos(Math.PI * distance / (radius + 1))) / 2;
       };
+      const expectedProfile = (row, selectedRow, hoveredRow, level) =>
+        expectedHeight(row, selectedRow, level) + (Number.isFinite(hoveredRow) ? expectedArrayHoverLift(row - hoveredRow) : 0);
+      const assertSettledProfile = (state, hoveredKey, label) => {
+        const hoveredRow = hoveredKey ? state.values.find(value => value.key === hoveredKey)?.row : undefined;
+        assert.ok(!hoveredKey || Number.isFinite(hoveredRow), label + " must retain a visible hovered entry.");
+        for (const value of state.values) {
+          const expected = expectedProfile(value.row, state.selected.row, hoveredRow, state.quality);
+          assert.ok(Math.abs(value.motionHeight - expected) < 2e-5,
+            label + " must equal the selected profile plus the independent hover profile at row " + value.row + ".");
+        }
+      };
+      const assertPointerStable = (state, baseline, label) => {
+        assert.deepEqual(state.selected, baseline.selected, label + " cannot change selection.");
+        assert.equal(state.input.selectedKey, baseline.input.selectedKey, label + " cannot change the selected entry.");
+        assert.equal(state.input.focusedKey, baseline.input.focusedKey, label + " cannot change catalog focus.");
+        assert.deepEqual(state.input.selects, baseline.input.selects, label + " cannot invoke selection.");
+        assert.deepEqual(state.input.navigations, baseline.input.navigations, label + " cannot navigate the catalog.");
+        assert.deepEqual(state.catalog, baseline.catalog, label + " cannot change the catalog.");
+        assert.equal(state.anchorRows.length, baseline.anchorRows.length, label + " must retain every ARRAY column anchor.");
+        for (const anchor of baseline.anchorRows) {
+          const next = state.anchorRows.find(value => value.lane === anchor.lane);
+          assert.ok(next && Math.abs(next.anchorRow - anchor.anchorRow) < 1e-8,
+            label + " cannot move any ARRAY column anchor: " + JSON.stringify({ before: anchor, after: next }));
+        }
+        assert.equal(state.clicks, baseline.clicks, label + " cannot click an entry.");
+        assert.equal(state.opens, baseline.opens, label + " cannot open an entry.");
+      };
       const capture = async (name, design, level, frame) => {
         const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
         await writeFile(path.join(motionOutput, name), Buffer.from(screen.data, "base64"));
         keyframes.push({ design, level, frame, name });
+      };
+      const captureHover = async (name, design, phase) => {
+        const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+        await writeFile(path.join(arrayHoverOutput, name), Buffer.from(screen.data, "base64"));
+        keyframes.push({ design, phase, name, output: ".tools/array-hover/" + name });
       };
       const runTheme = async design => {
         const off = await evaluate("window.caseCheck.prepareArrayBump(" + JSON.stringify(design) + ",\"off\",9)");
@@ -8764,14 +8859,14 @@ async function main() {
       const matrixMarkup = await evaluate('window.caseCheck.arrayBumpQualityMarkup("archive","grid")');
       const shelfWaveControl = waveControl(shelfMarkup), matrixWaveControl = waveControl(matrixMarkup);
       const shelfBumpHint = shelfWaveControl.match(/<small>([\s\S]*?)<\/small>/)?.[1] ?? "";
-      assert.ok(shelfBumpHint && /单凸起|One local rise/i.test(shelfBumpHint),
-        "Shelf quality markup explains the single local bump.");
+      assert.ok(shelfBumpHint && /调整选中项带起的前后专辑数量；悬停轻抬独立生效。|Controls how many albums rise around the selection; hover has its own gentle lift\./i.test(shelfBumpHint),
+        "Shelf quality markup explains the selection range and independent hover lift.");
       assert.ok(!matrixWaveControl.includes(shelfBumpHint),
         "Non-shelf quality controls do not show the shelf-only bump hint.");
       assert.ok(/矩阵保留连续波动|matrix retains continuous waves/i.test(matrixWaveControl),
         "The non-shelf MATRIX control retains its established global-wave explanation.");
       assert.ok(!/回波|echo/i.test(shelfWaveControl), "ARRAY bump quality controls do not advertise echoes.");
-      const uiGuard = { shelfWaveControl, matrixWaveControl, shelfOnlyHintAbsentOutsideShelf: true,
+      const uiGuard = { shelfWaveControl, matrixWaveControl, shelfOnlyHoverHintAbsentOutsideShelf: true,
         matrixContinuousWaveCopyRetained: true };
 
       const archiveRun = await runTheme("archive");
@@ -8787,58 +8882,139 @@ async function main() {
       }
       const hoverChecks = [];
       for (const design of ["archive", "rhine"]) {
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
         const fixture = await evaluate("window.caseCheck.prepareArrayBumpHover(" + JSON.stringify(design) + ")");
         const before = fixture.snapshot;
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: fixture.selectedTarget.x, y: fixture.selectedTarget.y });
         const hovered = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
         const selectedValue = state => state.values.find(value => value.key === state.selected.foobarEntryKey);
+        const valueByKey = (state, key) => state.values.find(value => value.key === key);
         const beforeSelected = selectedValue(before), hoveredSelected = selectedValue(hovered);
         const earlyWorldLift = hoveredSelected.y - beforeSelected.y;
         const counterfactualLift = hoveredSelected.motionHeight - fixture.noHoverPrediction;
         assert.equal(hovered.phase, "returning-array"); assert.equal(hovered.interactive, true);
         assert.equal(hovered.hoveredEntryKey, before.selected.foobarEntryKey,
           "CDP hover resolves the selected card during interactive returning-array.");
+        for (const value of before.values.filter(value => Math.abs(value.row - before.selected.row) <= 2)) {
+          assert.ok(valueByKey(hovered, value.key).motionHeight > fixture.noHoverPredictions[value.key] + 1e-9,
+            "Early selected hover raises its own case and the surrounding cases beyond their no-hover spring step.");
+        }
         assert.ok(counterfactualLift > 1e-8 && counterfactualLift < .5 && earlyWorldLift > .003,
           "The early real hover adds lift beyond the same spring's no-hover step before archiveReady: " +
             JSON.stringify({ design, counterfactualLift, noHoverPrediction: fixture.noHoverPrediction, target: fixture.selectedTarget }));
-        const hoverName = `array-bump-${design}-hover-returning-array.png`;
-        await capture(hoverName, design, "full", "returning-array-hover");
-        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: fixture.otherTarget.x, y: fixture.otherTarget.y });
-        const sameParentOther = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
-        assert.ok(sameParentOther.hoveredEntryKey !== before.selected.foobarEntryKey,
-          "A different entry from the same parent cannot masquerade as selected hover.");
+        const selectedHoverName = `array-hover-${design}-selected-returning-array.png`;
+        await captureHover(selectedHoverName, design, "selected-returning-array");
+
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
-        const left = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
-        assert.ok(left.hoveredEntryKey !== before.selected.foobarEntryKey, "Pointer leave clears selected hover.");
-        for (const state of [hovered, sameParentOther, left]) {
-          assert.equal(state.input.selectedKey, before.input.selectedKey);
-          assert.equal(state.input.focusedKey, before.input.focusedKey);
-          assert.deepEqual(state.input.selects, before.input.selects);
-          assert.deepEqual(state.input.navigations, before.input.navigations);
-          assert.deepEqual(state.catalog, before.catalog);
-          assert.equal(state.clicks, before.clicks); assert.equal(state.opens, before.opens);
-          assert.equal(state.phase, "returning-array"); assert.equal(state.interactive, true);
+        const baseline = (await evaluate("window.caseCheck.arrayBumpAdvance(300,300)"))[0];
+        assert.equal(baseline.phase, "archive");
+        assert.equal(baseline.hoveredEntryKey, "", "Pointer leave clears the selected hover key.");
+        assertSettledProfile(baseline, undefined, design + " no-hover return baseline");
+        const targets = await evaluate("window.caseCheck.arrayBumpHoverTargets()");
+        assert.equal(targets.otherTarget.index, fixture.selectedRecordIndex,
+          "The first hover fixture remains a different TRACKS entry from the selected parent album.");
+        assert.notEqual(targets.otherTarget.key, baseline.selected.foobarEntryKey);
+        assert.notEqual(targets.otherAlbumTarget.index, fixture.selectedRecordIndex,
+          "The second hover fixture belongs to a different parent album.");
+
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.otherTarget.x, y: targets.otherTarget.y });
+        const sameParentStart = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
+        const sameParentRow = valueByKey(sameParentStart, targets.otherTarget.key)?.row;
+        assert.equal(sameParentStart.hoveredEntryKey, targets.otherTarget.key,
+          "A real pointer hover resolves a non-selected TRACKS entry from the same parent album.");
+        const sameParentValue = valueByKey(sameParentStart, targets.otherTarget.key);
+        const sameParentBaseline = valueByKey(baseline, targets.otherTarget.key);
+        assert.ok(sameParentValue && sameParentBaseline && sameParentValue.motionHeight > sameParentBaseline.motionHeight + 1e-9,
+          "Hover raises the same-parent case itself beyond its selection-only height.");
+        const actualNeighbors = sameParentStart.values.filter(value => Math.abs(value.row - sameParentRow) === 1);
+        assert.ok(actualNeighbors.length > 0, "The same-parent hover fixture must have at least one physically occupied adjacent case.");
+        for (const rowValue of actualNeighbors) {
+          const baseValue = baseline.values.find(value => value.key === rowValue.key);
+          assert.ok(rowValue && baseValue && rowValue.motionHeight > baseValue.motionHeight + 1e-9,
+            "Hover raises the same-parent case and adjacent actual cases independently of selection: " +
+              JSON.stringify({ design, target: targets.otherTarget, hoveredEntryKey: sameParentStart.hoveredEntryKey,
+                sameParentRow, rowValue, baseValue }));
         }
-        hoverChecks.push({ design, selectedTarget: fixture.selectedTarget, otherTarget: fixture.otherTarget,
-          selectedRecordIndex: fixture.selectedRecordIndex, otherRecordIndex: fixture.otherRecordIndex,
-          noHoverPrediction: fixture.noHoverPrediction, counterfactualLift, earlyWorldLift,
-          selectionFocusCatalogUnchanged: true, hoverScreenshot: hoverName });
+        assertPointerStable(sameParentStart, baseline, design + " same-parent hover");
+        const sameParentSettled = (await evaluate("window.caseCheck.arrayBumpAdvance(240,240)"))[0];
+        assertSettledProfile(sameParentSettled, targets.otherTarget.key, design + " same-parent hover");
+        assertPointerStable(sameParentSettled, baseline, design + " same-parent hover");
+        const sameParentHoverName = `array-hover-${design}-same-parent-tracks.png`;
+        await captureHover(sameParentHoverName, design, "same-parent-tracks");
+
+        const movingTargets = await evaluate("window.caseCheck.arrayBumpHoverTargets()");
+        assert.notEqual(movingTargets.otherAlbumTarget.key, targets.otherTarget.key,
+          "The moved hover fixture must be a distinct visible album entry.");
+        assert.notEqual(movingTargets.otherAlbumTarget.index, fixture.selectedRecordIndex);
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: movingTargets.otherAlbumTarget.x, y: movingTargets.otherAlbumTarget.y });
+        const movedStart = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
+        const oldHoverValue = valueByKey(movedStart, targets.otherTarget.key);
+        const newHoverBefore = valueByKey(sameParentSettled, movingTargets.otherAlbumTarget.key);
+        const newHoverValue = valueByKey(movedStart, movingTargets.otherAlbumTarget.key);
+        assert.equal(movedStart.hoveredEntryKey, movingTargets.otherAlbumTarget.key,
+          "Moving the pointer transfers the independent hover key to a different album: " +
+            JSON.stringify({ design, movingTarget: movingTargets.otherAlbumTarget, actualHoveredKey: movedStart.hoveredEntryKey,
+              phase: movedStart.phase, interactive: movedStart.interactive, selected: movedStart.selected }));
+        assert.ok(oldHoverValue.motionHeight > expectedHeight(oldHoverValue.row, movedStart.selected.row, movedStart.quality) + 1e-9,
+          "The previous hovered case remains raised briefly while its spring returns.");
+        assert.ok(newHoverValue.motionHeight > newHoverBefore.motionHeight,
+          "The new album begins rising on the first pointer-move frame.");
+        assertPointerStable(movedStart, baseline, design + " moved hover");
+        const movedSettled = (await evaluate("window.caseCheck.arrayBumpAdvance(240,240)"))[0];
+        assertSettledProfile(movedSettled, movingTargets.otherAlbumTarget.key, design + " different-album hover");
+        assertPointerStable(movedSettled, baseline, design + " different-album hover");
+        const otherAlbumHoverName = `array-hover-${design}-different-album.png`;
+        await captureHover(otherAlbumHoverName, design, "different-album");
+
+        const selectedBeforeNavigate = movedSettled.selected.foobarEntryKey;
+        const navigateBefore = movedSettled.input.navigations.length;
+        const navigated = await evaluate("window.caseCheck.arrayBumpNavigate(1)");
+        assert.notEqual(navigated.selected.foobarEntryKey, selectedBeforeNavigate,
+          "The real ARRAY navigation fixture changes the selected entry while hover is active.");
+        const hoverAfterNavigate = (await evaluate("window.caseCheck.arrayBumpAdvance(240,240)"))[0];
+        assert.equal(hoverAfterNavigate.hoveredEntryKey, movingTargets.otherAlbumTarget.key,
+          "Changing selection preserves the independent hover entry key.");
+        assert.equal(hoverAfterNavigate.input.navigations.length, navigateBefore + 1);
+        assertSettledProfile(hoverAfterNavigate, movingTargets.otherAlbumTarget.key, design + " hover across selection navigation");
+
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
+        const leaveStart = (await evaluate("window.caseCheck.arrayBumpAdvance(1,1)"))[0];
+        assert.equal(leaveStart.hoveredEntryKey, "", "Pointer leave clears the independent hover key.");
+        const leavingValue = valueByKey(leaveStart, movingTargets.otherAlbumTarget.key);
+        assert.ok(leavingValue.motionHeight > expectedHeight(leavingValue.row, leaveStart.selected.row, leaveStart.quality) + 1e-9,
+          "Pointer leave starts a smooth spring return instead of snapping the hovered album down.");
+        const left = (await evaluate("window.caseCheck.arrayBumpAdvance(240,240)"))[0];
+        assertSettledProfile(left, undefined, design + " pointer leave");
+        assertPointerStable(left, hoverAfterNavigate, design + " pointer leave after navigation");
+        hoverChecks.push({ design, selectedTarget: fixture.selectedTarget,
+          sameParentTarget: targets.otherTarget, differentAlbumTarget: movingTargets.otherAlbumTarget,
+          selectedRecordIndex: fixture.selectedRecordIndex, sameParentRecordIndex: targets.otherTarget.index,
+          differentAlbumRecordIndex: movingTargets.otherAlbumTarget.index,
+          noHoverPrediction: fixture.noHoverPrediction, earlySelectedHoverLift: counterfactualLift, earlyWorldLift,
+          sameParentSettled: sameParentSettled.values.map(value => ({ key: value.key, row: value.row, motionHeight: value.motionHeight })),
+          movedProfile: movedSettled.values.map(value => ({ key: value.key, row: value.row, motionHeight: value.motionHeight })),
+          selectionNavigationKeptHoverKey: hoverAfterNavigate.hoveredEntryKey === movingTargets.otherAlbumTarget.key,
+          pointerLeaveRestoredProfile: true,
+          screenshots: [selectedHoverName, sameParentHoverName, otherAlbumHoverName] });
       }
       assert.deepEqual(runtimeErrors, [], "Browser runtime errors must remain empty.");
       assert.deepEqual(shaderErrors, [], "Actual GLB/material renders must not produce WebGL shader errors.");
       assert.deepEqual(blockedRoutes, [], "The offline fixture must not request outside its exact route whitelist.");
       const report = { ok: true,
-        scope: "Real ArchiveScene single-bump profiles at all quality levels, rapid forward/reverse spring settling, early CDP hover in interactive returning-array, matching themes, and retained MATRIX global-wave UI.",
+        scope: "Real ArchiveScene selected and independent Gaussian hover profiles at all quality levels, hover on same-parent TRACKS and other albums, smooth pointer movement/leave, selection navigation with a retained hover key, matching themes, and retained MATRIX global-wave UI.",
         themes: [archiveRun, rhineRun], hoverChecks, uiGuard, keyframes, runtimeErrors, shaderErrors, blockedRoutes };
       await writeFile(path.join(motionOutput, "array-bump-report.json"), JSON.stringify(report, null, 2));
-      console.log(JSON.stringify({ ok: true, checks: ["four exact current-column bump profiles on submitted matrices", "shelf-only bump hint and retained MATRIX wave copy", "both themes share the same levels", "rapid forward/reverse onNavigate then 5 seconds static", "no late rebound or second peak", "CDP hover during interactive returning-array", "same-parent target and pointer leave preserve catalog/focus/selection"],
-        report: ".tools/array-bump/array-bump-report.json",
+      await writeFile(path.join(arrayHoverOutput, "array-bump-hover-report.json"), JSON.stringify({ ok: true,
+        scope: report.scope, hoverChecks, uiGuard, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+      console.log(JSON.stringify({ ok: true, checks: ["four exact current-column bump profiles on submitted matrices", "shelf-only hover hint and retained MATRIX wave copy", "both themes share the same levels", "rapid forward/reverse onNavigate then 5 seconds static", "no late rebound or second peak", "real selected and non-selected CDP hover in both themes", "same-parent TRACKS and different-album targets", "additive hover neighborhoods, smooth move/leave, independent key across selection navigation", "selection/focus/catalog/column anchors remain stable during hover"],
+        report: ".tools/array-hover/array-bump-hover-report.json",
         screenshots: keyframes.map(item => item.name) }, null, 2));
       return;
     }
     if (isArrayComposition) {
       const motionOutput = unifiedOutput;
       await mkdir(motionOutput, { recursive: true });
+      await mkdir(arrayHoverOutput, { recursive: true });
       const screenshotsOnly = process.argv.includes("--screenshots-only");
       let motion;
       try {
@@ -8911,27 +9087,77 @@ async function main() {
         return;
       }
       const hoverChecks = [], surfaceChecks = [];
+      const assertCompositionHoverProfile = (state, hoveredKey, design, label) => {
+        const hoveredRow = hoveredKey ? state.caseValues.find(value => value.key === hoveredKey)?.row : undefined;
+        assert.ok(!hoveredKey || Number.isFinite(hoveredRow), design + " " + label + " must retain the hovered case in the active column.");
+        for (const value of state.caseValues) {
+          const expected = expectedArrayNeighborLift(value.row - state.selected.row) +
+            (Number.isFinite(hoveredRow) ? expectedArrayHoverLift(value.row - hoveredRow) : 0);
+          assert.ok(Math.abs(value.motionHeight - expected) < 2e-5,
+            design + " " + label + " must overlay hover on the selected profile at row " + value.row + ".");
+        }
+      };
+      const assertCompositionHoverInvariant = (state, baseline, design, label) => {
+        assert.deepEqual(state.selected, baseline.selected, design + " " + label + " cannot change selection.");
+        assert.deepEqual(state.catalog, baseline.catalog, design + " " + label + " cannot change the catalog.");
+        assert.equal(state.input.selectedKey, baseline.input.selectedKey, design + " " + label + " cannot change the selected key.");
+        assert.equal(state.input.focusedKey, baseline.input.focusedKey, design + " " + label + " cannot change right-panel focus.");
+        assert.deepEqual(state.input.selects, baseline.input.selects, design + " " + label + " cannot invoke selection.");
+        assert.deepEqual(state.input.navigations, baseline.input.navigations, design + " " + label + " cannot navigate.");
+        assert.deepEqual(state.anchorRows, baseline.anchorRows, design + " " + label + " cannot move any column anchor.");
+        assert.equal(state.clicks, baseline.clicks, design + " " + label + " cannot click.");
+        assert.equal(state.opens, baseline.opens, design + " " + label + " cannot open an album.");
+      };
+      const captureHoverScreenshot = async name => {
+        const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
+        await writeFile(path.join(arrayHoverOutput, name), Buffer.from(screen.data, "base64"));
+      };
       for (const design of ["archive", "rhine"]) {
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1440, y: 830 });
+        const hoverFixture = await evaluate("window.caseCheck.exercisePunkArrayMotion(true,true)");
+        assert.deepEqual(hoverFixture.fixtureTrackCounts, [10, 75],
+          "The real hover subfixture must place both album parents in the active lane.");
         const targets = await evaluate("window.caseCheck.prepareArrayPointer(" + JSON.stringify(design) + ")");
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.selected.x, y: targets.selected.y });
         const hovered = await evaluate("window.caseCheck.arrayHoverSnapshot()");
         assert.ok(Math.abs(hovered.y - targets.baseline.y - .5) < 2e-5,
           "Pointer move alone adds exactly the selected hover lift: " + JSON.stringify({ design, baseline: targets.baseline, hovered }));
-        assert.deepEqual(hovered.selected, targets.baseline.selected);
-        assert.deepEqual(hovered.catalog, targets.baseline.catalog);
+        assert.equal(hovered.hoveredEntryKey, targets.selected.key);
+        assertCompositionHoverProfile(hovered, targets.selected.key, design, "selected hover");
+        assertCompositionHoverInvariant(hovered, targets.baseline, design, "selected hover");
         assert.equal(hovered.phase, targets.baseline.phase); assert.equal(hovered.phase, "archive");
-        assert.equal(hovered.clicks, targets.baseline.clicks); assert.equal(hovered.opens, targets.baseline.opens);
-        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.other.x, y: targets.other.y });
+
+        const sameParentTarget = (await evaluate("window.caseCheck.arrayPointerHoverTargets()")).other;
+        assert.equal(sameParentTarget.index, targets.selectedRecordIndex,
+          "The composition fixture must target a different TRACKS entry from the selected parent album.");
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: sameParentTarget.x, y: sameParentTarget.y });
         const other = await evaluate("window.caseCheck.arrayHoverSnapshot()");
-        assert.ok(Math.abs(other.y - targets.baseline.y) < 2e-5, "Another track from the same album cannot masquerade as selected hover.");
-        assert.deepEqual(other.selected, targets.baseline.selected);
-        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: targets.selected.x, y: targets.selected.y });
-        await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.equal(other.hoveredEntryKey, sameParentTarget.key,
+          "A real pointer hover resolves a non-selected same-parent TRACKS entry.");
+        assertCompositionHoverProfile(other, sameParentTarget.key, design, "same-parent TRACKS hover");
+        assertCompositionHoverInvariant(other, targets.baseline, design, "same-parent TRACKS hover");
+
+        const otherAlbumTarget = (await evaluate("window.caseCheck.arrayPointerHoverTargets()")).otherAlbum;
+        assert.notEqual(otherAlbumTarget.index, targets.selectedRecordIndex,
+          "The composition fixture must also reach a different parent album.");
+        assert.notEqual(otherAlbumTarget.key, sameParentTarget.key);
+        await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: otherAlbumTarget.x, y: otherAlbumTarget.y });
+        const otherAlbum = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.equal(otherAlbum.hoveredEntryKey, otherAlbumTarget.key,
+          "Moving the pointer transfers hover to an independent album entry.");
+        assertCompositionHoverProfile(otherAlbum, otherAlbumTarget.key, design, "different-album hover");
+        assertCompositionHoverInvariant(otherAlbum, targets.baseline, design, "different-album hover");
+        await captureHoverScreenshot(`array-composition-${design}-different-album-hover.png`);
+
         await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1451, y: 841 });
         const left = await evaluate("window.caseCheck.arrayHoverSnapshot()");
+        assert.equal(left.hoveredEntryKey, "", "Pointer leave clears the active hover key.");
         assert.ok(Math.abs(left.y - targets.baseline.y) < 2e-5, "Pointer leave restores the selected browsing lift.");
-        hoverChecks.push({ design, targets, hovered, other, left });
+        assertCompositionHoverProfile(left, undefined, design, "pointer leave");
+        assertCompositionHoverInvariant(left, targets.baseline, design, "pointer leave");
+        hoverChecks.push({ design, targets, hovered, sameParentTarget, other, otherAlbumTarget, otherAlbum, left });
+        await evaluate("window.caseCheck.exercisePunkArrayMotion(true,false)");
+        await evaluate("window.caseCheck.prepareArrayCompositionBase(" + JSON.stringify(design) + ")");
         const screen = await command("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 1450, height: 840, scale: 1 } });
         await writeFile(path.join(motionOutput, "array-" + design + "-selection.png"), Buffer.from(screen.data, "base64"));
         const variants = [];
@@ -8984,10 +9210,14 @@ async function main() {
       await writeFile(path.join(motionOutput, "array-composition-audit.json"), JSON.stringify({ ok: true, ...motion,
         interaction: { ...interaction, hiddenHovered, hiddenClicked, rearHovered, activeClicked }, hoverChecks, surfaceChecks,
         screenshots, runtimeErrors, shaderErrors, blockedRoutes }, null, 2));
+      await writeFile(path.join(arrayHoverOutput, "array-composition-hover-report.json"), JSON.stringify({ ok: true,
+        hoverChecks, runtimeErrors, shaderErrors, blockedRoutes,
+        screenshots: hoverChecks.map(value => `array-composition-${value.design}-different-album-hover.png`) }, null, 2));
       console.log(JSON.stringify({ ok: true, checks: ["shared first-card alignment", "first-five-card no-scroll", "active-only column motion and memory",
-        "all-mesh right-column removal and rear tint", "real mouse focus plus hover and hit guards", "full-scene composer screenshots at 1600/1920/2560",
+        "all-mesh right-column removal and rear tint", "real selected and non-selected hover profiles in both themes", "same-parent TRACKS and different-album hit targets",
+        "independent Gaussian neighbors, hover move/leave, selection/focus/catalog/anchor preservation", "full-scene composer screenshots at 1600/1920/2560",
         "persistent selection and neighbor lift", "twenty-slot final partial tray", "detail-only inspection Z", "both MATRIX guards"],
-        report: path.relative(project, path.join(unifiedOutput, "array-composition-audit.json")), screenshots: screenshots.map(item => item.name) }, null, 2));
+        report: ".tools/array-hover/array-composition-hover-report.json", screenshots: screenshots.map(item => item.name) }, null, 2));
       return;
     }
     if (isArrayCoverVisibility) {
@@ -10017,7 +10247,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-      const failureDirectory = isReference ? referenceOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump ? arrayBumpOutput : isUnifiedRender ? unifiedOutput : output;
+      const failureDirectory = isReference ? referenceOutput : isFloorGuideRegression ? floorGuideOutput : isArrayRailProfile ? arrayRailOutput : isArrayCoverVisibility ? arrayCoverOutput : isArrayTray ? arrayTrayOutput : isArrayBump || isArrayComposition ? arrayHoverOutput : isUnifiedRender ? unifiedOutput : output;
   await mkdir(failureDirectory, { recursive: true });
   const failurePath = path.join(failureDirectory, `failure-${new Date().toISOString().replace(/[:.]/gu, "-")}.json`);
   await writeFile(failurePath, JSON.stringify({

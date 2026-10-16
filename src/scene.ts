@@ -1761,10 +1761,10 @@ export class ArchiveScene {
       const motionCells = [...this.cells, this.selectedCell, ...this.outgoing.map(old => old.cell)]
         .filter(cell => cell.foobarEntryKey && this.recordAtCell(cell) >= 0)
         .map(cell => ({ key: cell.foobarEntryKey!, lane: cell.lane, row: cell.row }));
-      const hoverSelected = this.hoveredEntryKey !== undefined && this.hoveredEntryKey === this.selectedCell.foobarEntryKey &&
-        this.musicArchiveInteractive && !this.targetDetail && !this.dragging;
+      const hoveredKey = this.musicArchiveInteractive && !this.targetDetail && !this.dragging
+        ? this.hoveredEntryKey : undefined;
       this.arrayCaseMotion.step(motionCells, this.selectedCell.foobarEntryKey ?? "", selectedLane, selectedRow,
-        this.quality.wave, hoverSelected, dt, this.reduced);
+        this.quality.wave, hoveredKey, dt, this.reduced);
     }
     this.pulses = this.pulses.filter((p) => time - p.time < 3.2);
     const aligningCopy = this.outgoing.some((o) => o.returnY !== null);

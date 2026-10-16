@@ -26,16 +26,22 @@ export function arrayNeighborLift(distance: number, level: WaveQuality = "full")
   return ARRAY_SELECTED_BELL_LIFT * (1 + Math.cos(Math.PI * offset / (radius + 1))) / 2;
 }
 
+/** The reference hover is a separate, softer Gaussian over nearby shelf slots. */
+export function arrayHoverLift(distance: number) {
+  return Number.isFinite(distance) ? ARRAY_HOVER_LIFT * Math.exp(-distance * distance / 2.2) : 0;
+}
+
 export type ArrayMotionCell = { key: string; lane: number; row: number };
 
-/** One local rise, smoothly retargeted by per-case critically damped springs. */
+/** Independent selection and hover rises, followed by per-case damped springs. */
 export class MusicArrayCaseMotion {
   private heights = new Map<string, Spring>();
   private cells = new Map<string, string>();
 
   step(cells: readonly ArrayMotionCell[], selectedKey: string, selectedLane: number, selectedRow: number,
-    level: WaveQuality, hoverSelected: boolean, dt: number, reduced: boolean) {
+    level: WaveQuality, hoveredKey: string | undefined, dt: number, reduced: boolean) {
     if (!Number.isFinite(dt) || dt < 0) return;
+    const hovered = hoveredKey ? cells.find(cell => cell.key === hoveredKey && cell.lane === selectedLane) : undefined;
     this.cells.clear();
     const present = new Set<string>();
     for (const cell of cells) {
@@ -44,9 +50,8 @@ export class MusicArrayCaseMotion {
       this.cells.set(`${cell.lane}:${cell.row}`, cell.key);
       const active = cell.lane === selectedLane;
       const selected = cell.key === selectedKey;
-      const target = !active ? 0 : selected
-        ? ARRAY_SELECTED_BELL_LIFT + (hoverSelected ? ARRAY_HOVER_LIFT : 0)
-        : arrayNeighborLift(cell.row - selectedRow, level);
+      const selectedLift = selected ? ARRAY_SELECTED_BELL_LIFT : arrayNeighborLift(cell.row - selectedRow, level);
+      const target = active ? selectedLift + (hovered ? arrayHoverLift(cell.row - hovered.row) : 0) : 0;
       let state = this.heights.get(cell.key);
       if (!state) { state = { value: target, velocity: 0 }; this.heights.set(cell.key, state); }
       if (reduced) { state.value = target; state.velocity = 0; }
