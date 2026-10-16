@@ -224,17 +224,20 @@
 }
 
 .music-app .lyrics-source-settings-link {
-  margin: -4px 0 4px;
-  border: 0;
-  padding: 3px 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
   color: var(--accent);
-  background: transparent;
+  background: var(--surface);
   font-size: 9px;
+  line-height: 1.2;
   cursor: pointer;
 }
 
 .music-app .lyrics-source-settings-link:hover {
-  text-decoration: underline;
+  border-color: var(--accent);
+  text-decoration: none;
 }
 
 .music-app .lyrics-data-heading {
@@ -833,7 +836,7 @@
 .music-app .lyrics-search-panel .lyrics-source-section-heading { margin-bottom: 8px; }
 .music-app .lyrics-search-panel .lyrics-data-heading { order: 0; flex-shrink: 0; margin: 0; }
 .music-app .lyrics-search-panel .lyrics-source-select { order: 1; flex: 1; width: auto; max-width: 220px; margin: 0; }
-.music-app .lyrics-search-panel .lyrics-source-settings-link { order: 2; flex-shrink: 0; margin: 0; font-size: 10px; }
+.music-app .lyrics-search-panel .lyrics-source-settings-link { order: 2; flex-shrink: 0; min-height: 38px; margin: 0; font-size: 10px; }
 .music-app .lyrics-search-panel .lyrics-search-close { order: 3; min-width: 28px; min-height: 28px; padding: 0; font-size: 18px; }
 .music-app .lyrics-search-fields { display: grid; grid-template-columns: 1.1fr 1fr 1fr auto; gap: 6px; }
 .music-app .lyrics-search-fields .lyrics-query-input { margin: 0; }
@@ -1019,6 +1022,13 @@
 .music-app .lyrics-dialog-toolbar .lyrics-import-button:hover { color: var(--accent); }
 .music-app .lyrics-track-settings { padding-top: 18px; }
 .music-app .lyrics-track-settings .lyrics-offset-section { margin-top: 18px; padding-top: 14px; }
+.music-app .lyrics-local-panel[hidden] { display: none !important; }
+.music-app .lyrics-local-panel { padding-top: 12px; }
+.music-app .lyrics-local-panel .lyrics-import-button { display: inline-flex; align-items: center; gap: 7px; width: auto; margin-top: 10px; padding-inline: 12px; }
+.music-app .lyrics-local-panel .lyrics-import-button svg { width: 15px; height: 15px; }
+.music-app .lyrics-current-source { margin: 12px 0 0; }
+.music-app .lyrics-preference-dialog > .lyrics-offset-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.music-app .lyrics-options-status:empty { display: none; }
 
 .music-app .lyrics-preference-header,
 .music-app .lyrics-preference-actions {

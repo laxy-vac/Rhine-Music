@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { LyricsLibrary } from './lyrics-library.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const artifactRoot = path.join(projectRoot, '.tools', 'future-lyrics', 'library-check');
+const artifactRoot = path.join(projectRoot, '.tools', 'lyrics-source-refinement', 'library-check');
 const lyrics = '[00:01.00]synthetic lyric line';
 
 async function fixture(t) {
@@ -73,8 +73,21 @@ test('QQ smartbox candidates use the supported lyric endpoint and persist the se
   const selected = await library.select({ trackId: 'demo-track', sourceId: 'qq', candidateId: 'qq-mid-demo' });
   assert.equal(selected.lyric.lrc, lyrics);
   assert.equal(selected.lyric.source.id, 'qq');
+  assert.equal(selected.activeKind, 'cloud');
+  assert.deepEqual(selected.variants, { cloud: true, local: false });
   assert.equal(calls.length, 2);
-  assert.equal((await library.load('demo-track')).lyric.lrc, lyrics);
+  const loaded = await library.load('demo-track');
+  assert.equal(loaded.lyric.lrc, lyrics);
+  assert.equal(loaded.activeKind, 'cloud');
+  assert.equal(loaded.variants.cloud, true);
+  assert.equal(loaded.variants.local, false);
+  const stored = JSON.parse(await fs.readFile(library.cacheFile('demo-track'), 'utf8'));
+  assert.equal(stored.version, 3);
+  assert.equal(stored.activeKind, 'cloud');
+  assert.equal(stored.userSelected, true);
+  assert.equal(stored.selectionRevision, 1);
+  assert.equal(stored.variants.cloud.source.id, 'qq');
+  assert.equal(stored.variants.local, undefined);
 });
 
 test('NetEase search omits album and uses a Chinese alias while ranking against original metadata', async t => {
@@ -94,7 +107,6 @@ test('NetEase search omits album and uses a Chinese alias while ranking against 
 
 test('auto search reports a source error and an empty source separately, then selects through the successful source cache', async t => {
   const { library } = await fixture(t);
-  await library.savePreferences({ trackId: 'demo-track', sourceId: 'qq' });
   await library.saveSources({ sources: [{
     id: 'custom-demo',
     name: '演示源',
@@ -124,6 +136,7 @@ test('auto search reports a source error and an empty source separately, then se
   const selected = await library.select({ trackId: 'demo-track', sourceId: 'custom-demo', candidateId: 'custom-song' });
   assert.equal(selected.lyric.lrc, lyrics);
   assert.equal(selected.lyric.source.id, 'custom-demo');
+  assert.equal(selected.activeKind, 'cloud');
 });
 
 test('explicit zero-count responses are empty results rather than source failures', async t => {
@@ -192,14 +205,134 @@ test('automatic resolution defaults to QQ and saves a high-confidence match', as
   assert.equal(result.lyric?.version, 2);
   assert.equal(result.lyric?.offsetInText, true);
   assert.deepEqual(calls.map(url => url.pathname.endsWith('/smartbox_new.fcg') ? 'qq-search' : 'qq-lyric'), ['qq-search', 'qq-lyric']);
-  assert.equal((await library.load('demo-track')).lyric?.source.id, 'qq');
+  const loaded = await library.load('demo-track');
+  assert.equal(loaded.lyric?.source.id, 'qq');
+  assert.equal(loaded.activeKind, 'cloud');
+  assert.deepEqual(loaded.variants, { cloud: true, local: false });
+  const stored = JSON.parse(await fs.readFile(library.cacheFile('demo-track'), 'utf8'));
+  assert.equal(stored.version, 3);
+  assert.equal(stored.userSelected, false);
+  assert.equal(stored.selectionRevision, 0);
+  assert.equal(stored.variants.cloud.source.id, 'qq');
+});
+
+test('automatic cache-first resolution selects a local bank when no explicit type was chosen', async t => {
+  const { library } = await fixture(t);
+  const local = {
+    version: 2, trackId: 'demo-track', track: { trackId: 'demo-track', title: '泡沫', artist: 'G.E.M. 邓紫棋', album: '我是歌手第二季', duration: 247 },
+    lrc: '[00:01.00]预存本地歌词', offsetMs: 0, offsetInText: true,
+    source: { id: 'local-import', name: '本地导入' }, savedAt: new Date().toISOString(),
+  };
+  await fs.mkdir(library.defaultCacheDirectory, { recursive: true });
+  await fs.writeFile(library.cacheFile('demo-track'), JSON.stringify({
+    version: 3, trackId: 'demo-track', activeKind: 'cloud', userSelected: false, selectionRevision: 0,
+    variants: { local },
+  }), 'utf8');
+  let calls = 0;
+  mockFetch(t, async input => { calls += 1; throw new Error(`A stored local bank must win cache-first lookup: ${String(input)}`); });
+
+  const result = await library.resolve({ trackId: 'demo-track' });
+  const loaded = await library.load('demo-track');
+  assert.equal(calls, 0);
+  assert.equal(result.lyric.source.id, 'local-import');
+  assert.equal(loaded.activeKind, 'local');
+  assert.equal(loaded.userSelected, false);
+  assert.equal(loaded.selectionRevision, 0);
+  assert.deepEqual(loaded.variants, { cloud: false, local: true });
+});
+
+test('explicitly activating an empty Local bank persists the choice and blocks automatic cloud fallback', async t => {
+  const { library } = await fixture(t);
+  let calls = 0;
+  mockFetch(t, async input => { calls += 1; throw new Error(`An explicitly selected empty Local bank must not query Cloud: ${String(input)}`); });
+
+  const activated = await library.activate({ trackId: 'demo-track', kind: 'local' });
+  assert.equal(activated.lyric, null);
+  assert.equal(activated.activeKind, 'local');
+  assert.equal(activated.userSelected, true);
+  assert.equal(activated.selectionRevision, 1);
+  assert.deepEqual(activated.variants, { cloud: false, local: false });
+  const result = await library.resolve({ trackId: 'demo-track' });
+  assert.equal(calls, 0);
+  assert.equal(result.lyric, null);
+  assert.equal(result.activeKind, 'local');
+  assert.equal(result.selectionRevision, 1);
+});
+
+test('choosing Cloud with a local bank searches and keeps Cloud active on later cache-first resolves', async t => {
+  const { library } = await fixture(t);
+  const localText = '[00:01.00]本地版本';
+  await library.import({ trackId: 'demo-track', lrc: localText });
+  const activated = await library.activate({ trackId: 'demo-track', kind: 'cloud' });
+  assert.equal(activated.lyric, null);
+  assert.equal(activated.activeKind, 'cloud');
+  assert.equal(activated.userSelected, true);
+  assert.equal(activated.selectionRevision, 2);
+  const calls = [];
+  mockFetch(t, async input => {
+    const url = new URL(String(input));
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/smartbox_new.fcg')) return qqSongs(qqSong('qq-chosen-cloud'));
+    if (url.pathname.endsWith('/fcg_query_lyric_new.fcg')) return jsonResponse({ retcode: 0, lyric: '[00:02.00]云端版本', trans: '' }, 'text/html;charset=utf-8');
+    throw new Error(`Unexpected Cloud activation URL: ${url.href}`);
+  });
+  const result = await library.resolve({ trackId: 'demo-track' });
+  assert.equal(result.lyric.source.id, 'qq');
+  assert.equal(result.activeKind, 'cloud');
+  assert.deepEqual(calls, ['/splcloud/fcgi-bin/smartbox_new.fcg', '/lyric/fcgi-bin/fcg_query_lyric_new.fcg']);
+
+  const requestsBeforeCachedResolve = calls.length;
+  const cached = await library.resolve({ trackId: 'demo-track' });
+  const loaded = await library.load('demo-track');
+  assert.equal(calls.length, requestsBeforeCachedResolve);
+  assert.equal(cached.activeKind, 'cloud');
+  assert.equal(cached.lyric.lrc, '[00:02.00]云端版本');
+  assert.deepEqual(loaded.variants, { cloud: true, local: true });
+  assert.equal(loaded.variants.local, true);
+  assert.equal(loaded.lyric.source.id, 'qq');
+  assert.equal(JSON.parse(await fs.readFile(library.cacheFile('demo-track'), 'utf8')).activeKind, 'cloud');
+});
+
+test('an in-flight automatic result cannot claim an empty Local bank selected by the user', async t => {
+  const { library } = await fixture(t);
+  let signalLyricRequest;
+  const lyricRequestStarted = new Promise(resolve => { signalLyricRequest = resolve; });
+  let releaseAutomaticLyric;
+  const automaticLyric = new Promise(resolve => { releaseAutomaticLyric = resolve; });
+  mockFetch(t, async (input, init = {}) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/smartbox_new.fcg')) return qqSongs(qqSong('qq-late-auto'));
+    if (url.pathname.endsWith('/fcg_query_lyric_new.fcg')) {
+      signalLyricRequest();
+      return await new Promise((resolve, reject) => {
+        const abort = () => reject(init.signal?.reason ?? Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        init.signal?.addEventListener('abort', abort, { once: true });
+        automaticLyric.then(resolve, reject);
+      });
+    }
+    throw new Error(`Unexpected late-auto URL: ${url.href}`);
+  });
+
+  const pending = library.resolve({ trackId: 'demo-track' });
+  await lyricRequestStarted;
+  const selected = await library.activate({ trackId: 'demo-track', kind: 'local' });
+  assert.equal(selected.activeKind, 'local');
+  assert.equal(selected.userSelected, true);
+  releaseAutomaticLyric(jsonResponse({ retcode: 0, lyric: '[00:01.00]迟到云歌词', trans: '' }, 'text/html;charset=utf-8'));
+  await pending;
+  const loaded = await library.load('demo-track');
+  assert.equal(loaded.activeKind, 'local');
+  assert.equal(loaded.userSelected, true);
+  assert.equal(loaded.selectionRevision, 1);
+  assert.equal(loaded.lyric, null);
+  assert.notEqual(loaded.activeKind, 'cloud');
 });
 
 test('an existing manual cache is returned without any network request or replacement', async t => {
   const { library } = await fixture(t);
   const manual = '[00:02.00]手动导入版本';
   await library.import({ trackId: 'demo-track', lrc: manual });
-  await library.offset({ trackId: 'demo-track', offsetMs: 1250 });
+  await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 1250 });
   const savedBeforeResolve = (await library.load('demo-track')).lyric;
   let calls = 0;
   mockFetch(t, async input => {
@@ -212,6 +345,8 @@ test('an existing manual cache is returned without any network request or replac
   assert.equal(result.lyric?.lrc, savedBeforeResolve?.lrc);
   assert.equal(result.lyric?.source.id, 'local-import');
   assert.equal(result.lyric?.offsetMs, 1250);
+  assert.equal(result.activeKind, 'local');
+  assert.deepEqual(result.variants, { cloud: false, local: true });
 });
 
 test('a QQ miss falls back to a matching enabled NetEase source', async t => {
@@ -237,6 +372,7 @@ test('a QQ miss falls back to a matching enabled NetEase source', async t => {
   const result = await library.resolve({ trackId: 'demo-track' });
   assert.equal(result.lyric?.source.id, 'netease');
   assert.equal(result.lyric?.lrc, '[00:01.00]网易 fallback');
+  assert.equal(result.activeKind, 'cloud');
   assert.deepEqual(calls, ['qq-search', 'netease-search', 'netease-lyric']);
 });
 
@@ -263,6 +399,7 @@ test('a QQ result for the wrong artist is rejected and resolution continues to t
   const result = await library.resolve({ trackId: 'demo-track' });
   assert.equal(result.lyric?.source.id, 'netease');
   assert.equal(result.lyric?.lrc, '[00:01.00]正确歌手歌词');
+  assert.equal(result.activeKind, 'cloud');
   assert.deepEqual(calls, ['qq-search', 'netease-search', 'netease-lyric']);
 });
 
@@ -313,7 +450,7 @@ test('resolution rejects wrong-artist candidates from every enabled source witho
 
   const result = await library.resolve({ trackId: 'demo-track' });
   assert.equal(result.lyric, null);
-  assert.equal((await library.load('demo-track')).lyric, null);
+  assert.deepEqual((await library.load('demo-track')).variants, { cloud: false, local: false });
 });
 
 test('cancelled automatic resolution rejects and leaves the cache untouched', async t => {
@@ -331,10 +468,10 @@ test('cancelled automatic resolution rejects and leaves the cache untouched', as
   } finally {
     clearTimeout(timer);
   }
-  assert.equal((await library.load('demo-track')).lyric, null);
+  assert.deepEqual((await library.load('demo-track')).variants, { cloud: false, local: false });
 });
 
-test('an automatic result arriving after a manual import cannot overwrite the manual cache', async t => {
+test('an automatic result arriving after a manual import cannot steal the active variant or overwrite its bank', async t => {
   const { library } = await fixture(t);
   const manual = '[00:02.00]手动优先';
   let signalLyricRequest;
@@ -360,12 +497,15 @@ test('an automatic result arriving after a manual import cannot overwrite the ma
   await library.import({ trackId: 'demo-track', lrc: manual });
   releaseAutomaticLyric(jsonResponse({ retcode: 0, lyric: '[00:01.00]自动歌词', trans: '' }, 'text/html;charset=utf-8'));
   await pending;
-  const stored = (await library.load('demo-track')).lyric;
+  const loaded = await library.load('demo-track');
+  const stored = loaded.lyric;
   assert.equal(stored?.lrc, manual);
   assert.equal(stored?.source.id, 'local-import');
+  assert.equal(loaded.activeKind, 'local');
+  assert.equal(loaded.variants.local, true);
 });
 
-test('legacy v1 default migration is in-memory until the user saves, while explicit source choices survive', async t => {
+test('legacy v1 default migration is in-memory until the user saves and stale per-track source files are ignored', async t => {
   const { library } = await fixture(t);
   await fs.mkdir(library.directory, { recursive: true });
   const legacy = { version: 1, defaultSourceId: 'netease', cacheDirectory: library.defaultCacheDirectory, previousCacheDirectories: [] };
@@ -373,8 +513,24 @@ test('legacy v1 default migration is in-memory until the user saves, while expli
 
   assert.equal((await library.settings()).settings.defaultSourceId, 'qq');
   assert.deepEqual(JSON.parse(await fs.readFile(library.settingsFile, 'utf8')), legacy);
-  await library.savePreferences({ trackId: 'demo-track', sourceId: 'netease' });
-  assert.equal((await library.preferences('demo-track')).effectiveSourceId, 'netease');
+  const stalePreferenceDirectory = path.join(library.directory, 'track-preferences');
+  await fs.mkdir(stalePreferenceDirectory, { recursive: true });
+  const stalePreferencePath = path.join(stalePreferenceDirectory, createHash('sha256').update('demo-track').digest('hex') + '.json');
+  await fs.writeFile(stalePreferencePath, JSON.stringify({ version: 1, trackId: 'demo-track', sourceId: 'netease' }), 'utf8');
+  const calls = [];
+  mockFetch(t, async input => {
+    const url = new URL(String(input));
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/smartbox_new.fcg')) return qqSongs(qqSong('qq-global-default'));
+    if (url.pathname.endsWith('/fcg_query_lyric_new.fcg')) return jsonResponse({ retcode: 0, lyric: lyrics, trans: '' }, 'text/html;charset=utf-8');
+    throw new Error(`Unexpected global-default URL: ${url.href}`);
+  });
+  const resolved = await library.resolve({ trackId: 'demo-track' });
+  assert.equal(resolved.lyric.source.id, 'qq');
+  assert.deepEqual(calls, ['/splcloud/fcgi-bin/smartbox_new.fcg', '/lyric/fcgi-bin/fcg_query_lyric_new.fcg']);
+  const search = await library.search({ trackId: 'demo-track' });
+  assert.equal(search.candidates[0].sourceId, 'qq');
+  assert.equal(calls.at(-1), '/splcloud/fcgi-bin/smartbox_new.fcg', 'Manual search without a temporary source must use the global default, not the stale per-track file.');
   await library.saveSettings({ defaultSourceId: 'qq', cacheDirectory: library.defaultCacheDirectory });
   assert.equal(JSON.parse(await fs.readFile(library.settingsFile, 'utf8')).version, 2);
 });
@@ -412,16 +568,24 @@ test('local import stores an exact UTF-8 cache copy and never records the origin
   const document = JSON.parse(await fs.readFile(cachePath, 'utf8'));
   assert.equal(path.extname(cachePath), '.json');
   assert.equal(path.dirname(cachePath), library.defaultCacheDirectory);
-  assert.equal(document.version, 2);
-  assert.equal(document.offsetInText, true);
-  assert.equal(document.source.id, 'local-import');
-  assert.equal(document.lrc, originalText);
+  assert.equal(document.version, 3);
+  assert.equal(document.activeKind, 'local');
+  assert.equal(document.userSelected, true);
+  assert.equal(document.selectionRevision, 1);
+  assert.equal(document.variants.local.version, 2);
+  assert.equal(document.variants.local.offsetInText, true);
+  assert.equal(document.variants.local.source.id, 'local-import');
+  assert.equal(document.variants.local.lrc, originalText);
+  assert.equal(document.variants.cloud, undefined);
   assert.deepEqual(await fs.readFile(sourcePath), before);
   assert.doesNotMatch(JSON.stringify(document), /original\.lrc|filePath|sourcePath|originalPath/i);
 
   const base64LikeText = 'QUJD'.repeat(32);
   await library.import({ trackId: 'demo-track', lrc: base64LikeText });
-  assert.equal((await library.load('demo-track')).lyric.lrc, base64LikeText);
+  const loaded = await library.load('demo-track');
+  assert.equal(loaded.lyric.lrc, base64LikeText);
+  assert.equal(loaded.activeKind, 'local');
+  assert.deepEqual(loaded.variants, { cloud: false, local: true });
   assert.deepEqual(await fs.readFile(sourcePath), before);
 });
 
@@ -429,22 +593,24 @@ test('repeated offset edits update the embedded base plus the current user adjus
   const { library } = await fixture(t);
   await library.import({ trackId: 'demo-track', lrc: '[offset:120]\r\n[00:01.00]原始歌词\r\n' });
 
-  const first = await library.offset({ trackId: 'demo-track', offsetMs: 250 });
+  const first = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 250 });
   assert.equal(first.lyric.version, 2);
   assert.equal(first.lyric.offsetInText, true);
   assert.equal(first.lyric.offsetMs, 250);
   assert.match(first.lyric.lrc, /^\[offset:370\]\r\n/);
 
-  const second = await library.offset({ trackId: 'demo-track', offsetMs: -400 });
+  const second = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: -400 });
   assert.equal(second.lyric.offsetMs, -400);
   assert.match(second.lyric.lrc, /^\[offset:-280\]\r\n/);
   const stored = JSON.parse(await fs.readFile(library.cacheFile('demo-track'), 'utf8'));
-  assert.equal(stored.offsetInText, true);
-  assert.equal(stored.offsetMs, -400);
-  assert.match(stored.lrc, /^\[offset:-280\]\r\n/);
+  assert.equal(stored.version, 3);
+  assert.equal(stored.activeKind, 'local');
+  assert.equal(stored.variants.local.offsetInText, true);
+  assert.equal(stored.variants.local.offsetMs, -400);
+  assert.match(stored.variants.local.lrc, /^\[offset:-280\]\r\n/);
 });
 
-test('online selection and legacy cache offsets migrate into version 2 text without double counting', async t => {
+test('cloud and local banks retain independent offsets, and legacy documents upgrade to V3 on write', async t => {
   const { library } = await fixture(t);
   mockFetch(t, async input => {
     const url = new URL(String(input));
@@ -452,16 +618,42 @@ test('online selection and legacy cache offsets migrate into version 2 text with
     if (url.pathname.endsWith('/fcg_query_lyric_new.fcg')) return jsonResponse({ retcode: 0, lyric: '[offset:40]\n[00:02.00]在线歌词', trans: '' }, 'text/html;charset=utf-8');
     throw new Error(`Unexpected online offset URL: ${url.href}`);
   });
+  await library.import({ trackId: 'demo-track', lrc: '[offset:120]\n[00:01.00]本地歌词' });
   const search = await library.search({ trackId: 'demo-track', sourceId: 'qq' });
   const selected = await library.select({ trackId: 'demo-track', sourceId: 'qq', candidateId: search.candidates[0].id });
   assert.equal(selected.lyric.version, 2);
   assert.equal(selected.lyric.offsetInText, true);
-  const onlineOffset = await library.offset({ trackId: 'demo-track', offsetMs: 300 });
+  assert.equal(selected.activeKind, 'cloud');
+  assert.equal(selected.userSelected, true);
+  assert.equal(selected.selectionRevision, 2);
+  const onlineOffset = await library.offset({ trackId: 'demo-track', kind: 'cloud', offsetMs: 300 });
   assert.equal(onlineOffset.lyric.offsetMs, 300);
   assert.match(onlineOffset.lyric.lrc, /^\[offset:340\]\n/);
+  assert.equal(onlineOffset.activeKind, 'cloud');
+
+  const localOffset = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: -250 });
+  assert.equal(localOffset.lyric.source.id, 'local-import');
+  assert.equal(localOffset.lyric.offsetMs, -250);
+  assert.match(localOffset.lyric.lrc, /^\[offset:-130\]\n/);
+  assert.equal(localOffset.activeKind, 'cloud', 'Offsetting the local bank must not change the active cloud bank.');
+  assert.equal(localOffset.userSelected, true);
+  assert.equal(localOffset.selectionRevision, 2, 'Offset editing must not change the user-selected variant revision.');
+  const both = await library.load('demo-track');
+  assert.equal(both.activeKind, 'cloud');
+  assert.deepEqual(both.variants, { cloud: true, local: true });
+  const bothCached = JSON.parse(await fs.readFile(library.cacheFile('demo-track'), 'utf8'));
+  assert.equal(bothCached.variants.cloud.offsetMs, 300);
+  assert.equal(bothCached.variants.cloud.lrc.startsWith('[offset:340]'), true);
+  assert.equal(bothCached.variants.local.offsetMs, -250);
+  assert.equal(bothCached.variants.local.lrc.startsWith('[offset:-130]'), true);
+  const localBankRead = await library.load('demo-track', 'local');
+  assert.equal(localBankRead.lyric.source.id, 'local-import');
+  assert.equal(localBankRead.lyric.offsetMs, -250);
+  assert.equal(localBankRead.activeKind, 'cloud', 'Reading another bank must not change the persisted active kind.');
+  assert.equal(localOffset.selectionRevision, 2, 'Offset editing must not increment the active-kind selection revision.');
 
   const legacyId = 'demo-track';
-  await fs.writeFile(library.cacheFile(legacyId), JSON.stringify({
+  const legacyDocument = {
     version: 1,
     trackId: legacyId,
     track: { trackId: legacyId, title: '泡沫', artist: 'G.E.M. 邓紫棋', album: '我是歌手第二季', duration: 247 },
@@ -469,12 +661,19 @@ test('online selection and legacy cache offsets migrate into version 2 text with
     offsetMs: 20,
     source: { id: 'netease', name: '网易云音乐' },
     savedAt: new Date().toISOString(),
-  }), 'utf8');
-  const legacyOffset = await library.offset({ trackId: legacyId, offsetMs: 200 });
+  };
+  const legacyPath = library.cacheFile(legacyId);
+  await fs.writeFile(legacyPath, JSON.stringify(legacyDocument), 'utf8');
+  const legacyOffset = await library.offset({ trackId: legacyId, kind: 'cloud', offsetMs: 200 });
   assert.equal(legacyOffset.lyric.version, 2);
   assert.equal(legacyOffset.lyric.offsetInText, true);
   assert.equal(legacyOffset.lyric.offsetMs, 200);
   assert.match(legacyOffset.lyric.lrc, /^\[offset:300\]\n/);
+  const migrated = JSON.parse(await fs.readFile(legacyPath, 'utf8'));
+  assert.equal(migrated.version, 3);
+  assert.equal(migrated.activeKind, 'cloud');
+  assert.equal(migrated.variants.cloud.offsetMs, 200);
+  assert.equal(migrated.variants.local, undefined);
 });
 
 test('replacing a lyric after changing cache folders leaves one validated document for that track', async t => {
@@ -489,10 +688,12 @@ test('replacing a lyric after changing cache folders leaves one validated docume
   await fs.copyFile(firstFile, defaultFile);
 
   await library.saveSettings({ defaultSourceId: 'qq', cacheDirectory: nextDirectory });
-  const updated = await library.offset({ trackId: 'demo-track', offsetMs: 350 });
+  const updated = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 350 });
   const currentFile = library.cacheFile('demo-track', nextDirectory);
   assert.equal(updated.lyric.offsetMs, 350);
-  assert.equal(JSON.parse(await fs.readFile(currentFile, 'utf8')).offsetInText, true);
+  const current = JSON.parse(await fs.readFile(currentFile, 'utf8'));
+  assert.equal(current.version, 3);
+  assert.equal(current.variants.local.offsetInText, true);
   await assert.rejects(fs.access(firstFile), error => error.code === 'ENOENT');
   await assert.rejects(fs.access(defaultFile), error => error.code === 'ENOENT');
 
@@ -547,7 +748,7 @@ test('an offset save refuses to overwrite a newer manual lyric version', async t
     return originalSave(trackId, contents, options);
   };
 
-  const pendingOffset = library.offset({ trackId: 'demo-track', offsetMs: 700 });
+  const pendingOffset = library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 700 });
   await offsetSaveStarted;
   await library.import({ trackId: 'demo-track', lrc: '[00:02.00]new manual version wins' });
   releaseOffsetSave();
@@ -565,7 +766,7 @@ test('a full 96 KiB local text can be offset and reloaded without altering its s
   await fs.writeFile(sourcePath, originalBytes);
 
   await library.import({ trackId: 'demo-track', lrc: originalText });
-  const shifted = await library.offset({ trackId: 'demo-track', offsetMs: 275 });
+  const shifted = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 275 });
   const reloaded = await library.load('demo-track');
   assert.equal(shifted.lyric.version, 2);
   assert.equal(shifted.lyric.offsetInText, true);
@@ -586,7 +787,7 @@ test('on Windows, a case-only cache-directory alias cannot unlink the current ly
   await library.import({ trackId: 'demo-track', lrc: '[00:01.00]case alias' });
   await library.saveSettings({ defaultSourceId: 'qq', cacheDirectory: aliasDirectory });
 
-  const updated = await library.offset({ trackId: 'demo-track', offsetMs: 180 });
+  const updated = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 180 });
   const currentFile = library.cacheFile('demo-track', aliasDirectory);
   assert.equal((await fs.stat(currentFile)).isFile(), true);
   assert.equal((await library.load('demo-track')).lyric.lrc, updated.lyric.lrc);
@@ -603,10 +804,10 @@ test('on Windows, historical case aliases of one cache are cleaned once without 
   await library.import({ trackId: 'demo-track', lrc: '[00:01.00]historical alias' });
   library.settingsConfig.previousCacheDirectories = [historyAlias];
   await library.saveSettings({ defaultSourceId: 'qq', cacheDirectory: currentDirectory });
-  const updated = await library.offset({ trackId: 'demo-track', offsetMs: 220 });
+  const updated = await library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 220 });
 
   const currentFile = library.cacheFile('demo-track', currentDirectory);
-  assert.equal(JSON.parse(await fs.readFile(currentFile, 'utf8')).offsetMs, 220);
+  assert.equal(JSON.parse(await fs.readFile(currentFile, 'utf8')).variants.local.offsetMs, 220);
   await assert.rejects(fs.access(library.cacheFile('demo-track', historyDirectory)), error => error.code === 'ENOENT');
   await assert.rejects(fs.access(library.cacheFile('demo-track', historyAlias)), error => error.code === 'ENOENT');
   const uniqueHistory = library.cacheDirectories().filter(directory => path.resolve(directory).toLowerCase() === path.resolve(historyDirectory).toLowerCase());

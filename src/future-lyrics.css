@@ -321,12 +321,19 @@ html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-notice-foot-valu
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-quiet-button,
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-primary-button,
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-offset-nudge,
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-source-settings-link,
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-import-button {
   min-height: 34px;
   border-color: var(--future-lyrics-edge);
   border-radius: 10px;
   color: var(--future-lyrics-instrument);
   background: var(--future-lyrics-control);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-source-settings-link {
+  min-height: 38px;
+  padding: 8px 10px;
+  text-decoration: none;
 }
 
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-primary-button {

@@ -305,14 +305,15 @@ export async function createMusicServer({
         if (route === '/api/lyrics/preferences' && request.method === 'POST') return json(response, 200, await lyrics.savePreferences(await bodyJson(request)));
         if (route === '/api/lyrics/sources' && get) return json(response, 200, await lyrics.sources());
         if (route === '/api/lyrics/sources' && request.method === 'POST') return json(response, 200, await lyrics.saveSources(await bodyJson(request)));
-        if (route === '/api/lyrics/track' && get) return json(response, 200, await lyrics.load(url.searchParams.get('trackId')));
+        if (route === '/api/lyrics/track' && get) return json(response, 200, await lyrics.load(url.searchParams.get('trackId'), url.searchParams.get('kind') || undefined));
         if (request.method === 'POST') {
           const value = await bodyJson(request), aborter = new AbortController();
           response.once('close', () => aborter.abort());
           if (route === '/api/lyrics/resolve') return json(response, 200, await lyrics.resolve(value, aborter.signal));
           if (route === '/api/lyrics/search') return json(response, 200, await lyrics.search(value, aborter.signal));
+          if (route === '/api/lyrics/variant') return json(response, 200, await lyrics.activate(value, aborter.signal));
           if (route === '/api/lyrics/select') return json(response, 200, await lyrics.select(value, aborter.signal));
-          if (route === '/api/lyrics/import') return json(response, 200, await lyrics.import(value));
+          if (route === '/api/lyrics/import') return json(response, 200, await lyrics.import(value, aborter.signal));
           if (route === '/api/lyrics/offset') return json(response, 200, await lyrics.offset(value));
         }
         return json(response, 404, { error: '歌词功能不存在或请求方法不支持。' });

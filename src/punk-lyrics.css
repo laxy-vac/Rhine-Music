@@ -83,6 +83,7 @@
   .lyrics-preference-dialog .lyrics-source-select { min-height:38px;border-radius:0;padding:8px 10px;font-size:12px; }
   .lyrics-search-fields { display:grid;grid-template-columns:1.1fr 1fr 1fr auto;gap:6px; }
   .lyrics-search-panel .lyrics-source-settings-link { font-size:11px; }
+  .lyrics-search-panel .lyrics-source-settings-link { border-radius:0;color:var(--ink);background:var(--panel);box-shadow:none;text-decoration:none; }
   .lyrics-search-outcome { font-size:11px; }
   .lyrics-candidate-card { border-radius:0;background:transparent; }
   .lyrics-offset-controls { gap:6px; }

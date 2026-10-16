@@ -76,14 +76,15 @@ interface LyricsGlobalSettings {
   defaultCacheDirectory: string;
 }
 
-interface LyricsTrackPreference {
-  trackId: string;
-  sourceId: string | null;
-  missingSourceId?: string;
-  effectiveSourceId: string;
-  defaultSourceId: string;
-  sources: LyricsSource[];
+type LyricsKind = "local" | "cloud";
+interface LyricsStatePayload {
+  lyric: LyricDocument | null;
+  activeKind: LyricsKind;
+  variants: Record<LyricsKind, boolean>;
+  userSelected?: boolean;
+  selectionRevision?: number;
 }
+const kindOfLyric = (documentValue: LyricDocument): LyricsKind => documentValue.source.id === "local-import" ? "local" : "cloud";
 
 export interface ParsedLyricLine {
   time: number | null;
@@ -270,11 +271,14 @@ export function setupLyricsPage(
   let followEnabled = true;
   let sourceList: LyricsSource[] = [];
   let globalSettings: LyricsGlobalSettings | undefined;
-  let trackPreference: LyricsTrackPreference | undefined;
+  let activeKind: LyricsKind = "cloud";
+  let optionsKind: LyricsKind = "cloud";
+  let lyricVariants: Record<LyricsKind, boolean> = { local: false, cloud: false };
+  let confirmedState: LyricsStatePayload = { lyric: null, activeKind: "cloud", variants: { local: false, cloud: false } };
+  let variantBusy = false;
+  let variantRequest: AbortController | undefined;
   let temporarySearchSourceId: string | undefined;
   let sourceRequest: AbortController | undefined;
-  let preferenceRequest: AbortController | undefined;
-  let preferenceSaveRequest: AbortController | undefined;
   let lyricRequest: AbortController | undefined;
   let currentTrackRequestGeneration = 0;
   let trackOperationControllers: AbortController[] = [];
@@ -286,8 +290,6 @@ export function setupLyricsPage(
   let activeMobileQuery: MediaQueryList | undefined;
   let preferenceDialogTrackId = "";
   let preferenceDialogOpener: HTMLElement | null = null;
-  let preferenceSaving = false;
-  let preferenceLoading = false;
   let searchBusy = false;
   let activeSearch: AbortController | undefined;
   let archiveQueueSignature = "";
@@ -364,14 +366,12 @@ export function setupLyricsPage(
   mainHeading.append(lyricsEyebrow, element("h2", "", trUi("歌词")));
   const lineCounter = element("div", "lyrics-line-counter", "— / —");
   const headerActions = element("div", "lyrics-header-actions");
-  const searchToggleButton = element("button", "lyrics-dialog-tab", trUi("查找歌词"));
-  searchToggleButton.type = "button";
-  searchToggleButton.title = trUi("搜索歌词");
-  searchToggleButton.setAttribute("aria-label", trUi("搜索歌词"));
-  searchToggleButton.setAttribute("role", "tab");
-  searchToggleButton.id = "lyrics-options-search-tab";
-  searchToggleButton.setAttribute("aria-selected", "true");
-  searchToggleButton.setAttribute("aria-controls", "lyrics-search-panel");
+  const cloudTabButton = element("button", "lyrics-dialog-tab", trUi("云歌词"));
+  cloudTabButton.type = "button";
+  cloudTabButton.setAttribute("role", "tab");
+  cloudTabButton.id = "lyrics-options-cloud-tab";
+  cloudTabButton.setAttribute("aria-selected", "true");
+  cloudTabButton.setAttribute("aria-controls", "lyrics-cloud-panel");
   const trackPreferenceButton = element("button", "lyrics-settings-gear");
   trackPreferenceButton.type = "button";
   trackPreferenceButton.title = trUi("歌词选项");
@@ -506,7 +506,8 @@ export function setupLyricsPage(
   archiveProfile.append(archiveProfileHeading, archiveCoverButton, archiveProfileTags, archiveTitle, archiveArtist, archiveLoaded, archiveProfileTable, archivePager, archiveQueue);
 
   const offsetSection = element("section", "lyrics-offset-section");
-  offsetSection.append(element("div", "lyrics-data-heading", trUi("每曲歌词偏移")));
+  const offsetHeading = element("div", "lyrics-data-heading", trUi("云歌词校准"));
+  offsetSection.append(offsetHeading);
   const offsetControls = element("div", "lyrics-offset-controls");
   const offsetInput = element("input");
   offsetInput.type = "number";
@@ -528,9 +529,9 @@ export function setupLyricsPage(
   offsetSection.append(offsetControls, offsetHint);
 
   const sourceSection = element("section", "lyrics-source-section lyrics-search-panel");
-  sourceSection.id = "lyrics-search-panel";
+  sourceSection.id = "lyrics-cloud-panel";
   sourceSection.setAttribute("role", "tabpanel");
-  sourceSection.setAttribute("aria-labelledby", "lyrics-options-search-tab");
+  sourceSection.setAttribute("aria-labelledby", "lyrics-options-cloud-tab");
   sourceSection.hidden = true;
   const sourceSectionHeading = element("div", "lyrics-source-section-heading");
   sourceSectionHeading.append(element("div", "lyrics-data-heading", trUi("搜索来源")));
@@ -552,7 +553,9 @@ export function setupLyricsPage(
   const searchButton = element("button", "lyrics-primary-button", trUi("搜索"));
   searchButton.type = "button";
   const importLabel = element("label", "lyrics-import-button");
-  importLabel.innerHTML = trUi('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M12 11v6m-3-3 3 3 3-3"/></svg><span>导入</span>');
+  importLabel.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5v18h14V8l-5-5Zm0 0v5h5M12 11v6m-3-3 3 3 3-3"/></svg>';
+  const importCaption = element("span", "", trUi("导入本地歌词"));
+  importLabel.append(importCaption);
   importLabel.title = trUi("导入 LRC / TXT");
   const importInput = element("input");
   importInput.type = "file";
@@ -587,37 +590,26 @@ export function setupLyricsPage(
   const preferenceTabs = element("div", "lyrics-dialog-toolbar");
   const preferenceTabList = element("div", "lyrics-dialog-tabs");
   preferenceTabList.setAttribute("role", "tablist");
-  preferenceTabList.setAttribute("aria-label", trUi("歌词工具"));
-  const settingsTabButton = element("button", "lyrics-dialog-tab", trUi("本曲设置"));
-  settingsTabButton.type = "button";
-  settingsTabButton.id = "lyrics-options-settings-tab";
-  settingsTabButton.setAttribute("role", "tab");
-  settingsTabButton.setAttribute("aria-selected", "false");
-  settingsTabButton.setAttribute("aria-controls", "lyrics-track-settings");
-  preferenceTabList.append(searchToggleButton, settingsTabButton);
-  preferenceTabs.append(preferenceTabList, importLabel);
-  const preferenceBody = element("div", "lyrics-track-settings");
-  preferenceBody.id = "lyrics-track-settings";
-  preferenceBody.setAttribute("role", "tabpanel");
-  preferenceBody.setAttribute("aria-labelledby", "lyrics-options-settings-tab");
-  preferenceBody.hidden = true;
-  const preferenceSelectLabel = element("label", "lyrics-preference-label", trUi("本曲默认来源"));
-  const preferenceSelect = element("select", "lyrics-source-select");
-  preferenceSelect.setAttribute("aria-label", trUi("设置当前曲目的默认歌词来源"));
-  preferenceSelect.setAttribute("data-keep-native-select", "true");
-  preferenceSelectLabel.append(preferenceSelect);
-  const preferenceEffective = element("p", "lyrics-preference-effective", trUi("跟随全局默认来源"));
-  const preferenceDialogStatus = element("p", "lyrics-help", trUi("只保存本曲默认来源，不自动搜索或替换已保存歌词。"));
-  const preferenceDialogActions = element("div", "lyrics-preference-actions");
-  const preferenceSettingsButton = element("button", "lyrics-quiet-button", trUi("打开歌词全局设置"));
-  preferenceSettingsButton.type = "button";
-  const preferenceCancelButton = element("button", "lyrics-quiet-button", trUi("取消"));
-  preferenceCancelButton.type = "button";
-  const preferenceSaveButton = element("button", "lyrics-primary-button", trUi("保存本曲设置"));
-  preferenceSaveButton.type = "button";
-  preferenceDialogActions.append(preferenceSettingsButton, preferenceCancelButton, preferenceSaveButton);
-  preferenceBody.append(preferenceSelectLabel, preferenceEffective, offsetSection, preferenceDialogStatus, preferenceDialogActions);
-  preferencePanel.append(preferenceDialogHeader, preferenceTrack, preferenceTabs, sourceSection, preferenceBody);
+  preferenceTabList.setAttribute("aria-label", trUi("歌词来源"));
+  const localTabButton = element("button", "lyrics-dialog-tab", trUi("本地歌词"));
+  localTabButton.type = "button";
+  localTabButton.id = "lyrics-options-local-tab";
+  localTabButton.setAttribute("role", "tab");
+  localTabButton.setAttribute("aria-selected", "false");
+  localTabButton.setAttribute("aria-controls", "lyrics-local-panel");
+  preferenceTabList.append(localTabButton, cloudTabButton);
+  preferenceTabs.append(preferenceTabList);
+  const localPanel = element("section", "lyrics-local-panel");
+  localPanel.id = "lyrics-local-panel";
+  localPanel.setAttribute("role", "tabpanel");
+  localPanel.setAttribute("aria-labelledby", "lyrics-options-local-tab");
+  localPanel.hidden = true;
+  const localStatus = element("p", "lyrics-help");
+  localPanel.append(localStatus, importLabel);
+  const currentSourceLabel = element("p", "lyrics-current-source lyrics-help");
+  const preferenceDialogStatus = element("p", "lyrics-help lyrics-options-status");
+  preferenceDialogStatus.setAttribute("role", "status");
+  preferencePanel.append(preferenceDialogHeader, preferenceTrack, preferenceTabs, currentSourceLabel, localPanel, sourceSection, offsetSection, preferenceDialogStatus);
   preferenceDialog.append(preferencePanel);
 
   rightBody.append(archiveProfile, coverFrame, albumTitle, albumArtist, albumMeta);
@@ -778,7 +770,8 @@ export function setupLyricsPage(
     const state = latestState;
     const track = state?.currentTrack;
     trackPreferenceButton.disabled = !track;
-    searchToggleButton.disabled = !track;
+    cloudTabButton.disabled = !track;
+    localTabButton.disabled = !track;
     const playing = !!state?.playing;
     transportText.textContent = playing ? trUi("播放中") : track ? state?.transport === "loading" ? trUi("载入中") : trUi("已暂停") : trUi("空闲");
     transportDot.classList.toggle("is-playing", playing);
@@ -842,11 +835,11 @@ export function setupLyricsPage(
     noticeText.textContent = message;
     noticeFootLabel.textContent = view.footLabel;
     noticeFootValue.textContent = view.footValue;
-    retryLyricsButton.hidden = !latestState?.currentTrack || !!lyricDocument || (state !== "missing" && state !== "error");
+    retryLyricsButton.hidden = !latestState?.currentTrack || !!lyricDocument || activeKind !== "cloud" || (state !== "missing" && state !== "error");
   }
 
   function renderLyrics(): void {
-    const editable=!!lyricDocument && lyricDocument.trackId === latestState?.currentTrack?.id;
+    const editable=!!lyricDocument && lyricDocument.trackId === latestState?.currentTrack?.id && kindOfLyric(lyricDocument) === optionsKind && !variantBusy;
     offsetInput.disabled=!editable;
     for(const button of [offsetApply,offsetMinus,offsetPlus,offsetReset])button.disabled=!editable;
     renderArchiveProfile();
@@ -951,15 +944,26 @@ export function setupLyricsPage(
       lyricRequest = undefined;
       lyricRequestTrackId = "";
     }
-    for (const controller of trackOperationControllers) controller.abort();
-    trackOperationControllers = [];
+    for (const controller of trackOperationControllers) {
+      if (includeAutomatic || controller !== variantRequest) controller.abort();
+    }
+    if (includeAutomatic) {
+      if (variantBusy) lyricAttemptSignature = "";
+      variantRequest = undefined;
+      variantBusy = false;
+      trackOperationControllers = [];
+    } else {
+      // A chosen source is a save operation. Leaving the page must not cancel
+      // that choice and let the previous source reappear on return.
+      trackOperationControllers = trackOperationControllers.filter(controller => controller === variantRequest);
+    }
     activeSearch = undefined;
     searchBusy = false;
   }
 
   async function loadCurrentLyric(force = false): Promise<void> {
     const trackId = latestState?.currentTrack?.id;
-    if (!trackId || disposed) return;
+    if (!trackId || disposed || variantBusy) return;
     if (!force && (lyricDocument?.trackId === trackId || lyricRequestTrackId === trackId || lyricAttemptSignature === activeMetadataSignature)) return;
     lyricRequest?.abort();
     const controller = new AbortController();
@@ -973,9 +977,13 @@ export function setupLyricsPage(
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trackId }), signal: controller.signal,
       });
-      const payload = await responseJson<{ lyric: LyricDocument | null; sources?: Array<{ status: "ok" | "empty" | "error" }> }>(response);
+      const payload = await responseJson<LyricsStatePayload & { sources?: Array<{ status: "ok" | "empty" | "error" }> }>(response);
       if (disposed || controller.signal.aborted || generation !== currentTrackRequestGeneration || latestState?.currentTrack?.id !== trackId) return;
       lyricDocument = payload.lyric?.trackId === trackId ? payload.lyric : null;
+      activeKind = payload.activeKind ?? (lyricDocument ? kindOfLyric(lyricDocument) : "cloud");
+      lyricVariants = payload.variants ?? { local: !!lyricDocument && activeKind === "local", cloud: !!lyricDocument && activeKind === "cloud" };
+      confirmedState = { ...payload, lyric: lyricDocument, activeKind, variants: lyricVariants };
+      selectOptionsKind(activeKind);
       parsedLyrics = lyricDocument ? parseLyrics(lyricDocument.lrc, lyricDocument.translation ?? "") : null;
       if (lyricDocument) {
         setLyricsNotice("missing", trUi("歌词记录为空"));
@@ -984,11 +992,12 @@ export function setupLyricsPage(
         searchMessage.textContent = searchStatus;
       } else {
         const unavailable = !!payload.sources?.length && payload.sources.every(source => source.status === "error");
-        setLyricsNotice(unavailable ? "error" : "missing", unavailable
+        setLyricsNotice(unavailable ? "error" : "missing", activeKind === "local" ? trUi("导入本地歌词以开始显示。") : unavailable
           ? trUi("歌词来源暂时不可用，可重新匹配或手动查找。")
           : trUi("未找到可靠匹配，可重新匹配或手动选择其他版本。"));
       }
       renderLyrics();
+      renderPreferenceDialog();
     } catch (error) {
       if (controller.signal.aborted || disposed || generation !== currentTrackRequestGeneration || latestState?.currentTrack?.id !== trackId) return;
       lyricDocument = null;
@@ -1036,8 +1045,8 @@ export function setupLyricsPage(
     automatic.value = "auto";
     sourceSelect.prepend(automatic);
     sourceSelect.disabled = searchBusy;
-    const preferredId = temporarySearchSourceId ?? (trackPreference?.sourceId ? trackPreference.effectiveSourceId : "auto");
-    sourceSelect.value = preferredId === "auto" || available.some((source) => source.id === preferredId) ? preferredId! : "auto";
+    const preferredId = temporarySearchSourceId ?? globalSettings?.defaultSourceId;
+    sourceSelect.value = preferredId === "auto" || available.some((source) => source.id === preferredId) ? preferredId! : available[0].id;
     if (temporarySearchSourceId && temporarySearchSourceId !== "auto" && !available.some((source) => source.id === temporarySearchSourceId)) temporarySearchSourceId = undefined;
     searchButton.disabled = searchBusy;
   }
@@ -1046,39 +1055,23 @@ export function setupLyricsPage(
     return lyricSourceLabel(sourceList.find((source) => source.id === sourceId)) || trUi("未配置可用来源");
   }
 
-  function renderPreferenceChoices(): void {
-    const missingSourceId = trackPreference?.missingSourceId;
-    const currentSourceId = trackPreference?.sourceId ?? missingSourceId ?? null;
-    preferenceSelect.replaceChildren();
-    const followOption = element("option", "", ui`跟随全局默认 · ${sourceName(trackPreference?.defaultSourceId ?? globalSettings?.defaultSourceId)}`);
-    followOption.value = "";
-    preferenceSelect.append(followOption);
-    if (missingSourceId) {
-      const missingOption = element("option", "", trUi("原来源已移除（当前使用全局默认）"));
-      missingOption.value = missingSourceId;
-      preferenceSelect.append(missingOption);
-    }
-    for (const source of sourceList) {
-      if (!source.enabled && source.id !== currentSourceId) continue;
-      const option = element("option", "", `${lyricSourceLabel(source)}${source.builtin ? trUi(" · 内置") : trUi(" · 自定义")}${source.enabled ? "" : trUi(" · 已停用")}`);
-      option.value = source.id;
-      preferenceSelect.append(option);
-    }
-    preferenceSelect.value = currentSourceId ?? "";
-    const effectiveId = trackPreference?.effectiveSourceId ?? globalSettings?.defaultSourceId;
-    preferenceEffective.textContent = missingSourceId
-      ? trUi("原来源已移除，当前使用全局默认；选择新来源或跟随全局后即可替换本曲设置。")
-      : ui`当前生效：${sourceName(effectiveId)}${trackPreference?.sourceId ? trUi("（本曲指定）") : trUi("（跟随全局）")}`;
-  }
-
   function renderPreferenceDialog(): void {
     const track = latestState?.currentTrack;
     preferenceTrack.textContent = track ? `${track.title} · ${track.artist}` : trUi("未选择曲目");
-    preferenceSelect.disabled = !track || preferenceSaving || preferenceLoading;
-    preferenceSaveButton.disabled = !track || preferenceSaving || preferenceLoading;
-    preferenceSettingsButton.disabled = preferenceSaving;
-    preferenceSaveButton.textContent = preferenceSaving ? trUi("正在保存…") : trUi("保存本曲设置");
-    renderPreferenceChoices();
+    currentSourceLabel.textContent = activeKind === "local" ? trUi("当前使用：本地歌词") : ui`当前使用：云歌词 · ${lyricDocument ? lyricSourceLabel(lyricDocument.source) : sourceName(globalSettings?.defaultSourceId)}`;
+    localStatus.textContent = lyricVariants.local
+      ? trUi("本地副本已保留。重新导入只替换本地歌词，云歌词及其校准保持不变。")
+      : trUi("导入 LRC / TXT 到播放器缓存，原文件不会被修改或删除。");
+    importCaption.textContent = lyricVariants.local ? trUi("重新导入本地歌词") : trUi("导入本地歌词");
+    offsetHeading.textContent = optionsKind === "local" ? trUi("本地歌词校准") : trUi("云歌词校准");
+    offsetHint.textContent = optionsKind === "local"
+      ? trUi("仅保存本地副本的校准，不改原文件或云歌词。正值让歌词提前。")
+      : trUi("仅保存云歌词的校准，不改变本地歌词。正值让歌词提前。");
+    const current = lyricDocument && kindOfLyric(lyricDocument) === optionsKind ? lyricDocument : null;
+    if (document.activeElement !== offsetInput) offsetInput.value = current ? (current.offsetMs / 1000).toFixed(1) : "0.0";
+    const disabled = !track || !current || variantBusy;
+    offsetInput.disabled = disabled;
+    for (const button of [offsetApply, offsetMinus, offsetPlus, offsetReset]) button.disabled = disabled;
   }
 
   function closePreferenceDialog(restoreFocus = true): void {
@@ -1105,12 +1098,11 @@ export function setupLyricsPage(
     preferenceDialog.hidden = false;
     trackPreferenceButton.setAttribute("aria-expanded", "true");
     preferenceDialog.setAttribute("aria-hidden", "false");
-    preferenceDialogStatus.textContent = trackPreference?.trackId === trackId ? trUi("只保存本曲默认来源，不自动搜索或替换已保存歌词。") : trUi("正在读取本曲设置…");
+    preferenceDialogStatus.textContent = "";
     renderPreferenceDialog();
-    selectOptionsTab("search");
-    searchToggleButton.focus();
+    selectOptionsKind(activeKind);
+    (activeKind === "local" ? localTabButton : cloudTabButton).focus();
     if (!sourceLoaded) void loadSources(true);
-    if (trackPreference?.trackId !== trackId) void loadTrackPreference(true);
   }
 
   async function loadSources(force = false): Promise<void> {
@@ -1138,40 +1130,6 @@ export function setupLyricsPage(
     }
   }
 
-  async function loadTrackPreference(force = false): Promise<void> {
-    const trackId = latestState?.currentTrack?.id;
-    if (!visible || disposed || !trackId || (!force && trackPreference?.trackId === trackId)) return;
-    preferenceRequest?.abort();
-    const controller = new AbortController();
-    preferenceRequest = controller;
-    preferenceLoading = true;
-    renderPreferenceDialog();
-    preferenceDialogStatus.textContent = trUi("正在读取本曲设置…");
-    try {
-      const response = await fetch(`/api/lyrics/preferences?trackId=${encodeURIComponent(trackId)}`, { signal: controller.signal });
-      const payload = await responseJson<LyricsTrackPreference>(response);
-      if (controller.signal.aborted || disposed || latestState?.currentTrack?.id !== trackId) return;
-      trackPreference = payload;
-      if (Array.isArray(payload.sources)) {
-        sourceList = payload.sources;
-        sourceLoaded = true;
-      }
-      globalSettings = { ...(globalSettings ?? { cacheDirectory: "", defaultCacheDirectory: "" }), defaultSourceId: payload.defaultSourceId };
-      renderSourceChoices();
-      renderPreferenceDialog();
-      preferenceDialogStatus.textContent = trUi("只保存本曲默认来源，不自动搜索或替换已保存歌词。");
-    } catch (error) {
-      if (controller.signal.aborted || disposed || latestState?.currentTrack?.id !== trackId) return;
-      preferenceDialogStatus.textContent = ui`读取本曲设置失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
-    } finally {
-      if (preferenceRequest === controller) {
-        preferenceRequest = undefined;
-        preferenceLoading = false;
-        renderPreferenceDialog();
-      }
-    }
-  }
-
   function beginTrackOperation(): { controller: AbortController; trackId: string; generation: number } | null {
     const trackId = latestState?.currentTrack?.id;
     if (!trackId || !visible) {
@@ -1183,33 +1141,90 @@ export function setupLyricsPage(
     return { controller, trackId, generation: currentTrackRequestGeneration };
   }
 
-  function isCurrentOperation(operation: { controller: AbortController; trackId: string; generation: number }): boolean {
-    return !disposed && visible && !operation.controller.signal.aborted && latestState?.currentTrack?.id === operation.trackId && currentTrackRequestGeneration === operation.generation;
+  function isCurrentOperation(operation: { controller: AbortController; trackId: string; generation: number }, requireVisible = true): boolean {
+    return !disposed && (!requireVisible || visible) && !operation.controller.signal.aborted && latestState?.currentTrack?.id === operation.trackId && currentTrackRequestGeneration === operation.generation;
   }
 
-  async function acceptLyric(documentValue: LyricDocument, trackId: string, operation?: { controller: AbortController; trackId: string; generation: number }, dismissOptions = true): Promise<void> {
-    if (latestState?.currentTrack?.id !== trackId || (operation && !isCurrentOperation(operation))) return;
+  async function acceptLyric(payload: LyricsStatePayload, trackId: string, operation?: { controller: AbortController; trackId: string; generation: number }, clearCandidates = false, allowHidden = false): Promise<void> {
+    if (latestState?.currentTrack?.id !== trackId || (operation && !isCurrentOperation(operation, !allowHidden))) return;
     lyricRequest?.abort();
     lyricRequest = undefined;
     lyricRequestTrackId = "";
     lyricAttemptSignature = activeMetadataSignature;
-    lyricDocument = documentValue;
-    parsedLyrics = parseLyrics(documentValue.lrc, documentValue.translation ?? "");
-    setLyricsNotice("missing", trUi("歌词记录为空"));
-    offsetInput.value = (documentValue.offsetMs / 1000).toFixed(1);
-    searchStatus = ui`歌词已保存 · ${lyricSourceLabel(documentValue.source) || trUi("来源未知")}`;
+    lyricDocument = payload.lyric?.trackId === trackId ? payload.lyric : null;
+    activeKind = payload.activeKind;
+    lyricVariants = payload.variants;
+    confirmedState = { ...payload, lyric: lyricDocument };
+    parsedLyrics = lyricDocument ? parseLyrics(lyricDocument.lrc, lyricDocument.translation ?? "") : null;
+    selectOptionsKind(activeKind);
+    setLyricsNotice("missing", lyricDocument ? trUi("歌词记录为空") : activeKind === "local"
+      ? trUi("导入本地歌词以开始显示。") : trUi("搜索并选择一个云歌词版本。"));
+    searchStatus = lyricDocument ? ui`当前歌词源：${lyricSourceLabel(lyricDocument.source) || trUi("来源未知")}` : trUi("搜索并选择一个云歌词版本。");
     searchMessage.textContent = searchStatus;
-    if(dismissOptions){candidateList.replaceChildren();sourceOutcomes.replaceChildren();closePreferenceDialog();}
+    if (clearCandidates) { candidateList.replaceChildren(); sourceOutcomes.replaceChildren(); }
     renderLyrics();
+    renderPreferenceDialog();
   }
 
-  function selectOptionsTab(tab: "search"|"settings"): void {
-    sourceSection.hidden = tab !== "search";
-    preferenceBody.hidden = tab !== "settings";
-    searchToggleButton.setAttribute("aria-selected", String(tab === "search"));
-    settingsTabButton.setAttribute("aria-selected", String(tab === "settings"));
-    searchToggleButton.tabIndex=tab === "search"?0:-1;
-    settingsTabButton.tabIndex=tab === "settings"?0:-1;
+  function selectOptionsKind(kind: LyricsKind): void {
+    optionsKind = kind;
+    sourceSection.hidden = kind !== "cloud";
+    localPanel.hidden = kind !== "local";
+    cloudTabButton.setAttribute("aria-selected", String(kind === "cloud"));
+    localTabButton.setAttribute("aria-selected", String(kind === "local"));
+    cloudTabButton.tabIndex = kind === "cloud" ? 0 : -1;
+    localTabButton.tabIndex = kind === "local" ? 0 : -1;
+    renderPreferenceDialog();
+  }
+
+  async function activateVariant(kind: LyricsKind, runSearch = false): Promise<void> {
+    const previous = confirmedState;
+    cancelAutomaticLyric();
+    variantRequest?.abort();
+    variantRequest = undefined;
+    variantBusy = false;
+    abortTrackOperations(false);
+    activeKind = kind;
+    selectOptionsKind(kind);
+    if (lyricDocument && kindOfLyric(lyricDocument) !== kind) { lyricDocument = null; parsedLyrics = null; }
+    setLyricsNotice("loading", trUi("正在切换歌词来源…"));
+    renderLyrics();
+    const operation = beginTrackOperation();
+    if (!operation) return;
+    variantRequest = operation.controller;
+    variantBusy = true;
+    preferenceDialogStatus.textContent = trUi("正在切换歌词来源…");
+    renderPreferenceDialog();
+    let accepted = false;
+    try {
+      const response = await fetch("/api/lyrics/variant", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: operation.trackId, kind }), signal: operation.controller.signal,
+      });
+      const payload = await responseJson<LyricsStatePayload>(response);
+      if (!isCurrentOperation(operation, false)) return;
+      await acceptLyric(payload, operation.trackId, operation, true, true);
+      preferenceDialogStatus.textContent = "";
+      accepted = true;
+    } catch (error) {
+      if (!isCurrentOperation(operation, false)) return;
+      activeKind = previous.activeKind;
+      lyricDocument = previous.lyric;
+      parsedLyrics = lyricDocument ? parseLyrics(lyricDocument.lrc, lyricDocument.translation ?? "") : null;
+      lyricVariants = previous.variants;
+      selectOptionsKind(activeKind);
+      preferenceDialogStatus.textContent = ui`切换歌词来源失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
+      setLyricStatus(preferenceDialogStatus.textContent);
+      renderLyrics();
+    } finally {
+      trackOperationControllers = trackOperationControllers.filter(controller => controller !== operation.controller);
+      if (variantRequest === operation.controller) {
+        variantRequest = undefined;
+        variantBusy = false;
+        if (!disposed) renderPreferenceDialog();
+      }
+    }
+    if (accepted && runSearch && isCurrentOperation(operation) && optionsKind === "cloud") await openSearch();
   }
 
   function cancelActiveSearch(): void {
@@ -1220,19 +1235,19 @@ export function setupLyricsPage(
   }
 
   async function openSearch(run = true): Promise<void> {
-    selectOptionsTab("search");
     const trackId = latestState?.currentTrack?.id;
+    const generation = currentTrackRequestGeneration;
     if (!trackId) { searchMessage.textContent = trUi("请先选择一首歌曲。"); return; }
-    if (!sourceLoaded || trackPreference?.trackId !== trackId) {
+    if (!sourceLoaded) {
       searchMessage.textContent = trUi("正在读取歌词来源…");
-      await Promise.all([loadSources(), loadTrackPreference()]);
+      await loadSources();
     }
-    if (!visible || disposed || latestState?.currentTrack?.id !== trackId) return;
+    if (!visible || disposed || preferenceDialog.hidden || optionsKind !== "cloud" || generation !== currentTrackRequestGeneration || latestState?.currentTrack?.id !== trackId) return;
     if (run && !searchBusy && !candidateList.children.length) await searchLyrics();
   }
 
   async function searchLyrics(): Promise<void> {
-    if (searchBusy) return;
+    if (searchBusy || optionsKind !== "cloud") return;
     const sourceId = sourceSelect.value;
     if (!sourceId) { searchMessage.textContent = trUi("没有已启用的来源，请到“管理来源”添加或启用。"); return; }
     if (lyricRequest && visible) cancelAutomaticLyric();
@@ -1288,7 +1303,7 @@ export function setupLyricsPage(
   }
 
   async function selectCandidate(candidate: LyricsCandidate, trackId: string): Promise<void> {
-    if (latestState?.currentTrack?.id !== trackId || !visible) return;
+    if (latestState?.currentTrack?.id !== trackId || !visible || optionsKind !== "cloud") return;
     cancelAutomaticLyric();
     const operation = beginTrackOperation();
     if (!operation || operation.trackId !== trackId) return;
@@ -1300,9 +1315,9 @@ export function setupLyricsPage(
         body: JSON.stringify({ trackId, sourceId: candidate.sourceId, candidateId: candidate.id }),
         signal: operation.controller.signal,
       });
-      const payload = await responseJson<{ lyric: LyricDocument }>(response);
+      const payload = await responseJson<LyricsStatePayload>(response);
       if (!isCurrentOperation(operation)) return;
-      await acceptLyric(payload.lyric, trackId, operation);
+      await acceptLyric(payload, trackId, operation, true);
     } catch (error) {
       if (!isCurrentOperation(operation)) return;
       searchMessage.textContent = ui`保存候选失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
@@ -1318,8 +1333,11 @@ export function setupLyricsPage(
       importInput.value = "";
       return;
     }
-    if (!latestState?.currentTrack || !visible) return;
+    if (!latestState?.currentTrack || !visible || optionsKind !== "local") return;
     cancelAutomaticLyric();
+    variantRequest?.abort();
+    variantRequest = undefined;
+    variantBusy = false;
     const operation = beginTrackOperation();
     if (!operation) return;
     searchMessage.textContent = ui`正在读取 ${file.name}…`;
@@ -1339,9 +1357,9 @@ export function setupLyricsPage(
         body: JSON.stringify({ trackId: operation.trackId, lrc }),
         signal: operation.controller.signal,
       });
-      const payload = await responseJson<{ lyric: LyricDocument }>(response);
+      const payload = await responseJson<LyricsStatePayload>(response);
       if (!isCurrentOperation(operation)) return;
-      await acceptLyric(payload.lyric, operation.trackId, operation);
+      await acceptLyric(payload, operation.trackId, operation, true);
     } catch (error) {
       if (isCurrentOperation(operation)) searchMessage.textContent = ui`导入失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
     } finally {
@@ -1355,7 +1373,7 @@ export function setupLyricsPage(
       callbacks.notify(trUi("歌词偏移需为 -30 至 30 秒的数字。"));
       return;
     }
-    if (!lyricDocument || !latestState?.currentTrack) {
+    if (!lyricDocument || !latestState?.currentTrack || kindOfLyric(lyricDocument) !== optionsKind || variantBusy) {
       callbacks.notify(trUi("先为当前曲目载入或保存歌词，再设置偏移。"));
       return;
     }
@@ -1367,59 +1385,17 @@ export function setupLyricsPage(
       const response = await fetch("/api/lyrics/offset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId: operation.trackId, offsetMs }),
+        body: JSON.stringify({ trackId: operation.trackId, offsetMs, kind: optionsKind }),
         signal: operation.controller.signal,
       });
-      const payload = await responseJson<{ lyric: LyricDocument }>(response);
+      const payload = await responseJson<LyricsStatePayload>(response);
       if (!isCurrentOperation(operation)) return;
-      await acceptLyric(payload.lyric, operation.trackId, operation, false);
+      await acceptLyric(payload, operation.trackId, operation);
     } catch (error) {
       if (isCurrentOperation(operation)) searchMessage.textContent = ui`保存偏移失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
     } finally {
       trackOperationControllers = trackOperationControllers.filter((controller) => controller !== operation.controller);
-      if (!disposed && visible) offsetApply.disabled = !lyricDocument;
-    }
-  }
-
-  async function saveTrackPreference(): Promise<void> {
-    const trackId = preferenceDialogTrackId;
-    if (!trackId || trackId !== latestState?.currentTrack?.id || preferenceSaving) return;
-    const sourceId = preferenceSelect.value || null;
-    preferenceSaving = true;
-    renderPreferenceDialog();
-    const controller = new AbortController();
-    preferenceSaveRequest?.abort();
-    preferenceSaveRequest = controller;
-    try {
-      const response = await fetch("/api/lyrics/preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId, sourceId }),
-        signal: controller.signal,
-      });
-      const payload = await responseJson<LyricsTrackPreference>(response);
-      if (disposed || controller.signal.aborted || latestState?.currentTrack?.id !== trackId) return;
-      trackPreference = payload;
-      if (Array.isArray(payload.sources)) {
-        sourceList = payload.sources;
-        sourceLoaded = true;
-      }
-      globalSettings = { ...(globalSettings ?? { cacheDirectory: "", defaultCacheDirectory: "" }), defaultSourceId: payload.defaultSourceId };
-      cancelActiveSearch();
-      temporarySearchSourceId = undefined;
-      candidateList.replaceChildren();
-      sourceOutcomes.replaceChildren();
-      renderSourceChoices();
-      searchMessage.textContent = trUi("本曲默认来源已更新；需要时手动搜索。已清除旧候选。");
-      callbacks.notify(trUi("已保存当前曲目的歌词来源；搜索仍需手动开始。"));
-      closePreferenceDialog();
-    } catch (error) {
-      if (disposed || controller.signal.aborted) return;
-      preferenceDialogStatus.textContent = ui`保存本曲设置失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
-    } finally {
-      if (preferenceSaveRequest === controller) preferenceSaveRequest = undefined;
-      preferenceSaving = false;
-      if (!disposed) renderPreferenceDialog();
+      if (!disposed && visible) renderPreferenceDialog();
     }
   }
 
@@ -1509,13 +1485,19 @@ export function setupLyricsPage(
   }, { passive: true });
   retryLyricsButton.addEventListener("click", () => { void loadCurrentLyric(true); });
   searchButton.addEventListener("click", () => { void searchLyrics(); });
-  searchToggleButton.addEventListener("click", () => { void openSearch(false); });
-  settingsTabButton.addEventListener("click", () => { selectOptionsTab("settings"); });
+  cloudTabButton.addEventListener("click", () => { void activateVariant("cloud", true); });
+  localTabButton.addEventListener("click", () => {
+    const needsImport = !lyricVariants.local;
+    void activateVariant("local");
+    if (needsImport) { importInput.value = ""; importInput.click(); }
+  });
   preferenceTabList.addEventListener("keydown", event=>{
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
     event.preventDefault();
-    const tab=event.key==='Home'?'search':event.key==='End'?'settings':sourceSection.hidden?'search':'settings';
-    selectOptionsTab(tab);(tab==='search'?searchToggleButton:settingsTabButton).focus();
+    const target = event.key === "Home" ? localTabButton : event.key === "End" ? cloudTabButton : document.activeElement === localTabButton ? cloudTabButton : localTabButton;
+    localTabButton.tabIndex = target === localTabButton ? 0 : -1;
+    cloudTabButton.tabIndex = target === cloudTabButton ? 0 : -1;
+    target.focus();
   });
   for (const input of [queryTitle, queryArtist, queryAlbum]) input.addEventListener("keydown", event => {
     if(event.key === "Enter" && !event.isComposing) { event.preventDefault(); void searchLyrics(); }
@@ -1528,16 +1510,10 @@ export function setupLyricsPage(
     openPreferenceDialog();
   });
   preferenceCloseButton.addEventListener("click", () => closePreferenceDialog());
-  preferenceCancelButton.addEventListener("click", () => closePreferenceDialog());
   preferenceDialog.addEventListener("click", (event) => {
     if (event.target === preferenceDialog) closePreferenceDialog();
   });
   preferencePanel.addEventListener("click", (event) => event.stopPropagation());
-  preferenceSettingsButton.addEventListener("click", () => {
-    closePreferenceDialog(false);
-    callbacks.openSettings();
-  });
-  preferenceSaveButton.addEventListener("click", () => { void saveTrackPreference(); });
   window.addEventListener("keydown", handlePreferenceEscape, true);
   importInput.addEventListener("change", () => { void importLyrics(importInput.files?.[0]); });
   offsetApply.addEventListener("click", () => {
@@ -1579,10 +1555,10 @@ export function setupLyricsPage(
         candidateList.replaceChildren();
         sourceOutcomes.replaceChildren();
         searchMessage.textContent = trUi("按曲名与歌手搜索，专辑用于区分版本。");
-        preferenceRequest?.abort();
-        preferenceRequest = undefined;
-        preferenceLoading = false;
-        trackPreference = undefined;
+        activeKind = "cloud";
+        optionsKind = "cloud";
+        lyricVariants = { local: false, cloud: false };
+        confirmedState = { lyric: null, activeKind: "cloud", variants: lyricVariants };
         temporarySearchSourceId = undefined;
         if (preferenceDialogTrackId) closePreferenceDialog();
         renderSourceChoices();
@@ -1599,7 +1575,6 @@ export function setupLyricsPage(
         }
         renderLyrics();
         if (nextTrackId) {
-          if (visible) void loadTrackPreference(true);
           void loadCurrentLyric();
         }
       } else if (album) {
@@ -1619,17 +1594,13 @@ export function setupLyricsPage(
         renderSourceChoices();
         offsetApply.disabled = !lyricDocument;
         void loadSources(true);
-        if (latestState?.currentTrack?.id) void loadTrackPreference(true);
-        if (latestState?.currentTrack?.id && latestState.currentTrack.id !== lyricDocument?.trackId) void loadCurrentLyric();
+        if (!variantBusy && latestState?.currentTrack?.id && latestState.currentTrack.id !== lyricDocument?.trackId) void loadCurrentLyric();
       } else {
         stopVisibleRefresh();
         closePreferenceDialog(false);
         abortTrackOperations(false);
         sourceRequest?.abort();
         sourceRequest = undefined;
-        preferenceRequest?.abort();
-        preferenceRequest = undefined;
-        preferenceLoading = false;
       }
       renderArchiveProfile();
     },
@@ -1638,8 +1609,6 @@ export function setupLyricsPage(
       disposed = true;
       stopVisibleRefresh();
       sourceRequest?.abort();
-      preferenceRequest?.abort();
-      preferenceSaveRequest?.abort();
       abortTrackOperations();
       window.removeEventListener("keydown", handlePreferenceEscape, true);
       activeMobileQuery?.removeEventListener("change", syncResponsiveDetails);

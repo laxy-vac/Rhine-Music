@@ -9,7 +9,7 @@ import { build, preview } from 'vite';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
 const desktopEntry = path.join(projectRoot, 'desktop', 'lyrics-page-check.cjs');
-const artifactRoot = path.join(projectRoot, '.tools', 'future-lyrics');
+const artifactRoot = path.join(projectRoot, '.tools', 'lyrics-source-refinement');
 const cacheDirectory = path.join(artifactRoot, 'vite-cache');
 const runDirectory = path.join(artifactRoot, 'run-' + Date.now() + '-' + randomUUID().slice(0, 8));
 const bundleRoot = path.join(runDirectory, 'vite-harness');
@@ -23,10 +23,12 @@ const sources = [
   { id: 'qq', name: 'QQ音乐', builtin: true, enabled: true },
   { id: 'netease', name: '网易云音乐', builtin: true, enabled: true },
 ];
-const savedLyrics = new Map();
-const preferences = new Map();
+const defaultSourceId = 'netease';
+const trackBanks = new Map();
 const requests = [];
 const resolveResponses = [];
+const searchResponses = [];
+const variantResponses = [];
 const metadataAvailability = new Map();
 let stopping = false;
 let bundledHtmlResponse = '';
@@ -48,18 +50,7 @@ async function readJson(request) {
   return text ? JSON.parse(text) : {};
 }
 
-function preferenceFor(trackId) {
-  const saved = preferences.get(trackId) ?? { sourceId: null };
-  return {
-    trackId,
-    sourceId: saved.sourceId,
-    effectiveSourceId: saved.sourceId ?? 'qq',
-    defaultSourceId: 'qq',
-    sources,
-  };
-}
-
-function lrcDocument(trackId) {
+function lrcDocument(trackId, sourceId = defaultSourceId) {
   const offsetTrack = trackId === 'synthetic-offset-track';
   const firstLines = trackId === 'synthetic-track'
     ? ['第一句合成歌词', '第二句合成歌词']
@@ -72,18 +63,59 @@ function lrcDocument(trackId) {
     translation: '',
     offsetMs: offsetTrack ? 500 : 0,
     offsetInText: true,
-    source: { id: 'qq', name: 'QQ音乐' },
+    source: { id: sourceId, name: sources.find(item => item.id === sourceId)?.name ?? '合成来源' },
     savedAt: new Date().toISOString(),
   };
 }
 
-function selectedLyricDocument(trackId) {
-  const document = lrcDocument(trackId);
-  if (trackId === 'synthetic-track') return document;
+function selectedLyricDocument(trackId, sourceId = defaultSourceId) {
+  const document = lrcDocument(trackId, sourceId);
   return {
     ...document,
     lrc: Array.from({ length: 20 }, (_, index) => `[00:${String(index + 1).padStart(2, '0')}.00]${index === 0 ? `手动选择结果 ${trackId}` : index === 1 ? '第二句手动候选歌词' : `手动候选第 ${index + 1} 行`}`).join('\n'),
   };
+}
+
+function localLyricDocument(trackId, text) {
+  return {
+    version: 2,
+    trackId,
+    lrc: String(text ?? `[00:01.00]本地歌词 ${trackId}`),
+    translation: '',
+    offsetMs: 0,
+    offsetInText: true,
+    source: { id: 'local-import', name: '本地导入' },
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function bankFor(trackId) {
+  let bank = trackBanks.get(trackId);
+  if (!bank) {
+    bank = { activeKind: 'cloud', userSelected: false, selectionRevision: 0, variants: {} };
+    trackBanks.set(trackId, bank);
+  }
+  return bank;
+}
+
+function bankState(trackId) {
+  const bank = trackBanks.get(trackId);
+  if (!bank) return { lyric: null, activeKind: 'cloud', userSelected: false, selectionRevision: 0, variants: { cloud: false, local: false } };
+  return {
+    lyric: bank.variants[bank.activeKind] ?? null,
+    activeKind: bank.activeKind,
+    userSelected: bank.userSelected,
+    selectionRevision: bank.selectionRevision,
+    variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local },
+  };
+}
+
+function activateBank(trackId, kind) {
+  const bank = bankFor(trackId);
+  bank.activeKind = kind;
+  bank.userSelected = true;
+  bank.selectionRevision += 1;
+  return bankState(trackId);
 }
 
 const productionStylesheets = [
@@ -113,18 +145,36 @@ const harnessHtml = [
   '<style>html,body{width:100%;height:100%;margin:0;overflow:hidden}*{box-sizing:border-box}body{font-family:system-ui,"Microsoft YaHei",sans-serif}#stage{position:relative;width:100vw;height:100vh;overflow:hidden}</style>',
   '</head><body>',
   '<div id="stage" class="music-app" data-design="rhine" data-page="lyrics" data-theme="day" data-layout="desktop">',
+  '<header class="music-header" id="lyrics-check-header" style="display:flex!important"><div class="music-identity"><a class="music-brand" href="/" aria-label="Rhine Music 音乐库"><strong>RHINE LAB</strong><span>MUSIC ARCHIVE <i>／</i> Terminal</span></a></div><nav class="music-topnav" aria-label="音乐终端导航">' +
+    '<button data-action="library" aria-label="唱片主页" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3z"/></svg><span>Archive</span></button>' +
+    '<button data-action="eq" aria-label="EQ 均衡器" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V6m5 12V9m5 9V4m5 14v-7"/></svg><span>EQ</span></button>' +
+    '<button data-action="lyrics" aria-label="歌词" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>歌词</span></button>' +
+    '<button data-action="signal" aria-label="信号" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h3l3-7 4 14 4-14 3 7h3"/></svg><span>信号</span></button>' +
+    '<button data-action="theme" aria-label="主题" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg><span>主题</span></button>' +
+    '<button data-action="search" aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>搜索</span></button>' +
+    '<button data-action="online" aria-label="在线曲库" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg><span>在线</span></button>' +
+    '<div class="theme-switch" aria-label="主题"><button data-theme="day" aria-label="暖昼主题" aria-pressed="true"><i class="theme-dot day"></i><span>暖昼</span></button><button data-theme="night" aria-label="深夜主题" aria-pressed="false"><i class="theme-dot night"></i><span>深夜</span></button></div>' +
+    '<time class="foobar-clock" aria-label="当前日期和时间"><strong>12:34</strong><small>PLAYBACK</small></time>' +
+    '<button data-action="settings" class="icon-button" aria-label="设置" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 13a7 7 0 0 0 0-2l2-1-2-3-2 1a7 7 0 0 0-2-1l-.4-2h-4L10 7a7 7 0 0 0-2 1L6 7l-2 3 2 1a7 7 0 0 0 0 2l-2 1 2 3 2-1a7 7 0 0 0 2 1l.6 2h4L15 17a7 7 0 0 0 2-1l2 1 2-3z"/></svg></button>' +
+    '<div class="minimal-transport" role="group" aria-label="音乐播放"><button type="button" data-action="locate-playing" id="lyrics-check-transport-title" class="transport-track" aria-label="定位当前歌曲" aria-hidden="true" disabled><span id="lyrics-check-transport-title-label"></span></button><button data-action="play-pause" id="lyrics-check-transport-anchor" aria-label="播放" aria-pressed="false"><span class="transport-glyph transport-play" aria-hidden="true">▶</span><span class="transport-glyph transport-pause" aria-hidden="true">Ⅱ</span></button><button data-action="stop" id="stop-playback" aria-label="停止">■</button></div>' +
+    '</nav></header>',
   '<main id="music-lyrics-page" class="music-settings-page music-lyrics-page">',
   '<header class="settings-page-heading"><div><small>03 / MUSIC ARCHIVE</small><h1>歌词</h1><p>同步文本与播放信息</p></div></header>',
   '<section id="lyrics-page-content" class="settings-page-content"></section>',
   '</main></div>',
   '<script type="module">',
   'import { setupTerminalLighting } from "/src/terminal-lighting.ts";',
+  'import { setupTransportTitle } from "/src/music-transport-title.ts";',
   'import { enhanceSettingsSelectControls } from "/src/settings-select-controls.ts";',
   'import { qualityPresets } from "/src/render-quality.ts";',
   'import { setupLyricsPage } from "/src/lyrics-page.ts";',
   'const track = { id:"synthetic-track", title:"合成歌曲", artist:"测试歌手", album:"测试专辑", duration:180, codec:"FLAC", format:"FLAC", sampleRate:44100, bitsPerSample:16, numberOfChannels:2, bitrate:0, lossless:true };',
   'let state = { currentTrack:track, queue:[track], currentIndex:0, playbackOrder:"default", playing:false, transport:"paused", currentTime:0.5, duration:180, backend:"browser", nativeOutputStatus:undefined, error:"" };',
   'const album = { title:"测试专辑", artist:"测试歌手", year:"2026" };',
+  'const transportTitle = setupTransportTitle(document.querySelector("#lyrics-check-transport-title"), document.querySelector("#lyrics-check-transport-title-label"));',
+  'window.__lyricsCheckTransportTitle = transportTitle;',
+  'window.__lyricsCheckUpdateTransportTitle = (title,shown) => transportTitle.update(title,shown);',
+  'window.__lyricsCheckSetDesignTheme = (design,theme) => { const root=document.querySelector("#stage");root.dataset.design=design;root.dataset.theme=theme;return true; };',
   'window.__lyricsCheckSeek = [];',
   'const terminalLighting = setupTerminalLighting(document.querySelector("#stage"));',
   'terminalLighting.setQuality(qualityPresets.original);',
@@ -142,7 +192,7 @@ const harnessHtml = [
   'window.__lyricsCheckSetCurrentTime = (value) => { state = { ...state, currentTime:value }; controller.update(state, album); syncSettingsSelectControls(); return value; };',
   'window.__lyricsCheckSetVisible = (visible) => { const stage=document.querySelector("#stage"), page=document.querySelector("#music-lyrics-page"), host=document.querySelector("#lyrics-page-content"); stage.dataset.page = visible ? "lyrics" : "music"; page.hidden = !visible; page.inert = !visible; controller.setVisible(visible); if(visible){settingsSelectControls=enhanceSettingsSelectControls(host);settingsSelectControls.sync();}else{settingsSelectControls?.close();settingsSelectControls?.destroy();settingsSelectControls=undefined;} return visible; };',
   'window.__lyricsCheckSyncSelects = syncSettingsSelectControls;',
-  'window.__lyricsCheckDestroy = () => { settingsSelectControls?.destroy(); controller.destroy(); terminalLighting.destroy(); };',
+  'window.__lyricsCheckDestroy = () => { settingsSelectControls?.destroy(); controller.destroy(); terminalLighting.destroy(); transportTitle.destroy(); };',
   'controller.setVisible(true);',
   'settingsSelectControls = enhanceSettingsSelectControls(document.querySelector("#lyrics-page-content"));',
   'settingsSelectControls.sync();',
@@ -180,7 +230,19 @@ const mockPlugin = {
       }
 
       if (url.pathname === '/__lyrics-check/state') {
-        respondJson(response, { requests, resolveResponses, savedTrackIds: Array.from(savedLyrics.keys()) });
+        respondJson(response, {
+          requests,
+          resolveResponses,
+          searchResponses,
+          variantResponses,
+          banks: Array.from(trackBanks, ([trackId, bank]) => ({
+            trackId,
+            activeKind: bank.activeKind,
+            userSelected: bank.userSelected,
+            selectionRevision: bank.selectionRevision,
+            variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local },
+          })),
+        });
         return;
       }
 
@@ -227,7 +289,7 @@ const mockPlugin = {
 
           if (url.pathname === '/api/lyrics/settings' && request.method === 'GET') {
             respondJson(response, {
-              settings: { defaultSourceId: 'qq', cacheDirectory: 'synthetic-cache', defaultCacheDirectory: 'synthetic-cache' },
+              settings: { defaultSourceId: 'netease', cacheDirectory: 'synthetic-cache', defaultCacheDirectory: 'synthetic-cache' },
               sources,
             });
             return;
@@ -236,79 +298,120 @@ const mockPlugin = {
           if (url.pathname === '/api/lyrics/resolve' && request.method === 'POST') {
             const trackId = String(body.trackId ?? '');
             const available = metadataAvailability.get(trackId) ?? true;
-            const lyric = savedLyrics.get(trackId) ?? (!available || trackId === 'synthetic-empty-track' ? null : lrcDocument(trackId));
-            const waitMs = ['synthetic-slow-track', 'synthetic-pending-track', 'synthetic-import-pending-track', 'synthetic-leave-track'].includes(trackId) ? 450 : 40;
+            const before = trackBanks.get(trackId);
+            const cachedKind = before?.userSelected
+              ? before.activeKind
+              : before?.variants.local ? 'local' : before?.variants.cloud ? 'cloud' : null;
+            const hadBank = !!cachedKind && !!before?.variants[cachedKind];
+            const startingRevision = before?.selectionRevision ?? 0;
+            const startingUserSelected = before?.userSelected ?? false;
+            if (hadBank) {
+              if (!before.userSelected) before.activeKind = cachedKind;
+              const current = bankState(trackId);
+              resolveResponses.push({ trackId, lyricTrackId: current.lyric?.trackId ?? null, activeKind: current.activeKind, cached: true });
+              respondJson(response, { ...current, sources: [] });
+              return;
+            }
+            if (before?.userSelected && before.activeKind === 'local') {
+              const current = bankState(trackId);
+              resolveResponses.push({ trackId, lyricTrackId: null, activeKind: current.activeKind, cached: false, blockedBySelection: true });
+              respondJson(response, { ...current, sources: [] });
+              return;
+            }
+            const lyric = !available || trackId === 'synthetic-empty-track' ? null : lrcDocument(trackId, defaultSourceId);
+            const waitMs = ['synthetic-slow-track', 'synthetic-pending-track', 'synthetic-import-pending-track', 'synthetic-empty-local-track', 'synthetic-leave-track'].includes(trackId) ? 450 : 40;
             if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
-            resolveResponses.push({ trackId, lyricTrackId: lyric?.trackId ?? null });
             if (response.destroyed || request.aborted) return;
-            if (lyric && !savedLyrics.has(trackId)) savedLyrics.set(trackId, lyric);
+            const current = bankFor(trackId);
+            const selectionChanged = current.selectionRevision !== startingRevision;
+            if (selectionChanged) {
+              const loaded = bankState(trackId);
+              resolveResponses.push({ trackId, lyricTrackId: loaded.lyric?.trackId ?? null, activeKind: loaded.activeKind, cached: !!loaded.lyric, selectionChanged: true });
+              respondJson(response, { ...loaded, sources: [] });
+              return;
+            }
+            if (lyric && !current.variants.cloud) current.variants.cloud = lyric;
+            const userChangedSelection = current.userSelected !== startingUserSelected;
+            if (lyric && !userChangedSelection && current.variants.cloud) current.activeKind = 'cloud';
+            const loaded = bankState(trackId);
+            resolveResponses.push({ trackId, lyricTrackId: loaded.lyric?.trackId ?? null, activeKind: loaded.activeKind, cached: false, userChangedSelection });
             respondJson(response, {
-              lyric,
-              sources: [{ sourceId: 'qq', name: 'QQ音乐', status: lyric ? 'ok' : 'empty', count: lyric ? 1 : 0 }],
+              ...loaded,
+              sources: [{ sourceId: defaultSourceId, name: sources.find(item => item.id === defaultSourceId).name, status: lyric ? 'ok' : 'empty', count: lyric ? 1 : 0 }],
             });
             return;
           }
 
           if (url.pathname === '/api/lyrics/track' && request.method === 'GET') {
-            respondJson(response, { lyric: savedLyrics.get(url.searchParams.get('trackId')) ?? null });
+            respondJson(response, bankState(url.searchParams.get('trackId') ?? ''));
             return;
           }
 
-          if (url.pathname === '/api/lyrics/preferences' && request.method === 'GET') {
-            respondJson(response, preferenceFor(url.searchParams.get('trackId') ?? ''));
-            return;
-          }
-
-          if (url.pathname === '/api/lyrics/preferences' && request.method === 'POST') {
-            preferences.set(body.trackId, { sourceId: body.sourceId ?? null });
-            respondJson(response, preferenceFor(body.trackId));
+          if (url.pathname === '/api/lyrics/variant' && request.method === 'POST') {
+            const trackId = String(body.trackId ?? '');
+            const kind = body.kind === 'local' ? 'local' : 'cloud';
+            if (trackId === 'synthetic-slow-variant-track') await new Promise((resolve) => setTimeout(resolve, 450));
+            const payload = activateBank(trackId, kind);
+            variantResponses.push({ trackId, kind, activeKind: payload.activeKind, selectionRevision: payload.selectionRevision,
+              responseDestroyed: response.destroyed, requestAborted: request.aborted });
+            respondJson(response, payload);
             return;
           }
 
           if (url.pathname === '/api/lyrics/search' && request.method === 'POST') {
             await new Promise((resolve) => setTimeout(resolve, 90));
+            const sourceId = body.sourceId === 'auto' ? 'qq' : body.sourceId || 'netease';
+            const source = sources.find(item => item.id === sourceId) ?? sources[0];
+            searchResponses.push({ trackId: String(body.trackId ?? ''), sourceId: source.id });
             respondJson(response, {
-              sourceName: '多来源',
+              sourceName: source.name,
               candidates: [{
-                id: 'synthetic-qq-candidate',
-                sourceId: 'qq',
+                id: `synthetic-${source.id}-candidate`,
+                sourceId: source.id,
                 title: body.query?.title || '合成歌曲',
                 artist: body.query?.artist || '测试歌手',
                 album: body.query?.album || '测试专辑',
                 duration: 180,
                 score: 0.99,
               }],
-              sources: [
-                { sourceId: 'netease', name: '网易云音乐', status: 'error', message: '模拟来源暂时不可用' },
-                { sourceId: 'qq', name: 'QQ音乐', status: 'ok', count: 1 },
-              ],
+              sources: source.id === 'qq' && body.sourceId === 'auto'
+                ? [{ sourceId: 'netease', name: '网易云音乐', status: 'error', message: '模拟来源暂时不可用' }, { sourceId: 'qq', name: 'QQ音乐', status: 'ok', count: 1 }]
+                : [{ sourceId: source.id, name: source.name, status: 'ok', count: 1 }],
             });
             return;
           }
 
           if (url.pathname === '/api/lyrics/select' && request.method === 'POST') {
-            const lyric = selectedLyricDocument(body.trackId);
-            savedLyrics.set(body.trackId, lyric);
-            respondJson(response, { lyric });
+            const bank = bankFor(body.trackId);
+            bank.variants.cloud = selectedLyricDocument(body.trackId, body.sourceId || defaultSourceId);
+            bank.activeKind = 'cloud';
+            bank.userSelected = true;
+            bank.selectionRevision += 1;
+            respondJson(response, bankState(body.trackId));
             return;
           }
 
           if (url.pathname === '/api/lyrics/offset' && request.method === 'POST') {
-            const current = savedLyrics.get(body.trackId);
+            const bank = trackBanks.get(body.trackId);
+            const kind = body.kind === 'local' ? 'local' : 'cloud';
+            const current = bank?.variants[kind];
             if (!current) {
               respondJson(response, { error: 'synthetic lyric not found' }, 404);
               return;
             }
             const lyric = { ...current, offsetMs: Number(body.offsetMs) || 0 };
-            savedLyrics.set(body.trackId, lyric);
-            respondJson(response, { lyric });
+            bank.variants[kind] = lyric;
+            respondJson(response, { lyric, activeKind: bank.activeKind, userSelected: bank.userSelected, selectionRevision: bank.selectionRevision, variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local } });
             return;
           }
 
           if (url.pathname === '/api/lyrics/import' && request.method === 'POST') {
-            const lyric = { ...lrcDocument(body.trackId), lrc: String(body.lrc ?? ''), source: { id: 'local-import', name: '本地导入' } };
-            savedLyrics.set(body.trackId, lyric);
-            respondJson(response, { lyric });
+            const bank = bankFor(body.trackId);
+            bank.variants.local = localLyricDocument(body.trackId, body.lrc);
+            bank.activeKind = 'local';
+            bank.userSelected = true;
+            bank.selectionRevision += 1;
+            respondJson(response, bankState(body.trackId));
             return;
           }
 
@@ -427,8 +530,8 @@ try {
     let stderr = '';
     const timeout = setTimeout(() => {
       child.kill();
-      reject(new Error('Electron lyrics check exceeded 45 seconds. stdout=' + stdout.slice(-6000) + ' stderr=' + stderr.slice(-6000)));
-    }, 45000);
+      reject(new Error('Electron lyrics check exceeded 120 seconds. stdout=' + stdout.slice(-6000) + ' stderr=' + stderr.slice(-6000)));
+    }, 120000);
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { stdout += chunk; });

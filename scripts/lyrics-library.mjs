@@ -7,6 +7,9 @@ import { isFullyQualified } from './platform.mjs';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const builtins = [{ id: 'netease', name: '网易云音乐', builtin: true, enabled: true }, { id: 'qq', name: 'QQ 音乐', builtin: true, enabled: true }];
 const AUTO_SOURCE_ID = 'auto';
+const LYRIC_KINDS = ['cloud', 'local'];
+const MAX_LYRIC_DOCUMENT_BYTES = 256 * 1024;
+const MAX_LYRIC_CONTAINER_BYTES = 512 * 1024 + 4096;
 const mappingDefaults = { results: 'results', id: 'id', title: 'title', artist: 'artist', album: 'album', duration: 'duration', lrc: 'lrc', translation: 'translation' };
 const normalize = value => String(value ?? '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
 const clean = (value, limit = 256) => typeof value === 'string' ? value.replace(/<[^>]*>/g, '').replace(/\0/g, '').trim().slice(0, limit) : '';
@@ -136,11 +139,63 @@ function withEmbeddedOffset(value, offset) {
   return `${bom}[offset:${offset}]${newline}${lines.join(newline)}`;
 }
 
-function validateCache(value, trackId) {
-  if (!value || typeof value !== 'object' || ![1, 2].includes(value.version) || value.trackId !== trackId || !value.source || typeof value.source.name !== 'string' || typeof value.lrc !== 'string' || value.translation !== undefined && typeof value.translation !== 'string' || !Number.isInteger(value.offsetMs) || Math.abs(value.offsetMs) > 30000 || value.version === 2 && value.offsetInText !== true) throw fail('本机歌词缓存格式无效，原文件已保留。');
-  localLyricText(value.lrc, 96 * 1024 + 128);
+function validLyricKind(value) { return LYRIC_KINDS.includes(value); }
+
+function validateLyricDocument(value, trackId) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || ![1, 2].includes(value.version) || value.trackId !== trackId
+      || !value.source || typeof value.source !== 'object' || Array.isArray(value.source) || typeof value.source.name !== 'string'
+      || typeof value.lrc !== 'string' || value.translation !== undefined && typeof value.translation !== 'string'
+      || !Number.isInteger(value.offsetMs) || Math.abs(value.offsetMs) > 30000 || value.version === 2 && value.offsetInText !== true) {
+    throw fail('本机歌词缓存格式无效，原文件已保留。');
+  }
+  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_LYRIC_DOCUMENT_BYTES) throw fail('本机歌词缓存过大，原文件已保留。');
+  let lrc = localLyricText(value.lrc, 96 * 1024 + 128);
   if (value.translation) localLyricText(value.translation);
+  if (value.version === 1) {
+    if (value.offsetInText !== true && value.offsetMs !== 0) {
+      const combinedOffset = embeddedOffset(lrc) + value.offsetMs;
+      if (!Number.isSafeInteger(combinedOffset)) throw fail('旧歌词缓存偏移超出安全范围，原文件已保留。');
+      lrc = withEmbeddedOffset(lrc, combinedOffset);
+    }
+    // Legacy v1 applied offsetMs outside the text. Normalize its meaning in
+    // memory; the source JSON is not rewritten by a read.
+    const normalized = { ...value, version: 2, lrc, offsetInText: true };
+    if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > MAX_LYRIC_DOCUMENT_BYTES) throw fail('本机歌词缓存过大，原文件已保留。');
+    return normalized;
+  }
   return value;
+}
+
+function validateCache(value, trackId) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && [1, 2].includes(value.version)) {
+    const lyric = validateLyricDocument(value, trackId);
+    const kind = lyric.source.id === 'local-import' ? 'local' : 'cloud';
+    return { version: 3, trackId, activeKind: kind, userSelected: false, selectionRevision: 0, variants: { [kind]: lyric } };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 3 || value.trackId !== trackId
+      || !value.variants || typeof value.variants !== 'object' || Array.isArray(value.variants)
+      || !validLyricKind(value.activeKind) || value.userSelected !== undefined && typeof value.userSelected !== 'boolean'
+      || value.selectionRevision !== undefined && (!Number.isSafeInteger(value.selectionRevision) || value.selectionRevision < 0)
+      || Object.keys(value).some(key => !['version', 'trackId', 'activeKind', 'variants', 'userSelected', 'selectionRevision'].includes(key))
+      || Object.keys(value.variants).some(kind => !validLyricKind(kind))) {
+    throw fail('本机歌词缓存格式无效，原文件已保留。');
+  }
+  const variants = {};
+  for (const kind of LYRIC_KINDS) {
+    if (!Object.hasOwn(value.variants, kind)) continue;
+    const document = value.variants[kind];
+    if (!document || document.version !== 2 || document.offsetInText !== true) throw fail('本机歌词缓存格式无效，原文件已保留。');
+    if ((kind === 'local') !== (document.source?.id === 'local-import')) throw fail('歌词缓存来源与版本类型不符，原文件已保留。');
+    variants[kind] = validateLyricDocument(document, trackId);
+  }
+  const userSelected = value.userSelected ?? false;
+  const selectionRevision = value.selectionRevision ?? 0;
+  const activeKind = userSelected
+    ? value.activeKind
+    : variants.local ? 'local' : 'cloud';
+  const normalized = { version: 3, trackId, activeKind, userSelected, selectionRevision, variants };
+  if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > MAX_LYRIC_CONTAINER_BYTES) throw fail('本机歌词缓存容器过大，原文件已保留。');
+  return normalized;
 }
 
 function candidate(source, value, wanted) {
@@ -260,52 +315,140 @@ export class LyricsLibrary {
   async readCache(trackId, directory) {
     const file = this.cacheFile(trackId, directory), info = await fs.lstat(file);
     if (!info.isFile() || info.isSymbolicLink()) throw fail('歌词缓存不是普通文件，原文件已保留。');
-    if (info.size > 256 * 1024) throw fail('本机歌词缓存过大。');
+    if (info.size > MAX_LYRIC_CONTAINER_BYTES) throw fail('本机歌词缓存过大。');
     return validateCache(JSON.parse(await fs.readFile(file, 'utf8')), trackId);
   }
-  async load(trackId) {
+  async loadContainer(trackId) {
     await this.init(); await this.metadata(trackId);
+    const variants = {};
+    let selectedState;
     for (const directory of this.cacheDirectories()) try {
-      return { lyric: await this.readCache(trackId, directory) };
+      const cached = await this.readCache(trackId, directory);
+      for (const kind of LYRIC_KINDS) if (!variants[kind] && cached.variants[kind]) variants[kind] = cached.variants[kind];
+      if (!selectedState) selectedState = {
+        userSelected: cached.userSelected,
+        selectionRevision: cached.selectionRevision,
+        activeKind: cached.activeKind,
+      };
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    return { lyric: null };
+    const userSelected = selectedState?.userSelected ?? false;
+    const selectionRevision = selectedState?.selectionRevision ?? 0;
+    const activeKind = userSelected
+      ? selectedState.activeKind
+      : variants.local ? 'local' : 'cloud';
+    return { version: 3, trackId, activeKind, userSelected, selectionRevision, variants };
   }
-  async save(trackId, contents, { onlyIfMissing = false, signal, preserveText = false, expectedLyric } = {}) {
+  projectCache(container, kind) {
+    const selectedKind = kind ?? container.activeKind;
+    return {
+      lyric: selectedKind ? container.variants[selectedKind] ?? null : null,
+      activeKind: container.activeKind,
+      userSelected: container.userSelected,
+      selectionRevision: container.selectionRevision,
+      variants: { cloud: !!container.variants.cloud, local: !!container.variants.local },
+      ...(kind ? { kind } : {}),
+    };
+  }
+  async resolveSnapshot(trackId, expectedSelectionRevision, sources = [], cachedOverride) {
+    const container = await this.loadContainer(trackId);
+    const selectionChanged = container.selectionRevision !== expectedSelectionRevision;
+    const hasActiveLyric = !!(container.activeKind && container.variants[container.activeKind]);
+    return {
+      ...this.projectCache(container),
+      cached: selectionChanged ? hasActiveLyric : cachedOverride ?? hasActiveLyric,
+      sources: selectionChanged || hasActiveLyric ? [] : sources,
+      ...(selectionChanged ? { selectionChanged: true } : {}),
+    };
+  }
+  async load(trackId, kind) {
+    if (kind !== undefined && kind !== null && kind !== '' && !validLyricKind(kind)) throw fail('歌词版本类型无效。');
+    const container = await this.loadContainer(trackId);
+    return this.projectCache(container, kind || undefined);
+  }
+  async commitContainer(trackId, container) {
+    const serialized = JSON.stringify(container);
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_LYRIC_CONTAINER_BYTES) throw fail('两份歌词合计超过本机歌词缓存容量。');
+    const currentFile = this.cacheFile(trackId);
+    const currentIdentity = pathKey(await fs.realpath(currentFile).catch(error => { if (error.code !== 'ENOENT') throw error; return currentFile; }));
+    const previousFiles = new Map();
+    for (const directory of this.cacheDirectories()) try {
+      await this.readCache(trackId, directory);
+      const file = this.cacheFile(trackId, directory), identity = pathKey(await fs.realpath(file));
+      if (identity !== currentIdentity) previousFiles.set(identity, file);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await writeJsonAtomic(currentFile, container);
+    for (const file of previousFiles.values()) await fs.unlink(file);
+  }
+  async save(trackId, contents, { kind, onlyIfMissing = false, signal, preserveText = false, expectedLyric, expectedSelectionRevision, activate = true, userSelection = false } = {}) {
+    if (!contents || typeof contents !== 'object' || Array.isArray(contents)) throw fail('歌词内容格式无效。');
     const metadata = await this.metadata(trackId);
     const text = preserveText ? value => localLyricText(value, 96 * 1024 + 128) : contents.source?.id === 'local-import' ? localLyricText : lyricText;
     const lrc = text(contents.lrc), translation = text(contents.translation);
     if (!lrc.trim()) throw fail('没有可保存的歌词内容。', 404);
-    const document = { version: 2, trackId, track: metadata, lrc, ...(translation ? { translation } : {}), offsetMs: contents.offsetMs ?? 0, offsetInText: true, source: contents.source, savedAt: new Date().toISOString() };
-    if (Buffer.byteLength(JSON.stringify(document), 'utf8') > 256 * 1024) throw fail('原文与翻译合计超过本机歌词文档容量。');
+    const bank = kind ?? (contents.source?.id === 'local-import' ? 'local' : 'cloud');
+    if (!validLyricKind(bank)) throw fail('歌词版本类型无效。');
+    if (expectedSelectionRevision !== undefined && (!Number.isSafeInteger(expectedSelectionRevision) || expectedSelectionRevision < 0)) throw fail('歌词选择版本号无效。');
+    const document = validateLyricDocument({ version: 2, trackId, track: metadata, lrc, ...(translation ? { translation } : {}), offsetMs: contents.offsetMs ?? 0, offsetInText: true, source: contents.source, savedAt: new Date().toISOString() }, trackId);
+    if (Buffer.byteLength(JSON.stringify(document), 'utf8') > MAX_LYRIC_DOCUMENT_BYTES) throw fail('原文与翻译合计超过本机歌词文档容量。');
     const write = this.tail.catch(() => {}).then(async () => {
       abortIfNeeded(signal);
-      const cached = await this.load(trackId);
-      if (onlyIfMissing && cached.lyric) return cached;
-      if (expectedLyric && JSON.stringify(cached.lyric) !== JSON.stringify(expectedLyric)) throw fail('歌词版本已变化，请对当前版本重新调整对齐。', 409);
-      // Only known, validated documents for this exact track are ours to replace.
-      const currentFile = this.cacheFile(trackId);
-      const currentIdentity = pathKey(await fs.realpath(currentFile).catch(error => { if (error.code !== 'ENOENT') throw error; return currentFile; }));
-      const previousFiles = new Map();
-      for (const directory of this.cacheDirectories()) try {
-        await this.readCache(trackId, directory);
-        const file = this.cacheFile(trackId, directory);
-        const identity = pathKey(await fs.realpath(file));
-        if (identity !== currentIdentity) previousFiles.set(identity, file);
-      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      const cached = await this.loadContainer(trackId);
+      if (expectedSelectionRevision !== undefined && cached.selectionRevision !== expectedSelectionRevision) {
+        return { ...this.projectCache(cached), kind: cached.activeKind, cached: true, selectionChanged: true };
+      }
+      if (onlyIfMissing) {
+        if (cached.activeKind === bank && cached.variants[bank]) return { ...this.projectCache(cached, bank), kind: bank, cached: true };
+        if ((cached.variants.cloud || cached.variants.local) && !(cached.userSelected && cached.activeKind === bank)) {
+          return { ...this.projectCache(cached), kind: cached.activeKind, cached: true };
+        }
+      }
+      if (expectedLyric !== undefined && JSON.stringify(cached.variants[bank] ?? null) !== JSON.stringify(expectedLyric)) throw fail('歌词版本已变化，请对当前版本重新调整对齐。', 409);
+      const variants = { ...cached.variants, [bank]: document };
+      let activeKind = cached.activeKind;
+      let userSelectedState = cached.userSelected;
+      let selectionRevision = cached.selectionRevision;
+      if (userSelection) {
+        if (selectionRevision >= Number.MAX_SAFE_INTEGER) throw fail('歌词选择版本号已达到安全上限。');
+        activeKind = bank;
+        userSelectedState = true;
+        selectionRevision += 1;
+      } else if (activate) {
+        activeKind = cached.userSelected ? cached.activeKind : variants.local ? 'local' : variants.cloud ? 'cloud' : cached.activeKind ?? bank;
+      }
+      const container = { version: 3, trackId, activeKind, userSelected: userSelectedState, selectionRevision, variants };
       abortIfNeeded(signal);
-      await writeJsonAtomic(currentFile, document);
-      for (const file of previousFiles.values()) await fs.unlink(file);
-      return { lyric: document };
+      await this.commitContainer(trackId, container);
+      return { ...this.projectCache(container, bank), kind: bank, cached: false };
+    });
+    this.tail = write; return write;
+  }
+  async activate(value, signal) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw fail('歌词版本切换请求格式无效。');
+    const { trackId, kind } = value;
+    if (!validLyricKind(kind)) throw fail('歌词版本类型无效。');
+    abortIfNeeded(signal);
+    const write = this.tail.catch(() => {}).then(async () => {
+      abortIfNeeded(signal);
+      const cached = await this.loadContainer(trackId);
+      abortIfNeeded(signal);
+      if (cached.selectionRevision >= Number.MAX_SAFE_INTEGER) throw fail('歌词选择版本号已达到安全上限。');
+      const container = { ...cached, activeKind: kind, userSelected: true, selectionRevision: cached.selectionRevision + 1 };
+      await this.commitContainer(trackId, container);
+      return { ...this.projectCache(container, kind), kind, cached: !!container.variants[kind] };
     });
     this.tail = write; return write;
   }
   async resolve({ trackId }, signal) {
     abortIfNeeded(signal);
-    const cached = await this.load(trackId);
+    const cached = await this.loadContainer(trackId);
     abortIfNeeded(signal);
-    if (cached.lyric) return { ...cached, cached: true, sources: [] };
-    const wanted = await this.metadata(trackId), preference = await this.preferences(trackId);
-    const priority = [...new Set([preference.effectiveSourceId, 'qq'])];
+    const selectedKind = cached.activeKind;
+    if (cached.userSelected && selectedKind === 'local') return { ...this.projectCache(cached, 'local'), cached: !!cached.variants.local, sources: [] };
+    if (cached.variants.local && !cached.userSelected) return { ...this.projectCache(cached, 'local'), cached: true, sources: [] };
+    if (cached.variants.cloud && selectedKind === 'cloud') return { ...this.projectCache(cached, 'cloud'), cached: true, sources: [] };
+    const expectedSelectionRevision = cached.selectionRevision;
+    const wanted = await this.metadata(trackId);
+    const priority = [...new Set([this.effectiveDefault(), 'qq'])];
     const ordered = [...builtins, ...this.custom].filter(source => source.enabled)
       .sort((left, right) => (priority.indexOf(left.id) < 0 ? 99 : priority.indexOf(left.id)) - (priority.indexOf(right.id) < 0 ? 99 : priority.indexOf(right.id)));
     const timeout = AbortSignal.timeout(20_000), lookupSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -319,8 +462,9 @@ export class LyricsLibrary {
             const contents = await this.candidateLyric({ trackId, sourceId: source.id, candidateId: found.id }, lookupSignal);
             const lrc = lyricText(contents.lrc);
             if (!lrc.split(/\r?\n/).some(line => line.replace(/\[[^\]]*\]/g, '').trim())) continue;
-            const result = await this.save(trackId, { ...contents, lrc }, { onlyIfMissing: true, signal: lookupSignal });
-            return { ...result, cached: false, sources: [...sources, { sourceId: source.id, name: source.name, status: 'ok', count: candidates.length }] };
+            const result = await this.save(trackId, { ...contents, lrc }, { kind: 'cloud', onlyIfMissing: true, expectedSelectionRevision, signal: lookupSignal });
+            if (result.selectionChanged || result.cached) return this.resolveSnapshot(trackId, expectedSelectionRevision, [], result.cached);
+            return this.resolveSnapshot(trackId, expectedSelectionRevision, [...sources, { sourceId: source.id, name: source.name, status: 'ok', count: candidates.length }], false);
           } catch (error) {
             abortIfNeeded(signal);
             failure = error;
@@ -335,13 +479,13 @@ export class LyricsLibrary {
       if (lookupSignal.aborted) break;
     }
     abortIfNeeded(signal);
-    return { lyric: null, sources };
+    return this.resolveSnapshot(trackId, expectedSelectionRevision, sources);
   }
   async search({ trackId, sourceId, query }, signal) {
     await this.init();
     abortIfNeeded(signal);
     const automatic = sourceId === AUTO_SOURCE_ID;
-    if (!automatic && (sourceId === undefined || sourceId === null || sourceId === '')) sourceId = (await this.preferences(trackId)).effectiveSourceId;
+    if (!automatic && (sourceId === undefined || sourceId === null || sourceId === '')) sourceId = this.effectiveDefault();
     const actual = await this.metadata(trackId), wanted = { ...actual };
     if (query !== undefined) {
       if (!query || typeof query !== 'object' || Array.isArray(query)) throw fail('检索信息格式无效。');
@@ -352,7 +496,7 @@ export class LyricsLibrary {
     }
     if (!wanted.title) throw fail('请填写歌曲标题。');
     if (automatic) {
-      const preferredSourceId = (await this.preferences(trackId)).effectiveSourceId;
+      const preferredSourceId = this.effectiveDefault();
       const orderedSources = [...builtins, ...this.custom].filter(item => item.enabled);
       orderedSources.sort((left, right) => Number(right.id === preferredSourceId) - Number(left.id === preferredSourceId));
       if (!orderedSources.length) throw fail('未找到可用的歌词源。');
@@ -443,18 +587,27 @@ export class LyricsLibrary {
   }
   async select(value, signal) {
     const contents = await this.candidateLyric(value, signal);
-    return this.save(value.trackId, contents, { signal });
+    return this.save(value.trackId, contents, { kind: 'cloud', userSelection: true, signal });
   }
-  async import({ trackId, lrc, translation }) {
+  async import({ trackId, lrc, translation }, signal) {
     if (typeof lrc !== 'string' || translation !== undefined && typeof translation !== 'string') throw fail('导入歌词需要文本内容。');
-    return this.save(trackId, { lrc, translation, source: { id: 'local-import', name: '本地导入' } });
+    abortIfNeeded(signal);
+    return this.save(trackId, { lrc, translation, source: { id: 'local-import', name: '本地导入' } }, { kind: 'local', userSelection: true, signal });
   }
-  async offset({ trackId, offsetMs }) {
+  async offset({ trackId, offsetMs, kind }) {
     if (!Number.isInteger(offsetMs) || Math.abs(offsetMs) > 30000) throw fail('歌词偏移需为 -30000 至 30000 毫秒的整数。');
-    const result = await this.load(trackId);
-    if (!result.lyric) throw fail('请先选择或导入歌词。', 404);
-    const baseOffset = embeddedOffset(result.lyric.lrc) - (result.lyric.offsetInText ? result.lyric.offsetMs : 0);
+    const cached = await this.loadContainer(trackId);
+    const bank = kind === undefined || kind === null || kind === '' ? cached.activeKind : kind;
+    if (!validLyricKind(bank)) throw fail('歌词版本类型无效。');
+    const lyric = cached.variants[bank];
+    if (!lyric) throw fail('请先选择或导入此版本歌词。', 404);
+    const baseOffset = embeddedOffset(lyric.lrc) - (lyric.offsetInText ? lyric.offsetMs : 0);
     if (!Number.isSafeInteger(baseOffset + offsetMs)) throw fail('原歌词的 offset 超出可调整范围，原缓存已保留。');
-    return this.save(trackId, { ...result.lyric, lrc: withEmbeddedOffset(result.lyric.lrc, baseOffset + offsetMs), offsetMs }, { preserveText: true, expectedLyric: result.lyric });
+    return this.save(trackId, { ...lyric, lrc: withEmbeddedOffset(lyric.lrc, baseOffset + offsetMs), offsetMs }, {
+      kind: bank,
+      preserveText: true,
+      expectedLyric: lyric,
+      activate: false,
+    });
   }
 }

@@ -93,13 +93,15 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | 入门EQ目录配置 | profile/standard-eq-library.json仅保存目录选择；渲染器selection token只保存目录/文件名/指纹，当前工作音效仍在现有preferences中 |
 | LSP与旧EQ聚合库/模式工作区 | profile旁presets/eq/audio-processing-presets.json，独立于HTTP端口；原有读取/保存逻辑保留，不自动迁移或删除旧库 |
 | 验证索引/封面/音频缓存 | 仓库旁 `music-data-source-preview/music-data`，不自动扫描/迁移/删除 |
-| 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接；歌词每曲一个SHA-256命名JSON，缓存文档含原文/翻译/来源/偏移 |
+| 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接；歌词每曲一个SHA-256命名V3 JSON，内含独立local/cloud bank及本曲来源选择/偏移状态 |
 
 退役阶段运行包的测试数据保留在工作区相对路径 `packaging/retired-stage-data`，仅作留存，不是运行入口；日常开发仅使用上表的源码验证profile。
 
-音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词缓存换目录本身不搬运文件；读取当前目录、最多16个配置历史目录和默认目录。显式替换歌词或保存偏移时，服务只处理该曲目的SHA-256文件：验证后将新version 2文档写入当前目录并清理配置历史目录内的有效旧副本；version 1缓存继续读取，显式替换/偏移才升级。未知、损坏、非普通或链接文件会保留并阻止覆盖；不扫描其他曲目或配置路径外目录。导入只传UTF-8文本副本，不传源文件路径、不改写/删除原文件。歌词识别当前曲目后会先查本机缓存；miss时默认QQ优先，失败/无可靠匹配时在20秒内按来源顺序回退。标签写回仍需用户主动选择。
+音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词缓存换目录本身不搬运文件；读取当前目录、最多16个配置历史目录和默认目录。V3每曲容器包含local/cloud两bank，各自独立替换内容/偏移；显式来源选择（包括空bank）锁存，迟到自动结果以`selectionRevision`拦截。本机bank优先；缺失时云端默认provider来自全局设置，临时自选不保存为本曲默认。旧V1/V2读取时仅在内存归一化，写入时升级并合并可确认的同hash历史内容；坏/未知文件和路径别名继续受保护。旧单曲来源偏好文件/API保留兼容，但不提供本曲默认UI，也不参与自动解析或云搜索默认。导入只传UTF-8文本副本，不传源文件路径，不修改/删除原文件。标签写回仍需用户主动选择。
 
 品尝版安装后使用 `<安装目录>/data` 和 `<安装目录>/presets`，不使用源码profile、不自动迁移现有个人文件。源码预览兼容读取旧preferences内嵌主题预设，以及新EQ文件缺失时的旧profile/audio-processing-presets.json；下一次用户保存才写入新预设目录，旧文件保留。两主题预设与EQ分开持久化，坏文件或启动后的外部编辑会拒绝覆盖并报告。
+
+V3歌词缓存不会随Git回滚降级。只支持V2的旧源码会保留但无法读取V3容器；恢复支持V3的源码后可继续读取。不要删除缓存来绕过版本校验，原始导入文件仍保持不变。
 
 ## 品尝版打包与交付源码ZIP
 
@@ -110,6 +112,8 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 `npm run export:source` 是可选交付步骤，输出当前main的源码ZIP到 `.tools/preview-release/source`；不包含Git历史、安装依赖、构建工具、个人数据或机器验证JSON，也不用于GitHub同步。本地开发与用户自行发布共用当前仓库的 `main`；这不授权自动推送。新机器需由用户先批准，再准备项目依赖和Electron/原生桌面工具；普通命令不自动下载或安装。详细品尝版边界见[品尝版说明](PREVIEW-RELEASE.md)。
 
 ## 检查索引与边界
+
+2026-10-16歌词来源精修：TypeScript/1662模块界面构建、28项库mock、26项离屏UI及40个标题用例通过；build.log在`.tools/lyrics-source-refinement`，报告/29张图在其`run-1792154817478-3a6a833b`。使用现有Vite预bundle和隐藏Electron持续绘制，来源/API全部mock，文件选择器只验证调用意图，不打开Windows实窗；没有外网歌词、个人曲库或设备访问。顶栏按现有预算固定：1920槽240px，1280/900仍受70px媒体限制，440槽100px，未补低分辨率适配。主Agent复核了弹窗、管理来源hover和短/长标题图；Windows真实键鼠、选择器、个人整窗及在线歌词服务未验。上轮`a684885`及`.tools/future-lyrics`的24/18结果是V2历史。此记录不授权额外环境或真实设备操作。
 
 2026-10-15上一轮实际运行的ARRAY cover rowTint before/after专项、array-composition、full unified、TSC与最终interface-only build均通过；runtime/shader/blockedRoutes为0。ARRAY此路径额外执行一次mask Scene render和一次全屏合成，未验证设备FPS。上一轮pure helper与album pointer未重跑、相关实现未改；pure helper沿用`66589e7`基线`.tools/array-composition/pure-motion-audit.json`（targetRow/列anchor逻辑未变）。旧source-surface目录`.tools/array-surface-refinement`仅保留更早历史，不作为当前motion验证。Build log在`.tools/array-cover-visibility/build.log`；before/after报告为`.tools/array-cover-visibility/{before-report.json,after-report.json,after-*-rowtint-on/off.png}`；上一轮composition报告为`.tools/array-composition/{array-composition-audit.json,array-composition-screenshots.json,unified-render-audit.json,scene-motion-unified-audit.json}`。验证使用隔离synthetic Scene，不代表个人播放器、音频设备或完整app页面人工验收，不声称像素复刻或用户通过。
 本轮两主题ARRAY单凸起带起验证通过：TSC、最终interface-only build、`--array-bump` pure/Scene/MATRIX/UI guards及array-composition复跑均通过，runtime/shader/blockedRoutes=0。四档中心slot邻居总数`0/2/4/8`（每侧最多`0/1/2/4`），邻居抬高`0/.374/.561/.677`，中心峰值`2.098`；快速正反选后静止5秒无迟到返波、尾帧变化0。`returning-array` hover相对无hover spring反事实首帧约`+.01`，目录/focus不变。MATRIX full/off扫描150帧确认global pulse正常，同列远4行maxY差`.0712`、邻列`.0604`，rail guards通过。报告在`.tools/array-bump/{build.log,pure-motion-audit.json,array-bump-report.json}`及同目录9张PNG。此轮未重跑full unified或cover白板专项；fader源码未改，相关旧报告仍为历史。`.tools/array-echo`仅为已撤回packet/回波版历史，不代表当前行为；结果不外推硬件FPS或用户人工验收。
