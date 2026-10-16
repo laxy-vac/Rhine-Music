@@ -23,6 +23,7 @@ export const playbackMarkup = () => ui`
     <span class="playback-song-copy"><strong id="playback-title"></strong><span class="playback-subtitle"><small id="playback-artist"></small><small id="playback-state"></small></span></span>
   </button>
   <div class="playback-timeline">
+    <span class="playback-current-lyric" aria-label="当前歌词"></span>
     <output id="playback-elapsed" aria-label="已播放时间">0:00</output>
     <div class="playback-seek"><div class="playback-rail" aria-hidden="true"><i class="playback-buffer"></i><i class="playback-fill"></i><i class="playback-loading"></i></div><input id="playback-progress" type="range" min="0" max="1" value="0" step="0.1" aria-label="播放进度" aria-describedby="playback-state" disabled></div>
     <output id="playback-duration" aria-label="总时长">0:00</output>
@@ -32,6 +33,8 @@ export const playbackMarkup = () => ui`
     <button class="playback-info-trigger" data-action="audio-info" aria-label="音频信息" title="音频信息与处理链路" aria-expanded="false" aria-controls="music-audio-info">${icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>')}</button>
     <button class="playback-queue" data-action="playback-queue" aria-label="当前专辑播放队列" title="当前专辑播放队列" aria-expanded="false">${icon('<path d="M4 6h11M4 11h11M4 16h7M19 10v9a2 2 0 1 1-2-2v-7l4-1"/>')}</button>
   </div>
+  <button type="button" class="playback-shuffle foobar-shuffle" data-action="foobar-shuffle" aria-label="打乱全部歌曲并播放" title="打乱全部歌曲并播放">▪ SHUFFLE ALL</button>
+  <label class="playback-order foobar-order">ORDER <select aria-label="播放顺序"><option value="default">DEFAULT</option><option value="repeat-queue">REPEAT QUEUE</option><option value="repeat-track">REPEAT TRACK</option><option value="random">RANDOM</option><option value="shuffle-tracks">SHUFFLE TRACKS</option><option value="shuffle-albums">SHUFFLE ALBUMS</option><option value="shuffle-folders">SHUFFLE FOLDERS</option></select></label>
 </section>`;
 
 export function playbackTime(value: number): string {
@@ -49,6 +52,8 @@ export function setupMusicPlayback(
     seek: (seconds: number) => void;
     volume: (value: number) => void;
     cover?: (track: MusicTrack) => string | undefined;
+    order?: (value: MusicPlayerState["playbackOrder"]) => void;
+    currentLyric?: () => string;
   },
 ) {
   const query = <T extends HTMLElement = HTMLElement>(selector: string) =>
@@ -58,6 +63,8 @@ export function setupMusicPlayback(
   const elapsed = query("#playback-elapsed");
   const duration = query("#playback-duration");
   const toggle = query("#playback-toggle");
+  const order = query<HTMLSelectElement>(".playback-order select");
+  const currentLyric = query(".playback-current-lyric");
   const coverImages = [
     ...host.querySelectorAll<HTMLImageElement>(".playback-cover-image"),
   ];
@@ -98,6 +105,12 @@ export function setupMusicPlayback(
         latest.currentTime,
         Math.max(0, latest.duration || latest.currentTrack?.duration || 0),
       );
+  }
+  function refreshLyric() {
+    const text = latest?.currentTrack ? callbacks.currentLyric?.() ?? "" : "";
+    if (currentLyric.textContent !== text) currentLyric.textContent = text;
+    if (currentLyric.title !== text) currentLyric.title = text;
+    currentLyric.setAttribute("aria-hidden", String(!text));
   }
   function updateCover(url: string | undefined) {
     if (url === coverUrl) return;
@@ -159,6 +172,7 @@ export function setupMusicPlayback(
   volume.addEventListener("input", () => {
     if (!volume.disabled) callbacks.volume(Number(volume.value) / 100);
   });
+  order.addEventListener("change", () => callbacks.order?.(order.value as MusicPlayerState["playbackOrder"]));
   const resize = new ResizeObserver(() => {
     (host.closest<HTMLElement>(".music-app") ?? host.parentElement)?.style.setProperty(
       "--playback-height",
@@ -168,6 +182,7 @@ export function setupMusicPlayback(
   resize.observe(host);
 
   return {
+    refreshLyric,
     update(state: MusicPlayerState) {
       const changed = trackId !== state.currentTrack?.id;
       const canSeek =
@@ -175,6 +190,8 @@ export function setupMusicPlayback(
         ["playing", "paused"].includes(state.transport) &&
         state.duration > 0;
       latest = state;
+      order.value = state.playbackOrder;
+      refreshLyric();
       if (changed || !canSeek) cancel();
       trackId = state.currentTrack?.id;
       const app = host.closest<HTMLElement>(".music-app") ?? host.parentElement!;

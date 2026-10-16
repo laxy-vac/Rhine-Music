@@ -259,7 +259,7 @@ async function responseJson<T>(response: Response): Promise<T> {
 export function setupLyricsPage(
   host: HTMLElement,
   callbacks: LyricsPageCallbacks,
-): { update(state: MusicPlayerState, album?: MusicAlbum): void; setVisible(visible: boolean): void; destroy(): void } {
+): { currentLine(position?: number): string; update(state: MusicPlayerState, album?: MusicAlbum): void; setVisible(visible: boolean): void; destroy(): void } {
   let latestState: MusicPlayerState | undefined;
   let latestAlbum: MusicAlbum | undefined;
   let visible = false;
@@ -849,6 +849,7 @@ export function setupLyricsPage(
   }
 
   function renderLyrics(): void {
+    host.dispatchEvent(new CustomEvent("lyrics-content-changed", { bubbles: true }));
     const editable=!!lyricDocument && lyricDocument.trackId === latestState?.currentTrack?.id && kindOfLyric(lyricDocument) === optionsKind && !variantBusy;
     offsetInput.disabled=!editable;
     for(const button of [offsetApply,offsetMinus,offsetPlus,offsetReset])button.disabled=!editable;
@@ -915,6 +916,17 @@ export function setupLyricsPage(
     });
   }
 
+  function currentLyricIndex(position = latestState?.currentTime ?? 0): number {
+    if (!parsedLyrics?.timed || !lyricDocument || lyricDocument.trackId !== latestState?.currentTrack?.id) return -1;
+    const current = Math.max(0, position + (lyricDocument.offsetInText ? 0 : lyricDocument.offsetMs) / 1000);
+    let index = -1;
+    for (let i = 0; i < parsedLyrics.lines.length; i += 1) {
+      const time = parsedLyrics.lines[i].time;
+      if (time !== null && time <= current) index = i;
+    }
+    return index;
+  }
+
   function updateActiveLine(allowScroll: boolean, force = false): void {
     const state = latestState;
     if (!visible || !state || !parsedLyrics || !lyricDocument || !parsedLyrics.timed) {
@@ -922,12 +934,7 @@ export function setupLyricsPage(
       updateArchiveLineIndex(-1);
       return;
     }
-    const current = Math.max(0, state.currentTime + (lyricDocument.offsetInText ? 0 : lyricDocument.offsetMs) / 1000);
-    let index = -1;
-    for (let i = 0; i < parsedLyrics.lines.length; i += 1) {
-      const time = parsedLyrics.lines[i].time;
-      if (time !== null && time <= current) index = i;
-    }
+    const index = currentLyricIndex();
     if (index === activeLineIndex && !force) return;
     activeLineIndex = index;
     updateArchiveLineIndex(index);
@@ -1604,6 +1611,10 @@ export function setupLyricsPage(
   syncArchiveLayout();
 
   return {
+    currentLine(position?: number): string {
+      const index = currentLyricIndex(position);
+      return index >= 0 ? parsedLyrics!.lines[index].text : "";
+    },
     update(state, album) {
       if (disposed) return;
       const nextTrackId = state.currentTrack?.id ?? "";

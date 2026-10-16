@@ -14,6 +14,8 @@
 
 顶栏“歌词”与音乐库、EQ平级。左侧播放信息可独立滚动，底部频谱固定保留完整高度；中央阅读歌词，右侧只保留封面与曲目信息。
 
+两主题底部进度条上方显示当前播放的原文歌词句。`setupLyricsPage().currentLine(position?)`复用当前文档、解析结果与页面活动行的偏移判断，歌词页隐藏时仍可读取；状态推进和`lyrics-content-changed`事件同步底栏，不额外搜索或下载。文档加载/切源/校准后立即刷新，换曲时拒绝旧track文档；无定时歌词或首句尚未到达时留空。固定18px歌词槽单行省略，完整文本保留在title中。
+
 Future歌词选项弹窗整体作为一块玻璃承接环境光；内部仅hover/focus-visible/selected/expanded控件显示inset表面亮边，不逐按钮生成外投光晕。弹窗打开时暂停背后接收器，关闭后恢复。该规则保留off/local/full光效质量档与Punk皮肤。
 
 1. 每曲缓存为一个按曲目ID的SHA-256命名V3 JSON容器，包含独立的`local`/`cloud` bank，以及`userSelected`和`selectionRevision`。每个bank最多一份歌词内容和一份偏移。选择偏好与有效内容类型分开：Local缺失时可以使用Cloud缓存或自动解析的Cloud结果，但实际`effectiveKind`为Cloud并设`usingCloudFallback=true`；回退不改变`activeKind`、`userSelected`或revision。显式选择Cloud后保持Cloud，即使Local文档随后出现也不会自动切回。
@@ -62,6 +64,8 @@ URL模板支持`{query}`、`{title}`、`{artist}`、`{album}`、`{id}`，各值�
 来源接口与歌词内容保留各自权利，不改授本项目MIT；歌词缓存只留本机，不分发歌词内容。
 
 ## 当前实现验证状态
+
+底栏当前句专项：TypeScript/1662模块界面构建及`node scripts/check-foobar-layout.mjs --playback-lyrics`通过，报告`.tools/playback-lyrics/playback-lyrics.json`。真实LyricsPage与播放条、主程序生产callbacks/冒泡事件在全mock下覆盖歌词页隐藏时异步缓存载入（一次resolve）、时间推进、currentLine纯getter、LRC内/外偏移一次应用、本地/云切换与校准、换曲清除旧文、无歌词和长句。空文本虽高0，18px网格槽和时间轴/轨道不变。两主题日夜四组、生产SHUFFLE ALL/ORDER/seek与6张稳定截图已验，主Agent复核Future日间和Punk夜间；未访问真实歌词服务、个人曲库、音频设备或实际播放器整窗。
 
 频谱连续运动修正：TypeScript与1662模块interface-only构建通过，日志在`.tools/lyrics-spectrum-motion/build.log`。`node scripts/check-lyrics-page.mjs --spectrum-motion`最终报告11项全通过，报告/四张稳定绘制截图在`.tools/lyrics-spectrum-motion/run-1792159827778-859aa4c4/`。同一快照约162ms内有10个不同生产DOM中间值；近等长上升/回落窗口的目标剩余差比例为0.0357/0.3963，确认快起慢落。静止32频段收敛后恒定，NaN/越界、暂停/不可用归零、切歌清峰、减少动态、页/文档显隐和销毁均通过。真实NativeAudio类配合全mock请求及惰性计时器探针确认250→100→250ms需求切换与signal共存；没有访问设备或真实原生服务，不证明实际网络延迟/FFT吞吐。两主题使用有效`rhine/archive` key与生产日夜颜色，等待离屏paint后核验三栏/32柱；主Agent复核Future日间与Punk夜间截图。无外网请求，未启动个人播放器或验证硬件FPS/实际歌曲观感。下列歌词来源/光效检查属于此前完成的功能验证。
 

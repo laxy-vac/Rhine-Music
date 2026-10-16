@@ -113,6 +113,8 @@ V3歌词缓存不会随Git回滚降级。只支持V2的旧源码会保留但无�
 
 ## 检查索引与边界
 
+底部播放条当前句与共享操作：TypeScript/1662模块interface-only最终构建及`node scripts/check-foobar-layout.mjs --playback-lyrics`通过；产物`.tools/playback-lyrics/{build.log,playback-lyrics.json}`和6张截图。1920×1080两主题日夜四组、Future旧版基线对照、两主题轨道下移、SHUFFLE ALL/ORDER与去DSP、seek、真实LyricsPage隐藏载入/偏移/切源/换曲/长句/空槽有覆盖。空文本元素本身高0，但18px网格行/44px时间轴及轨道几何保持；不是新增空白占位歌词。主Agent复核Future日间/Punk夜间图。使用生产回调/处理函数与全mock曲库/播放器/API；未启动个人播放器或调用设备，未验证原生下拉菜单实窗或其它宽度整套矩阵。此模式不改写旧geometry.json。
+
 歌词页频谱连续运动修正的TypeScript与1662模块interface-only构建通过，日志`.tools/lyrics-spectrum-motion/build.log`；`node scripts/check-lyrics-page.mjs --spectrum-motion`最终11项全通过，报告/四张稳定绘制截图在`run-1792159827778-859aa4c4`。验证连续中间帧、快起慢落、收敛/边界/归零、切歌/显隐/销毁、减少动态、有效Future/Punk日夜皮肤与原生需求100/250ms切换；真实NativeAudio类的请求/计时器全mock，无外网或设备访问，不代表个人整窗/硬件FPS。详情见[歌词验证](LYRICS.md)。
 
 2026-10-16当前Local fallback与Future歌词弹窗光效验证完成：TSC及1662模块interface-only build通过（`.tools/lyrics-local-fallback/build.log`）；`node --test scripts/check-lyrics-library.mjs`为29/29通过、0失败/取消/跳过（`library-check.log`）；`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`为`ok=true`、11项全true、18张截图（`run-1792158440496-eaab20df/report.json`）。UI全用mock且无外部请求；Windows选择器只拦截意图、focus-visible为CDP伪状态，未验证线上服务、个人播放器或设备。细节与历史边界见[歌词验证](LYRICS.md)。

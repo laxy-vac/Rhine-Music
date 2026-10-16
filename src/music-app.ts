@@ -1474,16 +1474,17 @@ let nativeBookmark = "";
 const playbackControls = setupMusicPlayback($("#music-playback"), {
   seek: position => player.seek(position),
   cover: track => library.albums.find(album => album.id === track.albumId)?.coverUrl,
+  order: value => setFoobarOrder(value),
+  currentLyric: () => lyricsPage.currentLine(),
   volume: volume => {
     player.setVolume(volume);preferences.volume=player.state.volume;savePrefs();updateOutputUI();
   },
 });
+stage.addEventListener("lyrics-content-changed", () => playbackControls.refreshLyric());
 foobarShell = setupFoobarShell(stage, {
   search: query => {
     applyMusicView({}, query);
   },
-  shuffle: () => shuffleFoobarLibrary(),
-  order: value => setFoobarOrder(value),
 });
 catalogGrid = setupMusicCatalogGrid(stage, stage.querySelector<HTMLElement>(".foobar-grid-host")!);
 syncDesignIdentity();
@@ -1546,11 +1547,7 @@ player.subscribe((state) => {
   eqControls?.sync();
   updateCurrentAudioSummary();
   playbackControls.update(state);
-  const stages = state.nativeOutputStatus?.processingStages;
-  const dspActive = !processingSettings.bitPerfect && (stages
-    ? stages.some(item => item.active && !/decode|volume|quant|output/i.test(item.id))
-    : state.backend !== "browser" && (processingSettings.eq.enabled || (processingSettings.eq.engine === "standard" && processingSettings.tone.enabled)));
-  foobarShell?.updatePlayer(state, dspActive);
+  foobarShell?.updatePlayer(state);
   const bookmark=state.nativeSessionId?`${state.nativeSessionId}:${state.queue.map(track=>track.id).join(',')}`:'';
   if(bookmark&&bookmark!==nativeBookmark){
     nativeBookmark=bookmark;

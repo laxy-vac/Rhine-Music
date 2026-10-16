@@ -7,8 +7,6 @@ import { legacyCatalogOptions } from "./music-view-settings";
 
 type Callbacks = {
   search: (query: string) => void;
-  shuffle: () => void;
-  order: (value: string) => void;
 };
 
 // Adapted from RhinE js/lib/emblem.js (MIT). Its arc-length centreline and
@@ -91,9 +89,6 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
   const searchButton = normalNav.querySelector<HTMLButtonElement>('[data-action="search"]')!;
   const utilities = document.createElement("div"); utilities.className = "foobar-transport-controls";
   utilities.innerHTML = `<button class="foobar-stop" data-action="stop" aria-label="停止播放">■</button>
-    <button class="foobar-shuffle" data-action="foobar-shuffle">▪ SHUFFLE ALL</button>
-    <button class="foobar-dsp" data-action="eq">DSP <span>OFF</span></button>
-    <label class="foobar-order">ORDER <select aria-label="播放顺序"><option value="default">DEFAULT</option><option value="repeat-queue">REPEAT QUEUE</option><option value="repeat-track">REPEAT TRACK</option><option value="random">RANDOM</option><option value="shuffle-tracks">SHUFFLE TRACKS</option><option value="shuffle-albums">SHUFFLE ALBUMS</option><option value="shuffle-folders">SHUFFLE FOLDERS</option></select></label>
     <span class="foobar-mode-slot"></span>`;
   const remaining = document.createElement("output"); remaining.className = "foobar-remaining"; remaining.textContent = "−00:00";
   const ports: { node: HTMLElement; marker: Comment; parent: Node }[] = [];
@@ -108,7 +103,6 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
     clearTimeout(searchTimer);
     if (active && stage.dataset.page === "music") searchTimer = setTimeout(() => { if (active) callbacks.search(search.value); }, 180);
   });
-  utilities.querySelector<HTMLSelectElement>("select")!.addEventListener("change", e => callbacks.order((e.target as HTMLSelectElement).value));
   playback.addEventListener("wheel", e => {
     if (!active || !(e.target as HTMLElement).closest(".playback-timeline")) return;
     const seek = playback.querySelector<HTMLInputElement>("#playback-progress")!;
@@ -196,13 +190,11 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
       if (!active) return;
       updatePage();
     },
-    updatePlayer(state: MusicPlayerState, processing: boolean) {
+    updatePlayer(state: MusicPlayerState) {
       playing = state.playing;
       if (!active) return;
       remaining.textContent = `−${playbackTime(Math.max(0, state.duration - state.currentTime))}`;
       playback.querySelector("#playback-volume-value")!.textContent = String(state.volumeLocked ? 100 : Math.round(state.volume * 100));
-      utilities.querySelector(".foobar-dsp span")!.textContent = processing ? "ON" : "OFF";
-      utilities.querySelector<HTMLSelectElement>(".foobar-order select")!.value = state.playbackOrder;
     },
     tick(seconds: number, reduced: boolean) {
       if (!active || !playing || reduced || seconds - lastEmblem < 1 / 30) return;

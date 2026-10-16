@@ -8,6 +8,7 @@ import { checkPunkSignal } from './check-punk-signal.mjs';
 import { checkFutureDesign } from './check-future-design.mjs';
 import { checkManagementNavigation, createManagementNavigationBootstrap } from './check-management-navigation.mjs';
 import { checkTerminalGlassProbe } from './check-terminal-glass.mjs';
+import { checkPlaybackLyrics } from './check-playback-lyrics.mjs';
 // Offline DOM geometry regression. Uses installed Chromium and real source
 // CSS/shell/title/range controls; never boots the player or its music service.
 import assert from "node:assert/strict";
@@ -22,7 +23,9 @@ const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const albumHeaderMode = process.argv.includes('--album-header');
 const albumLabelMotionMode = process.argv.includes('--album-label-motion');
 const unifiedAlbumActionsMode = process.argv.includes('--unified-album-actions');
-const output = path.join(project, unifiedAlbumActionsMode ? ".tools/unified-album-actions"
+const playbackLyricsMode = process.argv.includes('--playback-lyrics');
+const output = path.join(project, playbackLyricsMode ? ".tools/playback-lyrics"
+  : unifiedAlbumActionsMode ? ".tools/unified-album-actions"
   : albumLabelMotionMode ? ".tools/album-label-motion"
     : albumHeaderMode ? ".tools/album-header" : ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
@@ -47,8 +50,9 @@ const albumActionsMode = process.argv.includes('--album-actions') || punkAlbumAc
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
+if (playbackLyricsMode) await mkdir(output, { recursive: true });
 if (albumActionsMode) await mkdir(albumActionsOutput, { recursive: true });
-const sharedMode = process.argv.includes('--panel') || albumActionsMode || navigationMode || displayMode || glassMode || eqMode;
+const sharedMode = process.argv.includes('--panel') || albumActionsMode || navigationMode || displayMode || glassMode || eqMode || playbackLyricsMode;
 const navigationBootstrap = navigationMode ? createManagementNavigationBootstrap(main) : '';
 const hiResURL='data:image/svg+xml;base64,'+(await readFile(path.join(project,'public/audio-tech/hi-res.svg'))).toString('base64');
 let css = await readFile(path.join(project, "node_modules/@kitlangton/rolling-number/dist/styles.css"), "utf8");
@@ -100,9 +104,41 @@ function productionListener(eventName) {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
   }).outputText;
 }
+function productionStageListener(eventName) {
+  const callbacks = [];
+  for (const statement of parsed.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+    const call = statement.expression;
+    if (call.expression.getText(parsed) !== 'stage.addEventListener' ||
+      !ts.isStringLiteral(call.arguments[0]) || call.arguments[0].text !== eventName) continue;
+    callbacks.push(call.arguments[1]);
+  }
+  const callback = callbacks.at(-1);
+  assert.ok(callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)),
+    `The production stage ${eventName} listener must remain extractable.`);
+  return ts.transpileModule(`stage.addEventListener(${JSON.stringify(eventName)}, ${callback.getText(parsed)});`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+}
+function productionPlaybackCallbacks() {
+  let callbacks;
+  function find(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(parsed) === 'setupMusicPlayback')
+      callbacks = node.arguments[1];
+    ts.forEachChild(node, find);
+  }
+  find(parsed);
+  assert.ok(callbacks && ts.isObjectLiteralExpression(callbacks),
+    'The production setupMusicPlayback callbacks must remain extractable.');
+  return ts.transpileModule(`const playbackCallbackOptions = ${callbacks.getText(parsed)};`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
+  }).outputText;
+}
 const productionViewEvents = displayMode
   ? ['click', 'input', 'change', 'keydown'].map(productionListener).join('\n')
-  : albumActionsMode ? productionListener('click') : '';
+  : albumActionsMode || playbackLyricsMode ? productionListener('click') : '';
+const productionLyricsEvents = playbackLyricsMode ? productionStageListener('lyrics-content-changed') : '';
+const productionPlaybackCallbacksSource = playbackLyricsMode ? 'playbackCallbackOptions' : '{seek(){},volume(){},cover(){return coverURL;},order:value=>setFoobarOrder(value)}';
 async function moduleFunctions(name, exports, selectedOnly = false) {
   let source = name === '$main' ? main : await readFile(path.join(project, `src/${name}.ts`), "utf8");
   if(name==='hi-res')source=source.replaceAll('audio-tech/hi-res.svg',hiResURL);
@@ -141,7 +177,7 @@ const modules = (await Promise.all([
   moduleFunctions("music-presentation", ["MusicPresentation"]),
   moduleFunctions("album-interaction", ["setupAlbumInteraction"]),
   moduleFunctions("album-queue", ["setupAlbumQueue"]),
-  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumFormatSummary','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$','svg','icons'],true),
+  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumFormatSummary','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','setFoobarOrder','shuffleFoobarLibrary','$','svg','icons'],true),
 ])).join("\n");
 const initialize = `(async () => {
   const trUi = value => value;
@@ -236,7 +272,8 @@ const initialize = `(async () => {
   ${modules}
   const esc=escapeHtml,genres=[{id:'pop',name:'流行'}],demo=false,shelf='local',introductionsStarting=false,library={introductions:{running:false}};
   const introductionAlbumStatus=()=>'';
-  const played=[],playCalls=[];const player={play(id,tracks){played.push(id);playCalls.push({id,tracks});return Promise.resolve();}};
+  const played=[],playCalls=[],orderCalls=[],seekCalls=[],volumeCalls=[];let playbackControls;
+  const player={state:undefined,play(id,tracks){played.push(id);playCalls.push({id,tracks});return Promise.resolve();},seek(position){seekCalls.push(position);},setPlaybackOrder(value){orderCalls.push(value);if(player.state){player.state.playbackOrder=value;playerState=player.state;playbackControls?.update(player.state);}},setVolume(value){volumeCalls.push(value);if(player.state)player.state.volume=value;}};
   const stage = document.querySelector('#stage');
   stage.innerHTML = ${JSON.stringify(markup)}.replace('__PLAYBACK__', playbackMarkup()).replaceAll('__PLAY_ICON__', icons.play);
   // DOM fixture boundary: mount the production browse-control markup and use
@@ -262,7 +299,7 @@ const initialize = `(async () => {
   document.querySelector('#selection-hi-res').hidden=true;document.querySelector('#selection-dsd').hidden=true;
   const profile=document.querySelector('#selection-profile');profile.hidden=false;
   let sharedPanel,albumPanel,activationBefore,glassBaseline,openAlbumButton,glassCssSnapshot,fixtureReducedMotion=false;
-  let playerState;
+  let playerState,lyricsPage={currentLine:()=>''};
   const preferences={style:{scheme:'flare',caseStyle:'white',get design(){return stage.dataset.design;}},theme:'day',reduced:false,view:musicApplication.view,foobarArchive:legacyCatalogOptions(musicApplication.view),output:{}};
   const scene={
     get musicDisplayLayout(){return {effective:musicApplication.view.layout};},
@@ -275,6 +312,7 @@ const initialize = `(async () => {
   const updateSonyTechIndicators=()=>{};
   const albumMock={id:'fixture-album',title:'18 Plus',artist:'G.E.M.邓紫棋',year:2010,genreId:'pop',rawGenres:['流行'],discCount:1,folder:'example',producers:[],description:'一段用于检查专辑介绍和滚动焦点的示例文字。'.repeat(50),tracks:Array.from({length:30},(_,index)=>({id:'track-'+index,albumId:'fixture-album',title:['写不完的温柔','All About U','Game Over'][index%3]+' '+(index+1),artist:'G.E.M.邓紫棋',duration:180,trackNumber:index+1,format:'FLAC',sampleRate:192000,bitsPerSample:24,numberOfChannels:2,bitrate:4500000,lossless:true,browserPlayable:true}))};
   records.push({id:albumMock.id,album:albumMock},{id:'fixture-album-2',album:{...albumMock,id:'fixture-album-2',title:'Other Album'}});
+  library.albums=records.map(record=>record.album);
   const currentAlbum=()=>records[musicApplication.selectedIndex]?.album||albumMock;
   const profileMarkup=design=>'<div class="selection-profile-heading"><span>PROFILE</span><span>ARC-'+String(musicApplication.selectedIndex+1).padStart(4,'0')+'</span></div><dl>'+albumProfileFields(currentAlbum()).map(([label,value])=>'<div><dt>'+esc(design==='archive'?label.split(' / ')[0]:label)+'</dt><dd data-cjk="'+containsCjk(value)+'">'+esc(value)+'</dd></div>').join('')+'</dl>';
   const installGridPaginationEntries=()=>{
@@ -354,7 +392,9 @@ const initialize = `(async () => {
   }
   const ranges=setupEditableRanges(stage);
   let coverURL;
-  const playbackControls=setupMusicPlayback(document.querySelector('#music-playback'),{seek(){},volume(){},cover(){return coverURL;}});
+  ${playbackLyricsMode ? productionPlaybackCallbacks() : ''}
+  playbackControls=setupMusicPlayback(document.querySelector('#music-playback'),${productionPlaybackCallbacksSource});
+  ${productionLyricsEvents}
   let refreshed=0,navigated='',coverInspection;
   const closeManagementPage=()=>{};
   const locatePlaying=(albumId,trackId)=>{coverInspection=[albumId,trackId];};
@@ -373,6 +413,7 @@ const initialize = `(async () => {
   ${productionViewEvents}
   const track={id:'fixture-flac',albumId:'fixture-album',title:'测试曲目',artist:'测试歌手',format:'FLAC',codec:'FLAC',relativePath:'fixture.flac',sampleRate:44100,bitsPerSample:16,numberOfChannels:2,bitrate:900000,lossless:true};
   const state={transport:'playing',currentTrack:track,queue:[track],currentIndex:0,playbackOrder:'default',playing:true,loading:false,duration:180,currentTime:0,volume:.65,songFadeEnabled:true,bgmVolume:.18,bgmEnabled:true,bgmPlaying:false,error:null,bgmError:null,sonySettings:{dsee:false,dc:0,vinyl:0},sonyExecution:{streaming:true,parallel:true},sonyProcessing:{state:'off',progress:0},backend:'browser',outputSettings:outputDefault,volumeLocked:false};
+  player.state=state;
   const selection={number:4,total:20,code:1,genreIndex:1,genresTotal:3,genre:'2000s · 2010s',genreName:'2000s · 2010s',format:'FLAC',artist:'G.E.M.邓紫棋',meta:'2010 / 14 首曲目 / 51:25'};
   textMotion.update(selection,true);
   playerState=state;
@@ -380,7 +421,7 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,albumFormatSummary,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,albumFormatSummary,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,orderCalls,seekCalls,volumeCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode || playbackLyricsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,defaultMusicStyle,archiveMusicStyle,stylePalette,applyStylePalette,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},get lyricsController(){return lyricsPage;},set lyricsController(value){lyricsPage=value;},updatePlayback(value){playerState=value;player.state=value;this.state=value;lyricsPage?.update?.(value,albumMock);playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
@@ -432,7 +473,10 @@ try {
   const {frameTree}=await command("Page.getFrameTree",{});
   await command("Page.setDocumentContent",{frameId:frameTree.frame.id,html:`<!doctype html><style>${css}</style><main id="stage" class="music-app"></main>`});
   await evaluate(initialize);
-  if(eqMode) {
+  if(playbackLyricsMode) {
+    await checkPlaybackLyrics({command,evaluate,output,project});
+    console.log('Passed focused playback lyrics, shared shuffle/order, seek and desktop geometry checks; report and screenshots saved under .tools/playback-lyrics.');
+  } else if(eqMode) {
     await checkPunkEq({command,evaluate,output,project});
     console.log('Passed focused EQ rendering and tone controls; screenshots and report saved under .tools/foobar-layout-check.');
   } else if(glassMode) {
@@ -1213,7 +1257,7 @@ try {
   }
   }
 } finally {
-  if(!displayMode&&!glassMode&&!eqMode&&!albumActionsMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
+  if(!displayMode&&!glassMode&&!eqMode&&!albumActionsMode&&!playbackLyricsMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
   for(const {timer} of pending.values())clearTimeout(timer);
   if(socket?.readyState===WebSocket.OPEN)await send("Browser.close").catch(()=>browser.kill());
   else browser.kill();

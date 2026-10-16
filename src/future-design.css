@@ -220,6 +220,19 @@
   border-color: color-mix(in srgb,var(--future-highlight) 70%,var(--line));
   box-shadow: 0 14px 32px color-mix(in srgb, var(--future-shadow) 12%, transparent), inset 0 1px 0 var(--future-highlight);
 }
+.music-app[data-design="rhine"] .music-playback .playback-current-lyric {
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+  font-weight: 500;
+}
+.music-app[data-design="rhine"] .music-playback .playback-shuffle {
+  border-color: color-mix(in srgb, var(--future-highlight) 58%, var(--future-edge));
+  background: color-mix(in srgb, var(--surface) 54%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 56%, transparent);
+}
+.music-app[data-design="rhine"] .music-playback .playback-order select {
+  border-color: color-mix(in srgb, var(--future-highlight) 52%, var(--future-edge));
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
 .music-app[data-design="rhine"] .music-playback .playback-glass {
   background: linear-gradient(130deg,color-mix(in srgb,var(--future-highlight) 35%,transparent),transparent 42%,var(--future-prism-cool) 72%,var(--future-prism-warm)),var(--glass-tint);
   backdrop-filter: blur(18px) saturate(1.35);
