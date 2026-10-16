@@ -38,6 +38,8 @@ TypeScript与interface-only构建通过，日志`.tools/unified-ui-2026-10-17/bu
 
 图形/参数EQ的输入、拖动、键盘、锁定、选中图例及曲线节点通过；真实PNG像素测得竖轨3px、手柄可见宽11px，两个模式的中心偏差均为0px。频响图完整图例/说明与四边闭合边框已截图，保持普通滚动流且不遮挡推子。主Agent复核主题卡、Future夜间菜单/弹窗、两个模式推子与完整频响图，以及前述歌词整页图。
 
+后续用户指出图例胶囊上缘仍缺口：上述检查只校验图例容器，没有覆盖焦点轮廓相对scrollport的裁切。现已复现并补修图例行留白；`--eq-legend`的8组/24状态实测上沿裁切为0，前后证据在`.tools/eq-legend-2026-10-17`，稳定规则见[主题页](THEME-PAGE.md)。
+
 截图验收发现并修正三处问题：旧主题卡片规则将名称和说明挤到同一行；旧EQ范围控件规则将中性横向导航染成橙色；Chromium竖向range的13px手柄相对3px轨道向右偏5px。相关复跑和最终TypeScript/interface-only构建均通过。检查夹具曾缺少正式EQ wrapper，已补全并验证`position:static`和实际命中，不将夹具缺陷计作产品修复。
 
 所有报告、截图和日志位于`.tools/unified-ui-2026-10-17`；早期失败/调试产物保留作追溯，以最终主报告和各专项`report.json`为准。检查结束后，核对绝对路径与reparse point后移除了66个本轮合成浏览器/Electron资料目录；清理范围记录在`profile-cleanup.json`，未触及个人资料或修改前快照。检查脚本语法与`git diff --check`通过。Git仅记录源码/检查器/文档，不记录依赖、构建或测试浏览器资料。

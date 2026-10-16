@@ -24,8 +24,10 @@ const albumHeaderMode = process.argv.includes('--album-header');
 const albumLabelMotionMode = process.argv.includes('--album-label-motion');
 const unifiedAlbumActionsMode = process.argv.includes('--unified-album-actions');
 const playbackLyricsMode = process.argv.includes('--playback-lyrics');
-const unifiedUiMode = process.argv.includes('--unified-ui');
-const output = path.join(project, playbackLyricsMode ? ".tools/playback-lyrics"
+const eqLegendMode = process.argv.includes('--eq-legend');
+const unifiedUiMode = process.argv.includes('--unified-ui') || eqLegendMode;
+const output = path.join(project, eqLegendMode ? ".tools/eq-legend-2026-10-17"
+  : playbackLyricsMode ? ".tools/playback-lyrics"
   : unifiedUiMode ? ".tools/unified-ui-2026-10-17"
     : unifiedAlbumActionsMode ? ".tools/unified-album-actions"
   : albumLabelMotionMode ? ".tools/album-label-motion"
@@ -582,7 +584,11 @@ try {
       throw new Error(`${error.message}\\nUnified fixture DOM: ${JSON.stringify(diagnostics)}\\nGenerated initialization near line 10007:\\n${lineContext}`);
     }
   }else await evaluate(initialize);
-  if(unifiedUiMode) {
+  if(eqLegendMode) {
+    const {checkEqLegend}=await import('./check-eq-legend.mjs');
+    await checkEqLegend({command,evaluate,output,project});
+    console.log(`EQ legend focus report and screenshots saved under ${path.relative(project,output).replaceAll('\\','/')}.`);
+  } else if(unifiedUiMode) {
     const {runUnifiedUiChecks}=await import('./check-unified-ui.mjs');
     await runUnifiedUiChecks({command,evaluate,output,project});
     console.log(`Passed unified UI checks; report and screenshots saved under ${path.relative(project,output).replaceAll('\\','/')}.`);

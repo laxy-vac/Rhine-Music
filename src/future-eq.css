@@ -555,6 +555,7 @@ html .music-app[data-design="rhine"] #music-eq-page #eq-page-editor .eq-controls
   min-height: 220px;
   margin: 10px 0 0;
   padding: 10px 12px 9px;
+  row-gap: 6px;
   border: 1px solid color-mix(in srgb, var(--future-eq-edge) 52%, transparent);
   border-radius: 14px;
   background: linear-gradient(160deg, var(--future-eq-panel), var(--future-eq-glass));
@@ -595,6 +596,14 @@ html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-en
   stroke: var(--future-eq-panel);
   stroke-width: 2.4;
   filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--future-eq-shadow) 24%, transparent));
+}
+
+/* The horizontal scrollport also contains the 2px outline and 4px offset. */
+html .music-app[data-design="rhine"] #music-eq-page #eq-page-editor .eq-controls:not([data-eq-engine="lsp"]) .eq-response-legend {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px;
+  overflow-y: hidden;
 }
 
 html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) .eq-legend-item {
