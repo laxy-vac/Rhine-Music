@@ -1,4 +1,5 @@
 import { checkAlbumPanel } from './check-album-panel-behavior.mjs';
+import { checkAlbumActions } from './check-album-actions.mjs';
 import { checkPunkControls } from './check-punk-controls.mjs';
 import { checkPunkEq } from './check-punk-eq.mjs';
 import { checkWindowAspectUi } from './check-window-aspect-ui.mjs';
@@ -20,6 +21,7 @@ import { normalizeProcessing } from "../src/audio-processing-model.mjs";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(project, ".tools/foobar-layout-check");
 await mkdir(output, { recursive: true });
+const albumActionsOutput = path.join(project, ".tools/album-actions");
 const candidates = [process.env.LAYOUT_BROWSER,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean);
@@ -32,10 +34,12 @@ assert.match(main,/case "open":\s*setMode\("detail"\);/,"The source open-album a
 assert.match(main,/scene\.onOpenAlbum\s*=\s*index\s*=>\s*\{[^}]*setMode\("detail"\);/,"The source scene callback must open the selected album.");
 assert.match(main,/document\.addEventListener\("dblclick",\s*\(event\)\s*=>\s*\{[\s\S]*?setMode\("detail"\);/,"The source left-scene double-click handler must reach detail mode.");
 const displayMode = process.argv.includes('--display');
+const albumActionsMode = process.argv.includes('--album-actions');
 const navigationMode = process.argv.includes('--navigation');
 const glassMode = process.argv.includes('--glass');
 const eqMode = process.argv.includes('--eq');
-const sharedMode = process.argv.includes('--panel') || navigationMode || displayMode || glassMode || eqMode;
+if (albumActionsMode) await mkdir(albumActionsOutput, { recursive: true });
+const sharedMode = process.argv.includes('--panel') || albumActionsMode || navigationMode || displayMode || glassMode || eqMode;
 const navigationBootstrap = navigationMode ? createManagementNavigationBootstrap(main) : '';
 const hiResURL='data:image/svg+xml;base64,'+(await readFile(path.join(project,'public/audio-tech/hi-res.svg'))).toString('base64');
 let css = await readFile(path.join(project, "node_modules/@kitlangton/rolling-number/dist/styles.css"), "utf8");
@@ -69,7 +73,8 @@ function find(node) {
 find(parsed);
 assert.ok(template && ts.isTemplateExpression(template), "Use the actual music app DOM template.");
 const markup = template.head.text + template.templateSpans.map(span =>
-  (span.expression.getText(parsed) === "playbackMarkup()" ? "__PLAYBACK__" : "") + span.literal.text).join("");
+  (span.expression.getText(parsed) === "playbackMarkup()" ? "__PLAYBACK__"
+    : span.expression.getText(parsed) === "icons.play" ? "__PLAY_ICON__" : "") + span.literal.text).join("");
 function productionListener(eventName) {
   const callbacks = [];
   for (const statement of parsed.statements) {
@@ -88,7 +93,7 @@ function productionListener(eventName) {
 }
 const productionViewEvents = displayMode
   ? ['click', 'input', 'change', 'keydown'].map(productionListener).join('\n')
-  : '';
+  : albumActionsMode ? productionListener('click') : '';
 async function moduleFunctions(name, exports, selectedOnly = false) {
   let source = name === '$main' ? main : await readFile(path.join(project, `src/${name}.ts`), "utf8");
   if(name==='hi-res')source=source.replaceAll('audio-tech/hi-res.svg',hiResURL);
@@ -127,7 +132,7 @@ const modules = (await Promise.all([
   moduleFunctions("music-presentation", ["MusicPresentation"]),
   moduleFunctions("album-interaction", ["setupAlbumInteraction"]),
   moduleFunctions("album-queue", ["setupAlbumQueue"]),
-  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$'],true),
+  moduleFunctions('$main',['time','genreName','formatList','albumDuration','valueRange','albumProfileFields','trackList','albumAbout','producerBlock','playAlbum','playSelectedAlbum','renderDetail','syncTabIndicator','savePrefs','syncDesignIdentity','navigationSelection','stepAlbum','stepGenre','refreshFoobarSceneForLayoutChange','musicArrangementPreset','syncMusicCatalogView','applyMusicView','setMusicGridPage','$','svg','icons'],true),
 ])).join("\n");
 const initialize = `(async () => {
   const trUi = value => value;
@@ -205,7 +210,9 @@ const initialize = `(async () => {
   const settingsSelectControls=undefined;
   const detailTransition={dispose(){}};
   const browseTransition={dispose(){}};
-  const libraryRebuilding=false, libraryIntent=undefined, presentation={pendingSelection:undefined};
+  const libraryRebuilding=false, libraryIntent=undefined, presentation={pendingSelection:undefined,openCalls:0,backCalls:0,
+    open(){this.openCalls++;document.querySelector('#music-browse').hidden=true;document.querySelector('#music-detail').hidden=false;renderSharedTab('tracks');sharedPanel.setOpen(true);sharedPanel.finish();},
+    back(){this.backCalls++;document.querySelector('#music-browse').hidden=false;document.querySelector('#music-detail').hidden=true;sharedPanel.setOpen(false);sharedPanel.finish();}};
   const select=(index)=>{
     musicApplication.selectedIndex=index;musicApplication.selectedAlbumId=records[index]?.id;
     if(musicApplication.catalogFocus?.albumId!==musicApplication.selectedAlbumId)musicApplication.selectedTrackId=undefined;
@@ -220,9 +227,9 @@ const initialize = `(async () => {
   ${modules}
   const esc=escapeHtml,genres=[{id:'pop',name:'流行'}],demo=false,shelf='local',introductionsStarting=false,library={introductions:{running:false}};
   const introductionAlbumStatus=()=>'';
-  const played=[];const player={play(id){played.push(id);return Promise.resolve();}};
+  const played=[],playCalls=[];const player={play(id,tracks){played.push(id);playCalls.push({id,tracks});return Promise.resolve();}};
   const stage = document.querySelector('#stage');
-  stage.innerHTML = ${JSON.stringify(markup)}.replace('__PLAYBACK__', playbackMarkup());
+  stage.innerHTML = ${JSON.stringify(markup)}.replace('__PLAYBACK__', playbackMarkup()).replaceAll('__PLAY_ICON__', icons.play);
   // DOM fixture boundary: mount the production browse-control markup and use
   // the production document click handler; catalog data remains the explicit
   // three-entry mock defined above.
@@ -343,7 +350,7 @@ const initialize = `(async () => {
   const closeManagementPage=()=>{};
   const locatePlaying=(albumId,trackId)=>{coverInspection=[albumId,trackId];};
   const openArchivePage=()=>{coverInspection=['focused'];};
-  const setMode=mode=>{coverInspection??=[];coverInspection.push(mode);musicApplication.mode=mode;stage.dataset.mode=mode;};
+  const setMode=mode=>{coverInspection??=[];coverInspection.push(mode);musicApplication.mode=mode;stage.dataset.mode=mode;if(${albumActionsMode}){if(mode==='detail')presentation.open();else presentation.back();}};
   const audioInfoCallbacks={refresh(){refreshed++;},navigate(category,target){navigated=target;}};
   const audioInfoPopup=setupAudioInfoPopup(stage,audioInfoCallbacks);
   const albumQueue=setupAlbumQueue(stage,{albumFor:id=>id===albumMock.id?albumMock:undefined,play:(id,tracks)=>player.play(id,tracks),closeOther:()=>audioInfoPopup.close(false)});
@@ -364,11 +371,11 @@ const initialize = `(async () => {
   syncMusicCatalogView();
   let albumSteps=0,shelfSteps=0;
   const input=sharedPanel?setupAlbumInteraction(stage,{enabled:()=>stage.dataset.page==='music'&&(stage.dataset.design==='archive'||stage.dataset.design==='rhine'),stepAlbum:direction=>{albumSteps+=direction;},stepShelf:direction=>{shelfSteps+=direction;},scrollTarget:()=>sharedPanel.scrollTarget(),tab:direction=>renderSharedTab(direction<0?'tracks':'about')}):undefined;
-  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
+  window.fixture={stage,shell,title,textMotion,selection,audioInfoPopup,audioInfoCallbacks,albumQueue,albumMock,state,musicApplication,records,playbackControls,foobarArchiveWidth,sharedPanel,input,played,playCalls,playSelectedAlbum,presentation,productionClickListenerInstalled:${albumActionsMode},ranges,renderSharedTab,renderSourceDetail:renderDetail,renderProfile:profileMarkup,activationBefore,glassBaseline,glassCssSnapshot,openAlbumButton,SurfaceTransition,catalogGrid,applyMusicView,setMusicGridPage,musicGridPage:{paginateMusicGridGroups,getMusicGridPage,revealMusicGridEntry},syncMusicCatalogView,stepAlbum,stepGenre,syncDesignIdentity,musicArrangementPreset,musicStyleMarkup,renderProductionStylePage,stylePageContent,syncMusicViewControls,musicSortAlias,installGridPaginationEntries,scene,preferences,navigationCalls,focusMusicEntry,get focusedEntry(){return getMusicFocusedEntry(musicApplication.selectedIndex);},get savedPreferenceCount(){return savedPreferenceCount;},setPage(value){page=value;stage.dataset.page=value;},setPanel(value){panel=Boolean(value);},get albumSteps(){return albumSteps;},get shelfSteps(){return shelfSteps;},setReduced(value){fixtureReducedMotion=Boolean(value);},updatePlayback(value){playerState=value;playbackControls.update(value);albumQueue.update(value);},set coverURL(value){coverURL=value;},get refreshed(){return refreshed;},get navigated(){return navigated;},get coverInspection(){return coverInspection;}};
   ${navigationBootstrap}
 })();`;
 
-const profile = path.join(output, `browser-profile-${process.pid}-${Date.now()}`);
+const profile = path.join(albumActionsMode ? albumActionsOutput : output, `browser-profile-${process.pid}-${Date.now()}`);
 const browser = spawn(executable, ["--headless=new", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", "--no-first-run",
   "--no-default-browser-check", "--disable-background-networking", "--disable-component-update",
   "--disable-sync", "--disable-extensions", `--user-data-dir=${profile}`],
@@ -421,6 +428,11 @@ try {
     console.log('Passed focused EQ rendering and tone controls; screenshots and report saved under .tools/foobar-layout-check.');
   } else if(glassMode) {
     await checkTerminalGlassProbe({command,evaluate,output:path.join(output,"terminal-glass",process.argv.includes('--baseline')?'baseline':'current'),project});
+  } else if(albumActionsMode) {
+    await mkdir(albumActionsOutput,{recursive:true});
+    await checkAlbumActions({command,evaluate,output:albumActionsOutput,project,main});
+    await checkAlbumPanel({command,evaluate,output:albumActionsOutput});
+    console.log('Passed focused album action behavior and the full existing album panel behavior regression; report and screenshots saved under .tools/album-actions.');
   } else {
   if(sharedMode) {
     const before=await evaluate(`fixture.activationBefore`);
@@ -432,7 +444,7 @@ try {
     const active=await evaluate(`(()=>{const controller=fixture.sharedPanel,panel=controller.element,callout=document.querySelector('.album-callout'),article=document.querySelector('#album-detail-content'),button=fixture.openAlbumButton,scene=document.querySelector('#three-scene'),viewport=panel.querySelector('.album-panel-scroll');return {active:controller.active,panelConnected:panel.isConnected,panelHidden:panel.hidden,containsCallout:panel.contains(callout),containsArticle:panel.contains(article),openButtonConnected:button.isConnected,openButtonVisible:button.isConnected&&!button.hidden&&button.getClientRects().length>0,openButtonCount:document.querySelectorAll('.open-album').length,playButtonCount:document.querySelectorAll('.browse-play-album').length,profileVisible:!document.querySelector('#selection-profile').hidden,articleHidden:article.hidden,articleInert:article.inert,articleHasTabs:!!article.querySelector('.music-tabs'),articleRows:article.querySelectorAll('.track-row').length,noVisibleRows:[...article.querySelectorAll('.track-row')].every(row=>row.getClientRects().length===0),marker:fixture.stage.hasAttribute('data-album-panel'),sceneTabindex:scene.getAttribute('tabindex'),scrollTargetIsViewport:controller.scrollTarget()===viewport};})()`);
     assert.equal(active.active,true);assert.equal(active.panelConnected,true);assert.equal(active.panelHidden,false);
     assert.equal(active.containsCallout,true);assert.equal(active.containsArticle,true);
-    assert.equal(active.openButtonConnected,true);assert.equal(active.openButtonVisible,true);assert.equal(active.openButtonCount,1);assert.equal(active.playButtonCount,0);
+    assert.equal(active.openButtonConnected,true);assert.equal(active.openButtonVisible,true);assert.equal(active.openButtonCount,1);assert.equal(active.playButtonCount,1);
     assert.equal(active.profileVisible,true);assert.equal(active.articleHidden,true);assert.equal(active.articleInert,true);
     assert.equal(active.articleHasTabs,true);assert.equal(active.articleRows,30);assert.equal(active.noVisibleRows,true);
     assert.equal(active.marker,true);assert.equal(active.sceneTabindex,'-1');assert.equal(active.scrollTargetIsViewport,true);
@@ -1183,7 +1195,7 @@ try {
   }
   }
 } finally {
-  if(!displayMode&&!glassMode&&!eqMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
+  if(!displayMode&&!glassMode&&!eqMode&&!albumActionsMode)await writeFile(path.join(output,"geometry.json"),JSON.stringify(results,null,2));
   for(const {timer} of pending.values())clearTimeout(timer);
   if(socket?.readyState===WebSocket.OPEN)await send("Browser.close").catch(()=>browser.kill());
   else browser.kill();

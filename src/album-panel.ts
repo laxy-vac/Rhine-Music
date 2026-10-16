@@ -51,12 +51,58 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   let rootAlbumPanelValue: string | null = null;
   let rootAlbumPanelCaptured = false;
   let originalArticleState: { hidden: boolean; inert: boolean } | undefined;
-  let originalButtonState: { node: HTMLElement; hidden: boolean; inert: boolean } | undefined;
+  let originalActionSurfaceState: { node: HTMLElement; hidden: boolean; inert: boolean } | undefined;
+  let originalActionButtonStates: Array<{ node: HTMLElement; hidden: boolean; inert: boolean }> = [];
   let originalArticleTabindex: string | null = null;
   const tabAnimations = new Set<Animation>();
   let scanHead: HTMLElement | undefined;
 
   const openButton = () => callout.querySelector<HTMLElement>('.open-album[data-action="open"]');
+  const actionSurface = () => callout.querySelector<HTMLElement>(".album-actions") ?? openButton();
+  const actionButtons = () => {
+    const surface = actionSurface();
+    if (!surface) return [];
+    return surface.matches("button")
+      ? [surface]
+      : Array.from(surface.querySelectorAll<HTMLElement>("button"));
+  };
+  function captureActionState() {
+    const surface = actionSurface();
+    originalActionSurfaceState = surface
+      ? { node: surface, hidden: surface.hidden, inert: surface.inert }
+      : undefined;
+    originalActionButtonStates = actionButtons().map(node => ({
+      node,
+      hidden: node.hidden,
+      inert: node.inert,
+    }));
+  }
+  function restoreActionState() {
+    const surface = actionSurface();
+    if (surface) {
+      const state = originalActionSurfaceState?.node === surface ? originalActionSurfaceState : undefined;
+      surface.hidden = state?.hidden ?? false;
+      surface.inert = state?.inert ?? false;
+    }
+    for (const button of actionButtons()) {
+      const state = originalActionButtonStates.find(item => item.node === button);
+      button.hidden = state?.hidden ?? false;
+      button.inert = state?.inert ?? false;
+    }
+  }
+  function setActionState(state: "browse" | "transition" | "expanded") {
+    const hidden = state === "expanded";
+    const inert = state !== "browse";
+    const surface = actionSurface();
+    if (surface) {
+      surface.hidden = hidden;
+      surface.inert = inert;
+    }
+    for (const button of actionButtons()) {
+      button.hidden = hidden;
+      button.inert = inert;
+    }
+  }
   const futureTheme = () => {
     const app = root.closest<HTMLElement>(".music-app");
     return app?.dataset.design === "rhine" || root.dataset.design === "rhine";
@@ -162,21 +208,13 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     article.inert = true;
     article.style.removeProperty("height");
     article.style.removeProperty("overflow");
-    const button = openButton();
-    if (button) {
-      button.hidden = false;
-      button.inert = false;
-    }
+    setActionState("browse");
     panel.dataset.panelState = "browse";
     viewport.scrollTop = 0;
   }
 
   function setExpanded() {
-    const button = openButton();
-    if (button) {
-      button.hidden = true;
-      button.inert = true;
-    }
+    setActionState("expanded");
     article.hidden = false;
     article.inert = false;
     article.style.removeProperty("height");
@@ -199,8 +237,8 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   }
 
   function animateButton(mode: "exit" | "enter", ticket: number, complete: () => void) {
-    const button = openButton();
-    if (!button || instant()) {
+    const surface = actionSurface();
+    if (!surface || instant()) {
       complete();
       return;
     }
@@ -212,7 +250,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
       : mode === "exit"
         ? [{ opacity: 1, clipPath: "inset(0)" }, { offset:.85,opacity:1,clipPath:"inset(0 92% 0 0)" }, { opacity: 0, clipPath: "inset(0 100% 0 0)" }]
         : [{ opacity: 0.25, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0)" }];
-    const animation = button.animate(keyframes, {
+    const animation = surface.animate(keyframes, {
       duration: futureTheme()?240:mode==='exit'?360:520,
       easing: mode === "exit" ? "cubic-bezier(.4,0,.7,.2)" : "cubic-bezier(.2,.7,.2,1)",
       fill: "none",
@@ -232,11 +270,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
 
   function revealArticle(ticket: number, from: number) {
     if (!active || ticket !== revision || !wanted) return;
-    const button = openButton();
-    if (button) {
-      button.hidden = true;
-      button.inert = true;
-    }
+    setActionState("expanded");
     article.hidden = false;
     article.inert = false;
     revealFutureFields(article);
@@ -269,20 +303,11 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   function beginOpen(ticket: number, from: number) {
     if (!active || ticket !== revision || !wanted) return;
     if (article.hidden) {
-      const button = openButton();
-      if (button) {
-        button.hidden = false;
-        button.inert = true;
-      }
+      setActionState("transition");
       article.inert = true;
       panel.dataset.panelState = "button-exit";
       animateButton("exit", ticket, () => {
         if (!active || ticket !== revision || !wanted) return;
-        const currentButton = openButton();
-        if (currentButton) {
-          currentButton.hidden = true;
-          currentButton.inert = true;
-        }
         revealArticle(ticket, 0);
       });
       return;
@@ -293,13 +318,10 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
   function revealButton(ticket: number) {
     if (!active || ticket !== revision || wanted) return;
     viewport.scrollTop = 0;
-    const button = openButton();
-    if (button) {
-      button.hidden = false;
-      button.inert = false;
-    }
-    panel.dataset.panelState = button ? "button-enter" : "browse";
-    if (!button) {
+    const surface = actionSurface();
+    if (surface) setActionState("transition");
+    panel.dataset.panelState = surface ? "button-enter" : "browse";
+    if (!surface) {
       setBrowse();
       if (focusAfterClose && panel.contains(document.activeElement) && root.dataset.operationFocus === "right") focusOpenButton();
       focusAfterClose = false;
@@ -307,7 +329,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     }
     animateButton("enter", ticket, () => {
       if (!active || ticket !== revision || wanted) return;
-      button.inert = false;
+      setActionState("browse");
       panel.dataset.panelState = "browse";
       if (focusAfterClose && panel.contains(document.activeElement) && root.dataset.operationFocus === "right") focusOpenButton();
       focusAfterClose = false;
@@ -389,11 +411,7 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     focusAfterOpen = false;
     focusAfterClose = false;
 
-    const button = openButton();
-    if (button) {
-      button.hidden = originalButtonState?.node === button ? originalButtonState.hidden : false;
-      button.inert = originalButtonState?.node === button ? originalButtonState.inert : false;
-    }
+    restoreActionState();
     if (originalArticleState) {
       article.hidden = originalArticleState.hidden;
       article.inert = originalArticleState.inert;
@@ -421,7 +439,8 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     readingVeil.hidden = true;
     active = false;
     originalArticleState = undefined;
-    originalButtonState = undefined;
+    originalActionSurfaceState = undefined;
+    originalActionButtonStates = [];
   }
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -445,18 +464,14 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
       wanted = false;
       originalArticleState = { hidden: article.hidden, inert: article.inert };
       originalArticleTabindex = article.getAttribute("tabindex");
-      const button = openButton();
-      originalButtonState = button ? { node: button, hidden: button.hidden, inert: button.inert } : undefined;
+      captureActionState();
       viewport.append(callout, article);
       if (!panel.isConnected) root.append(panel);
       article.hidden = true;
       article.inert = true;
       article.style.removeProperty("height");
       article.style.removeProperty("overflow");
-      if (button) {
-        button.hidden = false;
-        button.inert = false;
-      }
+      setActionState("browse");
       panel.dataset.panelState = "browse";
       panel.hidden = false;
       readingVeil.hidden = false;
@@ -484,10 +499,10 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
       const from = article.hidden ? 0 : article.getBoundingClientRect().height;
       const wasFocusedInArticle = article.contains(document.activeElement);
       wanted = open;
-      const wasFocusedOnButton = openButton()?.contains(document.activeElement) ?? false;
-      focusAfterOpen = open && wasFocusedOnButton && root.dataset.operationFocus === "right";
+      const wasFocusedInActions = actionSurface()?.contains(document.activeElement) ?? false;
+      focusAfterOpen = open && wasFocusedInActions && root.dataset.operationFocus === "right";
       focusAfterClose = !open && wasFocusedInArticle;
-      if (wasFocusedOnButton || (!open && wasFocusedInArticle)) panel.focus({ preventScroll: true });
+      if (wasFocusedInActions || (!open && wasFocusedInArticle)) panel.focus({ preventScroll: true });
       revision++;
       const ticket = revision;
       cancelMotion();

@@ -518,7 +518,10 @@ stage.innerHTML = ui`
       <h1 id="selection-title"></h1><p id="selection-artist" class="selection-artist"></p>
       <div class="selection-meta" id="selection-meta"></div>
       <div id="selection-profile" class="selection-profile" hidden></div>
-      <button class="open-album" data-action="open" aria-label="打开专辑" data-cjk="${containsCjk(trUi("打开专辑"))}"><span class="open-album-label">打开专辑</span><span class="open-album-access-label" aria-hidden="true">ACCESS ALBUM</span><span class="open-album-arrow" aria-hidden="true">→</span></button>
+      <div class="album-actions">
+        <button type="button" class="browse-play-album" data-action="play-album" aria-label="播放专辑" data-cjk="${containsCjk(trUi("播放专辑"))}"><span class="play-album-label">播放专辑</span><span class="play-album-access-label" aria-hidden="true">PLAY ALBUM</span><span class="play-album-icon" aria-hidden="true">${icons.play}</span></button>
+        <button class="open-album" data-action="open" aria-label="打开专辑" data-cjk="${containsCjk(trUi("打开专辑"))}"><span class="open-album-label">打开专辑</span><span class="open-album-access-label" aria-hidden="true">ACCESS ALBUM</span><span class="open-album-arrow" aria-hidden="true">→</span></button>
+      </div>
     </div>
     <div class="music-navigation">
       <div class="music-counter"><span class="music-eyebrow">ALBUM / SELECT</span><div><b id="selection-number">01</b><span>/ <i id="selection-total">00</i></span></div></div>
@@ -583,6 +586,7 @@ stage.addEventListener("lyrics-settings-updated", () => {
 });
 $("#music-browse").insertAdjacentHTML("afterbegin", musicBrowseControlsMarkup(musicApplication.view));
 $(".open-album").setAttribute("aria-label", uiLanguage() === "en" ? "Open album" : "打开专辑");
+$(".browse-play-album").setAttribute("aria-label", uiLanguage() === "en" ? "Play album" : "播放专辑");
 const titleMotion = setupMusicTitleLayout(stage);
 const albumPanel = setupAlbumPanel(stage, () => preferences.reduced);
 albumPanel.setActive(true);
@@ -1080,6 +1084,7 @@ function updateStatus() {
 let selectedProfileMarkup = "";
 function updateSelection(navigation?: ArchiveNavigation) {
   const a = currentAlbum();
+  $<HTMLButtonElement>(".browse-play-album").disabled = !a?.tracks.length || !!a.offline;
   if (!a) {
     albumPanel.setVisible(false);
     selectionInitialized = false;
@@ -3635,6 +3640,13 @@ function playAlbum(id?: string) {
   void player.play(id || focusedTrack?.id || a.tracks[0].id, a.tracks);
 }
 
+/** The album action starts its queue at the first track, independently of TRACKS focus. */
+function playSelectedAlbum() {
+  const album = currentAlbum();
+  if (!album?.tracks.length || album.offline) return;
+  void player.play(album.tracks[0].id, album.tracks);
+}
+
 function setFoobarOrder(value: string) {
   player.setPlaybackOrder(value as Parameters<MusicPlayer["setPlaybackOrder"]>[0]);
 }
@@ -3907,6 +3919,9 @@ document.addEventListener("click", (e) => {
       break;
     case "open":
       setMode("detail");
+      break;
+    case "play-album":
+      playSelectedAlbum();
       break;
     case "back":
       setMode("archive");

@@ -102,6 +102,7 @@ export const mainEnglish: Record<string, string> = {
   "播放 / 暂停淡变": "Play / pause fade",
   "播放 / 暂停淡变时长": "Play / pause fade duration",
   "播放当前专辑": "Play current album",
+  "播放专辑": "Play album",
   "播放歌曲后显示音频信息。": "Audio information appears after playback starts.",
   "播放缓冲": "Playback buffer",
   "播放设备属性": "Playback device properties",
