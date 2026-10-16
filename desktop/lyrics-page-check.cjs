@@ -33,6 +33,10 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function hasExplicitNoLyricsNotice(value) {
+  return String(value??'')==='无本地歌词，也暂无可用的云歌词。';
+}
+
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function browser(expression) {
@@ -500,6 +504,399 @@ async function inspectHeaderScrollbar() {
   report.checks.futureHeaderScrollbarHiddenAndOverflowKeyboardReachable=true;
 }
 
+async function inspectLyricsLocalFallbackAndRightLighting() {
+  const trackId='synthetic-track';
+  const splitShadowLayers=value=>{
+    const text=String(value??'none'),layers=[];
+    let depth=0,start=0;
+    for(let index=0;index<text.length;index+=1){
+      if(text[index]==='(')depth+=1;
+      else if(text[index]===')')depth=Math.max(0,depth-1);
+      else if(text[index]===','&&depth===0){layers.push(text.slice(start,index).trim());start=index+1;}
+    }
+    layers.push(text.slice(start).trim());
+    return layers;
+  };
+  await browser(`(() => {const input=document.querySelector('#lyrics-local-panel input[type=file]');if(!input)throw new Error('Local file input missing');window.__lyricsCheckFilePickerCalls=0;input.addEventListener('click',event=>{event.preventDefault();window.__lyricsCheckFilePickerCalls++});return true})()`);
+  let state=await mockState();
+  let bank=state.banks.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='cloud'&&bank.variants.cloud&&!bank.variants.local,'The targeted Local-fallback run must begin with a Cloud document: '+JSON.stringify(bank));
+
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-cloud-tab").getAttribute("aria-selected")==="true"','Cloud options opened for the synthetic cached lyric');
+  const pickerBeforeLocal=await browser('window.__lyricsCheckFilePickerCalls');
+  const resolveCount=state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===trackId).length;
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===trackId&&item.body.kind==='local'),'Local preference activated over the cached Cloud document');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeLocal),'switching to Local did not open Import');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes("第一句合成歌词")','cached Cloud lyric remains displayed as Local fallback');
+  const fallbackVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&bank.variants.cloud&&!bank.variants.local&&fallbackVisual.lines.includes('第一句合成歌词')
+      &&fallbackVisual.localSelected==='true'&&fallbackVisual.cloudSelected==='false'
+      &&fallbackVisual.localMessage.includes('无本地歌词，使用云歌词')&&fallbackVisual.offsetDisabled
+      &&fallbackVisual.pickerCalls===pickerBeforeLocal
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===trackId).length===resolveCount,
+    'Local must show a read-only Cloud fallback, preserve active Local, and wait for an explicit Import click: '+JSON.stringify({bank,fallbackVisual}));
+  await waitForPaintStable('lyrics-local-fallback-cloud-preview');
+  await captureScreenshot('lyrics-local-fallback-cloud-preview');
+
+  const localText='[00:01.00]目标曲目的本地歌词\n[00:03.00]本地歌词第二句';
+  await click('#lyrics-local-panel .lyrics-import-button');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeLocal+1),'explicit Import click opened only the intercepted picker');
+  await browser(`(async()=>{const input=document.querySelector('#lyrics-local-panel input[type=file]'),text=${JSON.stringify(localText)},file=new File([text],'synthetic-local-import.lrc',{type:'text/plain'}),transfer=new DataTransfer();window.__lyricsCheckOriginalLocalText=text;window.__lyricsCheckOriginalLocalFile=file;transfer.items.add(file);Object.defineProperty(input,'files',{value:transfer.files,configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/import'&&item.body.trackId===trackId),'explicit local import request completed');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes("目标曲目的本地歌词")','Local import replaced the Cloud fallback immediately');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===trackId);
+  const importRequest=state.requests.filter(item=>item.path==='/api/lyrics/import'&&item.body.trackId===trackId).at(-1);
+  const originalUnchanged=await browser('window.__lyricsCheckOriginalLocalFile.arrayBuffer().then(bytes=>new TextDecoder().decode(bytes)===window.__lyricsCheckOriginalLocalText)');
+  const localImportVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true}))()');
+  assert(bank?.activeKind==='local'&&bank.effectiveKind==='local'&&bank.userSelected&&bank.variants.local&&bank.variants.cloud
+      &&importRequest?.body?.lrc===localText&&!Object.keys(importRequest.body).some(key=>/path|filename/i.test(key))
+      &&originalUnchanged&&localImportVisual.lines.includes('目标曲目的本地歌词')&&localImportVisual.localSelected==='true'
+      &&!localImportVisual.offsetDisabled&&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===trackId).length===resolveCount,
+    'Manual Local import must replace only its bank, preserve the original File bytes, and avoid another resolve: '+JSON.stringify({bank,importRequest,originalUnchanged,localImportVisual}));
+  await waitForPaintStable('lyrics-local-fallback-imported-local');
+  await captureScreenshot('lyrics-local-fallback-imported-local');
+
+  await browser('document.querySelector(".lyrics-offset-controls input").value="-0.5"');
+  await click('.lyrics-offset-controls .lyrics-quiet-button');
+  state=await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/offset'&&item.body.trackId===trackId&&item.body.kind==='local'&&item.body.offsetMs===-500)
+      &&snapshot.bankDocuments?.find(item=>item.trackId===trackId)?.variants.local?.offsetMs===-500,
+    'Local offset request completed and its document snapshot was updated');
+  await waitBrowser('document.querySelector(".lyrics-offset-controls input")?.value==="-0.5"','Local offset input settled after the save response');
+  bank=state.banks.find(item=>item.trackId===trackId);
+  const bankDocuments=state.bankDocuments.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='local'&&bank.variants.local&&bank.variants.cloud
+      &&bankDocuments?.variants.local.offsetMs===-500&&bankDocuments.variants.cloud.offsetMs===0,
+    'A Local offset edit must update only the Local document while the public variants remain availability flags: '+JSON.stringify({bank,bankDocuments}));
+
+  const searchRequestsBefore=(await mockState()).requests.filter(item=>item.path==='/api/lyrics/search'&&item.body.trackId===trackId).length;
+  await click('#lyrics-options-cloud-tab');
+  await waitMockState(snapshot=>snapshot.requests.filter(item=>item.path==='/api/lyrics/search'&&item.body.trackId===trackId).length>searchRequestsBefore
+      &&snapshot.searchResponses.length===snapshot.requests.filter(item=>item.path==='/api/lyrics/search').length,'Cloud panel searched with the global default after Local import');
+  await waitBrowser('document.querySelector(".lyrics-candidate-card button")!==null','Cloud search candidate available for Use-button lighting check');
+  const cloudOffsetAvailable=await browser('(() => ({selected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),disabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,heading:document.querySelector(".lyrics-offset-section .lyrics-data-heading")?.textContent.trim()??""}))()');
+  assert(cloudOffsetAvailable.selected==='true'&&!cloudOffsetAvailable.disabled&&cloudOffsetAvailable.heading.includes('云歌词'),
+    'Cloud calibration must be editable only after selecting the Cloud panel: '+JSON.stringify(cloudOffsetAvailable));
+  await waitBrowser('document.querySelector(".lyrics-offset-controls input")?.value==="0.0"','Cloud offset input settled after switching banks');
+  const cloudSearchSource=(await mockState()).searchResponses.filter(item=>item.trackId===trackId).at(-1)?.sourceId;
+  assert(cloudSearchSource==='netease','Cloud tab searches the global default source in this harness: '+String(cloudSearchSource));
+  await browser('document.querySelector(".lyrics-offset-controls input").value="0.5"');
+  await click('.lyrics-offset-controls .lyrics-quiet-button');
+  state=await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/offset'&&item.body.trackId===trackId&&item.body.kind==='cloud'&&item.body.offsetMs===500)
+      &&snapshot.bankDocuments?.find(item=>item.trackId===trackId)?.variants.cloud?.offsetMs===500,
+    'Cloud offset request completed and its document snapshot was updated');
+  await waitBrowser('document.querySelector(".lyrics-offset-controls input")?.value==="0.5"','Cloud offset input settled after the save response');
+  bank=state.banks.find(item=>item.trackId===trackId);
+  const offsetBankDocuments=state.bankDocuments.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='cloud'&&bank.variants.cloud&&bank.variants.local
+      &&offsetBankDocuments?.variants.cloud.offsetMs===500&&offsetBankDocuments.variants.local.offsetMs===-500,
+    'Cloud calibration must preserve the Local document offset while public variants remain availability flags: '+JSON.stringify({bank,offsetBankDocuments}));
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===trackId&&item.body.kind==='local'),'Local bank reactivated after Cloud calibration');
+  const restoredLocalOffset=await browser('(() => ({selected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),offset:document.querySelector(".lyrics-offset-controls input")?.value}))()');
+  assert(restoredLocalOffset.selected==='true'&&restoredLocalOffset.offset==='-0.5',
+    'Switching back to Local must restore its independent offset: '+JSON.stringify(restoredLocalOffset));
+  const searchesBeforeCloudLighting=(await mockState()).requests.filter(item=>item.path==='/api/lyrics/search'&&item.body.trackId===trackId).length;
+  await click('#lyrics-options-cloud-tab');
+  await waitMockState(snapshot=>snapshot.requests.filter(item=>item.path==='/api/lyrics/search'&&item.body.trackId===trackId).length>searchesBeforeCloudLighting
+      &&snapshot.searchResponses.length===snapshot.requests.filter(item=>item.path==='/api/lyrics/search').length,'Cloud panel re-entered its explicit search flow for right-control lighting');
+  report.checks.localFallbackManualImportAndScopedOffsets=true;
+
+  await browser('window.__lyricsCheckSetTerminalFull()');
+  await waitForPaintStable('lyrics-right-buttons-full-light-ready');
+  const controls=[
+    {key:'manage',selector:'#lyrics-cloud-panel .lyrics-source-settings-link',label:'管理来源'},
+    {key:'search',selector:'#lyrics-cloud-panel .lyrics-primary-button',label:'搜索'},
+    {key:'use',selector:'.lyrics-candidate-card button',label:'使用'},
+  ];
+  const lightingSamples=[],idleLightSamples=[];
+  for(const theme of ['day','night']){
+    await browser('(() => {const root=document.querySelector("#stage");root.dataset.design="rhine";root.dataset.theme='+JSON.stringify(theme)+';window.__lyricsCheckTerminalLighting?.refresh();return true})()');
+    await waitForPaintStable('lyrics-right-buttons-full-'+theme);
+    await browser('document.activeElement?.blur();window.__lyricsCheckTerminalLighting?.refresh()');
+    await pause(80);
+    const idleControls=[];
+    for(const control of controls){
+      const selector=JSON.stringify(control.selector);
+      const before=await browser(`(() => {const node=document.querySelector(${selector});if(!node)return null;const s=getComputedStyle(node),r=node.getBoundingClientRect(),pseudo=p=>{const q=getComputedStyle(node,p);return{content:q.content,display:q.display,opacity:q.opacity,background:q.backgroundColor,backgroundImage:q.backgroundImage,boxShadow:q.boxShadow,width:q.width,height:q.height,position:q.position}};return{width:r.width,height:r.height,borderRadius:s.borderRadius,border:s.border,background:s.backgroundColor,backgroundImage:s.backgroundImage,boxShadow:s.boxShadow,textDecoration:s.textDecorationLine,receiver:node.hasAttribute("data-terminal-receiver"),before:pseudo("::before"),after:pseudo("::after")}})()`);
+      assert(before&&before.width>0&&before.height>0,'Missing right-panel '+control.label+' button before full-light hover: '+JSON.stringify({theme,control,before}));
+      assert(!before.receiver&&before.boxShadow==='none'&&parseFloat(before.borderRadius)===10,
+        'Idle Future '+control.label+' must have no terminal receiver shadow and keep its 10px radius: '+JSON.stringify({theme,control,before}));
+      idleControls.push({key:control.key,width:before.width,height:before.height,borderRadius:before.borderRadius,receiver:before.receiver,boxShadow:before.boxShadow});
+      const rect=await browser(`(() => {const r=document.querySelector(${selector}).getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
+      browserWindow.webContents.sendInputEvent({type:'mouseMove',x:rect.x,y:rect.y});
+      await browser('window.__lyricsCheckTerminalLighting?.refresh()');
+      await waitForPaintStable('lyrics-right-button-'+theme+'-'+control.key);
+      const after=await browser(`(() => {const node=document.querySelector(${selector});if(!node)return null;const s=getComputedStyle(node),r=node.getBoundingClientRect(),pseudo=p=>{const q=getComputedStyle(node,p);return{content:q.content,display:q.display,opacity:q.opacity,background:q.backgroundColor,backgroundImage:q.backgroundImage,boxShadow:q.boxShadow,width:q.width,height:q.height,position:q.position}};return{width:r.width,height:r.height,borderRadius:s.borderRadius,border:s.border,background:s.backgroundColor,backgroundImage:s.backgroundImage,boxShadow:s.boxShadow,textDecoration:s.textDecorationLine,receiver:node.hasAttribute("data-terminal-receiver"),focusVisible:node.matches(":focus-visible"),before:pseudo("::before"),after:pseudo("::after")}})()`);
+      const hoverShadows=splitShadowLayers(after?.boxShadow);
+      assert(after&&after.receiver&&Math.abs(after.width-before.width)<0.5&&Math.abs(after.height-before.height)<0.5
+          &&after.borderRadius===before.borderRadius&&!after.textDecoration.includes('underline')
+          &&hoverShadows.length>0&&hoverShadows.every(value=>value.includes('inset')),
+        'Full terminal hover light must stay on the 10px button edge without an outer rectangular halo: '+JSON.stringify({theme,control,before,after}));
+      await captureScreenshot('lyrics-local-fallback-right-'+theme+'-'+control.key+'-hover');
+      browserWindow.webContents.sendInputEvent({type:'mouseMove',x:2,y:2});
+      await browser(`document.querySelector(${selector}).focus()`);
+      const debuggerApi=browserWindow.webContents.debugger;
+      const attachedHere=!debuggerApi.isAttached();
+      let focusNodeId=0;
+      let focused;
+      try{
+        if(attachedHere)debuggerApi.attach();
+        await debuggerApi.sendCommand('DOM.enable');
+        await debuggerApi.sendCommand('CSS.enable');
+        const {root}=await debuggerApi.sendCommand('DOM.getDocument');
+        const queried=await debuggerApi.sendCommand('DOM.querySelector',{nodeId:root.nodeId,selector:control.selector});
+        focusNodeId=queried.nodeId;
+        assert(focusNodeId>0,'Could not locate the focused '+control.label+' control for its focus-visible paint check.');
+        await debuggerApi.sendCommand('CSS.forcePseudoState',{nodeId:focusNodeId,forcedPseudoClasses:['focus-visible']});
+        await browser('window.__lyricsCheckTerminalLighting?.refresh()');
+        await waitForPaintStable('lyrics-right-button-focus-'+theme+'-'+control.key);
+        focused=await browser(`(() => {const node=document.querySelector(${selector});if(!node)return null;const s=getComputedStyle(node),r=node.getBoundingClientRect();return{width:r.width,height:r.height,borderRadius:s.borderRadius,boxShadow:s.boxShadow,textDecoration:s.textDecorationLine,receiver:node.hasAttribute("data-terminal-receiver"),focusVisible:node.matches(":focus-visible"),outline:s.outlineStyle,outlineWidth:s.outlineWidth}})()`);
+        const focusShadows=splitShadowLayers(focused?.boxShadow);
+        assert(focused&&focused.focusVisible&&focused.receiver&&Math.abs(focused.width-before.width)<0.5
+            &&Math.abs(focused.height-before.height)<0.5&&focused.borderRadius===before.borderRadius
+            &&focusShadows.length>0&&focusShadows.every(value=>value.includes('inset')),
+          'Full terminal focus-visible light must stay on the '+control.label+' edge without an outer halo: '+JSON.stringify({theme,control,before,focused}));
+        await captureScreenshot('lyrics-local-fallback-right-'+theme+'-'+control.key+'-focus');
+      }finally{
+        if(focusNodeId>0){try{await debuggerApi.sendCommand('CSS.forcePseudoState',{nodeId:focusNodeId,forcedPseudoClasses:[]});}catch{}}
+        if(attachedHere&&debuggerApi.isAttached()){try{debuggerApi.detach();}catch{}}
+      }
+      lightingSamples.push({theme,...control,before,hover:after,focus:focused});
+      await browser('document.activeElement?.blur();window.__lyricsCheckTerminalLighting?.refresh()');
+      browserWindow.webContents.sendInputEvent({type:'mouseMove',x:2,y:2});
+      await pause(80);
+    }
+    await waitForPaintStable('lyrics-right-buttons-idle-'+theme);
+    const idleAfter=await browser('(() => [...document.querySelectorAll("#lyrics-cloud-panel .lyrics-source-settings-link,#lyrics-cloud-panel .lyrics-primary-button,.lyrics-candidate-card button")].map(node=>({text:node.textContent.trim(),receiver:node.hasAttribute("data-terminal-receiver"),boxShadow:getComputedStyle(node).boxShadow,borderRadius:getComputedStyle(node).borderRadius})) )()');
+    assert(idleAfter.length>=3&&idleAfter.every(item=>!item.receiver&&item.boxShadow==='none'&&parseFloat(item.borderRadius)===10),
+      'After focus/hover clears, right-panel controls must return to the idle rounded style: '+JSON.stringify({theme,idleAfter}));
+    await captureScreenshot('lyrics-local-fallback-right-'+theme+'-idle');
+    idleLightSamples.push({theme,controls:idleControls,after:idleAfter});
+  }
+  report.rightPanelControlLightingSamples=lightingSamples;
+  report.rightPanelIdleControls=idleLightSamples;
+  report.checks.rightPanelManageSearchUseSoftLightDayNight=true;
+
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','close the options dialog before checking the backdrop light');
+  await browser('window.__lyricsCheckSetDesignTheme("rhine","day");window.__lyricsCheckSetCurrentTime(2.5);window.__lyricsCheckSetTerminalFull();window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-backdrop-before-modal');
+  const backdropBefore=await browser('(() => {const row=document.querySelector(".lyrics-line.is-active"),nav=document.querySelector(".music-topnav [data-action=library]");return{mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),row:row?.dataset.line??null,rowReceiver:row?.hasAttribute("data-terminal-receiver")??false,navReceiver:nav?.hasAttribute("data-terminal-receiver")??false,dialogHidden:document.querySelector("#lyrics-options-dialog").hidden}})()');
+  assert(backdropBefore.mode==='full'&&backdropBefore.dialogHidden&&backdropBefore.row!==null&&backdropBefore.rowReceiver&&backdropBefore.navReceiver,
+    'The full Future mode must light the active lyric and active topnav before the options modal opens: '+JSON.stringify(backdropBefore));
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','open the options modal over the active lyric');
+  await waitForPaintStable('lyrics-fallback-modal-backdrop-light');
+  const backdropInModal=await browser('(() => {const row=document.querySelector(".lyrics-line.is-active"),nav=document.querySelector(".music-topnav [data-action=library]"),dialog=document.querySelector(".lyrics-preference-dialog");return{mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),rowReceiver:row?.hasAttribute("data-terminal-receiver")??false,navReceiver:nav?.hasAttribute("data-terminal-receiver")??false,dialogReceiver:dialog?.hasAttribute("data-terminal-receiver")??false}})()');
+  assert(backdropInModal.mode==='full'&&!backdropInModal.rowReceiver&&!backdropInModal.navReceiver&&backdropInModal.dialogReceiver,
+    'Opening the Future dialog must clear receivers from backdrop lyrics/topnav and light only the modal surface: '+JSON.stringify(backdropInModal));
+  await captureScreenshot('lyrics-local-fallback-modal-backdrop-light');
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','close the options modal and restore backdrop lights');
+  await waitForPaintStable('lyrics-fallback-backdrop-after-modal');
+  const backdropAfter=await browser('(() => {const row=document.querySelector(".lyrics-line.is-active"),nav=document.querySelector(".music-topnav [data-action=library]"),dialog=document.querySelector(".lyrics-preference-dialog");return{mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),rowReceiver:row?.hasAttribute("data-terminal-receiver")??false,navReceiver:nav?.hasAttribute("data-terminal-receiver")??false,dialogReceiver:dialog?.hasAttribute("data-terminal-receiver")??false}})()');
+  assert(backdropAfter.mode==='full'&&backdropAfter.rowReceiver&&backdropAfter.navReceiver&&!backdropAfter.dialogReceiver,
+    'Closing the dialog must restore the active lyric and topnav receivers without changing the full light level: '+JSON.stringify(backdropAfter));
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','reopen the Cloud dialog for terminal quality mode checks');
+
+  const fullModeControls=await browser('(() => [...document.querySelectorAll("#lyrics-cloud-panel .lyrics-source-settings-link,#lyrics-cloud-panel .lyrics-primary-button,.lyrics-candidate-card button")].map(node=>{const r=node.getBoundingClientRect(),s=getComputedStyle(node);return{width:r.width,height:r.height,borderRadius:s.borderRadius}}))()');
+  await browser('window.__lyricsCheckSetTerminalLocal();window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-local-light-mode');
+  const localModeControls=await browser('(() => ({mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),controls:[...document.querySelectorAll("#lyrics-cloud-panel .lyrics-source-settings-link,#lyrics-cloud-panel .lyrics-primary-button,.lyrics-candidate-card button")].map(node=>{const r=node.getBoundingClientRect(),s=getComputedStyle(node);return{width:r.width,height:r.height,borderRadius:s.borderRadius,receiver:node.hasAttribute("data-terminal-receiver")}})}))()');
+  assert(localModeControls.mode==='local'&&localModeControls.controls.length===fullModeControls.length
+      &&localModeControls.controls.every((item,index)=>Math.abs(item.width-fullModeControls[index].width)<0.5&&Math.abs(item.height-fullModeControls[index].height)<0.5&&item.borderRadius===fullModeControls[index].borderRadius),
+    'Local terminal-light quality must preserve all right-control geometry and skin: '+JSON.stringify({fullModeControls,localModeControls}));
+  const manageSelector=JSON.stringify('#lyrics-cloud-panel .lyrics-source-settings-link');
+  const managePoint=await browser(`(() => {const r=document.querySelector(${manageSelector}).getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:managePoint.x,y:managePoint.y});
+  await browser('window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-local-light-hover');
+  const localHover=await browser(`(() => {const node=document.querySelector(${manageSelector}),r=node.getBoundingClientRect(),s=getComputedStyle(node);return{width:r.width,height:r.height,borderRadius:s.borderRadius,boxShadow:s.boxShadow,receiver:node.hasAttribute('data-terminal-receiver')}})()`);
+  assert(localHover.receiver&&localHover.borderRadius==='10px'&&Math.abs(localHover.width-fullModeControls[0].width)<0.5&&Math.abs(localHover.height-fullModeControls[0].height)<0.5
+      &&splitShadowLayers(localHover.boxShadow).every(value=>value.includes('inset')),
+    'Local terminal-light hover must retain the rounded button and use only its inset edge: '+JSON.stringify(localHover));
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:2,y:2});
+  await browser('window.__lyricsCheckSetTerminalOff();window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-off-light-mode');
+  const offModeControls=await browser('(() => ({mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),controls:[...document.querySelectorAll("#lyrics-cloud-panel .lyrics-source-settings-link,#lyrics-cloud-panel .lyrics-primary-button,.lyrics-candidate-card button")].map(node=>{const r=node.getBoundingClientRect(),s=getComputedStyle(node);return{width:r.width,height:r.height,borderRadius:s.borderRadius,receiver:node.hasAttribute("data-terminal-receiver")}})}))()');
+  assert(offModeControls.mode==='off'&&offModeControls.controls.length===fullModeControls.length
+      &&offModeControls.controls.every((item,index)=>Math.abs(item.width-fullModeControls[index].width)<0.5&&Math.abs(item.height-fullModeControls[index].height)<0.5&&item.borderRadius===fullModeControls[index].borderRadius&&!item.receiver),
+    'Off terminal-light quality must clear receivers without changing right-control geometry or skin: '+JSON.stringify({fullModeControls,offModeControls}));
+  const offManagePoint=await browser(`(() => {const r=document.querySelector(${manageSelector}).getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:offManagePoint.x,y:offManagePoint.y});
+  await browser('window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-off-light-hover');
+  const offHover=await browser(`(() => {const node=document.querySelector(${manageSelector}),s=getComputedStyle(node);return{mode:document.querySelector("#stage").getAttribute("data-terminal-lighting"),radius:s.borderRadius,receiver:node.hasAttribute('data-terminal-receiver')}})()`);
+  assert(offHover.mode==='off'&&offHover.radius==='10px'&&!offHover.receiver,
+    'Off terminal-light quality must keep the Future control skin without adding a hover receiver: '+JSON.stringify(offHover));
+
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:2,y:2});
+  await browser('window.__lyricsCheckSetTerminalFull();window.__lyricsCheckSetDesignTheme("archive","day");window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-archive-punk-light-mode');
+  const punkIdle=await browser('(() => [...document.querySelectorAll("#lyrics-cloud-panel .lyrics-source-settings-link,#lyrics-cloud-panel .lyrics-primary-button,.lyrics-candidate-card button")].map(node=>{const r=node.getBoundingClientRect(),s=getComputedStyle(node);return{width:r.width,height:r.height,borderRadius:s.borderRadius,receiver:node.hasAttribute("data-terminal-receiver"),textDecoration:s.textDecorationLine}}))()');
+  assert(punkIdle.length===fullModeControls.length&&punkIdle.every(item=>parseFloat(item.borderRadius)===0&&!item.receiver&&!item.textDecoration.includes('underline')),
+    'The Punk/archive control skin must stay square and unlit by Future terminal receivers: '+JSON.stringify(punkIdle));
+  const punkManagePoint=await browser(`(() => {const r=document.querySelector(${manageSelector}).getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:punkManagePoint.x,y:punkManagePoint.y});
+  await browser('window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-archive-punk-hover');
+  const punkHover=await browser(`(() => {const node=document.querySelector(${manageSelector}),s=getComputedStyle(node),r=node.getBoundingClientRect();return{width:r.width,height:r.height,borderRadius:s.borderRadius,receiver:node.hasAttribute('data-terminal-receiver'),textDecoration:s.textDecorationLine}})()`);
+  assert(parseFloat(punkHover.borderRadius)===0&&!punkHover.receiver&&!punkHover.textDecoration.includes('underline')
+      &&Math.abs(punkHover.width-punkIdle[0].width)<0.5&&Math.abs(punkHover.height-punkIdle[0].height)<0.5,
+    'Punk/archive Manage Sources hover must keep its square, stable, non-link surface: '+JSON.stringify({punkIdle,punkHover}));
+  await captureScreenshot('lyrics-local-fallback-punk-right-hover');
+  browserWindow.webContents.sendInputEvent({type:'mouseMove',x:2,y:2});
+  await browser('window.__lyricsCheckSetDesignTheme("rhine","day");window.__lyricsCheckSetTerminalFull();window.__lyricsCheckTerminalLighting?.refresh()');
+  await waitForPaintStable('lyrics-fallback-return-future-full');
+  report.backdropLightingSamples={before:backdropBefore,open:backdropInModal,after:backdropAfter};
+  report.terminalQualityModeSamples={full:fullModeControls,local:localModeControls,localHover,off:offModeControls,offHover};
+  report.punkControlSamples={idle:punkIdle,hover:punkHover};
+  report.checks.modalClearsAndRestoresBackdropReceivers=true;
+  report.checks.localOffLightModesKeepControlGeometry=true;
+  report.checks.punkSkinUnaffectedByFutureTerminalLighting=true;
+
+  const resolveCountBeforeCloudSelect=(await mockState()).requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===trackId).length;
+  await click('.lyrics-candidate-card button');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes("手动选择结果 synthetic-track")','user explicitly selected a Cloud candidate');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='cloud'&&bank.effectiveKind==='cloud'&&bank.userSelected&&bank.variants.local&&bank.variants.cloud,
+    'Explicit Cloud selection must remain authoritative when a Local bank exists: '+JSON.stringify(bank));
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','Cloud selection dialog closed before page re-entry check');
+  await browser('window.__lyricsCheckSetVisible(false)');
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes("手动选择结果 synthetic-track")','explicit Cloud lyric remained after page re-entry');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-cloud-tab").getAttribute("aria-selected")==="true"','reopening after re-entry keeps explicit Cloud active');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===trackId);
+  assert(bank?.activeKind==='cloud'&&bank.userSelected&&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===trackId).length===resolveCountBeforeCloudSelect,
+    'Explicit Cloud must not switch back to Local or trigger automatic resolution after re-entry: '+JSON.stringify(bank));
+  report.checks.explicitCloudDoesNotReturnToLocalAfterFallback=true;
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','targeted local-fallback dialog closed');
+
+  const autoFallbackTrack='synthetic-local-auto-fallback-track';
+  await browser('window.__lyricsCheckSetUnknownTrack('+JSON.stringify(autoFallbackTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===autoFallbackTrack),'unknown metadata produced an initial no-Cloud Local-fallback state');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-cloud-tab").getAttribute("aria-selected")==="true"','empty Cloud bank opened before the Local fallback resolver check');
+  const pickerBeforeAutoFallback=await browser('window.__lyricsCheckFilePickerCalls');
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===autoFallbackTrack&&item.body.kind==='local'),'Local preference persisted before Cloud fallback resolution');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeAutoFallback),'selecting an empty Local bank did not open Import');
+  const resolverStateBeforeMetadata=await mockState();
+  const resolveResponsesBeforeMetadata=resolverStateBeforeMetadata.resolveResponses.filter(item=>item.trackId===autoFallbackTrack).length;
+  const resolveRequestsBeforeMetadata=resolverStateBeforeMetadata.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===autoFallbackTrack).length;
+  await browser('window.__lyricsCheckSetKnownTrack('+JSON.stringify(autoFallbackTrack)+')');
+  state=await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===autoFallbackTrack&&item.activeKind==='local'&&item.effectiveKind==='cloud')
+      &&snapshot.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===autoFallbackTrack).length>resolveRequestsBeforeMetadata,
+    'metadata refresh resolved Cloud while Local remained active');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(autoFallbackTrack)+')','Cloud fallback lyric rendered while Local remained selected');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===autoFallbackTrack);
+  const autoFallbackVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  const autoFallbackResponse=state.resolveResponses.filter(item=>item.trackId===autoFallbackTrack).at(-1);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&bank.variants.cloud&&!bank.variants.local&&autoFallbackResponse?.activeKind==='local'&&autoFallbackResponse.effectiveKind==='cloud'
+      &&autoFallbackVisual.lines.includes(autoFallbackTrack)&&autoFallbackVisual.localSelected==='true'&&autoFallbackVisual.cloudSelected==='false'
+      &&autoFallbackVisual.localMessage.includes('无本地歌词，使用云歌词')&&autoFallbackVisual.offsetDisabled
+      &&autoFallbackVisual.pickerCalls===pickerBeforeAutoFallback
+      &&state.resolveResponses.filter(item=>item.trackId===autoFallbackTrack).length===resolveResponsesBeforeMetadata+1
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===autoFallbackTrack).length===resolveRequestsBeforeMetadata+1,
+    'A Cloud resolution must appear as a read-only fallback without changing the selected Local bank: '+JSON.stringify({bank,autoFallbackResponse,autoFallbackVisual}));
+  report.checks.emptyLocalAutomaticallyUsesCloudFallback=true;
+  await browser('window.__lyricsCheckSetVisible(false)');
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(autoFallbackTrack)+')','Cloud fallback remains visible after page re-entry');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','page re-entry and reopening retained the Local selection');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===autoFallbackTrack);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&state.resolveResponses.filter(item=>item.trackId===autoFallbackTrack).length===resolveResponsesBeforeMetadata+1
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===autoFallbackTrack).length===resolveRequestsBeforeMetadata+1,
+    'Re-entry must preserve Local selection and avoid another resolver: '+JSON.stringify(bank));
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','automatic-fallback dialog closed before empty-result checks');
+
+  const slowVariantTrack='synthetic-slow-variant-track';
+  await browser('window.__lyricsCheckSetTrack('+JSON.stringify(slowVariantTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===slowVariantTrack),'slow-variant track Cloud cache resolved');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(slowVariantTrack)+')','Cloud lyrics loaded before the delayed Local activation');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-cloud-tab").getAttribute("aria-selected")==="true"','Cloud selected before delayed Local activation');
+  const pickerBeforeSlowVariant=await browser('window.__lyricsCheckFilePickerCalls');
+  const slowVariantBefore=await mockState();
+  const slowVariantResolveCount=slowVariantBefore.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length;
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===slowVariantTrack&&item.body.kind==='local'),'delayed Local activation request started');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeSlowVariant),'delayed Local activation did not open Import');
+  await browser('window.__lyricsCheckSetVisible(false)');
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','page re-entered while the Local activation was pending');
+  const slowVariantPending=await mockState();
+  assert(!slowVariantPending.variantResponses.some(item=>item.trackId===slowVariantTrack)
+      &&slowVariantPending.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
+    'A pending Local activation must survive pagehide without an early response or competing resolver: '+JSON.stringify(slowVariantPending.variantResponses.filter(item=>item.trackId===slowVariantTrack)));
+  await waitMockState(snapshot=>snapshot.variantResponses.some(item=>item.trackId===slowVariantTrack&&item.kind==='local'),'delayed Local activation completed after re-entry');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(slowVariantTrack)+')','delayed Local selection displayed the Cloud fallback');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===slowVariantTrack);
+  const slowVariantResponse=state.variantResponses.find(item=>item.trackId===slowVariantTrack&&item.kind==='local');
+  const slowVariantVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&bank.variants.cloud&&!bank.variants.local&&slowVariantResponse?.activeKind==='local'&&slowVariantResponse.effectiveKind==='cloud'
+      &&slowVariantResponse.usingCloudFallback&&slowVariantResponse.selectionRevision===1&&slowVariantResponse.responseDestroyed===false&&!slowVariantResponse.requestAborted
+      &&slowVariantVisual.lines.includes(slowVariantTrack)&&slowVariantVisual.localMessage.includes('无本地歌词，使用云歌词')&&slowVariantVisual.offsetDisabled
+      &&slowVariantVisual.pickerCalls===pickerBeforeSlowVariant
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
+    'The delayed activation must retain Local while displaying Cloud as a read-only fallback, without a picker or second resolve: '+JSON.stringify({bank,slowVariantResponse,slowVariantVisual}));
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','reopening after delayed activation retained Local');
+  const slowReopen=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  assert(slowReopen.lines.includes(slowVariantTrack)&&slowReopen.localMessage.includes('无本地歌词，使用云歌词')&&slowReopen.offsetDisabled
+      &&slowReopen.pickerCalls===pickerBeforeSlowVariant
+      &&(await mockState()).requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
+    'Reopening after the delayed activation must not switch to Cloud or issue another resolve: '+JSON.stringify(slowReopen));
+  report.checks.slowVariantSurvivesPagehideWithLocalFallback=true;
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','delayed-activation dialog closed before remote-miss checks');
+
+  const pickerBefore=await browser('window.__lyricsCheckFilePickerCalls');
+  for(const emptyTrackId of ['synthetic-empty-local-track','synthetic-empty-fallback-track']){
+    await browser('window.__lyricsCheckSetUnknownTrack('+JSON.stringify(emptyTrackId)+')');
+    await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===emptyTrackId),'empty remote track initial response received');
+    await click('.lyrics-main-header [aria-label="歌词选项"]');
+    await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','empty remote Local fallback dialog opened');
+    await click('#lyrics-options-local-tab');
+    await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===emptyTrackId&&item.body.kind==='local'),'empty remote track switched to Local without Import');
+    const resolveBeforeKnown=(await mockState()).resolveResponses.filter(item=>item.trackId===emptyTrackId).length;
+    await browser('window.__lyricsCheckSetKnownTrack('+JSON.stringify(emptyTrackId)+')');
+    await waitMockState(snapshot=>snapshot.resolveResponses.filter(item=>item.trackId===emptyTrackId).length>resolveBeforeKnown,'empty remote track attempted Cloud resolution while Local remained active');
+    const emptyState=await mockState();
+    bank=emptyState.banks.find(item=>item.trackId===emptyTrackId);
+    const emptyUi=await browser('(() => ({lineCount:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+    assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind===null&&!bank.variants.local&&!bank.variants.cloud
+        &&emptyUi.lineCount===0&&hasExplicitNoLyricsNotice(emptyUi.notice)&&emptyUi.localMessage.includes('无本地歌词，使用云歌词')
+        &&emptyUi.localSelected==='true'&&emptyUi.pickerCalls===pickerBefore,
+      'A remote miss must leave Local selected with an explicit no-lyrics notice and no picker: '+JSON.stringify({bank,emptyUi}));
+    await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+    await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','empty remote dialog closed');
+  }
+
+  assert(!(await mockState()).requests.some(item=>item.path==='/api/lyrics/preferences'),'The Local/Cloud picker flow must not issue per-track source preference requests.');
+  report.checks.localFallbackFlowAndNoRemoteState=true;
+}
+
 async function saveFailureScreenshot() {
   if (!browserWindow || browserWindow.isDestroyed()) return;
   try {
@@ -631,6 +1028,15 @@ async function run() {
     const headerState=await mockState();
     report.mockApiPaths=Array.from(new Set(headerState.requests.map(item=>item.path)));
     report.checks.headerScrollbarModeOnly=true;
+    report.ok=true;
+    return;
+  }
+  if(checkMode==='lyrics-local-fallback'){
+    await inspectLyricsLocalFallbackAndRightLighting();
+    assert(report.externalNetworkRequests.length===0,'The isolated Local-fallback check attempted an external network request: '+JSON.stringify(report.externalNetworkRequests));
+    const fallbackState=await mockState();
+    report.mockApiPaths=Array.from(new Set(fallbackState.requests.map(item=>item.path)));
+    report.checks.lyricsLocalFallbackModeOnly=true;
     report.ok=true;
     return;
   }
@@ -785,7 +1191,14 @@ async function run() {
     const pickerBeforeLocal=await browser('window.__lyricsCheckFilePickerCalls');
     await click('#lyrics-options-local-tab');
     await waitMockState(state=>state.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId==='synthetic-track'&&item.body.kind==='local'),design+' '+theme+' Local variant activation submitted');
-    await waitBrowser('document.querySelector("#lyrics-local-panel").hidden===false&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeLocal+1),design+' '+theme+' Local tab selected and native picker intent intercepted');
+    await waitBrowser('document.querySelector("#lyrics-local-panel").hidden===false&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeLocal),design+' '+theme+' Local panel selected without opening the picker');
+    const localFallback=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+    const localFallbackBank=(await mockState()).banks.find(item=>item.trackId==='synthetic-track');
+    assert(localFallback.lines.includes('第一句合成歌词')&&localFallback.localMessage.includes('无本地歌词，使用云歌词')
+        &&localFallback.localSelected==='true'&&localFallback.cloudSelected==='false'&&localFallback.offsetDisabled
+        &&localFallback.pickerCalls===pickerBeforeLocal&&localFallbackBank?.activeKind==='local'
+        &&localFallbackBank.effectiveKind==='cloud'&&localFallbackBank.usingCloudFallback===true,
+      'Local without its own document must show cached Cloud lyrics as a read-only fallback and must not open the picker: '+JSON.stringify({localFallback,localFallbackBank}));
     await waitForPaintStable('lyrics-source-local-'+design+'-'+theme);
     await captureScreenshot('lyrics-source-local-'+design+'-'+theme);
     const searchResponsesBeforeCloud=(await mockState()).searchResponses.length;
@@ -847,40 +1260,112 @@ async function run() {
   report.checks.cloudSelectionPersistsCloudBank=true;
 
   const pickerBefore=await browser('window.__lyricsCheckFilePickerCalls');
-  assert(pickerBefore===4,'Each Future/Punk day/night Local entry must record one picker intent without opening a native dialog: '+pickerBefore);
+  assert(pickerBefore===0,'Selecting Local in the Future/Punk day/night visuals must never open the native picker: '+pickerBefore);
   await browser('window.__lyricsCheckSetTrack("synthetic-empty-local-track")');
   await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId==='synthetic-empty-local-track'),'empty Local track automatic resolve started');
   await click('.lyrics-main-header [aria-label="歌词选项"]');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','empty Local track dialog opened');
   await click('#lyrics-options-local-tab');
-  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.kind==='local'&&item.body.trackId==='synthetic-empty-local-track'),'empty Local selection persisted before opening picker');
-  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBefore+1),'clicking Local without a cache opened the file picker');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.kind==='local'&&item.body.trackId==='synthetic-empty-local-track'),'empty Local selection persisted without opening picker');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBefore),'clicking Local without a cache leaves the picker closed');
   const emptyLocal=await mockState();
   bank=emptyLocal.banks.find(item=>item.trackId==='synthetic-empty-local-track');
-  assert(bank?.activeKind==='local'&&bank.userSelected&&!bank.variants.local&&!bank.variants.cloud,
+  assert(bank?.activeKind==='local'&&bank.userSelected&&!bank.variants.local&&!bank.variants.cloud&&bank.effectiveKind===null,
     'Selecting an empty Local bank must remain an explicit selection: '+JSON.stringify(bank));
   await pause(520);
   const emptyLocalAfterAuto=await mockState();
   bank=emptyLocalAfterAuto.banks.find(item=>item.trackId==='synthetic-empty-local-track');
-  const emptyLocalVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",lineCount:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",noticeHidden:document.querySelector(".lyrics-notice")?.hidden??true,localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  const emptyLocalVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",lineCount:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",noticeHidden:document.querySelector(".lyrics-notice")?.hidden??true,localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
   assert(bank?.activeKind==='local'&&bank.userSelected&&!bank.variants.local&&!bank.variants.cloud
-      &&emptyLocalVisual.lineCount===0&&emptyLocalVisual.notice.includes('导入本地歌词')&&!emptyLocalVisual.noticeHidden
+      &&emptyLocalVisual.lineCount===0&&hasExplicitNoLyricsNotice(emptyLocalVisual.notice)&&emptyLocalVisual.localMessage.includes('无本地歌词，使用云歌词')&&!emptyLocalVisual.noticeHidden
       &&emptyLocalVisual.localSelected==='true'&&emptyLocalVisual.cloudSelected==='false'
-      &&!emptyLocalVisual.lines.includes('自动解析结果 synthetic-empty-local-track'),
-    'A late auto result must leave an empty Local prompt, no lyric rows, and a selected Local tab: '+JSON.stringify({bank,emptyLocalVisual}));
+      &&emptyLocalVisual.pickerCalls===pickerBefore&&!emptyLocalVisual.lines.includes('自动解析结果 synthetic-empty-local-track'),
+    'A remote miss must leave an explicit no-lyrics message, keep Local selected, and leave Import user-triggered: '+JSON.stringify({bank,emptyLocalVisual}));
   await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
   await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden&&document.activeElement?.getAttribute("aria-label")==="歌词选项"','empty Local dialog closed and focus returned to gear');
   const localReopenSearches=(await mockState()).searchResponses.length;
   await click('.lyrics-main-header [aria-label="歌词选项"]');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','reopening empty Local keeps the user-selected Local type');
-  const emptyLocalReopened=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
-  assert(emptyLocalReopened.lines===0&&emptyLocalReopened.notice.includes('导入本地歌词')&&emptyLocalReopened.cloudSelected==='false'
+  const emptyLocalReopened=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  assert(emptyLocalReopened.lines===0&&hasExplicitNoLyricsNotice(emptyLocalReopened.notice)&&emptyLocalReopened.localMessage.includes('无本地歌词，使用云歌词')&&emptyLocalReopened.cloudSelected==='false'
       &&emptyLocalReopened.pickerCalls===emptyLocalVisual.pickerCalls
       &&(await mockState()).searchResponses.length===localReopenSearches,
-    'Closing and reopening empty Local must keep its prompt and must not run Cloud search or reopen the file picker: '+JSON.stringify(emptyLocalReopened));
+    'Closing and reopening empty Local must keep its no-lyrics state without running search or opening Import: '+JSON.stringify(emptyLocalReopened));
   report.checks.emptyLocalPromptAndSelectionSurviveReopen=true;
   await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
   await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','empty Local dialog closed before returning to the prior track');
+
+  const localAutoFallbackTrack='synthetic-local-auto-fallback-track';
+  await browser('window.__lyricsCheckSetUnknownTrack('+JSON.stringify(localAutoFallbackTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===localAutoFallbackTrack),'unknown metadata produced an initial no-Cloud Local-fallback state');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','Local auto-fallback dialog opened');
+  const pickerBeforeAutoFallback=await browser('window.__lyricsCheckFilePickerCalls');
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===localAutoFallbackTrack&&item.body.kind==='local'),'Local preference selected before metadata refresh');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeAutoFallback),'selecting Local without a bank must not open Import');
+  const resolvesBeforeMetadata=(await mockState()).requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===localAutoFallbackTrack).length;
+  await browser('window.__lyricsCheckSetKnownTrack('+JSON.stringify(localAutoFallbackTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.filter(item=>item.trackId===localAutoFallbackTrack).length>resolvesBeforeMetadata,'metadata refresh resolved Cloud while Local stayed active');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(localAutoFallbackTrack)+')','automatic Cloud lyrics rendered beneath the selected Local preference');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===localAutoFallbackTrack);
+  const localAutoFallbackVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  const localAutoFallbackResolve=state.resolveResponses.filter(item=>item.trackId===localAutoFallbackTrack).at(-1);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&bank.variants.cloud&&!bank.variants.local&&localAutoFallbackResolve?.activeKind==='local'&&localAutoFallbackResolve.effectiveKind==='cloud'
+      &&localAutoFallbackVisual.lines.includes(localAutoFallbackTrack)&&localAutoFallbackVisual.localSelected==='true'
+      &&localAutoFallbackVisual.cloudSelected==='false'&&localAutoFallbackVisual.localMessage.includes('无本地歌词，使用云歌词')
+      &&localAutoFallbackVisual.offsetDisabled&&localAutoFallbackVisual.pickerCalls===pickerBeforeAutoFallback
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===localAutoFallbackTrack).length===resolvesBeforeMetadata+1,
+    'Metadata-triggered Cloud resolution must supply a read-only fallback without changing the user-selected Local tab: '+JSON.stringify({bank,localAutoFallbackResolve,localAutoFallbackVisual}));
+  await browser('window.__lyricsCheckSetVisible(false)');
+  await browser('window.__lyricsCheckSetVisible(true)');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(localAutoFallbackTrack)+')','Cloud fallback remains visible after leaving and re-entering the page');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','reopening after page re-entry keeps Local active');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===localAutoFallbackTrack);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===localAutoFallbackTrack).length===resolvesBeforeMetadata+1,
+    'Page re-entry and dialog reopen must not move activeKind from Local or start another resolver: '+JSON.stringify(bank));
+  report.checks.metadataResolveAndPageReentryKeepLocalWithCloudFallback=true;
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','Local fallback dialog closed before returning to cached Cloud track');
+
+  const emptyFallbackTrack='synthetic-empty-fallback-track';
+  await browser('window.__lyricsCheckSetUnknownTrack('+JSON.stringify(emptyFallbackTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.some(item=>item.trackId===emptyFallbackTrack),'unknown metadata produced an initial empty Cloud result');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','empty remote fallback dialog opened');
+  await click('#lyrics-options-local-tab');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===emptyFallbackTrack&&item.body.kind==='local'),'empty Local selection persisted before retrying Cloud resolve');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBefore),'empty Local selection still leaves Import user-triggered');
+  const emptyFallbackResolves=(await mockState()).resolveResponses.filter(item=>item.trackId===emptyFallbackTrack).length;
+  await browser('window.__lyricsCheckSetKnownTrack('+JSON.stringify(emptyFallbackTrack)+')');
+  await waitMockState(snapshot=>snapshot.resolveResponses.filter(item=>item.trackId===emptyFallbackTrack).length>emptyFallbackResolves,'known metadata attempted Cloud fallback but found no lyric');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===emptyFallbackTrack);
+  const emptyFallbackVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind===null&&!bank.variants.cloud&&!bank.variants.local
+      &&emptyFallbackVisual.lines===0&&hasExplicitNoLyricsNotice(emptyFallbackVisual.notice)&&emptyFallbackVisual.localMessage.includes('无本地歌词，使用云歌词')
+      &&emptyFallbackVisual.offsetDisabled&&emptyFallbackVisual.localSelected==='true'&&emptyFallbackVisual.cloudSelected==='false'
+      &&emptyFallbackVisual.pickerCalls===pickerBefore,
+    'When the Cloud resolver also misses, Local remains selected with a clear no-lyrics state and no implicit picker: '+JSON.stringify({bank,emptyFallbackVisual}));
+  const emptyFallbackResolveCount=state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===emptyFallbackTrack).length;
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','empty Cloud fallback dialog closed before reopening');
+  await click('.lyrics-main-header [aria-label="歌词选项"]');
+  await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','empty Cloud fallback reopen keeps Local selected');
+  state=await mockState();
+  bank=state.banks.find(item=>item.trackId===emptyFallbackTrack);
+  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.effectiveKind===null
+      &&state.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===emptyFallbackTrack).length===emptyFallbackResolveCount,
+    'Reopening after a remote miss must not switch to Cloud or launch another resolver: '+JSON.stringify(bank));
+  report.checks.emptyCloudFallbackKeepsLocalSelectionAndNoLyricsMessage=true;
+  await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','empty Cloud fallback dialog closed before returning to cached Cloud track');
+
   const resolvesBeforeReturn=(await mockState()).resolveResponses.filter(item=>item.trackId==='synthetic-track').length;
   await browser('window.__lyricsCheckSetTrack("synthetic-track")');
   await waitMockState(snapshot=>snapshot.resolveResponses.filter(item=>item.trackId==='synthetic-track').length>resolvesBeforeReturn,'previous synthetic track reselected');
@@ -889,9 +1374,17 @@ async function run() {
 
   await click('.lyrics-main-header [aria-label="歌词选项"]');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-cloud-tab").getAttribute("aria-selected")==="true"','Cloud dialog reopened before testing the separate Local import');
+  const pickerBeforeManualImport=await browser('window.__lyricsCheckFilePickerCalls');
   await click('#lyrics-options-local-tab');
-  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId==='synthetic-track'&&item.body.kind==='local'),'empty Local bank activated before opening the picker');
-  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBefore+2),'clicking Local without a cache opens the picker');
+  await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId==='synthetic-track'&&item.body.kind==='local'),'empty Local bank activated without opening the picker');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeManualImport),'clicking Local without a cache leaves the picker closed');
+  const fallbackBeforeImport=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",message:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true}))()');
+  bank=(await mockState()).banks.find(item=>item.trackId==='synthetic-track');
+  assert(bank?.activeKind==='local'&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true&&fallbackBeforeImport.lines.includes('手动选择结果 synthetic-track')
+      &&fallbackBeforeImport.message.includes('无本地歌词，使用云歌词')&&fallbackBeforeImport.offsetDisabled,
+    'The Local tab must display its cached Cloud fallback without opening Import and keep Local offset disabled: '+JSON.stringify({bank,fallbackBeforeImport}));
+  await click('#lyrics-local-panel .lyrics-import-button');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeManualImport+1),'explicit Import click opens the intercepted file picker');
   await browser(`(() => { const input=document.querySelector('#lyrics-local-panel input[type=file]'); const text=Array.from({length:20},(_,index)=>'[00:'+String(index+1).padStart(2,'0')+'.00]'+(index===0?'手动导入结果 synthetic-track':'本地导入歌词第 '+(index+1)+' 行')).join(String.fromCharCode(10)); const file=new File([text],'synthetic-manual.lrc',{type:'text/plain'}); const transfer=new DataTransfer();transfer.items.add(file);Object.defineProperty(input,'files',{value:transfer.files,configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}));return true; })()`);
   await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/import'&&item.body.trackId==='synthetic-track'),'local synthetic LRC import submitted');
   await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden===false && document.querySelector(".lyrics-lines")?.textContent.includes("手动导入结果 synthetic-track")','local import displayed without closing the dialog');
@@ -906,10 +1399,10 @@ async function run() {
   await waitMockState(snapshot=>snapshot.requests.filter(item=>item.path==='/api/lyrics/variant'&&item.body.trackId==='synthetic-track'&&item.body.kind==='local').length>=2,'cached Local bank reactivated');
   await pause(100);
   const pickerOnCachedLocal=await browser('window.__lyricsCheckFilePickerCalls');
-  assert(pickerOnCachedLocal===pickerBefore+2,'Clicking Local with an existing cache must restore it without opening the picker.');
+  assert(pickerOnCachedLocal===pickerBeforeManualImport+1,'Clicking Local with an existing cache must restore it without opening Import.');
   await waitBrowser('document.querySelector("#lyrics-local-panel .lyrics-import-button")&&!document.querySelector("#lyrics-local-panel .lyrics-import-button").hidden','cached Local panel exposes a re-import action');
   await click('#lyrics-local-panel .lyrics-import-button');
-  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBefore+3),'the separate re-import action opens the picker for a cached Local bank');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeManualImport+2),'the separate re-import action opens the picker for a cached Local bank');
 
   await browser('document.querySelector(".lyrics-offset-controls input").value="-0.5"');
   await click('.lyrics-offset-controls .lyrics-quiet-button');
@@ -982,7 +1475,7 @@ async function run() {
   const slowVariantResolveCount=slowVariantBefore.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length;
   await click('#lyrics-options-local-tab');
   await waitMockState(snapshot=>snapshot.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId===slowVariantTrack&&item.body.kind==='local'),'slow Local activation request started');
-  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeSlowVariant+1),'slow Local activation used the intercepted file-picker intent');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeSlowVariant),'slow Local tab activation leaves Import user-triggered');
   await browser('window.__lyricsCheckSetVisible(false)');
   await browser('window.__lyricsCheckSetVisible(true)');
   await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','re-entered lyrics page while slow Local activation remained pending');
@@ -991,24 +1484,27 @@ async function run() {
       &&slowVariantPending.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
     'A pending Local activation must survive page hide/re-entry without resolving or completing early: '+JSON.stringify({variantResponses:slowVariantPending.variantResponses.filter(item=>item.trackId===slowVariantTrack),resolveRequests:slowVariantPending.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack)}));
   await waitMockState(snapshot=>snapshot.variantResponses.some(item=>item.trackId===slowVariantTrack&&item.kind==='local'),'slow Local activation completed after page re-entry');
-  await waitBrowser('document.querySelector(".lyrics-lines")?.childElementCount===0&&document.querySelector(".lyrics-notice-text")?.textContent.includes("导入本地歌词")','completed empty Local selection left the body empty with its Local prompt');
+  await waitBrowser('document.querySelector(".lyrics-lines")?.textContent.includes('+JSON.stringify(slowVariantTrack)+')','completed empty Local selection displayed the cached Cloud fallback');
   const slowVariantCompleted=await mockState();
   bank=slowVariantCompleted.banks.find(item=>item.trackId===slowVariantTrack);
   const slowVariantResponse=slowVariantCompleted.variantResponses.find(item=>item.trackId===slowVariantTrack&&item.kind==='local');
-  assert(bank?.activeKind==='local'&&bank.userSelected&&bank.variants.cloud&&!bank.variants.local
-      &&slowVariantResponse?.activeKind==='local'&&slowVariantResponse.selectionRevision===1
+  const slowVariantVisual=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  assert(bank?.activeKind==='local'&&bank.effectiveKind==='cloud'&&bank.usingCloudFallback===true&&bank.userSelected&&bank.variants.cloud&&!bank.variants.local
+      &&slowVariantResponse?.activeKind==='local'&&slowVariantResponse.effectiveKind==='cloud'&&slowVariantResponse.usingCloudFallback&&slowVariantResponse.selectionRevision===1
       &&slowVariantResponse.responseDestroyed===false&&!slowVariantResponse.requestAborted
+      &&slowVariantVisual.lines.includes(slowVariantTrack)&&slowVariantVisual.localMessage.includes('无本地歌词，使用云歌词')&&slowVariantVisual.offsetDisabled
+      &&slowVariantVisual.pickerCalls===pickerBeforeSlowVariant
       &&slowVariantCompleted.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
-    'The delayed Local selection response must remain live, persist the empty Local choice over Cloud, and avoid a second resolve: '+JSON.stringify({bank,slowVariantResponse,resolveCount:slowVariantCompleted.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length}));
+    'The delayed Local selection response must remain live, preserve Cloud as a read-only fallback, and avoid a second resolve or picker: '+JSON.stringify({bank,slowVariantResponse,slowVariantVisual,resolveCount:slowVariantCompleted.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length}));
   await click('.lyrics-main-header [aria-label="歌词选项"]');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden&&document.querySelector("#lyrics-options-local-tab").getAttribute("aria-selected")==="true"&&document.querySelector("#lyrics-cloud-panel").hidden','reopening the dialog after slow activation must retain Local');
-  const slowVariantReopened=await browser('(() => ({lineCount:document.querySelector(".lyrics-lines")?.childElementCount??-1,notice:document.querySelector(".lyrics-notice-text")?.textContent??"",localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
+  const slowVariantReopened=await browser('(() => ({lines:document.querySelector(".lyrics-lines")?.textContent??"",localMessage:document.querySelector("#lyrics-local-panel > .lyrics-help")?.textContent??"",offsetDisabled:document.querySelector(".lyrics-offset-controls input")?.disabled??true,localSelected:document.querySelector("#lyrics-options-local-tab")?.getAttribute("aria-selected"),cloudSelected:document.querySelector("#lyrics-options-cloud-tab")?.getAttribute("aria-selected"),pickerCalls:window.__lyricsCheckFilePickerCalls}))()');
   const slowVariantReopenedState=await mockState();
-  assert(slowVariantReopened.lineCount===0&&slowVariantReopened.notice.includes('导入本地歌词')
+  assert(slowVariantReopened.lines.includes(slowVariantTrack)&&slowVariantReopened.localMessage.includes('无本地歌词，使用云歌词')&&slowVariantReopened.offsetDisabled
       &&slowVariantReopened.localSelected==='true'&&slowVariantReopened.cloudSelected==='false'
-      &&slowVariantReopened.pickerCalls===pickerBeforeSlowVariant+1
+      &&slowVariantReopened.pickerCalls===pickerBeforeSlowVariant
       &&slowVariantReopenedState.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length===slowVariantResolveCount,
-    'Closing and reopening after slow activation must keep Local selected and must not reopen the picker or auto-resolve Cloud: '+JSON.stringify({slowVariantReopened,resolveCount:slowVariantReopenedState.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length}));
+    'Closing and reopening after slow activation must keep the Local preference while showing read-only Cloud fallback, with no picker or auto-resolve: '+JSON.stringify({slowVariantReopened,resolveCount:slowVariantReopenedState.requests.filter(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId===slowVariantTrack).length}));
   report.checks.slowVariantSurvivesPagehideAndReentryWithoutAutoResolve=true;
   await browser('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
   await waitBrowser('document.querySelector("#lyrics-options-dialog").hidden','slow-variant Local dialog closed before track persistence test');
@@ -1062,8 +1558,12 @@ async function run() {
   await waitMockState(state=>state.requests.some(item=>item.path==='/api/lyrics/resolve'&&item.body.trackId==='synthetic-import-pending-track'),'import-race automatic resolution started');
   await click('.lyrics-main-header [aria-label="歌词选项"]');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden','import dialog opened while auto-resolution is pending');
+  const pickerBeforeRaceImport=await browser('window.__lyricsCheckFilePickerCalls');
   await click('#lyrics-options-local-tab');
   await waitMockState(state=>state.requests.some(item=>item.path==='/api/lyrics/variant'&&item.body.trackId==='synthetic-import-pending-track'&&item.body.kind==='local'),'empty Local bank selected during automatic resolution');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeRaceImport),'Local tab leaves the picker closed during the pending automatic result');
+  await click('#lyrics-local-panel .lyrics-import-button');
+  await waitBrowser('window.__lyricsCheckFilePickerCalls==='+String(pickerBeforeRaceImport+1),'explicit Import click opened the intercepted picker during the race');
   await browser(`(() => { const input=document.querySelector('#lyrics-local-panel input[type=file]'); const text=Array.from({length:20},(_,index)=>'[00:'+String(index+1).padStart(2,'0')+'.00]'+(index===0?'手动导入结果 synthetic-import-pending-track':'导入歌词第 '+(index+1)+' 行')).join(String.fromCharCode(10)); const file=new File([text],'synthetic-manual.lrc',{type:'text/plain'}); const transfer=new DataTransfer();transfer.items.add(file);Object.defineProperty(input,'files',{value:transfer.files,configurable:true});input.dispatchEvent(new Event('change',{bubbles:true}));return true; })()`);
   await waitMockState(state=>state.requests.some(item=>item.path==='/api/lyrics/import'&&item.body.trackId==='synthetic-import-pending-track'),'manual synthetic LRC import submitted');
   await waitBrowser('!document.querySelector("#lyrics-options-dialog").hidden && document.querySelector(".lyrics-lines")?.textContent.includes("手动导入结果 synthetic-import-pending-track")','imported lyrics displayed while the dialog remains open');

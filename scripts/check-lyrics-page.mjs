@@ -10,7 +10,10 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
 const desktopEntry = path.join(projectRoot, 'desktop', 'lyrics-page-check.cjs');
 const headerScrollbarMode = process.argv.includes('--header-scrollbar');
-const artifactRoot = path.join(projectRoot, '.tools', headerScrollbarMode ? 'header-scrollbar' : 'lyrics-source-refinement');
+const lyricsLocalFallbackMode = process.argv.includes('--lyrics-local-fallback');
+const checkMode = headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'full';
+const artifactDirectoryName = headerScrollbarMode ? 'header-scrollbar' : lyricsLocalFallbackMode ? 'lyrics-local-fallback' : 'lyrics-source-refinement';
+const artifactRoot = path.join(projectRoot, '.tools', artifactDirectoryName);
 const cacheDirectory = path.join(artifactRoot, 'vite-cache');
 const runDirectory = path.join(artifactRoot, 'run-' + Date.now() + '-' + randomUUID().slice(0, 8));
 const bundleRoot = path.join(runDirectory, 'vite-harness');
@@ -101,10 +104,14 @@ function bankFor(trackId) {
 
 function bankState(trackId) {
   const bank = trackBanks.get(trackId);
-  if (!bank) return { lyric: null, activeKind: 'cloud', userSelected: false, selectionRevision: 0, variants: { cloud: false, local: false } };
+  if (!bank) return { lyric: null, activeKind: 'cloud', effectiveKind: null, userSelected: false, selectionRevision: 0, variants: { cloud: false, local: false } };
+  const effectiveKind = bank.variants[bank.activeKind] ? bank.activeKind : bank.activeKind === 'local' && bank.variants.cloud ? 'cloud' : null;
+  const usingCloudFallback = bank.activeKind === 'local' && !bank.variants.local && !!bank.variants.cloud;
   return {
-    lyric: bank.variants[bank.activeKind] ?? null,
+    lyric: effectiveKind ? bank.variants[effectiveKind] ?? null : null,
     activeKind: bank.activeKind,
+    effectiveKind,
+    ...(usingCloudFallback ? { usingCloudFallback: true } : {}),
     userSelected: bank.userSelected,
     selectionRevision: bank.selectionRevision,
     variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local },
@@ -182,6 +189,7 @@ const harnessHtml = [
   'window.__lyricsCheckTerminalLighting = terminalLighting;',
   'window.__lyricsCheckSetTerminalFull = () => terminalLighting.setQuality(qualityPresets.ultra);',
   'window.__lyricsCheckSetTerminalLocal = () => terminalLighting.setQuality(qualityPresets.original);',
+  'window.__lyricsCheckSetTerminalOff = () => terminalLighting.setQuality(qualityPresets.performance);',
   'const controller = setupLyricsPage(document.querySelector("#lyrics-page-content"), { seek:(position)=>window.__lyricsCheckSeek.push(position), spectrum:()=>({available:true,bands:Array.from({length:32},(_,i)=>0.25+((i*13)%55)/100),sampleRate:44100,updatedAt:Date.now()}), notify:()=>{}, openSettings:()=>{} });',
   'let settingsSelectControls;',
   'const syncSettingsSelectControls = () => settingsSelectControls?.sync();',
@@ -236,12 +244,12 @@ const mockPlugin = {
           resolveResponses,
           searchResponses,
           variantResponses,
-          banks: Array.from(trackBanks, ([trackId, bank]) => ({
+          banks: Array.from(trackBanks, ([trackId]) => ({ trackId, ...bankState(trackId) })),
+          bankDocuments: Array.from(trackBanks, ([trackId, bank]) => ({
             trackId,
             activeKind: bank.activeKind,
-            userSelected: bank.userSelected,
             selectionRevision: bank.selectionRevision,
-            variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local },
+            variants: { ...bank.variants },
           })),
         });
         return;
@@ -300,26 +308,28 @@ const mockPlugin = {
             const trackId = String(body.trackId ?? '');
             const available = metadataAvailability.get(trackId) ?? true;
             const before = trackBanks.get(trackId);
-            const cachedKind = before?.userSelected
-              ? before.activeKind
-              : before?.variants.local ? 'local' : before?.variants.cloud ? 'cloud' : null;
-            const hadBank = !!cachedKind && !!before?.variants[cachedKind];
             const startingRevision = before?.selectionRevision ?? 0;
-            const startingUserSelected = before?.userSelected ?? false;
-            if (hadBank) {
-              if (!before.userSelected) before.activeKind = cachedKind;
-              const current = bankState(trackId);
-              resolveResponses.push({ trackId, lyricTrackId: current.lyric?.trackId ?? null, activeKind: current.activeKind, cached: true });
+            const stateBeforeResolve = bankState(trackId);
+            if (before?.userSelected && before.activeKind === 'local' && stateBeforeResolve.lyric) {
+              const current = stateBeforeResolve;
+              resolveResponses.push({ trackId, lyricTrackId: current.lyric?.trackId ?? null, activeKind: current.activeKind, effectiveKind: current.effectiveKind, cached: true });
               respondJson(response, { ...current, sources: [] });
               return;
             }
-            if (before?.userSelected && before.activeKind === 'local') {
+            if (!before?.userSelected && before?.variants.local) {
+              before.activeKind = 'local';
               const current = bankState(trackId);
-              resolveResponses.push({ trackId, lyricTrackId: null, activeKind: current.activeKind, cached: false, blockedBySelection: true });
+              resolveResponses.push({ trackId, lyricTrackId: current.lyric?.trackId ?? null, activeKind: current.activeKind, effectiveKind: current.effectiveKind, cached: true });
               respondJson(response, { ...current, sources: [] });
               return;
             }
-            const lyric = !available || trackId === 'synthetic-empty-track' ? null : lrcDocument(trackId, defaultSourceId);
+            if (before?.variants.cloud && before.activeKind === 'cloud') {
+              const current = bankState(trackId);
+              resolveResponses.push({ trackId, lyricTrackId: current.lyric?.trackId ?? null, activeKind: current.activeKind, effectiveKind: current.effectiveKind, cached: true });
+              respondJson(response, { ...current, sources: [] });
+              return;
+            }
+            const lyric = !available || ['synthetic-empty-track','synthetic-empty-local-track','synthetic-empty-fallback-track'].includes(trackId) ? null : lrcDocument(trackId, defaultSourceId);
             const waitMs = ['synthetic-slow-track', 'synthetic-pending-track', 'synthetic-import-pending-track', 'synthetic-empty-local-track', 'synthetic-leave-track'].includes(trackId) ? 450 : 40;
             if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
             if (response.destroyed || request.aborted) return;
@@ -332,10 +342,10 @@ const mockPlugin = {
               return;
             }
             if (lyric && !current.variants.cloud) current.variants.cloud = lyric;
-            const userChangedSelection = current.userSelected !== startingUserSelected;
-            if (lyric && !userChangedSelection && current.variants.cloud) current.activeKind = 'cloud';
+            const userChangedSelection = current.selectionRevision !== startingRevision;
+            if (lyric && !userChangedSelection && !current.userSelected && current.variants.cloud) current.activeKind = current.variants.local ? 'local' : 'cloud';
             const loaded = bankState(trackId);
-            resolveResponses.push({ trackId, lyricTrackId: loaded.lyric?.trackId ?? null, activeKind: loaded.activeKind, cached: false, userChangedSelection });
+            resolveResponses.push({ trackId, lyricTrackId: loaded.lyric?.trackId ?? null, activeKind: loaded.activeKind, effectiveKind: loaded.effectiveKind, cached: false, userChangedSelection });
             respondJson(response, {
               ...loaded,
               sources: [{ sourceId: defaultSourceId, name: sources.find(item => item.id === defaultSourceId).name, status: lyric ? 'ok' : 'empty', count: lyric ? 1 : 0 }],
@@ -353,7 +363,7 @@ const mockPlugin = {
             const kind = body.kind === 'local' ? 'local' : 'cloud';
             if (trackId === 'synthetic-slow-variant-track') await new Promise((resolve) => setTimeout(resolve, 450));
             const payload = activateBank(trackId, kind);
-            variantResponses.push({ trackId, kind, activeKind: payload.activeKind, selectionRevision: payload.selectionRevision,
+            variantResponses.push({ trackId, kind, activeKind: payload.activeKind, effectiveKind: payload.effectiveKind, usingCloudFallback: !!payload.usingCloudFallback, selectionRevision: payload.selectionRevision,
               responseDestroyed: response.destroyed, requestAborted: request.aborted });
             respondJson(response, payload);
             return;
@@ -402,7 +412,7 @@ const mockPlugin = {
             }
             const lyric = { ...current, offsetMs: Number(body.offsetMs) || 0 };
             bank.variants[kind] = lyric;
-            respondJson(response, { lyric, activeKind: bank.activeKind, userSelected: bank.userSelected, selectionRevision: bank.selectionRevision, variants: { cloud: !!bank.variants.cloud, local: !!bank.variants.local } });
+            respondJson(response, bankState(body.trackId));
             return;
           }
 
@@ -437,7 +447,7 @@ let report = {
   apiFullyMocked: true,
   externalNetworkRequestsMadeByCheck: false,
   browserWindowShown: false,
-  mode: headerScrollbarMode ? 'header-scrollbar' : 'full-lyrics-page',
+  mode: checkMode,
   cacheDirectory,
   artifactDirectory: runDirectory,
 };
@@ -523,7 +533,7 @@ try {
     RHINE_LYRICS_CHECK_PROFILE: profileDirectory,
     RHINE_LYRICS_CHECK_REPORT: reportPath,
     RHINE_LYRICS_CHECK_ARTIFACTS: runDirectory,
-    ...(headerScrollbarMode ? { RHINE_LYRICS_CHECK_MODE: 'header-scrollbar' } : {}),
+    ...(checkMode !== 'full' ? { RHINE_LYRICS_CHECK_MODE: checkMode } : {}),
   };
   delete environment.ELECTRON_RUN_AS_NODE;
 

@@ -97,7 +97,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 
 退役阶段运行包的测试数据保留在工作区相对路径 `packaging/retired-stage-data`，仅作留存，不是运行入口；日常开发仅使用上表的源码验证profile。
 
-音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词缓存换目录本身不搬运文件；读取当前目录、最多16个配置历史目录和默认目录。V3每曲容器包含local/cloud两bank，各自独立替换内容/偏移；显式来源选择（包括空bank）锁存，迟到自动结果以`selectionRevision`拦截。本机bank优先；缺失时云端默认provider来自全局设置，临时自选不保存为本曲默认。旧V1/V2读取时仅在内存归一化，写入时升级并合并可确认的同hash历史内容；坏/未知文件和路径别名继续受保护。旧单曲来源偏好文件/API保留兼容，但不提供本曲默认UI，也不参与自动解析或云搜索默认。导入只传UTF-8文本副本，不传源文件路径，不修改/删除原文件。标签写回仍需用户主动选择。
+音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词缓存换目录本身不搬运文件；读取当前目录、最多16个配置历史目录和默认目录。V3每曲容器包含local/cloud两bank，各自独立替换内容/偏移；`activeKind`保存页签偏好，显式来源选择和`selectionRevision`跨页面保留。点击Local只切页、不自动打开文件选择器；没有本地文档时读取Cloud缓存或按全局provider执行云解析，API以`effectiveKind`返回实际文档类型并通过`usingCloudFallback`标记回退，Local面板提示“无本地歌词，使用云歌词”。回退不改变activeKind或revision，Local偏移校准禁用且不得写入Cloud；Cloud也无文时正文为空。用户点击Import才打开选择器，导入成功后立即使用Local；显式Cloud选择不会自动回退Local。晚到自动结果仍由revision/导入守卫拦截。旧V1/V2读取时仅在内存归一化，写入时升级并合并可确认的同hash历史内容；坏/未知文件和路径别名继续受保护。旧单曲来源偏好文件/API保留兼容，但不提供本曲默认UI，也不参与自动解析或云搜索默认。导入只传UTF-8文本副本，不传源文件路径，不修改/删除原文件。标签写回仍需用户主动选择。
 
 品尝版安装后使用 `<安装目录>/data` 和 `<安装目录>/presets`，不使用源码profile、不自动迁移现有个人文件。源码预览兼容读取旧preferences内嵌主题预设，以及新EQ文件缺失时的旧profile/audio-processing-presets.json；下一次用户保存才写入新预设目录，旧文件保留。两主题预设与EQ分开持久化，坏文件或启动后的外部编辑会拒绝覆盖并报告。
 
@@ -113,7 +113,9 @@ V3歌词缓存不会随Git回滚降级。只支持V2的旧源码会保留但无�
 
 ## 检查索引与边界
 
-2026-10-16歌词来源精修：TypeScript/1662模块界面构建、28项库mock、26项离屏UI及40个标题用例通过；build.log在`.tools/lyrics-source-refinement`，报告/29张图在其`run-1792154817478-3a6a833b`。使用现有Vite预bundle和隐藏Electron持续绘制，来源/API全部mock，文件选择器只验证调用意图，不打开Windows实窗；没有外网歌词、个人曲库或设备访问。顶栏按现有预算固定：1920槽240px，1280/900仍受70px媒体限制，440槽100px，未补低分辨率适配。主Agent复核了弹窗、管理来源hover和短/长标题图；Windows真实键鼠、选择器、个人整窗及在线歌词服务未验。上轮`a684885`及`.tools/future-lyrics`的24/18结果是V2历史。此记录不授权额外环境或真实设备操作。
+2026-10-16当前Local fallback与Future歌词弹窗光效验证完成：TSC及1662模块interface-only build通过（`.tools/lyrics-local-fallback/build.log`）；`node --test scripts/check-lyrics-library.mjs`为29/29通过、0失败/取消/跳过（`library-check.log`）；`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`为`ok=true`、11项全true、18张截图（`run-1792158440496-eaab20df/report.json`）。UI全用mock且无外部请求；Windows选择器只拦截意图、focus-visible为CDP伪状态，未验证线上服务、个人播放器或设备。细节与历史边界见[歌词验证](LYRICS.md)。
+
+历史记录：提交`8581466`的28/26/40检查验证旧语义（Local无文时直接开导入选择器且不回退Cloud），不覆盖当前fallback规则；`a684885`的24/18检查为V2旧弹窗历史。详细说明见[歌词验证](LYRICS.md)。
 
 2026-10-15上一轮实际运行的ARRAY cover rowTint before/after专项、array-composition、full unified、TSC与最终interface-only build均通过；runtime/shader/blockedRoutes为0。ARRAY此路径额外执行一次mask Scene render和一次全屏合成，未验证设备FPS。上一轮pure helper与album pointer未重跑、相关实现未改；pure helper沿用`66589e7`基线`.tools/array-composition/pure-motion-audit.json`（targetRow/列anchor逻辑未变）。旧source-surface目录`.tools/array-surface-refinement`仅保留更早历史，不作为当前motion验证。Build log在`.tools/array-cover-visibility/build.log`；before/after报告为`.tools/array-cover-visibility/{before-report.json,after-report.json,after-*-rowtint-on/off.png}`；上一轮composition报告为`.tools/array-composition/{array-composition-audit.json,array-composition-screenshots.json,unified-render-audit.json,scene-motion-unified-audit.json}`。验证使用隔离synthetic Scene，不代表个人播放器、音频设备或完整app页面人工验收，不声称像素复刻或用户通过。
 本轮两主题ARRAY单凸起带起验证通过：TSC、最终interface-only build、`--array-bump` pure/Scene/MATRIX/UI guards及array-composition复跑均通过，runtime/shader/blockedRoutes=0。四档中心slot邻居总数`0/2/4/8`（每侧最多`0/1/2/4`），邻居抬高`0/.374/.561/.677`，中心峰值`2.098`；快速正反选后静止5秒无迟到返波、尾帧变化0。`returning-array` hover相对无hover spring反事实首帧约`+.01`，目录/focus不变。MATRIX full/off扫描150帧确认global pulse正常，同列远4行maxY差`.0712`、邻列`.0604`，rail guards通过。报告在`.tools/array-bump/{build.log,pure-motion-audit.json,array-bump-report.json}`及同目录9张PNG。此轮未重跑full unified或cover白板专项；fader源码未改，相关旧报告仍为历史。`.tools/array-echo`仅为已撤回packet/回波版历史，不代表当前行为；结果不外推硬件FPS或用户人工验收。

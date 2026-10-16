@@ -24,6 +24,7 @@ const RECEIVER_SELECTOR = [
   "#music-eq-page [role=slider]",
   "#music-lyrics-page button:not(.lyrics-line-button)",
   "#music-lyrics-page .lyrics-line.is-active",
+  "#music-lyrics-page .lyrics-preference-dialog",
   "#music-lyrics-page select",
   "#music-lyrics-page input:is([type=checkbox], [type=number], [type=range])",
   "#music-signal-page .signal-models button",
@@ -167,18 +168,18 @@ export function setupTerminalLighting(stage: HTMLElement): {
     return Math.max(baseline, 0.72);
   }
 
-  function collectSources(bounds: DOMRect, limits: { sourceCount: number }) {
+  function collectSources(bounds: DOMRect, limits: { sourceCount: number }, dialog?: HTMLElement) {
     const candidates = new Map<HTMLElement, number>();
     root
       .querySelectorAll<HTMLElement>(STATE_SOURCE_SELECTOR)
       .forEach((element) => {
-        if (isVisible(element))
+        if (isVisible(element) && (!dialog || dialog.contains(element)))
           candidates.set(element, candidateStrength(element, 0.68));
       });
     root
       .querySelectorAll<HTMLElement>(HOVER_FOCUS_SOURCE_SELECTOR)
       .forEach((element) => {
-        if (isVisible(element))
+        if (isVisible(element) && (!dialog || dialog.contains(element)))
           candidates.set(
             element,
             Math.max(
@@ -196,7 +197,7 @@ export function setupTerminalLighting(stage: HTMLElement): {
     // The selected record is a virtual source at its projected screen bearing.
     // It adds no DOM object or decorative backdrop.
     const scene = root.querySelector<HTMLElement>("#three-scene");
-    if (scene && isVisible(scene)) {
+    if (!dialog && scene && isVisible(scene)) {
       const magnitude = Math.hypot(direction.x, direction.y) || 1;
       sources.unshift({
         x:
@@ -295,10 +296,19 @@ export function setupTerminalLighting(stage: HTMLElement): {
             falloff: 4.6,
             gain: 0.86,
           };
-    const sources = collectSources(bounds, limits);
+    const dialogNode = root.querySelector<HTMLElement>("#music-lyrics-page .lyrics-preference-dialog");
+    const dialog = dialogNode && isVisible(dialogNode) ? dialogNode : undefined;
+    const sources = collectSources(bounds, limits, dialog);
 
     const ranked = [...root.querySelectorAll<HTMLElement>(RECEIVER_SELECTOR)]
-      .filter((element) => !element.matches(":disabled") && isVisible(element))
+      .filter((element) => {
+        if (element.matches(":disabled") || !isVisible(element)) return false;
+        if (!dialog) return true;
+        if (element === dialog) return true;
+        // The modal is one glass surface. Its inner controls receive only
+        // interaction highlights, instead of each casting an ambient halo.
+        return dialog.contains(element) && element.matches(":hover, :focus-visible, [aria-selected=true], [aria-expanded=true]");
+      })
       .map((element) => ({
         element,
         light: lightValues(element, sources, limits, bounds),

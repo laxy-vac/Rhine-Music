@@ -83,6 +83,8 @@ interface LyricsStatePayload {
   variants: Record<LyricsKind, boolean>;
   userSelected?: boolean;
   selectionRevision?: number;
+  effectiveKind?: LyricsKind | null;
+  usingCloudFallback?: boolean;
 }
 const kindOfLyric = (documentValue: LyricDocument): LyricsKind => documentValue.source.id === "local-import" ? "local" : "cloud";
 
@@ -835,7 +837,7 @@ export function setupLyricsPage(
     noticeText.textContent = message;
     noticeFootLabel.textContent = view.footLabel;
     noticeFootValue.textContent = view.footValue;
-    retryLyricsButton.hidden = !latestState?.currentTrack || !!lyricDocument || activeKind !== "cloud" || (state !== "missing" && state !== "error");
+    retryLyricsButton.hidden = !latestState?.currentTrack || !!lyricDocument || (activeKind === "local" && lyricVariants.local) || (state !== "missing" && state !== "error");
   }
 
   function renderLyrics(): void {
@@ -992,7 +994,7 @@ export function setupLyricsPage(
         searchMessage.textContent = searchStatus;
       } else {
         const unavailable = !!payload.sources?.length && payload.sources.every(source => source.status === "error");
-        setLyricsNotice(unavailable ? "error" : "missing", activeKind === "local" ? trUi("导入本地歌词以开始显示。") : unavailable
+        setLyricsNotice(unavailable ? "error" : "missing", activeKind === "local" ? trUi("无本地歌词，也暂无可用的云歌词。") : unavailable
           ? trUi("歌词来源暂时不可用，可重新匹配或手动查找。")
           : trUi("未找到可靠匹配，可重新匹配或手动选择其他版本。"));
       }
@@ -1058,10 +1060,12 @@ export function setupLyricsPage(
   function renderPreferenceDialog(): void {
     const track = latestState?.currentTrack;
     preferenceTrack.textContent = track ? `${track.title} · ${track.artist}` : trUi("未选择曲目");
-    currentSourceLabel.textContent = activeKind === "local" ? trUi("当前使用：本地歌词") : ui`当前使用：云歌词 · ${lyricDocument ? lyricSourceLabel(lyricDocument.source) : sourceName(globalSettings?.defaultSourceId)}`;
+    currentSourceLabel.textContent = lyricDocument
+      ? kindOfLyric(lyricDocument) === "local" ? trUi("当前使用：本地歌词") : ui`当前使用：云歌词 · ${lyricSourceLabel(lyricDocument.source)}`
+      : trUi("当前暂无歌词");
     localStatus.textContent = lyricVariants.local
       ? trUi("本地副本已保留。重新导入只替换本地歌词，云歌词及其校准保持不变。")
-      : trUi("导入 LRC / TXT 到播放器缓存，原文件不会被修改或删除。");
+      : trUi("无本地歌词，使用云歌词。");
     importCaption.textContent = lyricVariants.local ? trUi("重新导入本地歌词") : trUi("导入本地歌词");
     offsetHeading.textContent = optionsKind === "local" ? trUi("本地歌词校准") : trUi("云歌词校准");
     offsetHint.textContent = optionsKind === "local"
@@ -1158,9 +1162,10 @@ export function setupLyricsPage(
     parsedLyrics = lyricDocument ? parseLyrics(lyricDocument.lrc, lyricDocument.translation ?? "") : null;
     selectOptionsKind(activeKind);
     setLyricsNotice("missing", lyricDocument ? trUi("歌词记录为空") : activeKind === "local"
-      ? trUi("导入本地歌词以开始显示。") : trUi("搜索并选择一个云歌词版本。"));
+      ? trUi("无本地歌词，也暂无可用的云歌词。") : trUi("搜索并选择一个云歌词版本。"));
     searchStatus = lyricDocument ? ui`当前歌词源：${lyricSourceLabel(lyricDocument.source) || trUi("来源未知")}` : trUi("搜索并选择一个云歌词版本。");
     searchMessage.textContent = searchStatus;
+    preferenceDialogStatus.textContent = "";
     if (clearCandidates) { candidateList.replaceChildren(); sourceOutcomes.replaceChildren(); }
     renderLyrics();
     renderPreferenceDialog();
@@ -1186,7 +1191,8 @@ export function setupLyricsPage(
     abortTrackOperations(false);
     activeKind = kind;
     selectOptionsKind(kind);
-    if (lyricDocument && kindOfLyric(lyricDocument) !== kind) { lyricDocument = null; parsedLyrics = null; }
+    const keepCloud = kind === "local" && !lyricVariants.local && lyricVariants.cloud && lyricDocument && kindOfLyric(lyricDocument) === "cloud";
+    if (lyricDocument && kindOfLyric(lyricDocument) !== kind && !keepCloud) { lyricDocument = null; parsedLyrics = null; }
     setLyricsNotice("loading", trUi("正在切换歌词来源…"));
     renderLyrics();
     const operation = beginTrackOperation();
@@ -1225,6 +1231,7 @@ export function setupLyricsPage(
       }
     }
     if (accepted && runSearch && isCurrentOperation(operation) && optionsKind === "cloud") await openSearch();
+    if (accepted && isCurrentOperation(operation, false) && activeKind === "local" && !lyricVariants.local && !lyricVariants.cloud) await loadCurrentLyric(true);
   }
 
   function cancelActiveSearch(): void {
@@ -1330,6 +1337,7 @@ export function setupLyricsPage(
     if (!file) return;
     if (file.size > MAX_IMPORT_BYTES) {
       searchMessage.textContent = trUi("文件超过 96 KiB，请选择更小的 LRC / TXT 文件。");
+      preferenceDialogStatus.textContent = searchMessage.textContent;
       importInput.value = "";
       return;
     }
@@ -1341,6 +1349,7 @@ export function setupLyricsPage(
     const operation = beginTrackOperation();
     if (!operation) return;
     searchMessage.textContent = ui`正在读取 ${file.name}…`;
+    preferenceDialogStatus.textContent = searchMessage.textContent;
     try {
       const bytes = await file.arrayBuffer();
       let lrc: string;
@@ -1361,7 +1370,10 @@ export function setupLyricsPage(
       if (!isCurrentOperation(operation)) return;
       await acceptLyric(payload, operation.trackId, operation, true);
     } catch (error) {
-      if (isCurrentOperation(operation)) searchMessage.textContent = ui`导入失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
+      if (isCurrentOperation(operation)) {
+        searchMessage.textContent = ui`导入失败：${error instanceof Error ? error.message : trUi("未知错误")}`;
+        preferenceDialogStatus.textContent = searchMessage.textContent;
+      }
     } finally {
       trackOperationControllers = trackOperationControllers.filter((controller) => controller !== operation.controller);
       if (!disposed && visible) importInput.value = "";
@@ -1487,9 +1499,7 @@ export function setupLyricsPage(
   searchButton.addEventListener("click", () => { void searchLyrics(); });
   cloudTabButton.addEventListener("click", () => { void activateVariant("cloud", true); });
   localTabButton.addEventListener("click", () => {
-    const needsImport = !lyricVariants.local;
     void activateVariant("local");
-    if (needsImport) { importInput.value = ""; importInput.click(); }
   });
   preferenceTabList.addEventListener("keydown", event=>{
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;

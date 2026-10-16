@@ -433,8 +433,27 @@ html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-dialo
   color: var(--future-lyrics-instrument);
   background: var(--future-lyrics-glass);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--future-lyrics-edge-hi) 55%, transparent),
+    var(--terminal-receiver-shadow, inset 0 1px 0 color-mix(in srgb, var(--future-lyrics-edge-hi) 55%, transparent)),
     0 18px 44px color-mix(in srgb, var(--future-lyrics-shadow) 18%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-dialog [data-terminal-receiver] {
+  box-shadow: inset var(--terminal-light-x, 0px) var(--terminal-light-y, 1px) 0
+    color-mix(in srgb, var(--surface) var(--terminal-light-highlight, 20%), transparent);
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-preference-dialog .lyrics-search-panel {
+  overflow: visible;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-candidate-list {
+  padding: 4px;
+  margin-inline: -4px;
+}
+
+html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-import-button:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
 }
 
 html .music-app[data-design="rhine"] #music-lyrics-page .lyrics-dialog-toolbar {

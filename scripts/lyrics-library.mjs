@@ -340,21 +340,30 @@ export class LyricsLibrary {
   }
   projectCache(container, kind) {
     const selectedKind = kind ?? container.activeKind;
+    let effectiveKind = selectedKind && container.variants[selectedKind] ? selectedKind : null;
+    let usingCloudFallback = false;
+    if (selectedKind === 'local' && !effectiveKind && container.variants.cloud) {
+      effectiveKind = 'cloud';
+      usingCloudFallback = true;
+    }
     return {
-      lyric: selectedKind ? container.variants[selectedKind] ?? null : null,
+      lyric: effectiveKind ? container.variants[effectiveKind] ?? null : null,
       activeKind: container.activeKind,
+      effectiveKind,
       userSelected: container.userSelected,
       selectionRevision: container.selectionRevision,
       variants: { cloud: !!container.variants.cloud, local: !!container.variants.local },
+      ...(usingCloudFallback ? { usingCloudFallback: true } : {}),
       ...(kind ? { kind } : {}),
     };
   }
   async resolveSnapshot(trackId, expectedSelectionRevision, sources = [], cachedOverride) {
     const container = await this.loadContainer(trackId);
     const selectionChanged = container.selectionRevision !== expectedSelectionRevision;
-    const hasActiveLyric = !!(container.activeKind && container.variants[container.activeKind]);
+    const projected = this.projectCache(container);
+    const hasActiveLyric = !!projected.lyric;
     return {
-      ...this.projectCache(container),
+      ...projected,
       cached: selectionChanged ? hasActiveLyric : cachedOverride ?? hasActiveLyric,
       sources: selectionChanged || hasActiveLyric ? [] : sources,
       ...(selectionChanged ? { selectionChanged: true } : {}),
@@ -443,7 +452,9 @@ export class LyricsLibrary {
     const cached = await this.loadContainer(trackId);
     abortIfNeeded(signal);
     const selectedKind = cached.activeKind;
-    if (cached.userSelected && selectedKind === 'local') return { ...this.projectCache(cached, 'local'), cached: !!cached.variants.local, sources: [] };
+    if (cached.userSelected && selectedKind === 'local' && (cached.variants.local || cached.variants.cloud)) {
+      return { ...this.projectCache(cached, 'local'), cached: true, sources: [] };
+    }
     if (cached.variants.local && !cached.userSelected) return { ...this.projectCache(cached, 'local'), cached: true, sources: [] };
     if (cached.variants.cloud && selectedKind === 'cloud') return { ...this.projectCache(cached, 'cloud'), cached: true, sources: [] };
     const expectedSelectionRevision = cached.selectionRevision;

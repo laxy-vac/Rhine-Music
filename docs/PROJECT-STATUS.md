@@ -28,9 +28,11 @@
 - 两主题货架、阵列、网格详情共用ArchiveScene/Three.js renderer、实例池、封面图集与后期覆盖，保留各自盒体、材质、配色和右栏裁切。旧Canvas/foobar目录渲染链已在第四阶段删除，不作为当前源码回退选项；旧实现可从Git历史追溯。
 - Future第二阶段视觉反馈及历史验收仍有效：当时浏览页左上角的显示/分组/排序与STYLE共用view；资料区移除整块圆角玻璃底，以原音乐信息、细线及分段遮罩揭示呈现；ACCESS ALBUM保持小号文字/箭头和中英无障碍名称，Punk皮肤保持。第二阶段已获用户验收；本轮工具栏补齐布局并调整入口，隔离UI回归已通过。第三、四阶段基本完成，后续逐步修复细节。
 - Future完整终端受光下的顶栏灰白块/平边已修正：闲置透明项不接收卡片阴影，日夜切换由玻璃容器统一受光；滚动顶栏增加透明光效留白但按钮位置不变。歌词主面板外阴影不再被桌面载体裁掉，内部裁切与窄屏滚动保留。极致/高画质预设未降低；修正后的源码界面已重建，已纳入2026-10-15第二阶段用户整体验收；不作硬件帧率结论。
-- Future歌词当前采用每曲一个V3 hash JSON容器，含互相独立的local/cloud bank、`userSelected`与`selectionRevision`。未明确选择时本地内容优先，没有本地内容才自动补云端；显式切源（包括空bank）保持选择，迟到自动结果受revision保护。本曲默认来源UI已移除，旧偏好文件/API仅作兼容，自动/search默认不读；云端provider默认来自全局设置，临时自选不保存。弹窗只有“本地歌词/云歌词”，本地空bank只走导入、不显示云歌词；导入/选用后弹窗保持打开以便调偏移。V1/V2只在内存归一化，写入时升级V3并合并可确认的同hash历史bank；偏移只改当前bank，原导入文件不修改或删除。跟随默认开启，用户手动滚动暂停、程序滚动不暂停。Future玻璃样式、三栏、歌词当前句受光与32px设置图标保留。
-- 本轮TypeScript/1662模块界面构建、28项歌词库mock、26项离屏UI检查通过。两主题日夜Local/Cloud入口、管理来源悬停、空来源保持与复开、双bank独立校准、用户选择/自动迟到保护、全局默认/临时搜索、跟随和定位均有覆盖；主Agent已复核截图。报告与29张图在`.tools/lyrics-source-refinement/run-1792154817478-3a6a833b`，build.log在任务目录。没有外网歌词查询、个人曲库或音频设备访问；真实Windows选择器/键盘、线上服务、个人整窗和硬件未验。`a684885`与`.tools/future-lyrics`的24/18检查保留为V2历史；当前边界见[歌词](LYRICS.md)。
-- 顶栏歌名按现有视口预算使用固定槽，上限240/180/100px；701–1300px仍受既有70px限制，同一视口不因曲名或显隐移动整栏。普通字号12/11/10px按需缩至10px再单行省略，不换行/滚动；保留完整title/aria和淡入淡出，并在字体/主题/resize后重测。40个真实组件用例无失败/跳过，1920完整顶栏短/长图及Future/Punk日夜、1280/900/440预算已核对，不扩展低分辨率适配。
+- Future歌词当前采用每曲一个V3 hash JSON容器，含互相独立的local/cloud bank、`userSelected`与`selectionRevision`。`activeKind`保存偏好页签并跨页保留；点击Local只切页，不自动开选择器。Local无文时先用Cloud缓存或按全局provider解析Cloud，API的`effectiveKind`指向实际文档并以`usingCloudFallback`标记回退；Local面板提示“无本地歌词，使用云歌词”，禁用Local偏移，且不跨写Cloud。Cloud无文时正文为空。点击Import才打开选择器，导入成功立即使用Local；显式Cloud保持Cloud，不自动回Local。回退不改变页签与revision，迟到自动结果/导入继续受守卫约束。旧本曲来源偏好文件/API保留兼容，但自动/search默认不读；云端provider默认来自全局设置，临时自选不保存。导入/选用后弹窗保持打开以便调偏移。V1/V2只在内存归一化，写入时升级V3并合并可确认的同hash历史bank；偏移只改当前bank，原导入文件不修改或删除。跟随默认开启，用户手动滚动暂停、程序滚动不暂停。Future玻璃样式、三栏、歌词当前句受光与32px设置图标保留。
+- 当前Local fallback与Future歌词弹窗光效验证通过：TSC及1662模块interface-only build通过；歌词库29/29通过、0失败/取消/跳过；UI检查`ok=true`、11项均true、18张截图。产物在`.tools/lyrics-local-fallback`，UI报告为`run-1792158440496-eaab20df/report.json`。UI用隐藏Electron窗口和mock，无外部请求；Windows选择器仅拦截调用意图，focus-visible使用CDP伪态，未验证真实Windows键盘/选择器、线上服务、个人整窗或音频设备。
+- Future歌词弹窗的当前光效规则：整块弹窗玻璃承接环境光；内部仅hover/focus-visible/selected/expanded控件显示inset表面亮边，不逐按钮生成外投光晕；弹窗打开时暂停背后接收器，关闭后恢复。off/local/full光效质量档与Punk皮肤保留。主Agent复核了day空闲、Manage悬停、Search焦点、night Manage焦点、Use悬停、Punk悬停及Local fallback截图。
+- 前轮`8581466`的28项歌词库mock、26项离屏UI与40个标题用例针对旧Local空缺语义（自动打开选择器且不回退Cloud），不覆盖当前回退与校准规则；更早`a684885`/`.tools/future-lyrics`的24/18检查为V2历史。当前规则与验证边界见[歌词](LYRICS.md)。
+- 顶栏歌名按现有视口预算使用固定槽，上限240/180/100px；701–1300px仍受既有70px限制，同一视口不因曲名或显隐移动整栏。普通字号12/11/10px按需缩至10px再单行省略，不换行/滚动；保留完整title/aria和淡入淡出，并在字体/主题/resize后重测。40个组件用例来自前轮`8581466`记录；不作为当前Local fallback构建/回归结论。
 - 顶栏胶囊保留左右各16px内边距、默认10px间隔及外侧48px柔光留白。Future旧规则仍显示thin横滑条的遗漏已修正：标准/WebKit滑条均隐藏，保留溢出滚动及焦点访问。类型/界面构建与`--header-scrollbar`专项通过：1920/1280/1100×日夜6组、12张图，滑条高度0，窄窗末端留白约48px，Settings→标题→Play→Stop键盘路径可达；主Agent复核溢出截图。报告在`.tools/header-scrollbar/run-1792155401100-261b7de3`，build.log在任务目录。使用合成DOM/mock，未启动个人播放器或设备。此前--glass的胶囊间距/光效检查保留历史。
 - Future盒体仅「简单粗糙 / 精细 / Punk拓展」；精细用RhineLabUI外壳，盒内纸卡与局部透明窗在左，完整原标签移到右侧信息区；移除展示内构并避开压边/刻度。Punk主题只允许自己的盒体，旧结构选择归回punk，已保存外观/变换及Future配置保留。以下遗留项不是自动继续开发的指令。
 - Future简单粗糙款无编辑选项；精细款只调分部件透光率/透明度，保持源材质，重置只清光学覆盖；Punk拓展移除独立通用区，保留自身深度定制及命名个人预设。Punk主题编辑器现共用Future的Punk拓展布局和操作分组，保留Punk风格与唯一自有结构；两主题个人库分别为futurePunkPresets/archivePunkPresets，各自保存、使用、确认删除。
@@ -61,7 +63,7 @@
 | 主题/质量 | 画质/比例共用，外观/盒体按主题保存；Archive显示“水波强度”，Future显示“波动效果”；波动/光照/终端光分调及组合预设 | 画质波动值`off/basic/reduced/full`保持不变；本轮文案和单排行为的隔离检查通过，实际整窗手感继续收集反馈 |
 | 唱片盒 | Future简单款无编辑、精细款独立透光/透明度；Punk拓展与Punk主题共用十套内置/部件下拉/折叠进阶/个人预设布局，视觉与两套个人库独立 | Punk重建原PBR未知，不能称100%复刻；实际窗口交互仍需用户验收 |
 | EQ | 入门使用可选目录和文件名预设，保存/库内另存/Windows另存为、原生导入、播放器内改名、旧预设主动载入；Poweramp只单向读入，本机特色独立.rhine-eq格式。Tone仅入门显示/生效，切LSP停用但保留开关/数值；LSP沿用原聚合预设和官方CLAP独立窗 | 系统对话框实窗、用户目录/真实音频与LSP实际窗口整体验收不足；自动验证边界见下方记录 |
-| 歌词 | 共同三栏、V3 local/cloud独立bank、显式选择锁存与迟到revision保护、全局云端默认、bank内偏移、原文件保护、默认跟随与真实频谱；弹窗本地/云歌词两页，无本曲默认来源UI | 构建/28项库mock/26项UI与40标题用例通过，产物`.tools/lyrics-source-refinement`；真实歌词服务、个人曲库/整窗、Windows选择器/键盘未验，不承诺全曲覆盖 |
+| 歌词 | 共同三栏、V3 local/cloud独立bank、Local缺失时Cloud fallback及实际文档标识、显式来源选择与迟到revision保护、全局云端默认、bank内偏移、原文件保护、默认跟随与真实频谱；弹窗本地/云歌词两页，无本曲默认来源UI | TSC/1662模块build、歌词库29/29、UI 11项与18张截图通过，产物`.tools/lyrics-local-fallback`；检查为mock，真实Windows选择器/键盘、线上服务、个人播放器/设备未验 |
 | 信号 | 3D/2D/CLASSIC/SPECTRUM统一顺序，真实FFT/本次轨迹，缓存/按需绘制 | 调度/主线程成本不等于GPU端到端帧率 |
 | 音频核心 | libFLAC/FFmpeg、double队列、DSP/SRC、WASAPI/ASIO、纯输出、DSD独立路线 | 旧硬件报告不覆盖当前LSP/全部设备 |
 | 数据/语言 | 标签优先、多碟、只读FTP/FTPS、简体中文/English | 不自动写标签；未知第三方诊断保留原文 |

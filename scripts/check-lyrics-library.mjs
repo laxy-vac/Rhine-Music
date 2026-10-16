@@ -7,7 +7,7 @@ import test from 'node:test';
 import { LyricsLibrary } from './lyrics-library.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const artifactRoot = path.join(projectRoot, '.tools', 'lyrics-source-refinement', 'library-check');
+const artifactRoot = path.join(projectRoot, '.tools', 'lyrics-local-fallback', 'library-check');
 const lyrics = '[00:01.00]synthetic lyric line';
 
 async function fixture(t) {
@@ -24,7 +24,8 @@ async function fixture(t) {
     const resolvedRoot = path.resolve(root);
     const resolvedArtifactRoot = path.resolve(artifactRoot) + path.sep;
     if (!resolvedRoot.startsWith(resolvedArtifactRoot)) throw new Error(`Refusing to remove a fixture outside ${resolvedArtifactRoot}`);
-    await fs.rm(resolvedRoot, { recursive: true, force: true });
+    await library.tail.catch(() => {});
+    await fs.rm(resolvedRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   });
   return { library, root };
 }
@@ -241,22 +242,70 @@ test('automatic cache-first resolution selects a local bank when no explicit typ
   assert.deepEqual(loaded.variants, { cloud: false, local: true });
 });
 
-test('explicitly activating an empty Local bank persists the choice and blocks automatic cloud fallback', async t => {
+test('an empty Local choice persists while an automatically resolved Cloud bank becomes a read-only fallback', async t => {
   const { library } = await fixture(t);
-  let calls = 0;
-  mockFetch(t, async input => { calls += 1; throw new Error(`An explicitly selected empty Local bank must not query Cloud: ${String(input)}`); });
-
   const activated = await library.activate({ trackId: 'demo-track', kind: 'local' });
   assert.equal(activated.lyric, null);
+  assert.equal(activated.effectiveKind, null);
   assert.equal(activated.activeKind, 'local');
   assert.equal(activated.userSelected, true);
   assert.equal(activated.selectionRevision, 1);
   assert.deepEqual(activated.variants, { cloud: false, local: false });
+
+  const calls = [];
+  mockFetch(t, async input => {
+    const url = new URL(String(input));
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/smartbox_new.fcg')) return qqSongs(qqSong('qq-local-fallback'));
+    if (url.pathname.endsWith('/fcg_query_lyric_new.fcg')) return jsonResponse({ retcode: 0, lyric: '[00:02.00]云歌词 fallback', trans: '' }, 'text/html;charset=utf-8');
+    throw new Error(`Unexpected fallback URL: ${url.href}`);
+  });
   const result = await library.resolve({ trackId: 'demo-track' });
-  assert.equal(calls, 0);
-  assert.equal(result.lyric, null);
+  assert.deepEqual(calls, ['/splcloud/fcgi-bin/smartbox_new.fcg', '/lyric/fcgi-bin/fcg_query_lyric_new.fcg']);
+  assert.equal(result.lyric.source.id, 'qq');
+  assert.equal(result.lyric.lrc, '[00:02.00]云歌词 fallback');
   assert.equal(result.activeKind, 'local');
+  assert.equal(result.effectiveKind, 'cloud');
+  assert.equal(result.usingCloudFallback, true);
+  assert.equal(result.userSelected, true);
   assert.equal(result.selectionRevision, 1);
+  assert.deepEqual(result.variants, { cloud: true, local: false });
+
+  const callsBeforeCache = calls.length;
+  const cached = await library.resolve({ trackId: 'demo-track' });
+  const loaded = await library.load('demo-track');
+  assert.equal(calls.length, callsBeforeCache);
+  assert.equal(cached.activeKind, 'local');
+  assert.equal(cached.effectiveKind, 'cloud');
+  assert.equal(cached.usingCloudFallback, true);
+  assert.equal(loaded.activeKind, 'local');
+  assert.equal(loaded.effectiveKind, 'cloud');
+  assert.equal(loaded.usingCloudFallback, true);
+  assert.equal(loaded.lyric.source.id, 'qq');
+  await assert.rejects(library.offset({ trackId: 'demo-track', kind: 'local', offsetMs: 500 }), error => error.status === 404);
+});
+
+test('an empty Local choice stays active with no lyric when every enabled Cloud source misses', async t => {
+  const { library } = await fixture(t);
+  await library.activate({ trackId: 'demo-track', kind: 'local' });
+  const calls = [];
+  mockFetch(t, async input => {
+    const url = new URL(String(input));
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/smartbox_new.fcg')) return qqSongs();
+    if (url.pathname === '/api/search/get/web') return neteaseSongs();
+    throw new Error(`Unexpected empty fallback URL: ${url.href}`);
+  });
+
+  const resolved = await library.resolve({ trackId: 'demo-track' });
+  assert.deepEqual(calls, ['/splcloud/fcgi-bin/smartbox_new.fcg', '/api/search/get/web']);
+  assert.equal(resolved.lyric, null);
+  assert.equal(resolved.activeKind, 'local');
+  assert.equal(resolved.effectiveKind, null);
+  assert.equal(resolved.usingCloudFallback, undefined);
+  assert.equal(resolved.userSelected, true);
+  assert.equal(resolved.selectionRevision, 1);
+  assert.deepEqual(resolved.variants, { cloud: false, local: false });
 });
 
 test('choosing Cloud with a local bank searches and keeps Cloud active on later cache-first resolves', async t => {
@@ -325,6 +374,8 @@ test('an in-flight automatic result cannot claim an empty Local bank selected by
   assert.equal(loaded.userSelected, true);
   assert.equal(loaded.selectionRevision, 1);
   assert.equal(loaded.lyric, null);
+  assert.equal(loaded.effectiveKind, null);
+  assert.equal(loaded.usingCloudFallback, undefined);
   assert.notEqual(loaded.activeKind, 'cloud');
 });
 
