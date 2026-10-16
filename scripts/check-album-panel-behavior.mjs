@@ -211,3 +211,160 @@ export async function checkAlbumPanel({command,evaluate,output}) {
   assert.equal(await evaluate(`document.querySelector('.album-panel-veil')===null`),true,'Destroy must remove the persistent reading veil');
   await writeFile(path.join(output,'album-open-flow.json'),JSON.stringify({report,responsive,themeContext,cycles,restored},null,2));
 }
+
+// Narrow label-motion check: starts from the fixture's first visible browse state,
+// then follows one real open/return flow and its interruption cases.
+export async function checkAlbumLabelPanelMotion({command,evaluate,output}) {
+  const fullLabel='打开专辑';
+  await command('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
+  const viewport=await evaluate(`({width:innerWidth,height:innerHeight,deviceScaleFactor:devicePixelRatio})`);
+  assert.deepEqual(viewport,{width:1920,height:1080,deviceScaleFactor:1});
+  const sampleLabel=`(()=>{
+    const f=fixture,p=f.sharedPanel,label=document.querySelector('.open-album-label'),article=document.querySelector('#album-detail-content');
+    return{state:p.element.dataset.panelState,label:label?.textContent?.trim()??'',panelHidden:p.element.hidden,buttonHidden:document.querySelector('.open-album').hidden,
+      articleHidden:article.hidden,active:p.active,mode:f.musicApplication.mode,theme:f.stage.dataset.theme,design:f.stage.dataset.design,
+      openCalls:f.presentation.openCalls,backCalls:f.presentation.backCalls,time:performance.now()};
+  })()`;
+  const initial=await evaluate(sampleLabel);
+  assert.equal(initial.state,'browse','The first visible panel state must still be the initial browse state.');
+  assert.equal(initial.active,true);assert.equal(initial.mode,'archive');assert.equal(initial.design,'archive');
+  assert.equal(initial.panelHidden,false);assert.equal(initial.buttonHidden,false);assert.equal(initial.articleHidden,true);
+  assert.equal(initial.label,fullLabel,'The first Punk browse label is complete before any open/close cycle.');
+
+  const selectionChanges=[];
+  for(const design of ['archive','rhine'])for(const theme of ['day','night']){
+    const startFormat=design==='archive'?'FLAC 24/192':'FLAC · 24 bit / 192 kHz';
+    const changedFormat=design==='archive'?'FLAC 16/44.1':'FLAC · 16 bit / 44.1 kHz';
+    await evaluate(`(()=>{
+      const f=fixture,style={...f.preferences.style,design:${JSON.stringify(design)},scheme:${JSON.stringify(design==='archive'?'archive':'rhine')}};
+      f.preferences.style=style;f.preferences.theme=${JSON.stringify(theme)};f.stage.dataset.design=${JSON.stringify(design)};f.stage.dataset.theme=${JSON.stringify(theme)};
+      f.applyStylePalette(f.stage,style,${JSON.stringify(theme)});f.shell.setActive(${design==='archive'});f.syncDesignIdentity();
+      f.textMotion.finish();f.textMotion.update({...f.selection,format:${JSON.stringify(startFormat)}},false);
+    })()`);
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    await evaluate(`(()=>{fixture.sharedPanel.contentChanged(${JSON.stringify(`selection-${design}-${theme}`)});fixture.textMotion.update({...fixture.selection,format:${JSON.stringify(changedFormat)}},true);})()`);
+    const frames=[];
+    frames.push(await evaluate(sampleLabel));
+    await evaluate(`new Promise(resolve=>setTimeout(resolve,150))`);frames.push(await evaluate(sampleLabel));
+    await evaluate(`new Promise(resolve=>setTimeout(resolve,390))`);frames.push(await evaluate(sampleLabel));
+    for(const frame of frames){
+      assert.equal(frame.state,'browse',`${design}/${theme}: contentChanged keeps the panel in browse.`);
+      assert.equal(frame.label,fullLabel,`${design}/${theme}: selection/content changes keep the open label complete.`);
+      assert.equal(frame.buttonHidden,false);assert.equal(frame.articleHidden,true);
+    }
+    selectionChanges.push({design,theme,frames});
+  }
+
+  await evaluate(`(()=>{
+    const f=fixture,style={...f.preferences.style,design:'archive',scheme:'archive'};
+    f.preferences.style=style;f.preferences.theme='day';f.stage.dataset.design='archive';f.stage.dataset.theme='day';f.stage.dataset.mode='archive';f.musicApplication.mode='archive';
+    f.applyStylePalette(f.stage,style,'day');f.shell.setActive(true);f.syncDesignIdentity();
+    f.textMotion.finish();f.textMotion.update({...f.selection,format:'FLAC 24/192'},false);
+  })()`);
+  await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+  const beforeFirstClick=await evaluate(sampleLabel);
+  assert.equal(beforeFirstClick.state,'browse');assert.equal(beforeFirstClick.label,fullLabel);
+  await evaluate(`document.querySelector('.open-album').click()`);
+  const opening=[];
+  for(let i=0;i<18;i++){
+    const frame=await evaluate(sampleLabel);opening.push(frame);
+    if(frame.state!=='button-exit')break;
+    await new Promise(resolve=>setTimeout(resolve,35));
+  }
+  assert.equal(opening[0].state,'button-exit','The first real open click must expose the production button-exit stage.');
+  assert.ok(opening.every(frame=>frame.label===fullLabel),`Opening the album must not type or garble the label: ${JSON.stringify(opening)}`);
+  let opened;
+  for(let i=0;i<30;i++){
+    opened=await evaluate(sampleLabel);if(opened.state==='expanded')break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  assert.equal(opened?.state,'expanded','The actual open exit must complete into the expanded article.');
+  assert.equal(opened.label,fullLabel);
+  await evaluate(`(()=>{
+    fixture.sharedPanel.contentChanged('fixture-album-changed-while-open');
+    fixture.textMotion.update({...fixture.selection,format:'FLAC 16/44.1'},true);
+  })()`);
+  const openedContentFrames=[];
+  openedContentFrames.push(await evaluate(sampleLabel));
+  await evaluate(`new Promise(resolve=>setTimeout(resolve,150))`);openedContentFrames.push(await evaluate(sampleLabel));
+  await evaluate(`new Promise(resolve=>setTimeout(resolve,330))`);openedContentFrames.push(await evaluate(sampleLabel));
+  for(const frame of openedContentFrames){
+    assert.equal(frame.state,'expanded','The selected album can change while the detail panel remains open.');
+    assert.equal(frame.label,fullLabel,'A selected-album change while open must not type into the return button.');
+    assert.equal(frame.buttonHidden,true);assert.equal(frame.articleHidden,false);
+  }
+
+  await evaluate(`document.querySelector('.music-back').click()`);
+  const returning=[];let returnScreenshot;
+  for(let i=0;i<36;i++){
+    await new Promise(resolve=>setTimeout(resolve,35));
+    const frame=await evaluate(sampleLabel);returning.push(frame);
+    if(frame.state==='button-enter'&&frame.label!==fullLabel&&!returnScreenshot){
+      const clip=await evaluate(`(()=>{const r=document.querySelector('.open-album').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-18)),y:Math.max(0,Math.floor(r.top-18)),width:Math.ceil(r.width+36),height:Math.ceil(r.height+36),scale:3};})()`);
+      const image=await command('Page.captureScreenshot',{format:'png',clip});
+      returnScreenshot='punk-return-button-enter.png';
+      await writeFile(path.join(output,returnScreenshot),Buffer.from(image.data,'base64'));
+    }
+    if(frame.state==='browse')break;
+  }
+  const enterFrames=returning.filter(frame=>frame.state==='button-enter');
+  assert.ok(enterFrames.length>0,'Returning to browse must run the real button-enter phase.');
+  assert.ok(enterFrames.some(frame=>frame.label!==fullLabel&&/[#%/\\=<>_01]/.test(frame.label)),
+    `Punk label garbling must appear during button-enter: ${JSON.stringify(enterFrames)}`);
+  assert.equal(returning.at(-1)?.state,'browse','The return animation must settle back to browse.');
+  assert.equal(returning.at(-1)?.label,fullLabel,'The return animation restores the full label.');
+  assert.ok(returnScreenshot,'A screenshot was captured during the real Punk button-enter text animation.');
+
+  await evaluate(`document.querySelector('.open-album').click()`);
+  let secondOpen;
+  for(let i=0;i<30;i++){
+    secondOpen=await evaluate(sampleLabel);if(secondOpen.state==='expanded')break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  assert.equal(secondOpen?.state,'expanded','The second open is used only after the first-open behavior was recorded.');
+  await evaluate(`document.querySelector('.music-back').click()`);
+  let garbledReturn;
+  for(let i=0;i<30;i++){
+    await new Promise(resolve=>setTimeout(resolve,35));garbledReturn=await evaluate(sampleLabel);
+    if(garbledReturn.state==='button-enter'&&garbledReturn.label!==fullLabel)break;
+  }
+  assert.equal(garbledReturn?.state,'button-enter');
+  assert.notEqual(garbledReturn?.label,fullLabel,'The interruption scenario begins while the return label is visibly garbled.');
+  await evaluate(`fixture.sharedPanel.setOpen(true)`);
+  const interrupted=await evaluate(sampleLabel);
+  assert.equal(interrupted.state,'button-exit');
+  assert.equal(interrupted.label,fullLabel,'Reopening during button-enter cancels typing and restores the full label.');
+  let interruptedOpen;
+  for(let i=0;i<30;i++){
+    interruptedOpen=await evaluate(sampleLabel);if(interruptedOpen.state==='expanded')break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  assert.equal(interruptedOpen?.state,'expanded');assert.equal(interruptedOpen.label,fullLabel);
+
+  await evaluate(`(()=>{fixture.sharedPanel.setOpen(false);})()`);
+  let interruptedClosed;
+  for(let i=0;i<30;i++){
+    interruptedClosed=await evaluate(sampleLabel);if(interruptedClosed.state==='browse')break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  assert.equal(interruptedClosed?.state,'browse');assert.equal(interruptedClosed.label,fullLabel);
+
+  await evaluate(`document.querySelector('.open-album').click()`);
+  let reducedOpen;
+  for(let i=0;i<30;i++){
+    reducedOpen=await evaluate(sampleLabel);if(reducedOpen.state==='expanded')break;
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  assert.equal(reducedOpen?.state,'expanded');
+  await evaluate(`fixture.setReduced(true);document.querySelector('.music-back').click()`);
+  const reduced=await evaluate(sampleLabel);
+  assert.equal(reduced.state,'browse','Reduced motion settles the return directly into browse.');
+  assert.equal(reduced.label,fullLabel,'Reduced motion leaves no partial or garbled label.');
+  assert.equal(reduced.buttonHidden,false);assert.equal(reduced.articleHidden,true);
+  await evaluate(`fixture.setReduced(false)`);
+
+  await writeFile(path.join(output,'album-label-panel-motion.json'),JSON.stringify({
+    fixture:'First-visible production setupAlbumPanel state, actual extracted production click handler, real button-exit/button-enter animation, offline Chromium.',
+    viewport,initial,selectionChanges,beforeFirstClick,opening,opened,openedContentFrames,returning,returnScreenshot,interrupted,interruptedOpen,interruptedClosed,reduced,
+  },null,2));
+}

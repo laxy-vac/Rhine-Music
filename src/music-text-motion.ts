@@ -52,17 +52,61 @@ export function setupMusicTextMotion(root: HTMLElement) {
       locales: "en-US",
       format: { minimumIntegerDigits: digits, useGrouping: false },
     });
-  const text = (id: string) => {
-    const element = host(id, "text");
-    const controller = createRollingText(element, {
+  const text = (id: string, contained = false) => {
+    const element = root.querySelector<HTMLElement>(`#${id}`)!;
+    // A framed label owns its padding and marker; absolute reel layers must
+    // stay inside a separate text host, including during animated selection.
+    const reel = contained ? document.createElement("span") : element;
+    if (contained) {
+      reel.className = "selection-format-reel";
+      element.replaceChildren(reel);
+    }
+    reel.classList.add("music-rolling-text");
+    const controller = createRollingText(reel, {
       ...motion,
       text: "",
       transition: "direct",
       stagger: "none",
       direction: "up",
     });
+    const originalMinWidth = element.style.getPropertyValue("min-width");
+    const originalMinWidthPriority = element.style.getPropertyPriority("min-width");
+    let widthFrame = 0;
+    let widthTimer = 0;
+    let animated = false;
+    let value = "";
+    const cancelWidthRelease = () => {
+      cancelAnimationFrame(widthFrame);
+      clearTimeout(widthTimer);
+      widthFrame = 0;
+      widthTimer = 0;
+    };
+    const restoreWidth = () => {
+      cancelWidthRelease();
+      if (originalMinWidth) element.style.setProperty("min-width", originalMinWidth, originalMinWidthPriority);
+      else element.style.removeProperty("min-width");
+    };
+    const holdWidth = () => {
+      cancelWidthRelease();
+      // Right-aligned labels must not move their marker toward columns which
+      // are still animating from the previous, wider value.
+      const width = Number.parseFloat(getComputedStyle(element).width);
+      element.style.minWidth = `${Number.isFinite(width) ? width : element.offsetWidth}px`;
+      widthFrame = requestAnimationFrame(() => {
+        widthFrame = requestAnimationFrame(() => {
+          widthFrame = 0;
+          widthTimer = window.setTimeout(restoreWidth, motion.duration);
+        });
+      });
+    };
     return {
       update(options: { text?: string; animated?: boolean }) {
+        if (options.animated !== undefined) animated = options.animated;
+        if (contained) {
+          if (!animated) restoreWidth();
+          else if (options.text !== undefined && options.text !== value) holdWidth();
+        }
+        if (options.text !== undefined) value = options.text;
         const script = options.text === undefined ? element.dataset.cjk : String(containsCjk(options.text));
         const changed = element.dataset.cjk !== script;
         if (script !== undefined) element.dataset.cjk = script;
@@ -70,7 +114,10 @@ export function setupMusicTextMotion(root: HTMLElement) {
         if (changed) controller.refresh();
       },
       refresh: () => controller.refresh(),
-      destroy: () => controller.destroy(),
+      destroy() {
+        if (contained) restoreWidth();
+        controller.destroy();
+      },
     };
   };
   const wrappingText = (id: string) => {
@@ -183,7 +230,7 @@ export function setupMusicTextMotion(root: HTMLElement) {
   const texts = {
     genre: text("selection-genre"),
     genreName: text("genre-name"),
-    format: text("selection-format"),
+    format: text("selection-format", true),
     artist: wrappingText("selection-artist"),
     meta: wrappingText("selection-meta"),
   };

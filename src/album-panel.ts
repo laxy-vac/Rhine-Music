@@ -488,11 +488,9 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
     },
     setVisible(visible: boolean, inert = false) {
       if (!active) return;
-      const reveal=visible&&panel.hidden;
       panel.hidden = !visible;
       readingVeil.hidden = !visible;
       panel.inert = inert;
-      if(reveal&&!wanted)typeButton();
     },
     setOpen(open: boolean) {
       if (!active || wanted === open) return;
@@ -526,7 +524,6 @@ export function setupAlbumPanel(root: HTMLElement, reduced: () => boolean) {
         revealFutureFields(callout);
         if (wanted) revealFutureFields(article);
       }
-      if(!wanted&&!panel.hidden)typeButton();
     },
     scrollTarget() {
       return active ? viewport : null;

@@ -524,3 +524,180 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
   };
   await writeFile(path.join(output, "album-actions-report.json"), JSON.stringify(report, null, 2));
 }
+
+// Focused regression for the production rolling text inside the framed format label.
+export async function checkAlbumFormatMotion({ command, evaluate, output }) {
+  await command('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
+  const viewport=await evaluate(`({width:innerWidth,height:innerHeight,deviceScaleFactor:devicePixelRatio})`);
+  assert.deepEqual(viewport,{width:1920,height:1080,deviceScaleFactor:1},'Format reel bounds use the 1920×1080 project desktop viewport.');
+  const transitions = [];
+  const geometryViolations=[];
+  const designs = ["archive", "rhine"];
+  const themes = ["day", "night"];
+  const measure = `(()=>{
+    const host=document.querySelector('#selection-format'),reel=host.querySelector('.selection-format-reel');
+    const rnRoot=reel?.classList.contains('rn-root')?reel:reel?.querySelector('.rn-root');
+    const visual=rnRoot?.querySelector('.rn-visual');
+    const rect=node=>{const r=node.getBoundingClientRect();return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+    const hostRect=rect(host),hostStyle=getComputedStyle(host),before=getComputedStyle(host,'::before');
+    const border={left:parseFloat(hostStyle.borderLeftWidth)||0,right:parseFloat(hostStyle.borderRightWidth)||0,
+      top:parseFloat(hostStyle.borderTopWidth)||0,bottom:parseFloat(hostStyle.borderBottomWidth)||0};
+    const padding={left:parseFloat(hostStyle.paddingLeft)||0,right:parseFloat(hostStyle.paddingRight)||0,
+      top:parseFloat(hostStyle.paddingTop)||0,bottom:parseFloat(hostStyle.paddingBottom)||0};
+    const pseudo={content:before.content,display:before.display,width:before.width,height:before.height,
+      background:before.backgroundColor,color:before.color};
+    let marker=null;
+    if(before.content!=='none'&&before.display!=='none'&&parseFloat(before.width)>0&&parseFloat(before.height)>0){
+      const width=parseFloat(before.width),height=parseFloat(before.height),contentTop=hostRect.top+border.top+padding.top;
+      const contentHeight=hostRect.height-border.top-border.bottom-padding.top-padding.bottom;
+      marker={left:hostRect.left+border.left+padding.left,top:contentTop+(contentHeight-height)/2,
+        right:hostRect.left+border.left+padding.left+width,bottom:contentTop+(contentHeight-height)/2+height,width,height};
+    }
+    const slots=[...(visual?.querySelectorAll('.rn-slot')??[])];
+    const slotRects=slots.map(slot=>({text:(slot.textContent??'').trim(),rect:rect(slot)}));
+    const glyphRects=[];
+    for(const slot of slots){
+      const walker=document.createTreeWalker(slot,NodeFilter.SHOW_TEXT);let node;
+      while((node=walker.nextNode())){
+        if(!node.data.trim())continue;
+        const range=document.createRange();range.selectNodeContents(node);
+        for(const r of range.getClientRects())if(r.width>0&&r.height>0)glyphRects.push({left:r.left,top:r.top,right:r.right,bottom:r.bottom,
+          width:r.width,height:r.height,text:node.data,slotText:(slot.textContent??'').trim(),slot:rect(slot),
+          ancestors:[node.parentElement?.className??''].concat(node.parentElement?.parentElement?.className??'')});
+      }
+    }
+    const firstSlot=slotRects[0]?.rect??null,firstGlyph=glyphRects[0]??null;
+    return{design:fixture.stage.dataset.design,theme:fixture.stage.dataset.theme,host:hostRect,hostDisplay:hostStyle.display,
+      hostClass:host.className,hostIsRoot:host.classList.contains('rn-root'),border,padding,gap:parseFloat(hostStyle.columnGap)||0,
+      inlineMinWidth:host.style.getPropertyValue('min-width'),computedMinWidth:hostStyle.minWidth,
+      pseudo,marker,reelClass:reel?.className??'',reelIsRoot:reel?.classList.contains('rn-root')??false,
+      rnRootCount:host.querySelectorAll('.rn-root').length,rootClass:rnRoot?.className??'',root:rnRoot?rect(rnRoot):null,
+      visual:visual?rect(visual):null,slotRects,glyphRects,
+      layoutEvidence:{outerLeft:hostRect.left,outerRight:hostRect.right,paddingLeft:padding.left,paddingRight:padding.right,
+        markerRight:marker?.right??null,markerToGlyph:firstGlyph&&marker?firstGlyph.left-marker.right:null,
+        rootLeft:rnRoot?rnRoot.getBoundingClientRect().left:null,visualLeft:visual?visual.getBoundingClientRect().left:null,
+        firstSlotLeft:firstSlot?.left??null,firstTextLeft:firstGlyph?.left??null},
+      ready:rnRoot?.hasAttribute('data-rn-ready')??false,
+      text:rnRoot?.querySelector('.rn-value')?.textContent?.trim()??''};
+  })()`;
+  const saveSample = async (sample, label, {requireVisual=true}={}) => {
+    const record=(issue,glyph)=>geometryViolations.push({sample:`${sample.design}/${sample.theme}/${label}`,issue,
+      layoutEvidence:sample.layoutEvidence,host:sample.host,marker:sample.marker,glyph});
+    if(sample.hostIsRoot)record('outer format host unexpectedly owns rn-root');
+    if(!sample.reelIsRoot)record('inner selection-format-reel is missing rn-root');
+    if(sample.rnRootCount!==1)record(`expected one rn-root, found ${sample.rnRootCount}`);
+    if(requireVisual){
+      if(!sample.visual||!sample.ready)record('real .rn-visual is absent or not ready');
+      if(sample.slotRects.length===0)record('no real .rn-slot rectangles were sampled');
+      if(sample.glyphRects.length===0)record('no text-node character bounds were sampled');
+    }
+    const framed=sample.border.left+sample.border.right+sample.border.top+sample.border.bottom>0;
+    const left=sample.host.left+sample.border.left+.25;
+    const right=sample.host.right-sample.border.right-.25;
+    if(sample.marker&&framed){
+      if(sample.marker.left<sample.host.left+sample.border.left)record('Punk square crosses host left border');
+      if(sample.marker.right>sample.host.right-sample.border.right)record('Punk square crosses host right border');
+    }
+    for(const glyph of sample.glyphRects){
+      if(framed&&glyph.left<left)record('glyph crosses host left border',glyph);
+      if(framed&&glyph.right>right)record('glyph crosses host right border',glyph);
+      if(sample.marker){
+        if(glyph.left<sample.marker.right+sample.gap-1)record('glyph intrudes into the Punk square gap',glyph);
+      }
+    }
+    return sample;
+  };
+
+  for(const design of designs)for(const theme of themes){
+    const compact=design==='archive';
+    const sequence=compact
+      ? ['FLAC 24/192','FLAC 16/44.1','FLAC 24/88.2','FLAC 24/192']
+      : ['FLAC · 24 bit / 192 kHz','FLAC · 16 bit / 44.1 kHz','FLAC · 24 bit / 88.2 kHz','FLAC · 24 bit / 192 kHz'];
+    await evaluate(`(()=>{
+      const f=fixture,style={...f.preferences.style,design:${JSON.stringify(design)},scheme:${JSON.stringify(design==='archive'?'archive':'rhine')}};
+      f.textMotion.finish();f.preferences.style=style;f.preferences.theme=${JSON.stringify(theme)};
+      f.stage.dataset.design=${JSON.stringify(design)};f.stage.dataset.theme=${JSON.stringify(theme)};
+      f.applyStylePalette(f.stage,style,${JSON.stringify(theme)});f.syncDesignIdentity();
+      f.textMotion.update({...f.selection,format:${JSON.stringify(sequence[0])}},false);
+    })()`);
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    const baseline=await evaluate(measure);
+    assert.equal(baseline.text,sequence[0],`${design}/${theme}: the source summary uses its real ${compact?'compact':'plain'} format.`);
+
+    let from=sequence[0];
+    for(const target of sequence.slice(1)){
+      await evaluate(`fixture.textMotion.update({...fixture.selection,format:${JSON.stringify(target)}},true)`);
+      await evaluate(`(async()=>{for(let i=0;i<3;i++){const root=document.querySelector('#selection-format .selection-format-reel.rn-root');if(root?.hasAttribute('data-rn-ready'))break;await new Promise(resolve=>requestAnimationFrame(resolve));}})()`);
+      const start=await saveSample(await evaluate(measure),`${target} start`);
+      assert.ok(parseFloat(start.inlineMinWidth)>0,`${design}/${theme}: temporary host min-width is locked at animated start.`);
+      await evaluate(`new Promise(resolve=>setTimeout(resolve,170))`);
+      const middle=await saveSample(await evaluate(measure),`${target} middle`);
+      assert.ok(parseFloat(middle.inlineMinWidth)>0,`${design}/${theme}: temporary host min-width remains locked during the reel.`);
+      const clip=await evaluate(`(()=>{const r=document.querySelector('#selection-format').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left-12)),y:Math.max(0,Math.floor(r.top-8)),width:Math.ceil(r.width+24),height:Math.ceil(r.height+16),scale:3};})()`);
+      const image=await command('Page.captureScreenshot',{format:'png',clip});
+      const suffix=target.includes('16 bit / 44.1')||target.includes('16/44.1')?'16-44'
+        :target.includes('88.2')?'24-88':'24-192';
+      const screenshot=`format-reel-${design}-${theme}-${suffix}-mid.png`;
+      await writeFile(path.join(output,screenshot),Buffer.from(image.data,'base64'));
+      await evaluate(`new Promise(resolve=>setTimeout(resolve,380))`);
+      const end=await saveSample(await evaluate(measure),`${target} end`);
+      assert.equal(end.text,target,`${design}/${theme}: the real reel settles on ${target}.`);
+      assert.equal(end.inlineMinWidth,'',`${design}/${theme}: motion duration releases the temporary host min-width.`);
+      const natural=await evaluate(`(()=>{
+        fixture.textMotion.update({...fixture.selection,format:${JSON.stringify(target)}},false);
+        return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          const host=document.querySelector('#selection-format'),style=getComputedStyle(host),r=host.getBoundingClientRect();
+          resolve({width:r.width,inlineMinWidth:host.style.getPropertyValue('min-width'),computedMinWidth:style.minWidth,
+            text:host.querySelector('.rn-value')?.textContent?.trim()??''});
+        })));
+      })()`);
+      assert.equal(natural.inlineMinWidth,'',`${design}/${theme}: a static target has no leftover inline min-width.`);
+      assert.equal(natural.text,target);
+      assert.ok(Math.abs(end.host.width-natural.width)<.5,
+        `${design}/${theme}: the final label returns to its natural width after the lock releases (${JSON.stringify({end:end.host,natural})}).`);
+      transitions.push({design,theme,from,to:target,start,middle,end,natural,screenshot});
+      from=target;
+    }
+
+    const afterRefresh=await evaluate(`(()=>{
+      const f=fixture,host=document.querySelector('#selection-format'),before=host.getBoundingClientRect();
+      f.textMotion.refresh();
+      return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        const after=host.getBoundingClientRect(),style=getComputedStyle(host),pseudo=getComputedStyle(host,'::before');
+        resolve({before:{x:before.x,y:before.y,width:before.width,height:before.height},after:{x:after.x,y:after.y,width:after.width,height:after.height},
+          hostRoot:host.classList.contains('rn-root'),reelRoot:host.querySelector('.selection-format-reel')?.classList.contains('rn-root')??false,
+          inlineMinWidth:host.style.getPropertyValue('min-width'),
+          border:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth],pseudo:{content:pseudo.content,width:pseudo.width,height:pseudo.height},
+          text:host.querySelector('.rn-value')?.textContent?.trim()??''});
+      })));
+    })()`);
+    assert.equal(afterRefresh.hostRoot,false,`${design}/${theme}: refresh keeps the outer host outside rn-root.`);
+    assert.equal(afterRefresh.reelRoot,true,`${design}/${theme}: refresh preserves the inner reel root.`);
+    assert.equal(afterRefresh.inlineMinWidth,'',`${design}/${theme}: refresh leaves no stale temporary min-width.`);
+    assert.deepEqual(afterRefresh.border,design==='archive'?['1px','1px','1px','1px']:['0px','0px','0px','0px']);
+    assert.equal(afterRefresh.text,sequence.at(-1));
+    assert.ok(Math.abs(afterRefresh.before.width-afterRefresh.after.width)<1&&Math.abs(afterRefresh.before.height-afterRefresh.after.height)<1,
+      `${design}/${theme}: refresh must keep the label box stable (${JSON.stringify(afterRefresh)}).`);
+
+    const hostPoint=await evaluate(`(()=>{const r=document.querySelector('#selection-format').getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    const stableLayout=await evaluate(measure);
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:hostPoint.x,y:hostPoint.y});
+    const hovered=await saveSample(await evaluate(measure),`${design}/${theme} hover`,{requireVisual:false});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:2,y:2});
+    const departed=await saveSample(await evaluate(measure),`${design}/${theme} pointer out`,{requireVisual:false});
+    for(const sample of [hovered,departed])assert.equal(sample.text,sequence.at(-1));
+    for(const sample of [hovered,departed])assert.equal(sample.inlineMinWidth,'');
+    for(const sample of [hovered,departed]){
+      assert.ok(Math.abs(sample.host.left-stableLayout.host.left)<.25&&Math.abs(sample.host.top-stableLayout.host.top)<.25&&
+        Math.abs(sample.host.width-stableLayout.host.width)<.25&&Math.abs(sample.host.height-stableLayout.host.height)<.25,
+        `${design}/${theme}: hover and pointer-out preserve the label host box.`);
+      if(stableLayout.marker){
+        for(const key of ['left','top','right','bottom'])assert.ok(Math.abs(sample.marker[key]-stableLayout.marker[key])<.25,
+          `${design}/${theme}: hover and pointer-out preserve the Punk square (${key}).`);
+      }
+    }
+    transitions.push({design,theme,afterRefresh,hovered,departed});
+  }
+  await writeFile(path.join(output,'album-format-reel-motion.json'),JSON.stringify({fixture:'Production setupMusicTextMotion, actual .rn-visual/.rn-slot and Text-node Range bounds, offline Chromium; no player or audio service.',viewport,transitions,geometryViolations},null,2));
+  assert.deepEqual(geometryViolations,[],`Rolling format text geometry failed; full host/marker/root/slot/Text-node bounds are in album-format-reel-motion.json: ${JSON.stringify(geometryViolations)}`);
+}
