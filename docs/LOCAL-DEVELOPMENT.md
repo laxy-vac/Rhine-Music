@@ -93,11 +93,11 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | 入门EQ目录配置 | profile/standard-eq-library.json仅保存目录选择；渲染器selection token只保存目录/文件名/指纹，当前工作音效仍在现有preferences中 |
 | LSP与旧EQ聚合库/模式工作区 | profile旁presets/eq/audio-processing-presets.json，独立于HTTP端口；原有读取/保存逻辑保留，不自动迁移或删除旧库 |
 | 验证索引/封面/音频缓存 | 仓库旁 `music-data-source-preview/music-data`，不自动扫描/迁移/删除 |
-| 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接 |
+| 原音乐/FTP凭据/歌词缓存 | 用户指定位置，不入库或随代码交接；歌词每曲一个SHA-256命名JSON，缓存文档含原文/翻译/来源/偏移 |
 
 退役阶段运行包的测试数据保留在工作区相对路径 `packaging/retired-stage-data`，仅作留存，不是运行入口；日常开发仅使用上表的源码验证profile。
 
-音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词换缓存目录不自动迁移旧内容。标签写回需用户主动选择。
+音乐目录在设置 → 音乐库，先改草稿、保存并扫描生效；移除目录不删文件、不改系统PATH。歌词缓存换目录本身不搬运文件；读取当前目录、最多16个配置历史目录和默认目录。显式替换歌词或保存偏移时，服务只处理该曲目的SHA-256文件：验证后将新version 2文档写入当前目录并清理配置历史目录内的有效旧副本；version 1缓存继续读取，显式替换/偏移才升级。未知、损坏、非普通或链接文件会保留并阻止覆盖；不扫描其他曲目或配置路径外目录。导入只传UTF-8文本副本，不传源文件路径、不改写/删除原文件。歌词识别当前曲目后会先查本机缓存；miss时默认QQ优先，失败/无可靠匹配时在20秒内按来源顺序回退。标签写回仍需用户主动选择。
 
 品尝版安装后使用 `<安装目录>/data` 和 `<安装目录>/presets`，不使用源码profile、不自动迁移现有个人文件。源码预览兼容读取旧preferences内嵌主题预设，以及新EQ文件缺失时的旧profile/audio-processing-presets.json；下一次用户保存才写入新预设目录，旧文件保留。两主题预设与EQ分开持久化，坏文件或启动后的外部编辑会拒绝覆盖并报告。
 

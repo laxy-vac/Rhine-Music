@@ -12,6 +12,8 @@ const normalize = value => String(value ?? '').normalize('NFKC').toLowerCase().r
 const clean = (value, limit = 256) => typeof value === 'string' ? value.replace(/<[^>]*>/g, '').replace(/\0/g, '').trim().slice(0, limit) : '';
 const songText = value => typeof value === 'string' ? clean(value) : Array.isArray(value) ? value.map(entry => clean(typeof entry === 'string' ? entry : entry?.name)).filter(Boolean).join(' / ') : clean(value?.name ?? value?.title);
 const hash = value => createHash('sha256').update(value).digest('hex');
+const pathKey = value => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+const uniqueDirectories = values => [...new Map(values.map(value => [pathKey(value), value])).values()];
 const cjkRun = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
 const latinAliasPrefix = /^[\p{Script=Latin}\p{M}\p{N}\p{P}\p{S}\s]+(?=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])/u;
 
@@ -115,6 +117,32 @@ function lyricText(value) {
   return text;
 }
 
+function localLyricText(value, limit = 96 * 1024) {
+  if (typeof value !== 'string') return '';
+  if (value.includes('\0') || Buffer.byteLength(value, 'utf8') > limit) throw fail('本地歌词需要是不含空字符的 UTF-8 文本，最多 96 KiB。');
+  return value;
+}
+
+function embeddedOffset(value) {
+  const match = value.match(/^\s*\[offset\s*:\s*([+-]?\d+)\s*\]\s*$/im);
+  const offset = match ? Number(match[1]) : 0;
+  return Number.isSafeInteger(offset) ? offset : 0;
+}
+
+function withEmbeddedOffset(value, offset) {
+  const newline = value.includes('\r\n') ? '\r\n' : '\n';
+  const bom = value.startsWith('\uFEFF') ? '\uFEFF' : '';
+  const lines = value.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => !/^\s*\[offset\s*:[^\]]*\]\s*$/i.test(line));
+  return `${bom}[offset:${offset}]${newline}${lines.join(newline)}`;
+}
+
+function validateCache(value, trackId) {
+  if (!value || typeof value !== 'object' || ![1, 2].includes(value.version) || value.trackId !== trackId || !value.source || typeof value.source.name !== 'string' || typeof value.lrc !== 'string' || value.translation !== undefined && typeof value.translation !== 'string' || !Number.isInteger(value.offsetMs) || Math.abs(value.offsetMs) > 30000 || value.version === 2 && value.offsetInText !== true) throw fail('本机歌词缓存格式无效，原文件已保留。');
+  localLyricText(value.lrc, 96 * 1024 + 128);
+  if (value.translation) localLyricText(value.translation);
+  return value;
+}
+
 function candidate(source, value, wanted) {
   const id = String(value.id ?? '').trim();
   if (!id || id.length > 128 || /[\0\r\n]/.test(id)) return null;
@@ -126,13 +154,23 @@ function candidate(source, value, wanted) {
   return { id, sourceId: source.id, title, artist, album, ...(Number.isFinite(duration) && duration > 0 ? { duration } : {}), score };
 }
 
+function automaticMatch(value, wanted) {
+  if (!normalize(wanted.title) || normalize(value.title) !== normalize(wanted.title)) return false;
+  const artist = normalize(artistForSearch(wanted.artist)), found = normalize(artistForSearch(value.artist));
+  if (artist && !/^(未知|unknown|variousartists)/i.test(artist)) {
+    return artist === found || Math.min(artist.length, found.length) >= 2 && (artist.includes(found) || found.includes(artist));
+  }
+  return !!normalize(wanted.album) && !/^(未知|unknown)/i.test(normalize(wanted.album)) && normalize(value.album) === normalize(wanted.album) ||
+    wanted.duration > 0 && Number.isFinite(value.duration) && Math.abs(value.duration - wanted.duration) <= 4;
+}
+
 export class LyricsLibrary {
   constructor({ dataDir, resolveTrack }) {
     this.directory = path.join(dataDir, 'lyrics');
     this.sourceFile = path.join(this.directory, 'sources.json');
     this.settingsFile = path.join(this.directory, 'settings.json');
     this.defaultCacheDirectory = path.join(this.directory, 'cache');
-    this.settingsConfig = { version: 1, defaultSourceId: 'netease', cacheDirectory: this.defaultCacheDirectory, previousCacheDirectories: [] };
+    this.settingsConfig = { version: 2, defaultSourceId: 'qq', cacheDirectory: this.defaultCacheDirectory, previousCacheDirectories: [] };
     this.resolveTrack = resolveTrack;
     this.custom = []; this.ready = null; this.tail = Promise.resolve(); this.candidates = new Map();
   }
@@ -149,8 +187,8 @@ export class LyricsLibrary {
         const info = await fs.stat(this.settingsFile);
         if (info.size > 32 * 1024) throw fail('本机歌词设置过大。');
         const value = JSON.parse(await fs.readFile(this.settingsFile, 'utf8'));
-        if (value.version !== 1 || typeof value.defaultSourceId !== 'string' || !isFullyQualified(value.cacheDirectory) || !Array.isArray(value.previousCacheDirectories) || value.previousCacheDirectories.length > 16 || value.previousCacheDirectories.some(directory => typeof directory !== 'string' || !isFullyQualified(directory))) throw fail('本机歌词设置格式无效，原文件已保留。');
-        this.settingsConfig = { version: 1, defaultSourceId: value.defaultSourceId, cacheDirectory: path.resolve(value.cacheDirectory), previousCacheDirectories: value.previousCacheDirectories.map(directory => path.resolve(directory)) };
+        if (![1, 2].includes(value.version) || typeof value.defaultSourceId !== 'string' || !isFullyQualified(value.cacheDirectory) || !Array.isArray(value.previousCacheDirectories) || value.previousCacheDirectories.length > 16 || value.previousCacheDirectories.some(directory => typeof directory !== 'string' || !isFullyQualified(directory))) throw fail('本机歌词设置格式无效，原文件已保留。');
+        this.settingsConfig = { version: 2, defaultSourceId: value.version === 1 && value.defaultSourceId === 'netease' ? 'qq' : value.defaultSourceId, cacheDirectory: path.resolve(value.cacheDirectory), previousCacheDirectories: value.previousCacheDirectories.map(directory => path.resolve(directory)) };
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       return this;
     })();
@@ -158,7 +196,7 @@ export class LyricsLibrary {
   }
   async sources() { await this.init(); return { sources: [...builtins.map(value => ({ ...value })), ...structuredClone(this.custom)] }; }
   effectiveDefault() {
-    return [...builtins, ...this.custom].some(source => source.id === this.settingsConfig.defaultSourceId && source.enabled) ? this.settingsConfig.defaultSourceId : 'netease';
+    return [...builtins, ...this.custom].some(source => source.id === this.settingsConfig.defaultSourceId && source.enabled) ? this.settingsConfig.defaultSourceId : 'qq';
   }
   async settings() {
     const { sources } = await this.sources();
@@ -175,7 +213,7 @@ export class LyricsLibrary {
       await fs.mkdir(directory, { recursive: true });
       if (!(await fs.stat(directory)).isDirectory()) throw fail('歌词缓存路径不是文件夹。');
       const previous = this.settingsConfig.cacheDirectory === directory ? this.settingsConfig.previousCacheDirectories : [this.settingsConfig.cacheDirectory, ...this.settingsConfig.previousCacheDirectories];
-      const settings = { version: 1, defaultSourceId: value.defaultSourceId, cacheDirectory: directory, previousCacheDirectories: [...new Set(previous)].filter(item => item !== directory).slice(0, 16) };
+      const settings = { version: 2, defaultSourceId: value.defaultSourceId, cacheDirectory: directory, previousCacheDirectories: [...new Set(previous)].filter(item => item !== directory).slice(0, 16) };
       if (Buffer.byteLength(JSON.stringify(settings), 'utf8') > 32 * 1024) throw fail('缓存目录配置过长，设置未保存。');
       await writeJsonAtomic(this.settingsFile, settings);
       this.settingsConfig = settings;
@@ -218,27 +256,86 @@ export class LyricsLibrary {
     return { trackId, title: clean(value.track.title), artist: clean(value.track.artist), album: clean(value.album?.title), duration: Number(value.track.duration) || 0 };
   }
   cacheFile(id, directory = this.settingsConfig.cacheDirectory) { return path.join(directory, `${hash(id)}.json`); }
+  cacheDirectories() { return uniqueDirectories([this.settingsConfig.cacheDirectory, ...this.settingsConfig.previousCacheDirectories, this.defaultCacheDirectory]); }
+  async readCache(trackId, directory) {
+    const file = this.cacheFile(trackId, directory), info = await fs.lstat(file);
+    if (!info.isFile() || info.isSymbolicLink()) throw fail('歌词缓存不是普通文件，原文件已保留。');
+    if (info.size > 256 * 1024) throw fail('本机歌词缓存过大。');
+    return validateCache(JSON.parse(await fs.readFile(file, 'utf8')), trackId);
+  }
   async load(trackId) {
     await this.init(); await this.metadata(trackId);
-    const directories = [...new Set([this.settingsConfig.cacheDirectory, ...this.settingsConfig.previousCacheDirectories, this.defaultCacheDirectory])];
-    for (const directory of directories) try {
-      const file = this.cacheFile(trackId, directory), info = await fs.stat(file);
-      if (info.size > 256 * 1024) throw fail('本机歌词缓存过大。');
-      const value = JSON.parse(await fs.readFile(file, 'utf8'));
-      if (value.version !== 1 || value.trackId !== trackId || !value.source || typeof value.source.name !== 'string' || typeof value.lrc !== 'string' || !Number.isInteger(value.offsetMs) || Math.abs(value.offsetMs) > 30000) throw fail('本机歌词缓存格式无效，原文件已保留。');
-      lyricText(value.lrc); if (value.translation) lyricText(value.translation);
-      return { lyric: value };
+    for (const directory of this.cacheDirectories()) try {
+      return { lyric: await this.readCache(trackId, directory) };
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     return { lyric: null };
   }
-  async save(trackId, contents) {
+  async save(trackId, contents, { onlyIfMissing = false, signal, preserveText = false, expectedLyric } = {}) {
     const metadata = await this.metadata(trackId);
-    const lrc = lyricText(contents.lrc), translation = lyricText(contents.translation);
-    if (!lrc) throw fail('没有可保存的歌词内容。', 404);
-    const document = { version: 1, trackId, track: metadata, lrc, ...(translation ? { translation } : {}), offsetMs: contents.offsetMs ?? 0, source: contents.source, savedAt: new Date().toISOString() };
+    const text = preserveText ? value => localLyricText(value, 96 * 1024 + 128) : contents.source?.id === 'local-import' ? localLyricText : lyricText;
+    const lrc = text(contents.lrc), translation = text(contents.translation);
+    if (!lrc.trim()) throw fail('没有可保存的歌词内容。', 404);
+    const document = { version: 2, trackId, track: metadata, lrc, ...(translation ? { translation } : {}), offsetMs: contents.offsetMs ?? 0, offsetInText: true, source: contents.source, savedAt: new Date().toISOString() };
     if (Buffer.byteLength(JSON.stringify(document), 'utf8') > 256 * 1024) throw fail('原文与翻译合计超过本机歌词文档容量。');
-    const write = this.tail.catch(() => {}).then(async () => { await this.load(trackId); await writeJsonAtomic(this.cacheFile(trackId), document); });
-    this.tail = write; await write; return { lyric: document };
+    const write = this.tail.catch(() => {}).then(async () => {
+      abortIfNeeded(signal);
+      const cached = await this.load(trackId);
+      if (onlyIfMissing && cached.lyric) return cached;
+      if (expectedLyric && JSON.stringify(cached.lyric) !== JSON.stringify(expectedLyric)) throw fail('歌词版本已变化，请对当前版本重新调整对齐。', 409);
+      // Only known, validated documents for this exact track are ours to replace.
+      const currentFile = this.cacheFile(trackId);
+      const currentIdentity = pathKey(await fs.realpath(currentFile).catch(error => { if (error.code !== 'ENOENT') throw error; return currentFile; }));
+      const previousFiles = new Map();
+      for (const directory of this.cacheDirectories()) try {
+        await this.readCache(trackId, directory);
+        const file = this.cacheFile(trackId, directory);
+        const identity = pathKey(await fs.realpath(file));
+        if (identity !== currentIdentity) previousFiles.set(identity, file);
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      abortIfNeeded(signal);
+      await writeJsonAtomic(currentFile, document);
+      for (const file of previousFiles.values()) await fs.unlink(file);
+      return { lyric: document };
+    });
+    this.tail = write; return write;
+  }
+  async resolve({ trackId }, signal) {
+    abortIfNeeded(signal);
+    const cached = await this.load(trackId);
+    abortIfNeeded(signal);
+    if (cached.lyric) return { ...cached, cached: true, sources: [] };
+    const wanted = await this.metadata(trackId), preference = await this.preferences(trackId);
+    const priority = [...new Set([preference.effectiveSourceId, 'qq'])];
+    const ordered = [...builtins, ...this.custom].filter(source => source.enabled)
+      .sort((left, right) => (priority.indexOf(left.id) < 0 ? 99 : priority.indexOf(left.id)) - (priority.indexOf(right.id) < 0 ? 99 : priority.indexOf(right.id)));
+    const timeout = AbortSignal.timeout(20_000), lookupSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const sources = [];
+    for (const source of ordered) {
+      try {
+        const candidates = (await this.searchSource(source, trackId, wanted, lookupSignal)).filter(value => automaticMatch(value, wanted)).slice(0, 3);
+        let failure;
+        for (const found of candidates) {
+          try {
+            const contents = await this.candidateLyric({ trackId, sourceId: source.id, candidateId: found.id }, lookupSignal);
+            const lrc = lyricText(contents.lrc);
+            if (!lrc.split(/\r?\n/).some(line => line.replace(/\[[^\]]*\]/g, '').trim())) continue;
+            const result = await this.save(trackId, { ...contents, lrc }, { onlyIfMissing: true, signal: lookupSignal });
+            return { ...result, cached: false, sources: [...sources, { sourceId: source.id, name: source.name, status: 'ok', count: candidates.length }] };
+          } catch (error) {
+            abortIfNeeded(signal);
+            failure = error;
+            if (lookupSignal.aborted) break;
+          }
+        }
+        sources.push({ sourceId: source.id, name: source.name, status: failure ? 'error' : 'empty', count: 0, ...(failure ? { message: errorMessage(failure) } : {}) });
+      } catch (error) {
+        abortIfNeeded(signal);
+        sources.push({ sourceId: source.id, name: source.name, status: 'error', message: errorMessage(error) });
+      }
+      if (lookupSignal.aborted) break;
+    }
+    abortIfNeeded(signal);
+    return { lyric: null, sources };
   }
   async search({ trackId, sourceId, query }, signal) {
     await this.init();
@@ -318,7 +415,7 @@ export class LyricsLibrary {
     while (this.candidates.size > 128) this.candidates.delete(this.candidates.keys().next().value);
     return candidates;
   }
-  async select({ trackId, sourceId, candidateId }, signal) {
+  async candidateLyric({ trackId, sourceId, candidateId }, signal) {
     await this.init(); await this.metadata(trackId);
     const source = [...builtins, ...this.custom].find(item => item.id === sourceId && item.enabled);
     const search = this.candidates.get(`${trackId}:${sourceId}`), found = search?.values.find(item => item.id === candidateId);
@@ -341,7 +438,12 @@ export class LyricsLibrary {
       const value = await remoteJson(template(source.lyricUrl, { ...await this.metadata(trackId), query: [found.title, found.artist, found.album].join(' '), id: found.id }), { signal });
       lrc = field(value, source.mapping.lrc); translation = field(value, source.mapping.translation);
     }
-    return this.save(trackId, { lrc, translation, source: { id: source.id, name: source.name, ...(url ? { url } : {}) } });
+    abortIfNeeded(signal);
+    return { lrc, translation, source: { id: source.id, name: source.name, ...(url ? { url } : {}) } };
+  }
+  async select(value, signal) {
+    const contents = await this.candidateLyric(value, signal);
+    return this.save(value.trackId, contents, { signal });
   }
   async import({ trackId, lrc, translation }) {
     if (typeof lrc !== 'string' || translation !== undefined && typeof translation !== 'string') throw fail('导入歌词需要文本内容。');
@@ -351,6 +453,8 @@ export class LyricsLibrary {
     if (!Number.isInteger(offsetMs) || Math.abs(offsetMs) > 30000) throw fail('歌词偏移需为 -30000 至 30000 毫秒的整数。');
     const result = await this.load(trackId);
     if (!result.lyric) throw fail('请先选择或导入歌词。', 404);
-    return this.save(trackId, { ...result.lyric, offsetMs });
+    const baseOffset = embeddedOffset(result.lyric.lrc) - (result.lyric.offsetInText ? result.lyric.offsetMs : 0);
+    if (!Number.isSafeInteger(baseOffset + offsetMs)) throw fail('原歌词的 offset 超出可调整范围，原缓存已保留。');
+    return this.save(trackId, { ...result.lyric, lrc: withEmbeddedOffset(result.lyric.lrc, baseOffset + offsetMs), offsetMs }, { preserveText: true, expectedLyric: result.lyric });
   }
 }

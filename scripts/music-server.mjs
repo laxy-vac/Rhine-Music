@@ -309,6 +309,7 @@ export async function createMusicServer({
         if (request.method === 'POST') {
           const value = await bodyJson(request), aborter = new AbortController();
           response.once('close', () => aborter.abort());
+          if (route === '/api/lyrics/resolve') return json(response, 200, await lyrics.resolve(value, aborter.signal));
           if (route === '/api/lyrics/search') return json(response, 200, await lyrics.search(value, aborter.signal));
           if (route === '/api/lyrics/select') return json(response, 200, await lyrics.select(value, aborter.signal));
           if (route === '/api/lyrics/import') return json(response, 200, await lyrics.import(value));

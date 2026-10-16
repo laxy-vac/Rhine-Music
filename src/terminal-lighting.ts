@@ -14,7 +14,7 @@ const RECEIVER_SELECTOR = [
   // Light the glass switch once; its moving selection pill already has its own edge.
   ".music-topnav .theme-switch",
   ".music-style-page button",
-  ".music-settings-page button",
+  ".music-settings-page button:not(.lyrics-line-button)",
   ".music-settings-page select",
   ".music-settings-page input:is([type=checkbox], [type=number], [type=range])",
   ".music-settings-page [role=slider]",
@@ -23,7 +23,7 @@ const RECEIVER_SELECTOR = [
   "#music-eq-page input:is([type=checkbox], [type=number], [type=range])",
   "#music-eq-page [role=slider]",
   "#music-lyrics-page button:not(.lyrics-line-button)",
-  "#music-lyrics-page .lyrics-line-button.is-active",
+  "#music-lyrics-page .lyrics-line.is-active",
   "#music-lyrics-page select",
   "#music-lyrics-page input:is([type=checkbox], [type=number], [type=range])",
   "#music-signal-page .signal-models button",

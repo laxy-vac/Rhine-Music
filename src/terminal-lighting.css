@@ -46,7 +46,7 @@ html
     .music-topnav > button,
     .theme-switch > button,
     .music-style-page button,
-    .music-settings-page button,
+    .music-settings-page button:not(.lyrics-line-button),
     #music-eq-page button,
     #music-lyrics-page button:not(.lyrics-line-button),
     #music-signal-page .signal-models button,
@@ -67,7 +67,7 @@ html
     .music-topnav > button,
     .theme-switch > button,
     .music-style-page button,
-    .music-settings-page button,
+    .music-settings-page button:not(.lyrics-line-button),
     #music-eq-page button,
     #music-lyrics-page button:not(.lyrics-line-button),
     #music-signal-page .signal-models button,
@@ -83,7 +83,7 @@ html
     .music-topnav > button,
     .theme-switch > button,
     .music-style-page button,
-    .music-settings-page button,
+    .music-settings-page button:not(.lyrics-line-button),
     #music-eq-page button,
     #music-lyrics-page button:not(.lyrics-line-button),
     #music-signal-page .signal-models button,
@@ -96,7 +96,7 @@ html
 html
   .music-app[data-design="rhine"]
   #music-lyrics-page
-  .lyrics-line-button.is-active[data-terminal-receiver] {
+  .lyrics-line.is-active[data-terminal-receiver] {
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease;
@@ -109,7 +109,7 @@ html
       .music-topnav > button,
       .theme-switch > button,
       .music-style-page button,
-      .music-settings-page button,
+      .music-settings-page button:not(.lyrics-line-button),
       #music-eq-page button,
       #music-lyrics-page button:not(.lyrics-line-button),
       #music-signal-page .signal-models button,
@@ -127,7 +127,7 @@ html
     .music-topnav > button,
     .theme-switch > button,
     .music-style-page button,
-    .music-settings-page button,
+    .music-settings-page button:not(.lyrics-line-button),
     #music-eq-page button,
     #music-lyrics-page button:not(.lyrics-line-button),
     #music-signal-page .signal-models button,

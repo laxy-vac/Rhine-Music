@@ -50,6 +50,7 @@ export interface LyricDocument {
   lrc: string;
   translation?: string;
   offsetMs: number;
+  offsetInText?: boolean;
   source: { id: string; name: string; url?: string };
   savedAt: string;
 }
@@ -260,6 +261,9 @@ export function setupLyricsPage(
   let visible = false;
   let disposed = false;
   let activeTrackId = "";
+  let activeMetadataSignature = "";
+  let lyricRequestTrackId = "";
+  let lyricAttemptSignature = "";
   let lyricDocument: LyricDocument | null = null;
   let parsedLyrics: ParsedLyrics | null = null;
   let activeLineIndex = -2;
@@ -278,8 +282,7 @@ export function setupLyricsPage(
   let lyricStatus = trUi("选择一首曲目以读取本机歌词。");
   let lyricNoticeState: LyricsNoticeState = "standby";
   let sourceLoaded = false;
-  let searchStatus = trUi("搜索仅在点击后进行。");
-  let pendingProgrammaticScroll = false;
+  let searchStatus = trUi("自动匹配优先使用 QQ 音乐，也可手动查找其他版本。");
   let activeMobileQuery: MediaQueryList | undefined;
   let preferenceDialogTrackId = "";
   let preferenceDialogOpener: HTMLElement | null = null;
@@ -418,7 +421,10 @@ export function setupLyricsPage(
   const noticeFootLabel = element("span", "lyrics-notice-foot-label", trUi("输出链路"));
   const noticeFootValue = element("span", "lyrics-notice-foot-value", trUi("等待曲目"));
   noticeFoot.append(noticeFootLabel, noticeFootValue);
-  noticeBody.append(noticeEyebrow, noticeTitle, noticeText, noticeFoot);
+  const retryLyricsButton = element("button", "lyrics-quiet-button lyrics-retry-button", trUi("重新匹配"));
+  retryLyricsButton.type = "button";
+  retryLyricsButton.hidden = true;
+  noticeBody.append(noticeEyebrow, noticeTitle, noticeText, noticeFoot, retryLyricsButton);
   noticeFrame.append(noticeRail, noticeBody);
   lyricsNotice.append(noticeFrame);
   main.append(mainHeader, syncTools, lyricsScroller, lyricsNotice);
@@ -822,9 +828,9 @@ export function setupLyricsPage(
   function setLyricsNotice(state: LyricsNoticeState, message: string): void {
     const presentation: Record<LyricsNoticeState, { code: string; eyebrow: string; title: string; footLabel: string; footValue: string }> = {
       standby: { code: "PLAYBACK · 03", eyebrow: trUi("未载入曲目"), title: "STANDBY", footLabel: trUi("输出链路"), footValue: trUi("等待曲目") },
-      loading: { code: "LYRICS · 03", eyebrow: trUi("正在检查本机缓存"), title: trUi("读取中"), footLabel: trUi("歌词记录"), footValue: trUi("读取本机缓存") },
-      missing: { code: "LYRICS · 03", eyebrow: trUi("本机歌词"), title: trUi("暂无歌词"), footLabel: trUi("歌词记录"), footValue: trUi("无可用文本") },
-      error: { code: "LYRICS · 03", eyebrow: trUi("本机缓存读取异常"), title: trUi("读取失败"), footLabel: trUi("请求状态"), footValue: trUi("发生读取错误") },
+      loading: { code: "LYRICS · 03", eyebrow: trUi("正在匹配歌词"), title: trUi("读取中"), footLabel: trUi("歌词记录"), footValue: trUi("缓存优先 · 自动匹配") },
+      missing: { code: "LYRICS · 03", eyebrow: trUi("同步文本"), title: trUi("暂无歌词"), footLabel: trUi("歌词记录"), footValue: trUi("无可用文本") },
+      error: { code: "LYRICS · 03", eyebrow: trUi("歌词暂时不可用"), title: trUi("读取失败"), footLabel: trUi("请求状态"), footValue: trUi("可重试或手动查找") },
     };
     const view = presentation[state];
     lyricNoticeState = state;
@@ -836,6 +842,7 @@ export function setupLyricsPage(
     noticeText.textContent = message;
     noticeFootLabel.textContent = view.footLabel;
     noticeFootValue.textContent = view.footValue;
+    retryLyricsButton.hidden = !latestState?.currentTrack || !!lyricDocument || (state !== "missing" && state !== "error");
   }
 
   function renderLyrics(): void {
@@ -880,7 +887,7 @@ export function setupLyricsPage(
         button.addEventListener("click", () => {
           const doc = lyricDocument;
           if (!doc || line.time === null) return;
-          callbacks.seek(Math.max(0, line.time - doc.offsetMs / 1000));
+          callbacks.seek(Math.max(0, line.time - (doc.offsetInText ? 0 : doc.offsetMs) / 1000));
         });
         row.append(button);
       } else {
@@ -912,7 +919,7 @@ export function setupLyricsPage(
       updateArchiveLineIndex(-1);
       return;
     }
-    const current = Math.max(0, state.currentTime + lyricDocument.offsetMs / 1000);
+    const current = Math.max(0, state.currentTime + (lyricDocument.offsetInText ? 0 : lyricDocument.offsetMs) / 1000);
     let index = -1;
     for (let i = 0; i < parsedLyrics.lines.length; i += 1) {
       const time = parsedLyrics.lines[i].time;
@@ -926,9 +933,7 @@ export function setupLyricsPage(
       const active = Number(row.dataset.line) === index;
       row.classList.toggle("is-active", active);
       if (active && allowScroll && followEnabled) {
-        pendingProgrammaticScroll = true;
         row.scrollIntoView({ block: "center", behavior: "smooth" });
-        window.setTimeout(() => { pendingProgrammaticScroll = false; }, 220);
       }
     });
   }
@@ -940,9 +945,12 @@ export function setupLyricsPage(
     }
   }
 
-  function abortTrackOperations(): void {
-    lyricRequest?.abort();
-    lyricRequest = undefined;
+  function abortTrackOperations(includeAutomatic = true): void {
+    if (includeAutomatic) {
+      lyricRequest?.abort();
+      lyricRequest = undefined;
+      lyricRequestTrackId = "";
+    }
     for (const controller of trackOperationControllers) controller.abort();
     trackOperationControllers = [];
     activeSearch = undefined;
@@ -951,16 +959,21 @@ export function setupLyricsPage(
 
   async function loadCurrentLyric(force = false): Promise<void> {
     const trackId = latestState?.currentTrack?.id;
-    if (!visible || !trackId || disposed) return;
-    if (!force && lyricDocument?.trackId === trackId) return;
+    if (!trackId || disposed) return;
+    if (!force && (lyricDocument?.trackId === trackId || lyricRequestTrackId === trackId || lyricAttemptSignature === activeMetadataSignature)) return;
     lyricRequest?.abort();
     const controller = new AbortController();
     lyricRequest = controller;
+    lyricRequestTrackId = trackId;
+    const signature = activeMetadataSignature;
     const generation = ++currentTrackRequestGeneration;
-    setLyricsNotice("loading", trUi("正在读取这首曲目的本机歌词缓存…"));
+    setLyricsNotice("loading", trUi("正在读取缓存并自动匹配歌词…"));
     try {
-      const response = await fetch(`/api/lyrics/track?trackId=${encodeURIComponent(trackId)}`, { signal: controller.signal });
-      const payload = await responseJson<{ lyric: LyricDocument | null }>(response);
+      const response = await fetch("/api/lyrics/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId }), signal: controller.signal,
+      });
+      const payload = await responseJson<{ lyric: LyricDocument | null; sources?: Array<{ status: "ok" | "empty" | "error" }> }>(response);
       if (disposed || controller.signal.aborted || generation !== currentTrackRequestGeneration || latestState?.currentTrack?.id !== trackId) return;
       lyricDocument = payload.lyric?.trackId === trackId ? payload.lyric : null;
       parsedLyrics = lyricDocument ? parseLyrics(lyricDocument.lrc, lyricDocument.translation ?? "") : null;
@@ -970,14 +983,35 @@ export function setupLyricsPage(
         searchStatus = ui`当前歌词源：${lyricSourceLabel(lyricDocument.source) || trUi("未知来源")}`;
         searchMessage.textContent = searchStatus;
       } else {
-        setLyricsNotice("missing", trUi("本机缓存 · 未找到"));
+        const unavailable = !!payload.sources?.length && payload.sources.every(source => source.status === "error");
+        setLyricsNotice(unavailable ? "error" : "missing", unavailable
+          ? trUi("歌词来源暂时不可用，可重新匹配或手动查找。")
+          : trUi("未找到可靠匹配，可重新匹配或手动选择其他版本。"));
       }
       renderLyrics();
     } catch (error) {
       if (controller.signal.aborted || disposed || generation !== currentTrackRequestGeneration || latestState?.currentTrack?.id !== trackId) return;
       lyricDocument = null;
       parsedLyrics = null;
-      setLyricStatus(ui`读取本机歌词失败：${error instanceof Error ? error.message : trUi("未知错误")}`);
+      setLyricStatus(ui`匹配歌词失败：${error instanceof Error ? error.message : trUi("未知错误")}`);
+      renderLyrics();
+    } finally {
+      if (lyricRequest === controller) {
+        lyricRequest = undefined;
+        lyricRequestTrackId = "";
+        if (!controller.signal.aborted) lyricAttemptSignature = signature;
+      }
+    }
+  }
+
+  function cancelAutomaticLyric(): void {
+    lyricRequest?.abort();
+    lyricRequest = undefined;
+    lyricRequestTrackId = "";
+    lyricAttemptSignature = activeMetadataSignature;
+    currentTrackRequestGeneration += 1;
+    if (!lyricDocument) {
+      setLyricsNotice("missing", trUi("可手动选择歌词，或重新自动匹配。"));
       renderLyrics();
     }
   }
@@ -1157,6 +1191,8 @@ export function setupLyricsPage(
     if (latestState?.currentTrack?.id !== trackId || (operation && !isCurrentOperation(operation))) return;
     lyricRequest?.abort();
     lyricRequest = undefined;
+    lyricRequestTrackId = "";
+    lyricAttemptSignature = activeMetadataSignature;
     lyricDocument = documentValue;
     parsedLyrics = parseLyrics(documentValue.lrc, documentValue.translation ?? "");
     setLyricsNotice("missing", trUi("歌词记录为空"));
@@ -1199,6 +1235,7 @@ export function setupLyricsPage(
     if (searchBusy) return;
     const sourceId = sourceSelect.value;
     if (!sourceId) { searchMessage.textContent = trUi("没有已启用的来源，请到“管理来源”添加或启用。"); return; }
+    if (lyricRequest && visible) cancelAutomaticLyric();
     const operation = beginTrackOperation();
     if (!operation) return;
     activeSearch = operation.controller;
@@ -1251,6 +1288,8 @@ export function setupLyricsPage(
   }
 
   async function selectCandidate(candidate: LyricsCandidate, trackId: string): Promise<void> {
+    if (latestState?.currentTrack?.id !== trackId || !visible) return;
+    cancelAutomaticLyric();
     const operation = beginTrackOperation();
     if (!operation || operation.trackId !== trackId) return;
     searchMessage.textContent = ui`正在保存候选歌词：${candidate.title} · ${candidate.artist}…`;
@@ -1279,11 +1318,19 @@ export function setupLyricsPage(
       importInput.value = "";
       return;
     }
+    if (!latestState?.currentTrack || !visible) return;
+    cancelAutomaticLyric();
     const operation = beginTrackOperation();
     if (!operation) return;
     searchMessage.textContent = ui`正在读取 ${file.name}…`;
     try {
-      const lrc = await file.text();
+      const bytes = await file.arrayBuffer();
+      let lrc: string;
+      try {
+        lrc = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      } catch {
+        throw new Error(trUi("请选择 UTF-8 编码的 LRC / TXT 文件。"));
+      }
       if (!isCurrentOperation(operation)) return;
       if (new Blob([lrc]).size > MAX_IMPORT_BYTES) throw new Error(trUi("文件超过 96 KiB。"));
       const response = await fetch("/api/lyrics/import", {
@@ -1435,12 +1482,32 @@ export function setupLyricsPage(
     resumeFollow.hidden = true;
     updateActiveLine(true, true);
   });
-  lyricsScroller.addEventListener("scroll", () => {
-    if (pendingProgrammaticScroll || !visible) return;
+  function resetFollow(): void {
+    followEnabled = true;
+    followInput.checked = true;
+    resumeFollow.hidden = true;
+  }
+  function pauseFollow(): void {
+    if (!visible) return;
     followEnabled = false;
     followInput.checked = false;
     resumeFollow.hidden = false;
+  }
+  // Native smooth scrolling may continue for more than one frame. Only user
+  // scroll gestures suspend following; layout and playback scrolling never do.
+  lyricsScroller.addEventListener("wheel", event => {
+    if (event.deltaY || event.deltaX) pauseFollow();
   }, { passive: true });
+  lyricsScroller.addEventListener("touchmove", pauseFollow, { passive: true });
+  lyricsScroller.addEventListener("pointerdown", event => {
+    const bounds = lyricsScroller.getBoundingClientRect();
+    if (event.target === lyricsScroller && event.clientX >= bounds.left + lyricsScroller.clientWidth) pauseFollow();
+  });
+  lyricsScroller.addEventListener("keydown", event => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key) &&
+        !(event.target instanceof Element && event.target.closest("button, input, select, textarea, a"))) pauseFollow();
+  }, { passive: true });
+  retryLyricsButton.addEventListener("click", () => { void loadCurrentLyric(true); });
   searchButton.addEventListener("click", () => { void searchLyrics(); });
   searchToggleButton.addEventListener("click", () => { void openSearch(false); });
   settingsTabButton.addEventListener("click", () => { selectOptionsTab("settings"); });
@@ -1496,13 +1563,19 @@ export function setupLyricsPage(
     update(state, album) {
       if (disposed) return;
       const nextTrackId = state.currentTrack?.id ?? "";
+      const trackChanged = nextTrackId !== activeTrackId;
+      const signature = JSON.stringify([nextTrackId, state.currentTrack?.title ?? "", state.currentTrack?.artist ?? "", album?.title ?? ""]);
+      const metadataChanged = signature !== activeMetadataSignature;
+      activeMetadataSignature = signature;
       latestState = state;
       latestAlbum = album;
       renderPlayerInfo();
-      if (nextTrackId !== activeTrackId) {
+      if (trackChanged) {
         activeTrackId = nextTrackId;
         currentTrackRequestGeneration += 1;
         abortTrackOperations();
+        lyricAttemptSignature = "";
+        resetFollow();
         candidateList.replaceChildren();
         sourceOutcomes.replaceChildren();
         searchMessage.textContent = trUi("按曲名与歌手搜索，专辑用于区分版本。");
@@ -1520,39 +1593,38 @@ export function setupLyricsPage(
           queryTitle.value = state.currentTrack?.title ?? "";
           queryArtist.value = state.currentTrack?.artist ?? "";
           queryAlbum.value = album?.title ?? "";
-          setLyricsNotice("loading", visible ? trUi("正在读取这首曲目的本机歌词缓存…") : trUi("曲目已变化，返回歌词页后读取本机歌词缓存。"));
+          setLyricsNotice("loading", trUi("正在读取缓存并自动匹配歌词…"));
         } else {
           setLyricsNotice("standby", trUi("未载入曲目"));
         }
         renderLyrics();
-        if (visible && nextTrackId) {
-          void loadTrackPreference(true);
-          void loadCurrentLyric(true);
+        if (nextTrackId) {
+          if (visible) void loadTrackPreference(true);
+          void loadCurrentLyric();
         }
       } else if (album) {
         latestAlbum = album;
         if(!queryAlbum.value && document.activeElement !== queryAlbum)queryAlbum.value = album.title;
       }
+      if (!trackChanged && metadataChanged && nextTrackId && !lyricDocument) void loadCurrentLyric(true);
       if (visible) updateActiveLine(true);
     },
     setVisible(nextVisible) {
       if (disposed || visible === nextVisible) return;
       visible = nextVisible;
       if (visible) {
+        resetFollow();
         startVisibleRefresh();
         importInput.value = "";
         renderSourceChoices();
         offsetApply.disabled = !lyricDocument;
         void loadSources(true);
         if (latestState?.currentTrack?.id) void loadTrackPreference(true);
-        if (latestState?.currentTrack?.id && latestState.currentTrack.id !== lyricDocument?.trackId) void loadCurrentLyric(true);
+        if (latestState?.currentTrack?.id && latestState.currentTrack.id !== lyricDocument?.trackId) void loadCurrentLyric();
       } else {
         stopVisibleRefresh();
         closePreferenceDialog(false);
-        const hadPendingTrackRequest = !!lyricRequest || trackOperationControllers.length > 0;
-        currentTrackRequestGeneration += 1;
-        abortTrackOperations();
-        if (hadPendingTrackRequest) searchMessage.textContent = trUi("离页时已停止未完成的歌词请求；返回后可重新读取或搜索。");
+        abortTrackOperations(false);
         sourceRequest?.abort();
         sourceRequest = undefined;
         preferenceRequest?.abort();
