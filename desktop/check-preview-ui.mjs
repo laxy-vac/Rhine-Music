@@ -27,7 +27,7 @@ function allowedURL(value, localOrigin) {
   }
 }
 
-function mockNative() {
+export function mockNative() {
   const calls = { status: 0, eqEditor: 0, previewEq: 0, current: 0, refresh: 0, start: 0, queue: 0, control: 0, stopCurrent: 0 };
   return {
     calls,
@@ -50,7 +50,7 @@ function mockNative() {
   };
 }
 
-function mockSony() {
+export function mockSony() {
   const calls = { status: 0, prepare: 0, clearCache: 0, audio: 0, growingAudio: 0, job: 0, cancel: 0 };
   return {
     calls,
@@ -68,7 +68,7 @@ function mockSony() {
   };
 }
 
-function mockFtp() {
+export function mockFtp() {
   const unavailable = async () => { throw new Error('隔离预览已禁用 FTP 网络。'); };
   return {
     status: () => ({ configured: false, connected: false, note: 'isolated preview' }),
@@ -85,7 +85,7 @@ function mockFtp() {
   };
 }
 
-function mockOnline() {
+export function mockOnline() {
   return {
     async snapshot() { return { albums: [] }; },
     async sources() { return { sources: [] }; },

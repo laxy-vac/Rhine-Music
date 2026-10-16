@@ -117,7 +117,7 @@ V3歌词缓存不会随Git回滚降级。只支持V2的旧源码会保留但无�
 
 历史单项：底部播放条当前句与共享操作的TypeScript/1662模块interface-only构建及`node scripts/check-foobar-layout.mjs --playback-lyrics`通过；产物`.tools/playback-lyrics/{build.log,playback-lyrics.json}`和6张截图。1920×1080两主题日夜四组、轨道下移、SHUFFLE ALL/ORDER与去DSP、seek、真实LyricsPage隐藏载入/偏移/切源/换曲/长句/空槽有覆盖。空文本元素本身高0，但18px网格行/44px时间轴及轨道几何保持；不是新增空白占位歌词。全部合成/mock，未启动个人播放器或调用设备；这项历史报告未验证本轮ORDER自绘菜单、完整两主题整窗或其它宽度整套矩阵。
 
-本轮隐藏绘制专项：`node desktop/check-hidden-paint.cjs`使用现有Electron 44.6.0与两个`show:false`合成窗口；默认`backgroundThrottling`下两帧在317/340ms完成，设置`false`的探针在0ms完成，两个窗口始终未显示。`webContents.setBackgroundThrottling`在当前运行时可用。默认模式没有复现rAF阻塞，产品保留默认throttling。报告为[hidden-paint/report.json](../.tools/unified-ui-2026-10-17/hidden-paint/run-1792178372961-43504/report.json)。未加载播放器、启动服务或音频；此结果只验证隐藏窗口首帧调度，不代表真实`scene.warmup`时长或设备性能。
+本轮隐藏绘制专项：`node desktop/check-hidden-paint.cjs`使用现有Electron 44.6.0与两个`show:false`合成窗口；默认`backgroundThrottling`下两帧在317/340ms完成，设置`false`的探针在0ms完成，两个窗口始终未显示。`webContents.setBackgroundThrottling`在当前运行时可用。该简单页面未复现完整三维入口的隐藏调度问题；当前产品在隐藏初始化期间关闭窗口级节流，show后恢复true，端到端修复见[启动恢复](STARTUP-RECOVERY-2026-10-17.md)。报告为[hidden-paint/report.json](../.tools/unified-ui-2026-10-17/hidden-paint/run-1792178372961-43504/report.json)。未加载播放器、启动服务或音频；此结果只验证隐藏窗口首帧调度，不代表真实`scene.warmup`时长或设备性能。
 
 歌词页频谱连续运动修正的TypeScript与1662模块interface-only构建通过，日志`.tools/lyrics-spectrum-motion/build.log`；`node scripts/check-lyrics-page.mjs --spectrum-motion`最终11项全通过，报告/四张稳定绘制截图在`run-1792159827778-859aa4c4`。验证连续中间帧、快起慢落、收敛/边界/归零、切歌/显隐/销毁、减少动态、有效Future/Punk日夜皮肤与原生需求100/250ms切换；真实NativeAudio类的请求/计时器全mock，无外网或设备访问，不代表个人整窗/硬件FPS。详情见[歌词验证](LYRICS.md)。
 

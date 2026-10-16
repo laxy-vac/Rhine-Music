@@ -113,6 +113,7 @@ function createHiddenStartupGate({ipcMain,app,dialog,getWindow}){
   const wasMinimized=target.isMinimized();
   if(wasMinimized)target.restore();
   if(wasMinimized||!target.isVisible())target.show();
+  target.webContents.setBackgroundThrottling(true);
   if(pendingFocus){target.focus();pendingFocus=false}
   return true;
  };
@@ -126,10 +127,15 @@ function createHiddenStartupGate({ipcMain,app,dialog,getWindow}){
  const attachWindow=(target,url)=>{
   origin=new URL(url).origin;
   generation++;readyGeneration=-1;failureGeneration=-1;
+  // The complete WebGL startup needs frame callbacks before the first show.
+  // Restore ordinary background throttling immediately after revealing it.
+  target.webContents.setBackgroundThrottling(false);
   target.webContents.on('did-start-navigation',(_event,_destination,inPlace,isMainFrame)=>{
    if(!isMainFrame||inPlace)return;
    generation++;readyGeneration=-1;failureGeneration=-1;
-   target.hide();
+   target.webContents.setBackgroundThrottling(false);
+   // Keep an existing window visible across reload. Explicitly hiding it
+   // suspends the real renderer's frame callbacks even with throttling off.
   });
   target.webContents.on('did-fail-load',(_event,code,description,validatedURL,isMainFrame)=>{
    if(!isMainFrame||Number(code)===-3)return;

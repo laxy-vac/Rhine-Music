@@ -24,7 +24,13 @@ class MockWindow extends EventEmitter {
     this.hideCalls = 0;
     this.focusCalls = 0;
     this.restoreCalls = 0;
+    this.backgroundThrottling = true;
+    this.startupOperations = [];
     this.webContents = new EventEmitter();
+    this.webContents.setBackgroundThrottling = value => {
+      this.backgroundThrottling = value;
+      this.startupOperations.push(`throttle:${value}`);
+    };
     this.webContents.mainFrame = { url: `${origin}/` };
     this.webContents.getURL = () => `${origin}/`;
   }
@@ -32,7 +38,7 @@ class MockWindow extends EventEmitter {
   isDestroyed() { return this.destroyed; }
   isMinimized() { return this.minimized; }
   isVisible() { return this.visible; }
-  show() { this.showCalls++; this.visible = true; }
+  show() { this.showCalls++; this.visible = true; this.startupOperations.push('show'); }
   hide() { this.hideCalls++; this.visible = false; }
   focus() { this.focusCalls++; }
   restore() { this.restoreCalls++; this.minimized = false; this.visible = true; }
@@ -54,6 +60,7 @@ function mockRuntime() {
 
 const first = mockRuntime();
 assert.equal(first.window.showCalls, 0, 'Window must begin hidden.');
+assert.equal(first.window.backgroundThrottling, false, 'Hidden initialization must keep frame callbacks running.');
 first.window.emit('ready-to-show');
 first.window.webContents.emit('did-finish-load');
 assert.equal(first.window.showCalls, 0, 'Electron load milestones must not release the gate.');
@@ -64,6 +71,8 @@ assert.equal(first.window.showCalls, 0, 'Subframes and other webContents must no
 first.ready();
 assert.equal(first.gate.isReady(), true);
 assert.equal(first.window.showCalls, 1, 'A valid frontendReady signal must show the window.');
+assert.equal(first.window.backgroundThrottling, true, 'Normal background throttling must return after the window is shown.');
+assert.ok(first.window.startupOperations.indexOf('show') < first.window.startupOperations.indexOf('throttle:true'));
 first.ready();
 assert.equal(first.window.showCalls, 1, 'Duplicate ready signals must not show twice.');
 
@@ -72,15 +81,18 @@ assert.equal(first.gate.isReady(), true, 'In-page navigation must keep the curre
 assert.equal(first.window.hideCalls, 0);
 first.window.webContents.emit('did-start-navigation', {}, `${origin}/`, false, true);
 assert.equal(first.gate.isReady(), false, 'A new main-frame load must reset readiness.');
-assert.equal(first.window.hideCalls, 1, 'A reload must hide the window while it initializes again.');
+assert.equal(first.window.hideCalls, 0, 'A reload must keep the existing window visible so frame callbacks continue.');
+assert.equal(first.window.visible, true);
+assert.equal(first.window.backgroundThrottling, false, 'Reload initialization must keep frame callbacks running too.');
 first.app.emit('activate');
 first.app.emit('second-instance');
 assert.equal(first.window.showCalls, 1, 'Activation and second-instance requests must wait for readiness.');
 first.ready();
-assert.equal(first.window.showCalls, 2, 'The reloaded frontend must release the gate again.');
+assert.equal(first.window.showCalls, 1, 'The reloaded frontend must reuse the already visible window.');
+assert.equal(first.window.backgroundThrottling, true);
 assert.equal(first.window.focusCalls, 1, 'A queued activation should focus after readiness.');
 first.ready();
-assert.equal(first.window.showCalls, 2, 'Duplicate reload readiness must remain idempotent.');
+assert.equal(first.window.showCalls, 1, 'Duplicate reload readiness must remain idempotent.');
 
 first.window.webContents.emit('did-start-navigation', {}, `${origin}/`, false, true);
 first.ipcMain.emit('rhine:frontend-failed', first.event(), 'scene warmup exploded');

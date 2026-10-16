@@ -28,7 +28,7 @@
 
 TypeScript与interface-only构建通过，日志`.tools/unified-ui-2026-10-17/build.log`；产物位于`.tools/source-preview-interface`，未制作安装包。桌面隐藏显示gate的纯mock检查通过，覆盖首次就绪、重复消息、重载、提前激活、IPC归属及失败路径。原Punk intro/replay、旧简单加载和三维启动流程已移除；首次资料区静态就绪后再上报首帧，不新增入场动画。
 
-真实Electron隐藏窗口检查使用合成data页面，Electron44.6.0/Chromium152.0.7977.130下两个窗口始终未显示。默认background throttling下两次rAF在317/340ms内完成，未复现隐藏初始化等待绘制的死锁，因此保留默认节流；报告`.tools/unified-ui-2026-10-17/hidden-paint/run-1792178372961-43504/report.json`。该检查不覆盖个人场景初始化耗时或后续窗口遮挡。
+历史简单页面检查：Electron44.6.0/Chromium152.0.7977.130下两个合成data窗口始终未显示，默认background throttling时两次rAF在317/340ms完成。此检查没有覆盖完整三维入口，曾据此错误保留启动期默认节流；用户随后报告无窗口。完整Electron入口复现默认模式30秒无ready，仅关闭窗口级节流后约4秒就绪。当前修复和端到端证据见[启动恢复](STARTUP-RECOVERY-2026-10-17.md)，不将旧简单页面结果视为完整启动通过。
 
 真实盒体WebGL检查使用项目既有Chrome与Three.js、合成封面和专用本地静态源；三盒型昼夜、封面/外观改变、异步旧图保护、hidden停draw、destroy释放均通过。最初发现Minimal前置印刷没有写深度，后绘玻璃覆盖封面；已统一复用主场景Lambert印刷材质并写深度，复跑后Minimal封面可辨。Punk测试明确将透光率设为0.75，因此有较明显雾化，遵从给定材质，不据此调整用户预设。报告与图在`.tools/unified-ui-2026-10-17/case-preview`，运行期GL/脚本错误和外部请求为0；具体GPU后端未能核实，不能据此称硬件FPS通过。
 
