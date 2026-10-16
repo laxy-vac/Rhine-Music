@@ -145,10 +145,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         assert.deepEqual([appearance.actions.style.borderTopColor,appearance.actions.style.borderRightColor,
           appearance.actions.style.borderBottomColor,appearance.actions.style.borderLeftColor],Array(4).fill(appearance.ink.stage.resolved),
           `${theme}: the shared Punk frame follows the current foreground.`);
-        assert.equal(appearance.actions.style.outlineWidth,"1px");assert.equal(appearance.actions.style.outlineStyle,"solid");
-        assert.equal(appearance.actions.style.outlineColor,appearance.open.arrow.color,
-          `${theme}: the shared Punk outer frame follows the active accent.`);
-        assert.equal(appearance.actions.style.outlineOffset,"4px");
+        assert.equal(appearance.actions.style.outlineStyle,"none",`${theme}: the action group has no outer accent outline.`);
         assert.equal(appearance.play.style.fontSize, "12px", `${theme}: Punk action text stays small.`);
         assert.equal(appearance.play.labelStyle.fontSize, "12px");
         assert.equal(appearance.play.labelStyle.lineHeight, "15px");
@@ -255,7 +252,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
         const formatStyle=getComputedStyle(formatNode),formatDot=getComputedStyle(formatNode,'::before'),formatRect=formatNode.getBoundingClientRect();
         const playStyle=getComputedStyle(play),actions=document.querySelector('.album-actions').getBoundingClientRect();
         return {scheme:${JSON.stringify(scheme)},theme,transitionBefore,expected:{accent:color(palette.accent),ink:color(palette.fg),pageBg:color(palette.bg)},
-          computed:{outline:groupStyle.outlineColor,arrow:arrow.color,groupBorders:[groupStyle.borderTopColor,groupStyle.borderRightColor,groupStyle.borderBottomColor,groupStyle.borderLeftColor],
+          computed:{outline:groupStyle.outlineColor,outlineStyle:groupStyle.outlineStyle,arrow:arrow.color,groupBorders:[groupStyle.borderTopColor,groupStyle.borderRightColor,groupStyle.borderBottomColor,groupStyle.borderLeftColor],
             divider:[border.borderTopWidth,border.borderRightWidth,border.borderBottomWidth,border.borderLeftWidth],
             playBackground:playStyle.backgroundColor,playColor:playStyle.color,format:{text:formatNode.innerText.trim(),display:formatStyle.display,
               rects:formatNode.getClientRects().length,borders:[formatStyle.borderTopWidth,formatStyle.borderRightWidth,formatStyle.borderBottomWidth,formatStyle.borderLeftWidth],
@@ -265,8 +262,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
             width:Math.ceil(actions.width+32),height:Math.ceil(actions.height+32),scale:3},
           formatClip:(()=>{const r=document.querySelector('.selection-rule').getBoundingClientRect();return{x:Math.max(0,Math.floor(r.x-8)),y:Math.max(0,Math.floor(r.y-5)),width:Math.ceil(r.width+16),height:Math.ceil(r.height+10),scale:3};})()};
       })()`);
-      assert.equal(check.computed.outline, check.expected.accent,
-        `${scheme}/${theme}: Punk open outline follows the real stylePalette accent.`);
+      assert.equal(check.computed.outlineStyle, "none", `${scheme}/${theme}: Punk action group has no outer accent outline.`);
       assert.equal(check.computed.arrow, check.expected.accent,
         `${scheme}/${theme}: Punk diagonal arrow follows the real stylePalette accent.`);
       assert.deepEqual(check.computed.groupBorders, Array(4).fill(check.expected.ink),
@@ -345,7 +341,7 @@ export async function checkAlbumActions({ command, evaluate, output, main }) {
       })()`);
     }
   }
-  assert.ok(new Set(punkPaletteChecks.map(check => check.computed.outline)).size >= 5,
+  assert.ok(new Set(punkPaletteChecks.map(check => check.computed.arrow)).size >= 5,
     "Archive/Field/Hazard day/night must produce visibly different Punk accent colors.");
   const futureDay = visuals.find(item => item.design === "rhine" && item.theme === "day");
   const futureNight = visuals.find(item => item.design === "rhine" && item.theme === "night");
@@ -637,13 +633,12 @@ export async function checkUnifiedAlbumActions({ command, evaluate, output, main
             Math.abs(sample.group.rect.right - sample.open.rect.right - 1) <= .25 &&
             Math.abs(sample.group.rect.width - sample.play.rect.width - sample.open.rect.width - 2) <= .5,
             `${theme}: Punk group bounds tightly wrap both buttons and the shared frame. ${JSON.stringify(sample)}`);
-          assert.ok(sample.group.rect.x-5>=sample.viewport.x-1&&sample.group.rect.right+5<=sample.viewport.right+1,
-            `${theme}: the shared accent outline stays inside the album scroll viewport. ${JSON.stringify(sample)}`);
+          assert.ok(sample.group.rect.x>=sample.viewport.x-1&&sample.group.rect.right<=sample.viewport.right+1,
+            `${theme}: the shared foreground frame stays inside the album scroll viewport. ${JSON.stringify(sample)}`);
           assert.deepEqual(sample.group.style.borders, ["1px", "1px", "1px", "1px"]);
           assert.ok(sample.group.style.borderColors.every(color => color === sample.open.style.color),
             `${theme}: the shared fine frame follows the foreground.`);
-          assert.equal(sample.group.style.outlineWidth, "1px");assert.equal(sample.group.style.outlineStyle, "solid");
-          assert.equal(sample.group.style.outlineColor, sample.open.arrow);assert.equal(sample.group.style.outlineOffset, "4px");
+          assert.equal(sample.group.style.outlineStyle, "none", `${theme}: the action group has no permanent outer accent outline.`);
           assert.equal(sample.play.style.background, sample.open.style.color);
           assert.notEqual(sample.play.style.color, sample.open.style.color);
           assert.equal(sample.open.style.background, "rgba(0, 0, 0, 0)");
@@ -670,13 +665,13 @@ export async function checkUnifiedAlbumActions({ command, evaluate, output, main
             await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
             const focus = await evaluate(`(()=>{const button=document.querySelector(${JSON.stringify(selector)});button.focus({preventScroll:true});const s=getComputedStyle(button);
               return{active:document.activeElement===button,visible:button.matches(':focus-visible'),outlineWidth:s.outlineWidth,outlineStyle:s.outlineStyle,
-                outlineColor:s.outlineColor,outlineOffset:s.outlineOffset,groupOutline:getComputedStyle(button.parentElement).outlineColor};})()`);
+                outlineColor:s.outlineColor,outlineOffset:s.outlineOffset,accent:getComputedStyle(button.parentElement.querySelector('.open-album-punk-arrow')).color};})()`);
             evidence.focus.push({design, theme, name, ...focus});await saveEvidence();
             assert.equal(focus.active, true, `${design}/${theme}: ${name} remains independently focusable.`);
             assert.equal(focus.visible, true, `${design}/${theme}: ${name} receives keyboard focus-visible styling.`);
             assert.equal(focus.outlineWidth, "2px");assert.equal(focus.outlineStyle, "solid");
-            assert.equal(focus.outlineOffset, "-4px");assert.equal(focus.outlineColor, focus.groupOutline,
-              `${design}/${theme}: ${name} focus follows the group accent.`);
+            assert.equal(focus.outlineOffset, "-4px");assert.equal(focus.outlineColor, focus.accent,
+              `${design}/${theme}: ${name} keyboard focus follows the active accent.`);
           }
         }
       }

@@ -52,8 +52,7 @@ export async function checkAlbumPanel({command,evaluate,output}) {
     if(design==='archive') {
       assert.equal(keyboardOpen.outline,'solid');assert.equal(keyboardOpen.width,'2px');assert.equal(keyboardOpen.color,keyboardOpen.accent);
       assert.equal(keyboardOpen.offset,'-4px',`${design}: the child focus ring stays inset within the shared group frame.`);
-      assert.equal(keyboardOpen.groupOutline,'solid');assert.equal(keyboardOpen.groupWidth,'1px');
-      assert.equal(keyboardOpen.groupColor,keyboardOpen.accent);assert.equal(keyboardOpen.groupOffset,'4px');
+      assert.equal(keyboardOpen.groupOutline,'none','Punk action group keeps no permanent outer accent outline.');
     } else {
       assert.equal(keyboardOpen.outline,'solid',`${design}: Future retains its existing focused access button outline.`);
       assert.ok(parseFloat(keyboardOpen.width)>0,`${design}: keyboard focus has a visible outline.`);

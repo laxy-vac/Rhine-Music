@@ -185,15 +185,14 @@
 .music-app[data-design="archive"] .album-panel .album-actions {
   display: inline-flex;
   width: max-content;
-  max-width: calc(100% - 10px);
+  max-width: 100%;
   justify-content: flex-start;
   align-items: stretch;
   flex-wrap: nowrap;
   gap: 0;
-  margin: 14px 5px 0;
+  margin: 14px 0 0;
   border: 1px solid var(--ink);
-  outline: 1px solid var(--accent);
-  outline-offset: 4px;
+  outline: 0;
   transform-origin: 50% 50%;
 }
 .music-app[data-design="archive"] .album-panel :is(.open-album, .browse-play-album) {
