@@ -1,6 +1,13 @@
 import { logo, brandHeading } from "./brand";
+import { escapeHtml } from "./html";
+import {
+  defaultEntryWelcome,
+  normalizeEntryText,
+  type EntryTextCopy,
+} from "./entry-preferences.mjs";
 
-export function futureEntryMarkup(): string {
+export function futureEntryMarkup(copy: EntryTextCopy = {}): string {
+  const welcome = escapeHtml(normalizeEntryText(copy.welcome, defaultEntryWelcome));
   return `
     <div class="future-entry" role="dialog" aria-modal="true" aria-label="系统入场">
       <div class="future-entry-film" data-mode="boot" aria-hidden="true">
@@ -21,7 +28,7 @@ export function futureEntryMarkup(): string {
             <div class="welcome-panel"></div>
             <div class="welcome-heading">WELCOME TO</div>
             <div class="welcome-company"><strong>RHINE LAB.LLC.</strong><strong class="welcome-highlight" aria-hidden="true">RHINE LAB.LLC.</strong></div>
-            <div class="welcome-database">TERMINAL</div>
+            <div class="welcome-database">${welcome}</div>
             <div class="welcome-logo">${logo}</div>
           </div>
         </section>

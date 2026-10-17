@@ -20,6 +20,7 @@ async function main() {
  await copy(path.join(project,'dist'),path.join(appDir,'dist'));
  for(const file of ['main.cjs','preload.cjs','window-aspect.mjs','self-test.mjs','runtime-assets.json'])await copy(path.join(project,'desktop',file),path.join(appDir,'desktop',file));
  await copy(path.join(project,'src/window-aspect-model.mjs'),path.join(appDir,'src/window-aspect-model.mjs'));
+ await copy(path.join(project,'src/entry-preferences.mjs'),path.join(appDir,'src/entry-preferences.mjs'));
  await copy(path.join(project,'windows/app.ico'),path.join(appDir,'desktop/app.ico'));
  const scripts=['music-server.mjs','music-library.mjs','read-audio-metadata.mjs','album-introductions.mjs','online-sources.mjs','platform.mjs','sony-walkman.mjs','ftp-library.mjs','native-output.mjs','audio-fixtures.mjs'];
  for(const file of scripts)await copy(path.join(project,'scripts',file),path.join(appDir,'scripts',file));

@@ -7,6 +7,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { pathToFileURL } = require('node:url');
 
 if (process.versions.electron) {
   runElectronProbe().catch(error => {
@@ -273,6 +274,7 @@ async function runLauncher() {
         reduced: false,
         output: { backend: 'browser' },
         ...(futureEntryMode ? {
+          entryOnOpen: true,
           style: { design: 'rhine' },
           view: { layout: 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
         } : {}),
@@ -304,7 +306,7 @@ async function runLauncher() {
     const environment = { ...process.env, RHINE_STARTUP_PROBE_CONFIG: configPath };
     delete environment.ELECTRON_RUN_AS_NODE;
     childResult = await new Promise((resolve, reject) => {
-      const child = spawn(electronPath, [appDirectory, ...(futureEntryMode ? ['--future-entry-capture'] : [])], {
+      const child = spawn(electronPath, [appDirectory, ...((futureEntryMode || themeFollowMode) ? ['--capture-probe'] : [])], {
         cwd: projectRoot,
         env: environment,
         // Match launch-source-preview.mjs: SW_HIDE at process creation can
@@ -314,7 +316,9 @@ async function runLauncher() {
       });
       let stdout = '';
       let stderr = '';
-      const timeout = setTimeout(() => child.kill(), futureEntryMode ? 150000 : 90000);
+      // Entry covers the cinematic, text edits and both themes. Theme-follow
+      // covers palette/layout cases and reload. Keep watchdogs mode-specific.
+      const timeout = setTimeout(() => child.kill(), futureEntryMode ? 210000 : themeFollowMode ? 150000 : 90000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); });
@@ -409,7 +413,7 @@ async function runElectronProbe() {
   const { app, BrowserWindow, ipcMain, dialog } = require('electron');
   const { pathToFileURL } = require('node:url');
   app.commandLine.appendSwitch('force_high_performance_gpu');
-  const captureSchedulingOverrides = process.argv.includes('--future-entry-capture')
+  const captureSchedulingOverrides = process.argv.includes('--capture-probe') || process.argv.includes('--future-entry-capture')
     ? ['disable-backgrounding-occluded-windows', 'disable-renderer-backgrounding'] : [];
   // Chromium consumes these before app readiness, so set them before any await.
   for (const option of captureSchedulingOverrides) app.commandLine.appendSwitch(option);
@@ -648,10 +652,29 @@ async function runElectronProbe() {
       const selectMatch = source.match(/const selectPreferences=value=>\{[\s\S]*?\n\};/);
       if (!keysMatch || !selectMatch) throw new Error('Could not extract production preference whitelist and selectPreferences function.');
       const keys = new Set(new Function(`return ${keysMatch[1]};`)());
-      selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null);
+      const entryPreferencesModel = config.futureEntry
+        ? await import(pathToFileURL(path.join(config.projectRoot, 'src', 'entry-preferences.mjs')).href)
+        : null;
+      selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', 'entryPreferencesModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null, entryPreferencesModel);
       if (config.themeFollow) report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
-      if (config.futureEntry) report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
+      if (config.futureEntry) {
+        report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
+        report.productionPreferenceWhitelistHasEntryWelcome = keys.has('entryWelcome');
+        report.productionPreferenceWhitelistHasEntryIdentity = keys.has('entryIdentity');
+        const legacyPreferences = selectPreferencesForMock({ entryOnOpen: true });
+        const invalidEntryPreferences = selectPreferencesForMock({
+          entryWelcome: 'W'.repeat(2_100_000),
+          entryIdentity: 'Kristen123 Wright',
+        });
+        report.productionEntryTextDefaultsLegacyProfile =
+          legacyPreferences.entryWelcome === entryPreferencesModel.defaultEntryWelcome &&
+          legacyPreferences.entryIdentity === entryPreferencesModel.defaultEntryIdentity;
+        report.productionEntryTextInvalidValuesUseDefaults =
+          invalidEntryPreferences.entryWelcome === entryPreferencesModel.defaultEntryWelcome &&
+          invalidEntryPreferences.entryIdentity === entryPreferencesModel.defaultEntryIdentity;
+      }
     }
+    mockPreferences = selectPreferencesForMock(mockPreferences);
 
     instrumentIpcMain();
     ipcMain.on('rhine:preferences:get', event => {
@@ -673,6 +696,10 @@ async function runElectronProbe() {
           allowedFollowField: Object.hasOwn(mockPreferences, 'followSystemTheme'),
           entryOnOpen: mockPreferences.entryOnOpen,
           allowedEntryOnOpen: Object.hasOwn(mockPreferences, 'entryOnOpen'),
+          entryWelcome: mockPreferences.entryWelcome,
+          allowedEntryWelcome: Object.hasOwn(mockPreferences, 'entryWelcome'),
+          entryIdentity: mockPreferences.entryIdentity,
+          allowedEntryIdentity: Object.hasOwn(mockPreferences, 'entryIdentity'),
         });
         return { ok: true };
       } catch (error) {
@@ -912,6 +939,7 @@ async function runElectronProbe() {
         report.futureEntry = await futureEntryModule.checkFutureEntry({
           browserWindow,
           outputDirectory: config.runDirectory,
+          probeReport: report,
           getPreferences: () => structuredClone(mockPreferences),
           setPreferences: value => { mockPreferences = structuredClone(value); },
           getReadyCount: () => report.frontendReadyCount,
@@ -971,6 +999,7 @@ async function runElectronProbe() {
     };
   } catch (error) {
     report.startupOutcome = config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.failureRendererState = await captureState();
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });
   } finally {
     try { await themeFollowHarness?.detach(); } catch (error) { report.themeFollowDetachError = error.message; }

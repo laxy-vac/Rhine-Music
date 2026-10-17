@@ -14,6 +14,9 @@ export async function checkFuturePanels({ browserWindow, outputDirectory, report
     const query=document.querySelector('#online-query'),search=document.querySelector('[data-action="online-search"]'),source=document.querySelector('#online-source'),collection=document.querySelector('#online-collection');
     return {
       theme:stage?.dataset.theme??null,design:stage?.dataset.design??null,
+      graphicsPageOpen:!document.querySelector('#music-theme-page')?.hidden,
+      graphicsTitle:document.querySelector('#music-style-title')?.textContent?.trim()??null,
+      graphicsControls:!!document.querySelector('#theme-page-content aside.theme-mode-controls'),
       panel:panel?.dataset.panel??null,panelRect:rect(panel),headingRect:rect(heading),bodyRect:rect(body),headingTop:rect(heading)?.y??null,
       bodyScrollTop:body?.scrollTop??null,bodyScrollHeight:body?.scrollHeight??null,bodyClientHeight:body?.clientHeight??null,
       bodyClientWidth:body?.clientWidth??null,bodyScrollWidth:body?.scrollWidth??null,panelClientWidth:panel?.clientWidth??null,panelScrollWidth:panel?.scrollWidth??null,
@@ -46,8 +49,12 @@ export async function checkFuturePanels({ browserWindow, outputDirectory, report
     result.screenshots.push(item); return item;
   };
   const setTheme = async theme => {
-    await click(`.theme-switch button[data-theme="${theme}"]`);
+    await click('.music-topnav [data-action="theme"]');
+    await waitFor(s => s.graphicsPageOpen && s.graphicsTitle === 'GRAPHICS' && s.graphicsControls, 'GRAPHICS theme controls');
+    await click(`aside.theme-mode-controls button[data-theme="${theme}"]`);
     await waitFor(s => s.theme === theme, `Future ${theme} theme`);
+    await click('.music-topnav [data-action="theme"]');
+    await waitFor(s => !s.graphicsPageOpen, 'return from GRAPHICS to archive');
     await paint();
   };
   const openPanel = async type => {

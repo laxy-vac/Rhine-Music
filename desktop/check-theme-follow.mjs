@@ -27,6 +27,10 @@ export async function installThemeFollowProbe(browserWindow, onProgress = () => 
 
 export async function checkThemeFollow({ browserWindow, outputDirectory, probeReport, getPreferences, themeProbe }) {
   const wc = browserWindow.webContents;
+  try {
+  // Only the synthetic capture window keeps painting while occluded. The
+  // production gate's ready/restoration events are observed before this point.
+  wc.setBackgroundThrottling(false);
   const result = { ok: false, checks: {}, cases: [], screenshots: [], mediaChanges: [], layoutChecks: [] };
   const evaluate = script => wc.executeJavaScript(script, true);
   const state = () => evaluate(`(() => {
@@ -37,7 +41,9 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
       themeButtonsEnabled:!!aside&&[...aside.querySelectorAll('button[data-theme]')].every(button=>!button.disabled),
       pageBg:style.getPropertyValue('--page-bg').trim(),surface:style.getPropertyValue('--surface').trim(),ink:style.getPropertyValue('--ink').trim(),
       mql:watch?{events:watch.events,matches:watch.matches,systemDark:window.__rhineThemeFollowQuery?.matches??null}:null,
-      stylePageOpen:!document.querySelector('#music-theme-page')?.hidden,hasLayout:!!document.querySelector('#theme-page-content .design-family-layout')};
+      stylePageOpen:!document.querySelector('#music-theme-page')?.hidden,hasLayout:!!document.querySelector('#theme-page-content .design-family-layout'),
+      graphicsTitle:document.querySelector('#music-style-title')?.textContent?.trim()??null,
+      graphicsNavLabel:document.querySelector('.music-topnav [data-action="theme"]')?.textContent?.trim()??null};
   })()`);
   const waitFor = async (test, label, timeout = 7000) => {
     const until = Date.now() + timeout;
@@ -64,7 +70,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
     result.mediaChanges.push({ theme, beforeEvents: before, afterEvents: after.mql?.events, systemDark: after.mql?.systemDark });
     return after;
   };
-  const openStyle = async () => { await click('.music-topnav [data-action="theme"]'); await waitFor(s => s.stylePageOpen && s.hasLayout, 'STYLE theme controls'); await paint(); };
+  const openStyle = async () => { await click('.music-topnav [data-action="theme"]'); await waitFor(s => s.stylePageOpen && s.hasLayout && s.graphicsTitle === 'GRAPHICS', 'GRAPHICS theme controls'); await paint(); };
   const chooseDesign = async design => {
     const before = await state();
     if (before.design !== design) { await click(`.design-family-card[data-style-design="${design}"]`); await waitFor(s => s.design === design, `design ${design}`, 12000); }
@@ -119,6 +125,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
   await setSystem('night', initial.mql?.systemDark !== true);
   assert.equal((await state()).theme, 'day', 'follow-off must ignore system changes');
   await openStyle();
+  result.checks.graphicsTitleAndTopbarLabel = (await state()).graphicsTitle === 'GRAPHICS' && /GRAPHICS/i.test((await state()).graphicsNavLabel ?? '');
   const enableSaves = saves();
   await clickFollow(true);
   const enabled = await waitFor(s => s.theme === 'night' && s.savedFollow === true, 'immediate sync after enabling follow');
@@ -169,6 +176,12 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
   const narrowGeometry = await checkGeometry('narrow-window');
   await screenshot('narrow', { design: (await state()).design, theme: (await state()).theme, geometry: narrowGeometry });
 
+  // Keep the lifecycle/persistence case independent of the preceding narrow
+  // layout case, and return its WebGL surface to the original test dimensions.
+  browserWindow.setContentSize(1320, 900);
+  await pause(300);
+  await paint();
+
   const saved = getPreferences(); assert.equal(saved.theme, 'night'); assert.equal(saved.followSystemTheme, true);
   const savesBeforeReload = saves(), readyBefore = probeReport.frontendReadyCount;
   browserWindow.webContents.reload();
@@ -176,6 +189,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
   while (Date.now() < deadline && probeReport.frontendReadyCount <= readyBefore) await pause(100);
   assert.equal(probeReport.frontendReadyCount, readyBefore + 1, 'reload must deliver a second real ready message');
   assert.equal(browserWindow.webContents.getBackgroundThrottling(), true); assert.equal(browserWindow.isVisible(), true);
+  wc.setBackgroundThrottling(false);
   await themeProbe.watchCurrentDocument();
   await openStyle();
   const afterReload = await state();
@@ -194,4 +208,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
   result.summary = { cases: result.cases.length, screenshots: result.screenshots.length, readyMessages: probeReport.frontendReadyCount };
   result.ok = Object.values(result.checks).every(Boolean) && result.cases.length === 4 && result.screenshots.length === 5;
   return result;
+  } finally {
+    if (!browserWindow.isDestroyed()) wc.setBackgroundThrottling(true);
+  }
 }

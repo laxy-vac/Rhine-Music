@@ -607,6 +607,7 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
     'desktop/window-aspect.mjs',
     'src/known-issues.mjs',
     'src/window-aspect-model.mjs',
+    'src/entry-preferences.mjs',
   ];
   const appStorage = path.join(project, 'desktop', 'app-storage.cjs');
   try {

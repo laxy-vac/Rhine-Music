@@ -57,6 +57,11 @@
   visibility: visible;
 }
 
+.music-app .future-entry-film .welcome-database {
+  font-size: 36px;
+  white-space: nowrap;
+}
+
 .music-app .future-entry-skip {
   position: absolute;
   top: clamp(12px, 2.5vh, 32px);

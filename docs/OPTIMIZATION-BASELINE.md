@@ -18,6 +18,7 @@
 | 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
 | 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
 | Future MATRIX 入场 | ALBUMS/MATRIX 默认每次打开播放终端/Logo/圆环/欢迎与阵列演出后停在总览；英文跳过、昼夜、减少动态、持久化自动播放开关及手动重播按主题规范处理 |
+| Graphics 与入场个性化 | 两主题 GRAPHICS 复用原 Style 页集中图形/主题/显示；Future 欢迎文案与 ID 可改，字母/空格/24 字符边界统一校验；Punk 入场入口预留且禁用 |
 
 缓存更新、纸卡闪烁、旧顶栏横滑条、控件漏光和本轮已反馈的界面问题不再作为未完成任务保留。已结束的统一架构迁移也不再按阶段重新排期。
 
@@ -57,7 +58,7 @@
 | 基本离线检查 | `npm test` |
 | 界面类型与构建 | `node scripts/build-source-preview.mjs --interface-only` |
 | 真实前端隐藏启动/重载 | `node desktop/check-startup-entry.cjs` |
-| Future MATRIX 入场与总览交接 | `node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
+| Future 入场、文本防呆及两主题 Graphics | `node scripts/check-entry-preferences.mjs`；`node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
 | 系统跟随语义与整窗交互 | `node --experimental-strip-types --test scripts/check-music-theme-follow.mjs`；`node desktop/check-startup-entry.cjs --theme-follow` |
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |

@@ -126,7 +126,7 @@ export function setupFoobarShell(stage: HTMLElement, callbacks: Callbacks) {
     normalNav.querySelectorAll<HTMLButtonElement>("button[data-action]").forEach(button => {
       if (names[button.dataset.action!]) button.setAttribute("aria-pressed", String(button.dataset.action === current));
     });
-    q(".foobar-section").textContent = `${page === "theme" ? "STYLE" : page === "music" ? "ARCHIVE" : page.toUpperCase()} SECTION · ${stage.dataset.mode === "detail" ? "INSPECT" : "BROWSE"}`;
+    q(".foobar-section").textContent = `${page === "theme" ? "GRAPHICS" : page === "music" ? "ARCHIVE" : page.toUpperCase()} SECTION · ${stage.dataset.mode === "detail" ? "INSPECT" : "BROWSE"}`;
     q(".foobar-watermark").textContent = stage.querySelector("#genre-name")?.textContent || "UNKNOWN";
   };
   new MutationObserver(updatePage).observe(stage, { attributes: true, attributeFilter: ["data-page", "data-mode"] });

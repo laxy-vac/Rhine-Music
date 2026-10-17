@@ -12,6 +12,12 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 ## 共享唱片页
 
+### Graphics 与普通设置
+
+两主题的顶部 `GRAPHICS` 沿用原 Style 页的主题卡、Punk 配色和预览、盒体编辑与画质界面，集中管理主题、日夜与系统跟随、窗口比例、减少动态、全屏和渲染选项。旧 Settings 内的主题卡与显示动效控件不再重复，顶部日夜切换也合并到 Graphics 的模式区；这些选项继续使用原有共享偏好。
+
+普通 Settings 的“常规”保留语言和 Graphics 跳转，“交互与入场”保留终端入场与界面声音；音频、歌词、音乐库、来源和关于各自保持原职责。入场仅 Future 生效，Punk 保留设置入口并标明后续适配，当前入场控件禁用且不更改 Future 的入场偏好。
+
 ### 浏览与选择
 
 两主题共用 SHOW、LAYOUT、GROUP、SORT 和目录 query。可见布局名称为 ARRAY、MATRIX、GRID，内部稳定键分别是 <code>shelf</code>、<code>array</code>、<code>grid</code>。SHOW 为 ALBUMS/TRACKS；GROUP 为 GENRE/ARTIST/DECADE/A-Z/NONE；SORT 为 ARTIST/TITLE/YEAR/ADDED。
@@ -36,9 +42,11 @@ Archive 从 EQ、歌词、信号、主题等同窗口页面返回原唱片上下
 
 ## Future / Rhine
 
-Future 的 ALBUMS / MATRIX 入场复用 RhineLabUI 的文字、Logo、权限圆环和欢迎轨迹，随后在现有 ArchiveScene 中展开阵列并平滑落到总览；全程约 25.36 秒，不自动打开专辑详情。动画内跳过按钮固定显示 `SKIP INTRO ↗`，欢迎标识使用 `TERMINAL`，不随界面语言翻译。前端资源与首帧准备好后释放桌面显示门，再开始计时；窗口隐藏期间暂停。按钮、Enter 或 Esc 可直接跳过到总览。
+Future 的 ALBUMS / MATRIX 入场复用 RhineLabUI 的文字、Logo、权限圆环和欢迎轨迹，随后在现有 ArchiveScene 中展开阵列并平滑落到总览；全程约 25.36 秒，不自动打开专辑详情。跳过按钮固定显示 `SKIP INTRO ↗`。默认欢迎文案为 `Internal DataBase`，欢迎 ID 为 `Kristen Wright`，均保留原文、不随语言翻译。前端资源与首帧准备好后释放桌面显示门，再开始计时；窗口隐藏期间暂停。按钮、Enter 或 Esc 可直接跳过到总览。
 
-默认每次新打开窗口都播放，不记录“已看过”状态；跳过不会关闭后续自动播放。设置 → 界面与交互 → 终端入场提供“每次打开窗口时播放入场”（偏好 `entryOnOpen`，默认 true）和“重播入场”。关闭自动播放后仍可手动重播；重播退出设置并返回现有专辑总览，保留当前选择与播放，不改变开关。昼夜跟随当前全局模式，减少动态、空曲库、设置语言返回，以及其他主题/排列仍直接显示现有界面；不支持当前入场时，重播按钮禁用并解释原因，不切换 view 或主题。实现见 [future-entry.ts](../src/future-entry.ts) 与 [music-app.ts](../src/music-app.ts)。
+默认每次新打开窗口都播放，不记录“已看过”状态；跳过不会关闭后续自动播放。设置 → 交互与入场 → 终端入场提供自动播放开关（`entryOnOpen`，默认 true）、欢迎文案（`entryWelcome`）、欢迎 ID（`entryIdentity`）、恢复默认和重播。两个文本字段仅接受 ASCII 英文字母与单词间普通空格，各最多 24 字符（含空格）；键入、粘贴、输入事件和保存均有边界，首尾空格去除、连续空格合并，空值恢复默认。非法偏好值在载入/写入时回退到默认，欢迎文字转义后插入；较宽文案按实测宽度缩小字号，保持单行且不改打字时间轴。
+
+关闭自动播放后仍可手动重播；重播退出设置并返回现有专辑总览，保留当前选择与播放，不改变开关。昼夜跟随当前全局模式，减少动态、空曲库、设置语言返回，以及其他主题/排列仍直接显示现有界面；不支持当前入场时，重播按钮禁用并解释原因，不切换 view 或主题。实现见 [future-entry.ts](../src/future-entry.ts)、[entry-text-controls.ts](../src/entry-text-controls.ts) 与 [entry-preferences.mjs](../src/entry-preferences.mjs)。
 
 Future 延续现代终端与轻透玻璃，使用唱片页的page/surface/accent token；夜间保留深蓝玻璃色系。光照使用现有场景和局部屏幕效果，不宣称全局光线追踪；背景不添加墙板、隔断或无功能立体物件。
 

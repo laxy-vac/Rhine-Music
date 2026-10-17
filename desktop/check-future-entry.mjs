@@ -7,6 +7,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function checkFutureEntry({
   browserWindow,
   outputDirectory,
+  probeReport,
   getPreferences,
   setPreferences,
   sendKey,
@@ -38,6 +39,7 @@ export async function checkFutureEntry({
     '  const overlay = document.querySelector(".future-entry");',
     '  const film = document.querySelector(".future-entry-film");',
     '  const boot = film?.querySelector(".boot");',
+    '  const welcomeLine = film?.querySelector(".welcome-database");',
     '  const browse = document.querySelector("#music-browse");',
     '  const scene = document.querySelector("#three-scene");',
     '  const nav = document.querySelector(".music-topnav");',
@@ -45,10 +47,23 @@ export async function checkFutureEntry({
     '  const settings = document.querySelector("#music-settings");',
     '  const interfaceCategory = document.querySelector(".settings-category[data-settings-category=interface]");',
     '  const interfaceNav = document.querySelector("[data-settings-category-target=interface]");',
+    '  const appearanceCategory = document.querySelector(".settings-category[data-settings-category=appearance]");',
+    '  const appearanceNav = document.querySelector("[data-settings-category-target=appearance]");',
     '  const entrySettings = document.querySelector("#entry-settings");',
     '  const entryOnOpen = document.querySelector("#entry-on-open");',
     '  const entryReplay = document.querySelector("[data-action=entry-replay]");',
+    '  const entryWelcome = document.querySelector("#entry-welcome[data-entry-text=entryWelcome]");',
+    '  const entryIdentity = document.querySelector("#entry-identity[data-entry-text=entryIdentity]");',
+    '  const entryWelcomeCount = document.querySelector("[data-entry-count=entryWelcome]");',
+    '  const entryIdentityCount = document.querySelector("[data-entry-count=entryIdentity]");',
+    '  const entryTextReset = document.querySelector("[data-action=entry-text-reset]");',
+    '  const entryTextHelp = document.querySelector("#entry-text-help");',
+    '  const entryTextStatus = document.querySelector("#entry-text-status");',
     '  const entrySettingsCategory = entrySettings?.closest(".settings-category");',
+    '  const graphicsPage = document.querySelector("#music-theme-page");',
+    '  const graphicsDisplay = document.querySelector("#graphics-display-settings");',
+    '  const graphicsNav = document.querySelector(".music-topnav [data-action=theme]");',
+    '  const settingsInterfaceNav = settings?.querySelector("[data-settings-category-target=interface]");',
     '  const skipButton = document.querySelector(".future-entry-skip");',
     '  return {',
     '    theme: stage?.dataset.theme ?? null,',
@@ -78,15 +93,51 @@ export async function checkFutureEntry({
     '    settingsHidden: settings?.hidden ?? null,',
     '    interfaceCategoryHidden: interfaceCategory?.hidden ?? null,',
     '    interfaceNavCurrent: interfaceNav?.getAttribute("aria-current") === "page",',
+    '    appearanceCategoryHidden: appearanceCategory?.hidden ?? null,',
+    '    appearanceNavCurrent: appearanceNav?.getAttribute("aria-current") === "page",',
     '    entrySettingsPresent: Boolean(entrySettings),',
     '    entrySettingsCategory: entrySettingsCategory?.dataset.settingsCategory ?? null,',
-    '    entryControlsInSection: Boolean(entrySettings?.contains(entryOnOpen) && entrySettings?.contains(entryReplay)),',
+    '    entryControlsInSection: Boolean(entrySettings?.contains(entryOnOpen) && entrySettings?.contains(entryReplay) && entrySettings?.contains(entryWelcome) && entrySettings?.contains(entryIdentity) && entrySettings?.contains(entryTextReset)),',
     '    entrySettingsText: entrySettings?.textContent?.trim() ?? null,',
     '    entryOnOpenChecked: entryOnOpen?.checked ?? null,',
+    '    entryOnOpenDisabled: entryOnOpen?.disabled ?? null,',
     '    entryReplayDisabled: entryReplay?.disabled ?? null,',
+    '    entryWelcomeValue: entryWelcome?.value ?? null,',
+    '    entryIdentityValue: entryIdentity?.value ?? null,',
+    '    entryWelcomeDisabled: entryWelcome?.disabled ?? null,',
+    '    entryIdentityDisabled: entryIdentity?.disabled ?? null,',
+    '    entryWelcomeMaxLength: entryWelcome?.maxLength ?? null,',
+    '    entryIdentityMaxLength: entryIdentity?.maxLength ?? null,',
+    '    entryWelcomePattern: entryWelcome?.getAttribute("pattern") ?? null,',
+    '    entryIdentityPattern: entryIdentity?.getAttribute("pattern") ?? null,',
+    '    entryWelcomeCount: entryWelcomeCount?.textContent?.trim() ?? null,',
+    '    entryIdentityCount: entryIdentityCount?.textContent?.trim() ?? null,',
+    '    entryTextResetDisabled: entryTextReset?.disabled ?? null,',
+    '    entryTextHelp: entryTextHelp?.textContent?.trim() ?? null,',
+    '    entryTextStatus: entryTextStatus?.textContent?.trim() ?? null,',
+    '    settingsInterfaceLabel: settingsInterfaceNav?.textContent?.trim() ?? null,',
+    '    settingsHasMotionSettings: Boolean(settings?.querySelector("#motion-settings")),',
+    '    settingsHasThemeCards: Boolean(settings?.querySelector(".theme-cards, [data-theme=day], [data-theme=night]")),',
+    '    settingsHasLanguageControl: Boolean(settings?.querySelector("#ui-language")),',
+    '    settingsHasGraphicsLink: Boolean(settings?.querySelector("[data-action=theme]")),',
+    '    graphicsPageOpen: !!graphicsPage && !graphicsPage.hidden,',
+    '    graphicsTitle: document.querySelector("#music-style-title")?.textContent?.trim() ?? null,',
+    '    graphicsNavLabel: graphicsNav?.textContent?.trim() ?? null,',
+    '    graphicsHasStyleCard: Boolean(graphicsPage?.querySelector(".design-family-card")),',
+    '    graphicsHasQuality: Boolean(graphicsPage?.querySelector("#theme-quality-slot .quality-settings [data-quality]")),',
+    '    graphicsHasWindowAspect: Boolean(graphicsPage?.querySelector("[data-window-aspect]")),',
+    '    graphicsHasDisplaySettings: Boolean(graphicsDisplay),',
+    '    graphicsHasReducedMotion: Boolean(graphicsDisplay?.querySelector("#reduced-motion")),',
+    '    graphicsHasFullscreen: Boolean(graphicsDisplay?.querySelector("[data-action=fullscreen]")),',
+    '    graphicsHasThemeControls: Boolean(graphicsPage?.querySelector(".theme-mode-controls [data-theme=day]")),',
+    '    topbarHasThemeSwitcher: Boolean(document.querySelector(".theme-switch")),',
     '    skipPresent: Boolean(skipButton),',
     '    skipText: skipButton?.textContent?.trim() ?? null,',
     '    welcomeDatabase: film?.querySelector(".welcome-database")?.textContent?.trim() ?? null,',
+    '    welcomeLineWidth: welcomeLine?.clientWidth ?? 0,',
+    '    welcomeLineScrollWidth: welcomeLine?.scrollWidth ?? 0,',
+    '    welcomeLineFontSize: welcomeLine ? Number.parseFloat(getComputedStyle(welcomeLine).fontSize) || 0 : 0,',
+    '    authIdentity: film?.querySelector("#auth-message")?.textContent?.trim() ?? null,',
     '    visual: {',
     '      overlayOpacity: overlay ? getComputedStyle(overlay).opacity : null,',
     '      overlayBackground: overlay ? getComputedStyle(overlay).backgroundColor : null,',
@@ -153,11 +204,28 @@ export async function checkFutureEntry({
     detailHidden: state.detailHidden ?? null,
     settingsHidden: state.settingsHidden ?? null,
     interfaceCategoryHidden: state.interfaceCategoryHidden ?? null,
+    appearanceCategoryHidden: state.appearanceCategoryHidden ?? null,
     entrySettingsCategory: state.entrySettingsCategory ?? null,
     entryControlsInSection: state.entryControlsInSection ?? null,
     entryOnOpenChecked: state.entryOnOpenChecked ?? null,
+    entryOnOpenDisabled: state.entryOnOpenDisabled ?? null,
     entryReplayDisabled: state.entryReplayDisabled ?? null,
     entrySettingsText: state.entrySettingsText ?? null,
+    entryWelcomeValue: state.entryWelcomeValue ?? null,
+    entryIdentityValue: state.entryIdentityValue ?? null,
+    entryWelcomeDisabled: state.entryWelcomeDisabled ?? null,
+    entryIdentityDisabled: state.entryIdentityDisabled ?? null,
+    entryWelcomeCount: state.entryWelcomeCount ?? null,
+    entryIdentityCount: state.entryIdentityCount ?? null,
+    entryTextResetDisabled: state.entryTextResetDisabled ?? null,
+    entryTextHelp: state.entryTextHelp ?? null,
+    entryTextStatus: state.entryTextStatus ?? null,
+    graphicsTitle: state.graphicsTitle ?? null,
+    graphicsNavLabel: state.graphicsNavLabel ?? null,
+    graphicsPageOpen: state.graphicsPageOpen ?? null,
+    welcomeLineWidth: state.welcomeLineWidth ?? null,
+    welcomeLineScrollWidth: state.welcomeLineScrollWidth ?? null,
+    welcomeLineFontSize: state.welcomeLineFontSize ?? null,
     visual: state.visual ?? null,
   });
   const check = (name, condition, message) => {
@@ -165,6 +233,10 @@ export async function checkFutureEntry({
     assert.ok(condition, message);
   };
   const screenshot = async (name, state) => {
+    if (/graphics|settings/.test(name)) {
+      await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      await evaluate(`Promise.allSettled(document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation => animation.finished))`);
+    }
     await pause(120);
     const image = await browserWindow.capturePage();
     const file = path.join(outputDirectory, 'future-entry-' + name + '.png');
@@ -176,6 +248,11 @@ export async function checkFutureEntry({
       theme: state.theme ?? null,
       phase: state.entry?.phase ?? null,
       time: state.entry?.time ?? null,
+      welcomeDatabase: state.welcomeDatabase ?? null,
+      authIdentity: state.authIdentity ?? null,
+      welcomeLineWidth: state.welcomeLineWidth ?? null,
+      welcomeLineScrollWidth: state.welcomeLineScrollWidth ?? null,
+      welcomeLineFontSize: state.welcomeLineFontSize ?? null,
       visual: state.visual ?? null,
       entryOnOpenChecked: state.entryOnOpenChecked ?? null,
       entryReplayDisabled: state.entryReplayDisabled ?? null,
@@ -192,7 +269,10 @@ export async function checkFutureEntry({
       value.entrySettingsPresent &&
       value.entrySettingsCategory === 'interface' &&
       value.entryControlsInSection &&
-      value.entryOnOpenChecked !== null,
+      value.entryOnOpenChecked !== null &&
+      value.entryWelcomeValue !== null &&
+      value.entryIdentityValue !== null &&
+      value.entryTextStatus !== null,
     label + ' interface entry settings');
     result.states.push(compactState(label + '-settings', state));
     return state;
@@ -215,6 +295,115 @@ export async function checkFutureEntry({
       label + ': entryOnOpen must survive the production preference whitelist');
     result.states.push(compactState(label + '-saved', saved));
     return saved;
+  };
+  const setEntryTextFromUI = async (welcome, identity, label) => {
+    await evaluate(`(() => {
+      const welcome = document.querySelector('#entry-welcome[data-entry-text="entryWelcome"]');
+      const identity = document.querySelector('#entry-identity[data-entry-text="entryIdentity"]');
+      if (!welcome || !identity) throw new Error('Entry text inputs are missing');
+      welcome.value = ${JSON.stringify(welcome)};
+      identity.value = ${JSON.stringify(identity)};
+      welcome.dispatchEvent(new Event('input', { bubbles: true }));
+      identity.dispatchEvent(new Event('input', { bubbles: true }));
+      welcome.dispatchEvent(new Event('change', { bubbles: true }));
+      identity.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    const saved = await waitFor(value =>
+      getPreferences()?.entryWelcome === welcome &&
+      getPreferences()?.entryIdentity === identity &&
+      value.entryWelcomeValue === welcome &&
+      value.entryIdentityValue === identity,
+    label + ' entry text persisted', 8000);
+    check(label + ' preserves valid text and case',
+      getPreferences().entryWelcome === welcome && getPreferences().entryIdentity === identity,
+      label + ': valid entry text should save without changing case');
+    result.states.push(compactState(label + '-saved', saved));
+    return saved;
+  };
+  const assertEntryTextDefaults = async label => {
+    const state = await waitFor(value =>
+      getPreferences()?.entryWelcome === 'Internal DataBase' &&
+      getPreferences()?.entryIdentity === 'Kristen Wright' &&
+      value.entryWelcomeValue === 'Internal DataBase' &&
+      value.entryIdentityValue === 'Kristen Wright',
+    label + ' entry text defaults', 8000);
+    check(label + ' restores both copy defaults',
+      state.entryWelcomeValue === 'Internal DataBase' && state.entryIdentityValue === 'Kristen Wright',
+      label + ': welcome and identity must both use their default text');
+    result.states.push(compactState(label + '-defaults', state));
+    return state;
+  };
+  const exerciseEntryTextValidation = async label => {
+    const before = getPreferences();
+    const savesBefore = probeReport?.preferenceSaves?.length ?? 0;
+    const result = await evaluate(`(() => {
+      const welcome = document.querySelector('#entry-welcome[data-entry-text="entryWelcome"]');
+      const identity = document.querySelector('#entry-identity[data-entry-text="entryIdentity"]');
+      if (!welcome || !identity) throw new Error('Entry text inputs are missing');
+      const beforeInput = new InputEvent('beforeinput', { inputType: 'insertText', data: '中文123<script>\\n', bubbles: true, cancelable: true });
+      welcome.dispatchEvent(beforeInput);
+      const identityBeforeInput = new InputEvent('beforeinput', { inputType: 'insertText', data: 'ID123\\n', bubbles: true, cancelable: true });
+      identity.dispatchEvent(identityBeforeInput);
+      const transfer = new DataTransfer();
+      transfer.setData('text/plain', '中文123<script>\\n');
+      const paste = new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true });
+      welcome.dispatchEvent(paste);
+      const identityTransfer = new DataTransfer();
+      identityTransfer.setData('text/plain', 'ID123\\n');
+      const identityPaste = new ClipboardEvent('paste', { clipboardData: identityTransfer, bubbles: true, cancelable: true });
+      identity.dispatchEvent(identityPaste);
+      welcome.value = 'Private 中文123<script>';
+      welcome.dispatchEvent(new Event('input', { bubbles: true }));
+      identity.value = 'Ada123 Lovelace\\n';
+      identity.dispatchEvent(new Event('input', { bubbles: true }));
+      const identityAfterInput = identity.value;
+      identity.value = 'W'.repeat(25);
+      identity.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        beforeInputPrevented: beforeInput.defaultPrevented,
+        identityBeforeInputPrevented: identityBeforeInput.defaultPrevented,
+        pastePrevented: paste.defaultPrevented,
+        identityPastePrevented: identityPaste.defaultPrevented,
+        welcomeAfterInput: welcome.value,
+        identityAfterInput,
+        identityAfterLongInput: identity.value,
+      };
+    })()`);
+    check(label + ' beforeinput and paste reject invalid characters',
+      result.beforeInputPrevented && result.identityBeforeInputPrevented && result.pastePrevented && result.identityPastePrevented,
+      label + ': beforeinput and paste must reject non-ASCII letters, digits, markup, and line breaks');
+    check(label + ' input fallback removes invalid characters',
+      result.welcomeAfterInput === 'Private script' &&
+        result.identityAfterInput === 'Ada Lovelace' &&
+        result.identityAfterLongInput === 'W'.repeat(24),
+      label + ': input fallback should retain ASCII letters/spaces and limit values to 24 characters');
+    await evaluate(`(() => {
+      const welcome = document.querySelector('#entry-welcome[data-entry-text="entryWelcome"]');
+      const identity = document.querySelector('#entry-identity[data-entry-text="entryIdentity"]');
+      welcome.value = '<script>alert(1)</script>';
+      identity.value = 'Kristen123 Wright';
+      welcome.dispatchEvent(new Event('change', { bubbles: true }));
+      identity.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await pause(250);
+    check(label + ' invalid direct change is not saved',
+      getPreferences()?.entryWelcome === before.entryWelcome &&
+        getPreferences()?.entryIdentity === before.entryIdentity &&
+        (probeReport?.preferenceSaves?.length ?? 0) === savesBefore,
+      label + ': directly dispatched invalid change events must not alter or resave preferences');
+    return result;
+  };
+  const waitForAuthIdentity = async (identity, label) => waitFor(state =>
+    state.entry?.active === true && state.entry.time >= 8.6 && state.authIdentity?.includes(identity),
+  label + ' full identity text', 10000);
+  const openGraphics = async label => {
+    await click('.music-topnav [data-action="theme"]');
+    return waitFor(state => state.graphicsPageOpen && state.graphicsTitle === 'GRAPHICS', label + ' GRAPHICS page');
+  };
+  const closeGraphics = async label => {
+    await click('.music-topnav [data-action="theme"]');
+    await waitFor(state => !state.graphicsPageOpen, label + ' return to music');
   };
   const assertArchiveOverview = async label => {
     const state = await waitFor(value =>
@@ -253,13 +442,25 @@ export async function checkFutureEntry({
   };
 
   const initialPreferences = getPreferences();
+  check('production preference whitelist retains entry text',
+    probeReport?.productionPreferenceWhitelistHasEntryWelcome === true &&
+      probeReport?.productionPreferenceWhitelistHasEntryIdentity === true,
+    'The production preferences filter must retain entryWelcome and entryIdentity');
+  check('production selector defaults a legacy profile',
+    probeReport?.productionEntryTextDefaultsLegacyProfile === true,
+    'A profile without entry text must receive both safe defaults');
+  check('production selector rejects invalid and overlong text',
+    probeReport?.productionEntryTextInvalidValuesUseDefaults === true,
+    'Invalid markup and digits must fall back before preferences are saved');
   check('explicit Future matrix albums preferences',
     initialPreferences?.style?.design === 'rhine' &&
       initialPreferences?.view?.layout === 'array' &&
       initialPreferences?.view?.show === 'albums' &&
       initialPreferences?.reduced === false &&
+      initialPreferences?.entryWelcome === 'Internal DataBase' &&
+      initialPreferences?.entryIdentity === 'Kristen Wright' &&
       initialPreferences?.entryOnOpen !== false,
-    'Future entry probe must start with design=rhine, layout=array, show=albums, reduced=false, with automatic entry enabled by default');
+    'Future entry probe must start with default welcome/identity and automatic entry enabled for the Future album matrix');
   const firstReady = await waitFor(state =>
     readyCount() >= 1 && state.stats?.loaded === true && state.entry?.active === true,
   'entry remains active after first ready', 8000);
@@ -268,6 +469,9 @@ export async function checkFutureEntry({
   check('skip label remains fixed English',
     firstReady.skipText === 'SKIP INTRO ↗',
     'The Future entry skip control must use its fixed English label');
+  check('default welcome copy is rendered',
+    firstReady.welcomeDatabase === 'Internal DataBase',
+    'The Future welcome line must default to Internal DataBase');
   check('Future matrix scene selected',
     firstReady.design === 'rhine' && firstReady.stats.displayLayout?.effective === 'array',
     'The initial scene must use the Future matrix layout');
@@ -277,14 +481,33 @@ export async function checkFutureEntry({
   result.states.push(compactState('first-ready', firstReady));
 
   const phaseNames = ['logo', 'auth', 'scan', 'welcome', 'array', 'settle'];
-  const captureAt = { logo: 5.0, auth: 8.0, scan: 15.4, welcome: 20.4, array: 24.2, settle: 26.1 };
+  const captureAt = { logo: 5.0, auth: 8.6, scan: 15.4, welcome: 20.4, array: 24.2, settle: 26.1 };
   const capturedPhases = new Set();
   let lastTimelineRecord = 0;
   let handoffBefore;
   let timelineEnded = false;
+  let previousTimelineEntryTime;
+  let maxObservedStepSeconds = 0;
+  let largestObservedStepSeconds = 0;
+  let oversizedTimelineStepCount = 0;
+  let nonMonotonicTimelineStepCount = 0;
   const timelineDeadline = Date.now() + 32000;
   while (Date.now() < timelineDeadline) {
     const state = await snapshot();
+    const currentEntryTime = Number(state.entry?.time);
+    if (Number.isFinite(currentEntryTime)) {
+      if (previousTimelineEntryTime !== undefined) {
+        const step = currentEntryTime - previousTimelineEntryTime;
+        if (step < 0) {
+          nonMonotonicTimelineStepCount++;
+        } else {
+          largestObservedStepSeconds = Math.max(largestObservedStepSeconds, step);
+          if (step > 2) oversizedTimelineStepCount++;
+          else maxObservedStepSeconds = Math.max(maxObservedStepSeconds, step);
+        }
+      }
+      previousTimelineEntryTime = currentEntryTime;
+    }
     if (state.entry?.active !== true) {
       timelineEnded = true;
       break;
@@ -306,8 +529,12 @@ export async function checkFutureEntry({
         state.visual?.bootOpacity === '1' && state.visual?.bootVisibility === 'visible',
         phase + ': boot layer must remain visible inside the isolated overlay');
       if (phase === 'welcome') {
-        check('welcome identifies the TERMINAL', state.welcomeDatabase === 'TERMINAL',
-          'The welcome screen must say TERMINAL');
+        check('welcome retains the default database line', state.welcomeDatabase === 'Internal DataBase',
+          'The welcome screen must show the selected database label');
+      }
+      if (phase === 'auth') {
+        check('default auth identity is complete', state.authIdentity?.includes('Kristen Wright'),
+          'The auth line must complete the default Kristen Wright identity within its existing frame range');
       }
       check(phase + ' SVG surfaces retain their film dimensions',
         state.visual.logoWidth > 100 && state.visual.scanWidth > 500,
@@ -351,10 +578,23 @@ export async function checkFutureEntry({
   };
   result.summary.handoffDelta = handoffDelta;
   const naturalDurationSeconds = finalOverview.entry.time - 1.76;
+  const nominalDurationSeconds = 25.36;
+  const durationOverrunSeconds = naturalDurationSeconds - nominalDurationSeconds;
+  const allowedDurationOverrunSeconds = Math.max(0.2, maxObservedStepSeconds + 0.05);
   result.summary.naturalDurationSeconds = naturalDurationSeconds;
-  check('natural duration matches the 25.36 second entry',
-    Math.abs(naturalDurationSeconds - 25.36) < 0.2,
-    'Natural entry elapsed ' + naturalDurationSeconds.toFixed(3) + ' seconds from first ready; expected about 25.36');
+  result.summary.nominalDurationSeconds = nominalDurationSeconds;
+  result.summary.observedStepSeconds = maxObservedStepSeconds;
+  result.summary.largestObservedStepSeconds = largestObservedStepSeconds;
+  result.summary.oversizedTimelineStepCount = oversizedTimelineStepCount;
+  result.summary.nonMonotonicTimelineStepCount = nonMonotonicTimelineStepCount;
+  result.summary.durationOverrunSeconds = durationOverrunSeconds;
+  check('timeline clock steps remain within 2 seconds',
+    oversizedTimelineStepCount === 0 && nonMonotonicTimelineStepCount === 0,
+    'Timeline observed ' + oversizedTimelineStepCount + ' steps over 2s and ' + nonMonotonicTimelineStepCount + ' backwards steps; largest observed step was ' + largestObservedStepSeconds.toFixed(3) + 's');
+  check('natural duration matches the nominal duration plus observed frame step',
+    naturalDurationSeconds >= nominalDurationSeconds &&
+      naturalDurationSeconds <= nominalDurationSeconds + allowedDurationOverrunSeconds,
+    'Natural entry elapsed ' + naturalDurationSeconds.toFixed(3) + 's; nominal ' + nominalDurationSeconds.toFixed(3) + 's, maximum normal step ' + maxObservedStepSeconds.toFixed(3) + 's, allowed overrun ' + allowedDurationOverrunSeconds.toFixed(3) + 's');
   check('camera position is continuous', handoffDelta.cameraPosition < 0.1,
     'Camera position jumped across the intro handoff: ' + JSON.stringify(handoffDelta));
   check('camera aim is continuous', handoffDelta.cameraAim < 0.05,
@@ -403,17 +643,55 @@ export async function checkFutureEntry({
   check('manual replay remains available while auto entry is off',
     manualSettings.entryOnOpenChecked === false && manualSettings.entryReplayDisabled === false,
     'Manual replay must remain enabled when automatic entry is disabled');
+  check('entry text controls have safe defaults and 24 character limits',
+    manualSettings.entryWelcomeValue === 'Internal DataBase' &&
+      manualSettings.entryIdentityValue === 'Kristen Wright' &&
+      manualSettings.entryWelcomeMaxLength === 24 &&
+      manualSettings.entryIdentityMaxLength === 24,
+    'The interface settings must expose the default welcome and identity with 24 character limits');
+  check('interface settings retain the interaction and entry category',
+    /interaction.*entr(?:y|ance)|交互.*入场/i.test(manualSettings.settingsInterfaceLabel ?? ''),
+    'The Settings category should remain interface and display the new interaction and entry label');
+  check('entry text controls advertise ASCII words and spaces',
+    /A-Z/.test(manualSettings.entryWelcomePattern ?? '') &&
+      /a-z/.test(manualSettings.entryWelcomePattern ?? '') &&
+      /A-Z/.test(manualSettings.entryIdentityPattern ?? '') &&
+      /a-z/.test(manualSettings.entryIdentityPattern ?? '') &&
+      /letter|字母/i.test(manualSettings.entrySettingsText ?? '') &&
+      /space|空格/i.test(manualSettings.entrySettingsText ?? '') &&
+      /24/.test(manualSettings.entrySettingsText ?? ''),
+    'Entry text settings must describe the English letter/word-space restriction and 24 character limit');
+  check('entry copy counters and status are present',
+    /17\s*\/\s*24/.test(manualSettings.entryWelcomeCount ?? '') &&
+      /14\s*\/\s*24/.test(manualSettings.entryIdentityCount ?? '') &&
+      /letter|字母/i.test(manualSettings.entryTextHelp ?? '') &&
+      /space|空格/i.test(manualSettings.entryTextHelp ?? '') &&
+      /24/.test(manualSettings.entryTextHelp ?? '') &&
+      manualSettings.entryTextStatus !== null &&
+      manualSettings.entryTextResetDisabled === false,
+    'The entry settings must show character counters, a status area and an enabled reset control');
+  await exerciseEntryTextValidation('entry text input validation');
+  const customSettings = await setEntryTextFromUI('Private Archive', 'Ada Lovelace', 'custom entry copy');
+  check('custom entry copy updates counters',
+    /15\s*\/\s*24/.test(customSettings.entryWelcomeCount ?? '') &&
+      /12\s*\/\s*24/.test(customSettings.entryIdentityCount ?? ''),
+    'Counters should reflect the saved custom values including spaces');
   // The settings page and its View Transition have separate animation clocks.
   // Inspect the settled control panel rather than the outgoing archive snapshot.
   await pause(650);
-  await screenshot('settings-entry-control-auto-off', manualSettings);
+  await screenshot('settings-entry-control-auto-off', customSettings);
   await click('[data-action="entry-replay"]');
   const manualReplay = await waitFor(state =>
-    state.entry?.active === true && state.overlayPresent && state.settingsHidden === true,
+    state.entry?.active === true && state.overlayPresent && state.settingsHidden === true &&
+      state.welcomeDatabase === 'Private Archive',
   'manual replay starts from the settings page', 8000);
   check('manual replay uses the Future matrix',
     manualReplay.design === 'rhine' && manualReplay.stats.displayLayout?.effective === 'array',
     'Manual replay must use the Future matrix composition');
+  const manualIdentity = await waitForAuthIdentity('Ada Lovelace', 'manual replay custom identity');
+  check('manual replay uses the saved identity',
+    manualIdentity.authIdentity.includes('Ada Lovelace'),
+    'The auth line must show the saved identity after typing completes');
   sendKey('ESC');
   await assertArchiveOverview('manual replay Escape skip');
   check('manual replay does not re-enable auto entry',
@@ -428,8 +706,55 @@ export async function checkFutureEntry({
   check('automatic entry on plays on the next open',
     automaticOnReady.entry.active === true && automaticOnReady.overlayPresent,
     'Reloading with entryOnOpen=true must start the Future entry');
+  check('custom copy survives renderer reload',
+    automaticOnReady.welcomeDatabase === 'Private Archive' &&
+      getPreferences().entryWelcome === 'Private Archive' &&
+      getPreferences().entryIdentity === 'Ada Lovelace',
+    'Saved entry text must survive a renderer reload and populate the next entry');
+  const automaticOnIdentity = await waitForAuthIdentity('Ada Lovelace', 'automatic replay custom identity');
+  check('automatic replay uses the saved identity',
+    automaticOnIdentity.authIdentity.includes('Ada Lovelace'),
+    'The automatic auth line must show the saved identity after typing completes');
   sendKey('ENTER');
   await assertArchiveOverview('automatic entry enabled Enter skip');
+
+  await openInterfaceSettings('empty entry text fallback');
+  await evaluate(`(() => {
+    const welcome = document.querySelector('#entry-welcome[data-entry-text="entryWelcome"]');
+    welcome.value = '';
+    welcome.dispatchEvent(new Event('input', { bubbles: true }));
+    welcome.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await waitFor(state => getPreferences().entryWelcome === 'Internal DataBase' && state.entryWelcomeValue === 'Internal DataBase',
+    'empty welcome change restores its default');
+  await click('[data-action="entry-text-reset"]');
+  await assertEntryTextDefaults('entry text reset');
+  await setEntryTextFromUI('W'.repeat(24), 'Ada Lovelace', '24 character welcome');
+  await click('[data-action="entry-replay"]');
+  const wideWelcomeReplay = await waitFor(state =>
+    state.entry?.active === true && state.welcomeDatabase === 'W'.repeat(24) &&
+      state.welcomeLineWidth > 0 &&
+      state.welcomeLineScrollWidth <= state.welcomeLineWidth + 1 &&
+      state.welcomeLineFontSize >= 18 && state.welcomeLineFontSize < 36,
+  '24 wide letters fit the welcome line', 8000);
+  check('24 wide letters fit the 480px welcome line',
+    wideWelcomeReplay.welcomeLineScrollWidth <= wideWelcomeReplay.welcomeLineWidth + 1 &&
+      wideWelcomeReplay.welcomeLineFontSize >= 18 && wideWelcomeReplay.welcomeLineFontSize < 36,
+    'The welcome text should shrink once to a readable size without overflowing its 480px line');
+  const wideWelcomeVisible = await waitFor(state =>
+    state.entry?.active === true && state.entry.phase === 'welcome' && state.entry.time >= 20.4 &&
+      state.welcomeDatabase === 'W'.repeat(24) &&
+      state.welcomeLineScrollWidth <= state.welcomeLineWidth + 1 &&
+      state.welcomeLineFontSize >= 18 && state.welcomeLineFontSize < 36,
+  '24 wide letters visible in the welcome phase', 25000);
+  await screenshot('welcome-24-wide-letters', wideWelcomeVisible);
+  await click('.future-entry-skip');
+  await assertArchiveOverview('24 character welcome skip');
+  await openInterfaceSettings('restore default copy');
+  await click('[data-action="entry-text-reset"]');
+  await assertEntryTextDefaults('restore default copy');
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close text reset settings');
 
   const repeatedReady = await reloadAndWait('automatic entry repeats', true);
   check('automatic entry repeats on every open',
@@ -477,13 +802,128 @@ export async function checkFutureEntry({
   await waitFor(state => state.settingsHidden === true, 'close grid layout settings');
   await assertArchiveOverview('grid settings dismissed');
 
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === false, 'general settings page');
+  await click('[data-action="settings-category"][data-settings-category-target="appearance"]');
+  const generalSettings = await waitFor(state => state.settingsHidden === false &&
+    state.appearanceCategoryHidden === false && state.appearanceNavCurrent && state.settingsHasLanguageControl,
+    'general settings page');
+  check('settings page keeps language and Graphics link only',
+    generalSettings.settingsHasLanguageControl &&
+      generalSettings.settingsHasGraphicsLink &&
+      !generalSettings.settingsHasThemeCards &&
+      !generalSettings.settingsHasMotionSettings,
+    'Settings should keep language and the Graphics link without theme cards or motion controls');
+  await screenshot('settings-general-graphics-link', generalSettings);
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close general settings');
+
+  await setPreferences({
+    ...getPreferences(),
+    entryOnOpen: false,
+    reduced: false,
+    style: { ...getPreferences().style, design: 'rhine' },
+    view: { ...getPreferences().view, layout: 'array', show: 'albums' },
+  });
+  await reloadAndWait('Future Graphics route', false);
+  await assertArchiveOverview('Future Graphics route');
+  await openGraphics('Future Graphics route');
+  const futureGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsHasDisplaySettings,
+    'Future Graphics controls');
+  check('Future Graphics title and topbar label',
+    futureGraphics.graphicsTitle === 'GRAPHICS' && /GRAPHICS/i.test(futureGraphics.graphicsNavLabel ?? ''),
+    'Both the Graphics page title and topbar label must read GRAPHICS');
+  check('Future Graphics retains style, quality, aspect and display controls',
+    futureGraphics.graphicsHasStyleCard &&
+      futureGraphics.graphicsHasQuality &&
+      futureGraphics.graphicsHasWindowAspect &&
+      futureGraphics.graphicsHasReducedMotion &&
+      futureGraphics.graphicsHasFullscreen &&
+      futureGraphics.graphicsHasThemeControls &&
+      !futureGraphics.topbarHasThemeSwitcher,
+    'Graphics must retain theme cards, render quality, window aspect, reduced motion and fullscreen controls');
+  await screenshot('future-graphics', futureGraphics);
+  await closeGraphics('Future Graphics route');
+
+  await setPreferences({
+    ...getPreferences(),
+    entryOnOpen: true,
+    style: { ...getPreferences().style, design: 'archive' },
+    view: { ...getPreferences().view, layout: 'grid', show: 'albums' },
+  });
+  const punkReady = await reloadAndWait('Punk entry unsupported', false);
+  check('Punk has no Future entry overlay',
+    punkReady.design === 'archive' && punkReady.entry?.active === false && !punkReady.overlayPresent,
+    'Punk must not show the Future entry');
+  const punkSettings = await openInterfaceSettings('Punk entry settings');
+  check('Punk keeps a disabled entry settings stub',
+    punkSettings.entrySettingsPresent &&
+      punkSettings.entryControlsInSection &&
+      punkSettings.entryOnOpenDisabled === true &&
+      punkSettings.entryReplayDisabled === true &&
+      punkSettings.entryWelcomeDisabled === true &&
+      punkSettings.entryIdentityDisabled === true &&
+      punkSettings.entryTextResetDisabled === true &&
+      /later|future|后续适配/i.test(punkSettings.entrySettingsText ?? ''),
+    'Punk should retain the entry settings section with disabled controls and a future adaptation note');
+  const punkPrefsBeforeForgery = getPreferences();
+  const punkSavesBeforeForgery = probeReport?.preferenceSaves?.length ?? 0;
+  await evaluate(`(() => {
+    const automatic = document.querySelector('#entry-on-open');
+    const welcome = document.querySelector('#entry-welcome[data-entry-text="entryWelcome"]');
+    const identity = document.querySelector('#entry-identity[data-entry-text="entryIdentity"]');
+    automatic.checked = !automatic.checked;
+    welcome.value = 'Changed Copy';
+    identity.value = 'Changed Identity';
+    automatic.dispatchEvent(new Event('change', { bubbles: true }));
+    welcome.dispatchEvent(new Event('change', { bubbles: true }));
+    identity.dispatchEvent(new Event('change', { bubbles: true }));
+    document.querySelector('[data-action="entry-text-reset"]')?.click();
+    document.querySelector('[data-action="entry-replay"]')?.click();
+  })()`);
+  await pause(250);
+  check('forged Punk settings changes do not alter Future preferences',
+    getPreferences().entryOnOpen === punkPrefsBeforeForgery.entryOnOpen &&
+      getPreferences().entryWelcome === punkPrefsBeforeForgery.entryWelcome &&
+      getPreferences().entryIdentity === punkPrefsBeforeForgery.entryIdentity &&
+      (probeReport?.preferenceSaves?.length ?? 0) === punkSavesBeforeForgery,
+    'Synthetic change events on disabled Punk controls must not write Future entry preferences');
+  check('Punk replay remains absent',
+    !(await snapshot()).overlayPresent,
+    'Punk must not create the Future entry overlay from disabled controls');
+  await screenshot('punk-entry-settings-disabled', await snapshot());
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close Punk entry settings');
+  await openGraphics('Punk Graphics route');
+  const punkGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsHasDisplaySettings,
+    'Punk Graphics controls');
+  check('Punk Graphics title and display controls',
+    punkGraphics.design === 'archive' &&
+      punkGraphics.graphicsTitle === 'GRAPHICS' &&
+      /GRAPHICS/i.test(punkGraphics.graphicsNavLabel ?? '') &&
+      punkGraphics.graphicsHasQuality &&
+      punkGraphics.graphicsHasWindowAspect &&
+      punkGraphics.graphicsHasReducedMotion &&
+      punkGraphics.graphicsHasFullscreen &&
+      punkGraphics.graphicsHasThemeControls,
+    'Punk Graphics must keep the shared style, render quality, window aspect and display controls');
+  await screenshot('punk-graphics', punkGraphics);
+  await closeGraphics('Punk Graphics route');
+
   result.summary = {
+    nominalDurationSeconds,
     naturalDurationSeconds,
+    durationOverrunSeconds,
+    observedStepSeconds: maxObservedStepSeconds,
+    largestObservedStepSeconds,
+    oversizedTimelineStepCount,
+    nonMonotonicTimelineStepCount,
     capturedPhases: Array.from(capturedPhases),
     screenshotCount: result.screenshots.length,
     handoffDelta,
-    finalTheme: gridOverview.theme,
-    finalLayout: gridOverview.stats.displayLayout?.effective ?? null,
+    finalTheme: punkGraphics.theme,
+    finalLayout: punkGraphics.stats?.displayLayout?.effective ?? null,
+    finalDesign: punkGraphics.design,
     readyMessages: readyCount(),
   };
   result.ok = Object.values(result.assertions).every(Boolean);

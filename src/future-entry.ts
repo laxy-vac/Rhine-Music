@@ -1,6 +1,12 @@
 import { BootSequence } from "./boot";
 import { progress, smooth } from "./boot-motion";
 import { futureEntryMarkup } from "./future-entry-markup";
+import {
+  defaultEntryIdentity,
+  defaultEntryWelcome,
+  normalizeEntryText,
+  type EntryTextCopy,
+} from "./entry-preferences.mjs";
 import "./future-entry.css";
 
 // The reference film starts at PV 6.76 s (app time 1.76 s). Stop before
@@ -25,20 +31,29 @@ export class FutureEntry {
   private time = futureEntryStart;
   active = true;
 
-  constructor(private stage: HTMLElement, private finish: (skipped: boolean, ms: number) => void) {
+  constructor(
+    private stage: HTMLElement,
+    private finish: (skipped: boolean, ms: number) => void,
+    copy: EntryTextCopy = {},
+  ) {
+    const welcome = normalizeEntryText(copy.welcome, defaultEntryWelcome);
+    const identity = normalizeEntryText(copy.identity, defaultEntryIdentity);
     this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.siblings = Array.from(stage.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
       .map(node => ({ node, inert: node.inert }));
     for (const { node } of this.siblings) node.inert = true;
-    stage.insertAdjacentHTML("beforeend", futureEntryMarkup());
+    stage.insertAdjacentHTML("beforeend", futureEntryMarkup({ welcome, identity }));
     this.overlay = stage.querySelector<HTMLElement>(".future-entry")!;
     this.film = this.overlay.querySelector<HTMLElement>(".future-entry-film")!;
-    this.sequence = new BootSequence(this.film);
+    this.sequence = new BootSequence(this.film, { identity });
     stage.dataset.futureEntry = "access";
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(stage);
     this.resize();
     this.render();
+    void document.fonts.ready.then(() => {
+      if (this.active && this.overlay.isConnected) this.fitWelcomeText();
+    });
     const button = this.overlay.querySelector<HTMLButtonElement>(".future-entry-skip")!;
     button.addEventListener("click", event => {
       event.stopPropagation();
@@ -100,6 +115,34 @@ export class FutureEntry {
   private resize() {
     const scale = Math.min(this.stage.clientWidth / 1920, this.stage.clientHeight / 1080);
     this.overlay.style.setProperty("--future-entry-scale", String(scale));
+  }
+
+  private fitWelcomeText() {
+    const element = this.film.querySelector<HTMLElement>(".welcome-database");
+    if (!element) return;
+    const style = getComputedStyle(element);
+    const baseSize = Number.parseFloat(style.fontSize) || 36;
+    const minSize = 18;
+    const width = Math.max(1, (element.clientWidth || 480) - 12);
+    const text = element.textContent ?? "";
+    if (!text) return;
+    const ink = document.createElement("span");
+    ink.textContent = text;
+    ink.style.cssText = "display:inline-block;font:inherit;letter-spacing:inherit;white-space:nowrap";
+    element.replaceChildren(ink);
+    // Measure the actual font/layout once after fonts are ready. Canvas metrics
+    // can differ from the displayed glyphs and tracking on Windows.
+    let fontSize = baseSize;
+    for (let pass = 0; pass < 3 && ink.offsetWidth > width; pass++) {
+      const next = Math.max(minSize, fontSize * width / ink.offsetWidth);
+      if (Math.abs(next - fontSize) < .01) break;
+      fontSize = next;
+      element.style.fontSize = `${fontSize}px`;
+    }
+    if (ink.offsetWidth > width && text.length > 1) {
+      const spacing = Number.parseFloat(style.letterSpacing) || 0;
+      element.style.letterSpacing = `${Math.max(-1, spacing - (ink.offsetWidth - width) / (text.length - 1) - .05)}px`;
+    }
   }
 
   private render() {

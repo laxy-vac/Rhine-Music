@@ -69,7 +69,6 @@
   .music-app[data-design="archive"] .music-topnav > button { padding-inline: 4px; }
 }
 .music-app[data-design="archive"][data-layout="portrait"] .music-topnav { grid-template-columns: repeat(7, 28px) minmax(0, 1fr); }
-.music-app[data-design="archive"][data-layout="portrait"] .theme-switch { grid-row: 2; grid-column: 1 / span 4; }
 .music-app[data-design="archive"][data-layout="portrait"] .music-topnav > [data-action="settings"] { grid-row: 2; grid-column: 5; }
 .music-app[data-design="archive"][data-layout="portrait"] .music-topnav .minimal-transport { grid-row: 2; grid-column: 6 / -1; }
 
@@ -1035,6 +1034,59 @@
 }
 
 .style-switch-row input[role="switch"]:checked::after { transform: translateX(17px); }
+
+.music-style-page .graphics-display-settings .style-section-heading {
+  margin-bottom: 10px;
+}
+
+.music-style-page .graphics-display-settings .style-setting-row {
+  margin: 0;
+  border-top-color: var(--style-rule);
+}
+
+.music-style-page .graphics-display-settings .style-setting-row > span {
+  font-size: 11px;
+}
+
+.music-style-page .graphics-display-settings .style-setting-row > span small {
+  font-size: 9px;
+}
+
+.music-style-page .graphics-display-settings .text-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+
+.music-style-page .graphics-display-settings .text-button:hover {
+  color: var(--ink);
+}
+
+.music-app[data-design="archive"] #music-theme-page .graphics-display-settings .style-switch-row input[role="switch"] {
+  border-color: var(--line);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] #music-theme-page .graphics-display-settings .style-switch-row input[role="switch"]::after {
+  border-radius: 0;
+  background: var(--panel-hi, var(--page-bg));
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"] #music-theme-page .graphics-display-settings .style-switch-row input[role="switch"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
 
 .style-integrations {
   display: grid;

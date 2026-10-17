@@ -491,8 +491,8 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", follo
   return `<section class="music-style-page foobar-style-page" aria-labelledby="music-style-title">
     <header class="music-style-heading foobar-style-heading">
       <div class="foobar-style-heading-copy">
-        <small class="foobar-style-kicker"><i></i>STYLE&nbsp; · &nbsp;05</small>
-        <h1 id="music-style-title">STYLE</h1>
+        <small class="foobar-style-kicker"><i></i>GRAPHICS&nbsp; · &nbsp;05</small>
+        <h1 id="music-style-title">GRAPHICS</h1>
         <p>${escapeHtml(t("配色与显示设置实时生效。", "COLOUR SCHEMES AND DISPLAY SETTINGS APPLY LIVE."))}</p>
       </div>
       <div class="foobar-style-heading-tools">
@@ -508,7 +508,7 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", follo
           <div class="style-scheme-grid foobar-scheme-grid">${SCHEMES.map((scheme) => schemeCardMarkup(scheme, style)).join("")}</div>
         </section>
         <section class="foobar-style-display" aria-labelledby="style-display-heading">
-          <div class="foobar-style-section-heading"><div><small>02&nbsp; / &nbsp;DISPLAY</small><h2 id="style-display-heading">${escapeHtml(t("显示设置", "DISPLAY"))}</h2></div><span>${escapeHtml(t("foobar 原版选项", "FOOBAR STYLE OPTIONS"))}</span></div>
+          <div class="foobar-style-section-heading"><div><small>02&nbsp; / &nbsp;DISPLAY</small><h2 id="style-display-heading">${escapeHtml(t("显示设置", "DISPLAY"))}</h2></div><span>${escapeHtml(t("当前主题的显示选项", "CURRENT THEME DISPLAY OPTIONS"))}</span></div>
           <div class="foobar-display-grid">
             <div class="foobar-display-card"><small>TEXT</small>${selectMarkup("textScale", style.textScale, textOptions, t("文字尺寸", "Text size"))}</div>
             <div class="foobar-display-card"><small>ARRAY</small>${selectMarkup("arrayScale", style.arrayScale, arrayOptions, t("唱片阵列尺寸", "Array size"))}</div>
@@ -518,7 +518,7 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", follo
           </div>
         </section>
       </div>
-      <aside class="music-style-preview foobar-style-preview" aria-label="${escapeHtml(t("Style 预览", "Style preview"))}">
+      <aside class="music-style-preview foobar-style-preview" aria-label="${escapeHtml(t("图形预览", "Graphics preview"))}">
         <div class="style-preview-heading foobar-style-preview-heading"><small data-style-preview-label>${escapeHtml(t("使用中", "IN USE"))}</small><span>${escapeHtml(t("悬停或聚焦卡片以预览", "HOVER OR FOCUS A CARD TO PREVIEW"))}</span></div>
         <div class="style-preview-content foobar-style-preview-content" data-style-preview-content>${previewMarkup(style, mode, null)}</div>
       </aside>
@@ -531,7 +531,7 @@ export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night", 
   const style = normalizeMusicStyle(styleValue);
   if (style.design === "archive") return archiveMusicStyleMarkup(style, mode, followSystemTheme);
   const modeName = mode === "day" ? "LIGHT" : "DARK";
-  const heading = `<header class="music-style-heading"><div><small>STYLE&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">STYLE</h1><p>${escapeHtml(t("调整界面外观、唱片盒与画质。", "Adjust the appearance, album case and render quality."))}</p></div><span class="style-mode-indicator"><i></i>${modeName}</span></header>`;
+  const heading = `<header class="music-style-heading"><div><small>GRAPHICS&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">GRAPHICS</h1><p>${escapeHtml(t("调整界面外观、唱片盒与画质。", "Adjust the appearance, album case and render quality."))}</p></div><span class="style-mode-indicator"><i></i>${modeName}</span></header>`;
   const themeSelector = designFamilyMarkup(style, mode, followSystemTheme);
   const pageStart = `<section class="music-style-page" aria-labelledby="music-style-title">${heading}${themeSelector}`;
   return `${pageStart}<div id="theme-quality-slot" class="style-native-quality"></div></section>`;

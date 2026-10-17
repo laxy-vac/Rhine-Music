@@ -32,16 +32,21 @@ const previewNative=path.join(root,'.tools/source-preview-native-audio/rhine-aud
 process.env.SONY_WALKMAN_NATIVE_DECODER=sourcePreview&&require('node:fs').existsSync(previewNative)?previewNative:path.join(root,'vendor/audio/windows-x64/rhine-audio-host.exe');
 process.env.RHINE_NATIVE_AUDIO=process.env.SONY_WALKMAN_NATIVE_DECODER;
 let service,window,quitting=false,preferences={},saveTail=Promise.resolve();
-let windowAspectModel,windowAspectController;
+let windowAspectModel,windowAspectController,entryPreferencesModel;
 const audioPresetFile=storage.audioPresetFile;
 const audioPresetMaxBytes=16*1024*1024,audioPresetSourceMaxBytes=4*1024*1024;
 const emptyAudioPresetStore=()=>({schemaVersion:1,activeId:null,presets:[],eqBanks:{}});
 let audioPresetStore=emptyAudioPresetStore(),audioPresetStoreExists=false,audioPresetLoadError='',audioPresetFileFingerprint=null,audioPresetSaveTail=Promise.resolve();
-const preferenceKeys=new Set(['language','theme','followSystemTheme','entryOnOpen','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
+const preferenceKeys=new Set(['language','theme','followSystemTheme','entryOnOpen','entryWelcome','entryIdentity','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
 const selectPreferences=value=>{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid preferences');
- const text=JSON.stringify(value);if(Buffer.byteLength(text,'utf8')>2*1024*1024)throw new Error('Preferences exceed limit');
- const selected=Object.fromEntries(Object.entries(value).filter(([key])=>preferenceKeys.has(key)));
+ const safeValue={...value};
+ if(entryPreferencesModel){
+  safeValue.entryWelcome=entryPreferencesModel.normalizeEntryText(safeValue.entryWelcome,entryPreferencesModel.defaultEntryWelcome);
+  safeValue.entryIdentity=entryPreferencesModel.normalizeEntryText(safeValue.entryIdentity,entryPreferencesModel.defaultEntryIdentity);
+ }
+ const text=JSON.stringify(safeValue);if(Buffer.byteLength(text,'utf8')>2*1024*1024)throw new Error('Preferences exceed limit');
+ const selected=Object.fromEntries(Object.entries(safeValue).filter(([key])=>preferenceKeys.has(key)));
  if(selected.language!=='zh-CN'&&selected.language!=='en')delete selected.language;
  if(typeof selected.followSystemTheme!=='boolean')delete selected.followSystemTheme;
  if(typeof selected.entryOnOpen!=='boolean')delete selected.entryOnOpen;
@@ -230,6 +235,7 @@ else {
  app.whenReady().then(async()=>{
   try {
    windowAspectModel=await import(pathToFileURL(path.join(root,'src/window-aspect-model.mjs')).href);
+   entryPreferencesModel=await import(pathToFileURL(path.join(root,'src/entry-preferences.mjs')).href);
    const {attachWindowAspect}=await import(pathToFileURL(path.join(__dirname,'window-aspect.mjs')).href);
    await loadAudioPresetStore();
    if(previewUICheck){

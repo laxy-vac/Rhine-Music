@@ -75,6 +75,8 @@ import { SurfaceTransition, PageScanTransition } from "./ui-transitions";
 import { qualityMarkup, syncQualityUI } from "./quality-settings";
 import { ArchiveScene } from "./scene";
 import { FutureEntry, futureEntryEnd, futureEntryShot } from "./future-entry";
+import { ENTRY_TEXT_MAX_LENGTH, defaultEntryWelcome, defaultEntryIdentity, normalizeEntryText } from "./entry-preferences.mjs";
+import { setupEntryTextControls } from "./entry-text-controls";
 import { mountQualityDetection } from "./quality-detection";
 import {
   records,
@@ -132,8 +134,8 @@ type Theme = "day" | "night";
 type Panel = "search" | "online" | null;
 type SettingsCategory = "appearance" | "interface" | "audio" | "lyrics" | "library" | "sources" | "about";
 const settingsCategories: { id: SettingsCategory; title: string; intro: string; sections: string[] }[] = [
-  { id: "appearance", title: trUi("外观与显示"), intro: trUi("选择明暗模式与界面语言。"), sections: ["#appearance-settings"] },
-  { id: "interface", title: trUi("界面与交互"), intro: trUi("调整界面动效、操作音效和氛围配乐。"), sections: ["#entry-settings", "#motion-settings", "#interface-sound-settings"] },
+  { id: "appearance", title: trUi("常规"), intro: trUi("管理界面语言。图形、主题和显示选项位于 GRAPHICS。"), sections: ["#appearance-settings"] },
+  { id: "interface", title: trUi("交互与入场"), intro: trUi("设置终端入场、操作音效和氛围配乐。"), sections: ["#entry-settings", "#interface-sound-settings"] },
   { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
   { id: "lyrics", title: trUi("歌词"), intro: trUi("管理默认来源、共享服务器与本地缓存。"), sections: ["#lyrics-global-settings"] },
   { id: "library", title: trUi("音乐库"), intro: trUi("选择音乐文件夹、导入与扫描，管理专辑分类和介绍资料。"), sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
@@ -274,6 +276,8 @@ const preferences = {
     quality: "original" as QualityPreset,
     reduced: false,
     entryOnOpen: true,
+    entryWelcome: defaultEntryWelcome,
+    entryIdentity: defaultEntryIdentity,
     volume: 0.65,
     songFade: true,
     sony: { ...sonyOff },
@@ -304,6 +308,8 @@ const preferences = {
       quality: QualityPreset;
       reduced: boolean;
       entryOnOpen: boolean;
+      entryWelcome: string;
+      entryIdentity: string;
       volume: number;
       songFade: boolean;
       sony: SonySettings;
@@ -321,6 +327,8 @@ const preferences = {
 preferences.language = uiLanguage();
 preferences.followSystemTheme = preferences.followSystemTheme === true;
 preferences.entryOnOpen = preferences.entryOnOpen !== false;
+preferences.entryWelcome = normalizeEntryText(preferences.entryWelcome, defaultEntryWelcome);
+preferences.entryIdentity = normalizeEntryText(preferences.entryIdentity, defaultEntryIdentity);
 preferences.futurePunkPresets = normalizeCaseUserPresets(preferences.futurePunkPresets);
 preferences.archivePunkPresets = normalizeCaseUserPresets(preferences.archivePunkPresets);
 preferences.windowAspect = normalizeWindowAspect(preferences.windowAspect);
@@ -513,10 +521,9 @@ stage.innerHTML = ui`
       <button data-action="eq" aria-label="EQ 均衡器" title="均衡器" aria-pressed="false" aria-controls="music-eq-page">${icons.eq}<span>EQ</span></button>
       <button data-action="lyrics" aria-label="歌词" title="歌词" aria-pressed="false" aria-controls="music-lyrics-page">${icons.lyrics}<span>${musicInterfaceLabels.navigation.lyrics}</span></button>
       <button data-action="signal" aria-label="信号" title="信号" aria-pressed="false" aria-controls="music-signal-page">${svg('<path d="M2 12h3l3-7 4 14 4-14 3 7h3"/>')}<span>${musicInterfaceLabels.navigation.signal}</span></button>
-      <button data-action="theme" aria-label="主题" title="主题" aria-pressed="false" aria-controls="music-theme-page">${svg('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="6" height="7" rx="1"/><rect x="4" y="14" width="7" height="6" rx="1"/><circle cx="17" cy="17" r="3"/>')}<span>${musicInterfaceLabels.navigation.style}</span></button>
+      <button data-action="theme" aria-label="图形设置" title="图形设置" aria-pressed="false" aria-controls="music-theme-page">${svg('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="6" height="7" rx="1"/><rect x="4" y="14" width="7" height="6" rx="1"/><circle cx="17" cy="17" r="3"/>')}<span>${musicInterfaceLabels.navigation.style}</span></button>
       <button data-action="search" aria-label="搜索">${icons.search}<span>${musicInterfaceLabels.navigation.search}</span></button>
       <button data-action="online" aria-label="在线曲库" aria-pressed="false">${icons.globe}<span>${musicInterfaceLabels.navigation.online}</span></button>
-      <div class="theme-switch" aria-label="主题">${(["day", "night"] as Theme[]).map((t) => ui`<button data-theme="${t}" aria-label="${themeNames[t]}主题" aria-pressed="${preferences.theme === t}"><i class="theme-dot ${t}"></i><span>${themeNames[t]}</span></button>`).join("")}</div>
       <button data-action="settings" class="icon-button" aria-label="设置" title="设置" aria-pressed="false" aria-controls="music-settings">${icons.settings}<span>${musicInterfaceLabels.navigation.settings}</span></button>
       <div class="minimal-transport" role="group" aria-label="当前歌曲"><button type="button" data-action="locate-playing" id="transport-track" class="transport-track" aria-label="定位当前歌曲" aria-hidden="true" disabled><span id="transport-track-label"></span></button></div>
     </nav>
@@ -548,7 +555,7 @@ stage.innerHTML = ui`
   </section>
   <div id="music-empty" class="music-empty" hidden><small>YOUR PRIVATE COLLECTION</small><h1>让音乐进入这座档案馆。</h1><p>在设置中选择本地音乐文件夹，专辑封面会出现在每一张卡片上。</p><button data-action="library-settings">打开音乐库设置 ↗</button><button data-action="demo" class="subtle">先查看演示封面</button></div>
   <section id="music-settings" class="music-settings-page" aria-labelledby="settings-page-title" hidden>
-    <div class="settings-page-heading"><div><small>SYSTEM / SETTINGS</small><h1 id="settings-page-title" tabindex="-1">设置</h1><p>管理播放、音质与显示偏好</p></div></div>
+    <div class="settings-page-heading"><div><small>SYSTEM / SETTINGS</small><h1 id="settings-page-title" tabindex="-1">设置</h1><p>管理通用、音频、入场与音乐库偏好</p></div></div>
     <div class="settings-page-layout"><nav class="settings-page-nav" aria-label="设置分类">${settingsNavigationMarkup()}</nav><div id="settings-page-content" class="settings-page-content" role="region" aria-label="设置内容"></div></div>
   </section>
   <section id="music-eq-page" class="music-settings-page music-eq-page" aria-labelledby="eq-page-title" hidden>
@@ -565,8 +572,8 @@ stage.innerHTML = ui`
   </section>
   <div class="music-page-scan" aria-hidden="true" hidden><div class="music-page-scan-head"></div></div>
   <section id="music-theme-page" class="music-settings-page music-theme-page" aria-labelledby="theme-page-title" hidden>
-    <div class="settings-page-heading"><div><small>THEMES</small><h1 id="theme-page-title" tabindex="-1">主题</h1><p>选择播放器主题</p></div></div>
-    <div id="theme-page-content" class="settings-page-content" role="region" aria-label="主题与显示"></div>
+    <div class="settings-page-heading"><div><small>GRAPHICS</small><h1 id="theme-page-title" tabindex="-1">图形设置</h1><p>统一调整图形、主题和显示选项。</p></div></div>
+    <div id="theme-page-content" class="settings-page-content" role="region" aria-label="图形、主题与显示"></div>
   </section>
   ${playbackMarkup()}
   <div class="music-bottomline"><span id="collection-line">LOCAL COLLECTION <i>·</i> <span id="library-count">0 ALBUMS</span></span><span id="runtime-info">THREE.JS / LOCAL</span></div>
@@ -574,6 +581,11 @@ stage.innerHTML = ui`
   <div id="music-startup-error" role="alert" hidden></div>
 `;
 editableRanges = setupEditableRanges(stage);
+const entryTextControls = setupEntryTextControls(stage, {
+  read: key => preferences[key],
+  write: (key, value) => { preferences[key] = value; savePrefs(); },
+  enabled: () => preferences.style.design === "rhine",
+});
 syncDesignIdentity();
 stage.addEventListener("eq-controls-rerender", () => {
   if (page !== "eq") return;
@@ -833,6 +845,8 @@ function syncEntrySettings() {
   const reason = entryPlaybackUnavailable();
   if (button) button.disabled = !!reason;
   if (note) note.textContent = reason || trUi("重播会回到专辑总览，不影响音乐播放。");
+  const future = preferences.style.design === "rhine";
+  document.querySelectorAll<HTMLInputElement | HTMLButtonElement>('#entry-settings [data-entry-text], #entry-on-open, [data-action="entry-text-reset"]').forEach(control => { control.disabled = !future; });
 }
 
 function startFutureEntry() {
@@ -845,7 +859,7 @@ function startFutureEntry() {
       scene?.finishMusicIntro(now);
     }
     syncSelectionMotion();
-  });
+  }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity });
   return true;
 }
 
@@ -1951,6 +1965,7 @@ function renderThemePage() {
   caseEditor = undefined;
   content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme, preferences.followSystemTheme);
   content.querySelector(".music-style-heading")?.insertAdjacentHTML("afterend", windowAspectMarkup(preferences.windowAspect));
+  content.querySelector(".design-family-section")?.insertAdjacentHTML("afterend", ui`<section id="graphics-display-settings" class="graphics-display-settings window-aspect-settings" aria-labelledby="graphics-display-title"><div class="style-section-heading"><div><small>GLOBAL / DISPLAY</small><h2 id="graphics-display-title">显示与动效</h2></div></div><label class="style-setting-row style-switch-row"><span>减少动态效果<small>简化镜头、文字加载和页签过渡</small></span><input type="checkbox" role="switch" id="reduced-motion" ${preferences.reduced ? "checked" : ""}></label><button type="button" class="text-button" data-action="fullscreen">切换全屏 ↗</button></section>`);
   content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design, musicApplication.view.layout));
   cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#theme-quality-slot")!, {
     getStyle: () => preferences.style,
@@ -3183,6 +3198,16 @@ function updateProcessingField(control: HTMLInputElement | HTMLSelectElement) {
   }
 }
 
+function entrySettingsMarkup() {
+  const future = preferences.style.design === "rhine";
+  const disabled = future ? "" : "disabled";
+  const fields = ([
+    ["entryWelcome", "entry-welcome", trUi("欢迎文案")],
+    ["entryIdentity", "entry-identity", trUi("欢迎 ID")],
+  ] as const).map(([key, id, label]) => `<label class="entry-text-field" for="${id}"><span>${label}<output data-entry-count="${key}" aria-hidden="true">${preferences[key].length} / ${ENTRY_TEXT_MAX_LENGTH}</output></span><input type="text" id="${id}" data-entry-text="${key}" value="${esc(preferences[key])}" maxlength="${ENTRY_TEXT_MAX_LENGTH}" pattern="[A-Za-z]+( [A-Za-z]+)*" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="entry-text-help entry-text-status" ${disabled}></label>`).join("");
+  return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>FUTURE</small></h3>${!future ? trUi('<p class="entry-unavailable-note">Punk 入场动画后续适配，当前仅保留设置入口。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
+}
+
 function renderSettingsPage() {
   const content = $("#settings-page-content");
   settingsSelectControls?.destroy();
@@ -3194,7 +3219,7 @@ function renderSettingsPage() {
   lyricsSettings?.destroy();
   lyricsSettings = undefined;
   content.innerHTML =
-    ui`<section class="panel-section" id="appearance-settings"><h3>外观主题</h3><div class="theme-cards">${(["day", "night"] as Theme[]).map((t) => `<button data-theme="${t}" aria-pressed="${preferences.theme === t}" class="${t}"><i></i><strong>${themeNames[t]}</strong><span>${t === "day" ? trUi("暖白玻璃与日光") : trUi("极简星空与透光白卡")}</span></button>`).join("")}</div></section>
+    ui`<section class="panel-section" id="appearance-settings"><h3>界面语言</h3><p>图形、主题和显示选项已集中到 GRAPHICS。</p><button type="button" class="text-button" data-action="theme">打开 GRAPHICS ↗</button></section>
     <section class="panel-section" id="library-sort-settings"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>${uiLanguage() === "en" ? "Shared with browse toolbar" : "与浏览工具栏共享设置"}</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${musicArrangementPreset() === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}<option value="custom" disabled ${musicArrangementPreset() === "custom" ? "selected" : ""}>${trUi("自定义")}</option></select></label><p>${uiLanguage() === "en" ? "More grouping and sorting options are available in the album browse toolbar." : "更多分组与排序选项可在唱片浏览页工具栏中调整。"}</p></section>
     <section class="panel-section" id="introduction-settings"><h3>专辑介绍</h3><p>从公开百科查询并更新专辑介绍，附上资料来源。介绍保存在本机，不需要配置 MusicBrainz 联系信息；音乐文件不会上传。</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details></section>
     <section class="panel-section" id="current-audio-settings"><h3>当前音源</h3><p id="current-audio-source"></p><p>歌曲文件的格式与音质信息。播放时的处理和输出方式可在音频链路中查看。</p><button class="text-button" data-action="audio-info">查看音频链路 ↗</button></section>
@@ -3209,8 +3234,7 @@ function renderSettingsPage() {
     ${resamplingMarkup()}
     ${precisionMarkup()}
     ${bufferMarkup()}
-    <section class="panel-section" id="motion-settings"><h3>动效与显示</h3><label class="settings-row"><span>减少动态效果<small>简化镜头、文字加载和页签过渡</small></span><input type="checkbox" id="reduced-motion" ${preferences.reduced ? "checked" : ""}></label><button class="text-button" data-action="fullscreen">切换全屏 ↗</button></section>
-    <section class="panel-section" id="entry-settings"><h3>终端入场</h3><label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""}></label><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><p id="entry-replay-note"></p></section>
+    ${entrySettingsMarkup()}
     <section class="panel-section" id="interface-sound-settings"><h3>界面声音与氛围</h3><p id="interface-sound-status" class="interface-audio-note" role="status"></p><label class="settings-row"><span>界面音效<small>按钮、卡片和页面切换的提示音</small></span><input type="checkbox" id="sound-setting" ${preferences.sound ? "checked" : ""}></label><label class="settings-row"><span>音效音量</span><input type="range" id="sound-volume" aria-label="音效音量" min="0" max="100" value="${Math.round(preferences.soundVolume * 100)}"></label><button class="text-button" data-action="sound-preview">试听界面音效 ↗</button><label class="settings-row"><span>氛围 BGM<small>音乐停止时播放，开始播放歌曲后淡出</small></span><input type="checkbox" id="bgm-setting" ${preferences.bgm ? "checked" : ""}></label><label class="settings-row"><span>BGM 音量</span><input type="range" id="bgm-volume" aria-label="BGM 音量" min="0" max="100" value="${Math.round(preferences.bgmVolume * 100)}"></label></section>
     <section class="panel-section" id="lyrics-global-settings"></section>
     <section class="panel-section" id="about-settings"><h3>项目与许可</h3><p>音乐适配与维护：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/RonaldDeng/Rhine-Music-Demo/blob/v0.2.0/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
@@ -3219,6 +3243,7 @@ function renderSettingsPage() {
   content.querySelector('#appearance-settings')?.insertAdjacentHTML('beforeend', ui`<label class="settings-row"><span>界面语言<small>切换后重新载入界面</small></span><select id="ui-language" aria-label="界面语言"><option value="zh-CN" ${uiLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${uiLanguage()==='en'?'selected':''}>English</option></select></label><button type="button" class="text-button" data-action="apply-language">应用语言 ↗</button>`);
   content.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(control => control.setAttribute("role", "switch"));
   syncEntrySettings();
+  entryTextControls.sync();
   content.insertAdjacentHTML("beforeend", ui`<section class="panel-section" id="library-management-settings"><h3>导入与目录管理</h3><div id="library-page-body" class="library-settings-body" role="region" aria-label="音乐库导入与目录管理"></div></section>`);
   const categories = settingsCategories.map((category) => {
     const section = document.createElement("section");
@@ -3937,6 +3962,15 @@ document.addEventListener("click", (e) => {
   if (action === "audio-info") { albumQueue.close(false);audioInfoPopup.toggle(target); return; }
   if (action === "library") { openArchivePage(); return; }
   if (action === "entry-replay") { replayFutureEntry(); return; }
+  if (action === "entry-text-reset") {
+    if (preferences.style.design !== "rhine") return;
+    preferences.entryWelcome = defaultEntryWelcome;
+    preferences.entryIdentity = defaultEntryIdentity;
+    entryTextControls.sync();
+    savePrefs();
+    $("#entry-text-status").textContent = trUi("已恢复默认欢迎文案与 ID。");
+    return;
+  }
   if (action === "eq") { page === "eq" ? closeManagementPage() : openEqPage(); return; }
   if (action === "lyrics") { page === "lyrics" ? closeManagementPage() : openLyricsPage(); return; }
   if (action === "signal") { page === "signal" ? closeManagementPage() : openSignalPage(); return; }
@@ -4163,6 +4197,7 @@ document.addEventListener("keydown", event => {
 document.addEventListener("change", (e) => {
   const control = e.target as HTMLInputElement | HTMLSelectElement;
   if (control.id === "entry-on-open" && control instanceof HTMLInputElement) {
+    if (preferences.style.design !== "rhine" || control.disabled) { control.checked = preferences.entryOnOpen; return; }
     preferences.entryOnOpen = control.checked;
     savePrefs();
     return;
