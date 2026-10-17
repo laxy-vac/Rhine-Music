@@ -2,24 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import { MusicMatrixDrag } from "../src/music-matrix-drag.ts";
-import { MusicLayoutTransition } from "../src/music-layout-transition.ts";
-
-test("opposite archive axes travel around the focus instead of collapsing through it", () => {
-  const motion = new MusicLayoutTransition();
-  const source = new THREE.Matrix4().makeTranslation(4, 0, 1);
-  const target = new THREE.Matrix4().makeTranslation(-4, 0, -1);
-  const camera = new THREE.PerspectiveCamera(10, 1.5, 1, 300);
-  camera.position.set(-60, 40, 100);
-  motion.begin(new Map([["album", source]]), new THREE.Matrix4(), camera, new THREE.Vector3(), false, true);
-  motion.prepareTarget(new THREE.Vector3());
-  motion.advance(.725);
-  const middle = target.clone(); motion.apply(middle, "album");
-  const position = new THREE.Vector3().setFromMatrixPosition(middle);
-  assert.ok(Math.hypot(position.x, position.z) > 4, "neighbor spacing must survive the halfway turn");
-  motion.advance(.725);
-  const end = target.clone(); motion.apply(end, "album");
-  assert.ok(end.elements.every((value, index) => Math.abs(value - target.elements[index]) < 1e-8));
-});
+import {
+  MusicLayoutTransition,
+  shelfEntryCamera,
+  shelfEntryFrame,
+} from "../src/music-layout-transition.ts";
 
 const axisAligned = {
   lane: { x: 100, y: 0 },
@@ -38,43 +25,6 @@ function assertPosition(actual, expected, epsilon = 1e-6) {
   assert.ok(actual, "expected an active position");
   close(actual.lane, expected.lane, epsilon);
   close(actual.row, expected.row, epsilon);
-}
-
-function matrixAt(position, rotation = [0, 0, 0], scale = [1, 1, 1]) {
-  const quaternion = new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(...rotation),
-  );
-  return new THREE.Matrix4().compose(
-    new THREE.Vector3(...position),
-    quaternion,
-    new THREE.Vector3(...scale),
-  );
-}
-
-function assertPoseNear(actualMatrix, expectedMatrix, epsilon = 1e-6) {
-  const actual = {
-    position: new THREE.Vector3(),
-    rotation: new THREE.Quaternion(),
-    scale: new THREE.Vector3(),
-  };
-  const expected = {
-    position: new THREE.Vector3(),
-    rotation: new THREE.Quaternion(),
-    scale: new THREE.Vector3(),
-  };
-  actualMatrix.clone().decompose(actual.position, actual.rotation, actual.scale);
-  expectedMatrix
-    .clone()
-    .decompose(expected.position, expected.rotation, expected.scale);
-  for (const axis of ["x", "y", "z"]) {
-    close(actual.position[axis], expected.position[axis], epsilon);
-    close(actual.scale[axis], expected.scale[axis], epsilon);
-  }
-  const rotationError = 1 - Math.abs(actual.rotation.dot(expected.rotation));
-  assert.ok(
-    rotationError <= epsilon,
-    `rotation should match (angular similarity error ${rotationError})`,
-  );
 }
 
 function assertFiniteVector(vector) {
@@ -190,118 +140,213 @@ test("a new drag during coast continues from the current camera center", () => {
   });
 });
 
-test("layout morph preserves its start pose, interpolates, and reaches its target", () => {
-  const transition = new MusicLayoutTransition();
-  const source = matrixAt([0, 1, 2], [0.1, 0.2, -0.1], [1, 1.2, 0.8]);
-  const selectedSource = matrixAt([-2, 0, 1]);
-  const target = matrixAt([10, 5, -4], [0.4, 1.1, 0.3], [1.5, 0.7, 2]);
-  const entries = new Map([["album-a", source.clone()]]);
-  const camera = new THREE.PerspectiveCamera(34, 16 / 9, 0.1, 100);
-  camera.position.set(0, 2, 14);
-  const aim = new THREE.Vector3(0, 0, 0);
-  camera.lookAt(aim);
+const layoutDuration = 1.12;
 
-  transition.begin(entries, selectedSource, camera, aim, false, true);
+test("layout transition is linear and release/resolve weights do not overlap", () => {
+  const transition = new MusicLayoutTransition();
+  transition.begin();
   assert.equal(transition.active, true);
   close(transition.progress, 0);
-  close(transition.shelfAmount, 0);
 
-  const atStart = target.clone();
-  transition.apply(atStart, "album-a");
-  assertPoseNear(atStart, source);
-  const selectedAtStart = target.clone();
-  transition.apply(selectedAtStart, undefined, true);
-  assertPoseNear(selectedAtStart, selectedSource);
+  let previousProgress = 0;
+  let previousOutgoing = 1;
+  let previousIncoming = 0;
+  for (let step = 0; step <= 100; step++) {
+    if (step > 0) transition.advance(layoutDuration / 100);
+    const expectedProgress = step / 100;
+    const progress = transition.progress;
+    close(progress, expectedProgress, 1e-12);
+    assert.ok(progress >= previousProgress, "progress must be monotonic");
 
-  transition.advance(0.725);
-  close(transition.progress, 0.5);
-  close(transition.shelfAmount, 0.5);
-  const atMiddle = target.clone();
-  transition.apply(atMiddle, "album-a");
-  const middlePosition = new THREE.Vector3().setFromMatrixPosition(atMiddle);
-  assert.ok(middlePosition.distanceTo(new THREE.Vector3(5, 3, -1)) < 1e-6);
+    const { outgoing, incoming, phase } = transition.frame;
+    assert.ok(outgoing >= -1e-12 && outgoing <= 1 + 1e-12);
+    assert.ok(incoming >= -1e-12 && incoming <= 1 + 1e-12);
+    assert.ok(
+      !(outgoing > 1e-12 && incoming > 1e-12),
+      "the two frames must not cross-fade",
+    );
+    assert.ok(outgoing <= previousOutgoing + 1e-12, "release weight must not rise");
+    assert.ok(incoming + 1e-12 >= previousIncoming, "resolve weight must not fall");
+    assert.equal(phase, progress < 0.34 ? "release" : "resolve");
 
-  transition.advance(0.725);
+    previousProgress = progress;
+    previousOutgoing = outgoing;
+    previousIncoming = incoming;
+  }
+
   close(transition.progress, 1);
-  close(transition.shelfAmount, 1);
-  const atEnd = target.clone();
-  transition.apply(atEnd, "album-a");
-  assertPoseNear(atEnd, target);
+  close(transition.frame.outgoing, 0);
+  close(transition.frame.incoming, 1);
   transition.finishFrame();
   assert.equal(transition.active, false);
+  close(transition.progress, 1);
 });
 
-test("layout camera keeps a finite visible span and finite vectors from start to end", () => {
+test("the .34 boundary separates release from resolve", () => {
+  const before = new MusicLayoutTransition();
+  before.begin();
+  before.advance(layoutDuration * (0.34 - 1e-6));
+  assert.equal(before.frame.phase, "release");
+  assert.ok(before.frame.outgoing > 0);
+  close(before.frame.incoming, 0);
+
+  const after = new MusicLayoutTransition();
+  after.begin();
+  after.advance(layoutDuration * 0.34 + 1e-12);
+  close(after.progress, 0.34, 1e-10);
+  assert.equal(after.frame.phase, "resolve");
+  close(after.frame.outgoing, 0);
+  assert.ok(after.frame.incoming > 0);
+});
+
+test("begin resets a partial or completed transition for a reverse layout choice", () => {
   const transition = new MusicLayoutTransition();
+  transition.begin();
+  transition.advance(layoutDuration / 2);
+  close(transition.progress, 0.5);
+
+  transition.begin();
+  assert.equal(transition.active, true);
+  close(transition.progress, 0);
+  close(transition.frame.outgoing, 1);
+  close(transition.frame.incoming, 0);
+  assert.equal(transition.frame.phase, "release");
+
+  transition.advance(layoutDuration);
+  close(transition.progress, 1);
+  transition.finishFrame();
+  assert.equal(transition.active, false);
+  transition.begin();
+  assert.equal(transition.active, true);
+  close(transition.progress, 0);
+});
+
+test("shelf entry reveals structure, then catalog, then reaches ready monotonically", () => {
+  const boundaries = [
+    { time: 21.99, structure: 0, catalog: 0, casesVisible: false, phase: "structure" },
+    { time: 22, structure: 0, catalog: 0, casesVisible: false, phase: "structure" },
+    { time: 22.65, structure: 1, catalog: 0, casesVisible: false, phase: "structure" },
+    { time: 22.75, structure: 1, catalog: 0, casesVisible: true, phase: "catalog" },
+    { time: 24.1, structure: 1, catalog: 1, casesVisible: true, phase: "ready" },
+  ];
+  for (const expected of boundaries) {
+    const actual = shelfEntryFrame(expected.time);
+    close(actual.structure, expected.structure);
+    close(actual.catalog, expected.catalog);
+    assert.equal(actual.casesVisible, expected.casesVisible);
+    assert.equal(actual.phase, expected.phase);
+  }
+
+  let previousStructure = 0;
+  let previousCatalog = 0;
+  let previousCasesVisible = false;
+  for (let time = 21.9; time <= 24.2; time += 0.025) {
+    const frame = shelfEntryFrame(time);
+    assert.ok(frame.structure >= previousStructure - 1e-12);
+    assert.ok(frame.catalog >= previousCatalog - 1e-12);
+    assert.ok(!previousCasesVisible || frame.casesVisible);
+    previousStructure = frame.structure;
+    previousCatalog = frame.catalog;
+    previousCasesVisible = frame.casesVisible;
+  }
+});
+
+test("shelf camera holds registration through 24.1 and settles exactly to normal framing", () => {
   const camera = new THREE.PerspectiveCamera(38, 16 / 10, 0.1, 100);
-  const startAim = new THREE.Vector3(1, -1, 2);
-  const startPosition = new THREE.Vector3(4, 3, 13);
-  camera.position.copy(startPosition);
-  camera.lookAt(startAim);
-  const startSpan = visibleSpan(camera, startAim);
+  const basePosition = new THREE.Vector3(4, 3, 13);
+  const baseAim = new THREE.Vector3(1, -1, 2);
+  const normalSpan = 18;
+  const distance = basePosition.distanceTo(baseAim);
+  const normalFov = THREE.MathUtils.radToDeg(
+    2 * Math.atan(normalSpan / (2 * distance)),
+  );
+  const samples = [21.9, 22, 22.65, 22.75, 24, 24.1, 24.3125, 24.525, 24.7375, 24.95];
+  const spans = [];
+
+  for (const time of samples) {
+    // scene.ts rebuilds the ordinary framing before applying this small lens settle.
+    camera.position.copy(basePosition);
+    camera.fov = normalFov;
+    const aim = baseAim.clone();
+    camera.lookAt(aim);
+    const beforePosition = camera.position.clone();
+    shelfEntryCamera(camera, aim, time);
+
+    assertFiniteVector(camera.position);
+    assertFiniteVector(aim);
+    assert.ok(Number.isFinite(camera.fov) && camera.fov > 0 && camera.fov < 180);
+    assert.ok(camera.position.distanceTo(beforePosition) < 1e-12);
+    assert.ok(aim.distanceTo(baseAim) < 1e-12);
+
+    const span = visibleSpan(camera, aim);
+    const ratio = span / normalSpan;
+    assert.ok(ratio >= 1 - 1e-9 && ratio <= 1.018 + 1e-9);
+    if (time <= 24.1) close(ratio, 1.018, 1e-9);
+    spans.push({ time, ratio });
+  }
+
+  const settlingSpans = spans.filter(({ time }) => time >= 24.1);
+  for (let index = 1; index < settlingSpans.length; index++) {
+    assert.ok(settlingSpans[index].ratio <= settlingSpans[index - 1].ratio + 1e-12);
+  }
+  close(settlingSpans.at(-1).ratio, 1, 1e-9);
+  close(camera.fov, normalFov, 1e-9);
+});
+
+test("layout camera settles only around the target pose, independent of the old camera", () => {
   const targetPosition = new THREE.Vector3(-5, 6, 12);
   const targetAim = new THREE.Vector3(2, 1, 1);
   const targetSpan = 18;
-  const renderedAim = startAim.clone();
 
-  transition.begin(new Map(), matrixAt([0, 0, 0]), camera, startAim, false, true);
-  for (const sample of [
-    { dt: 0, expectedSpan: startSpan },
-    { dt: 0.725, expectedSpan: (startSpan + targetSpan) / 2 * 1.09 },
-    { dt: 0.725, expectedSpan: targetSpan },
-  ]) {
-    transition.advance(sample.dt);
+  function renderFrom(startPosition, startAim, startFov, progress) {
+    const transition = new MusicLayoutTransition();
+    transition.begin();
+    transition.advance(layoutDuration * progress);
+    const camera = new THREE.PerspectiveCamera(startFov, 16 / 9, 0.1, 100);
+    camera.position.copy(startPosition);
+    const renderedAim = startAim.clone();
+    camera.lookAt(renderedAim);
     transition.applyCamera(camera, renderedAim, targetPosition, targetAim, targetSpan);
-    assertFiniteVector(camera.position);
-    assertFiniteVector(renderedAim);
-    assert.ok(Number.isFinite(camera.fov) && camera.fov > 0 && camera.fov < 180);
-    close(visibleSpan(camera, renderedAim), sample.expectedSpan, 1e-5);
+    return { camera, renderedAim };
   }
-  for (const axis of ["x", "y", "z"]) {
-    close(camera.position[axis], targetPosition[axis]);
-    close(renderedAim[axis], targetAim[axis]);
+
+  const samples = [0, 0.28, 0.5, 0.75, 1];
+  for (const progress of samples) {
+    const first = renderFrom(
+      new THREE.Vector3(0, 2, 14),
+      new THREE.Vector3(0, 0, 0),
+      34,
+      progress,
+    );
+    const second = renderFrom(
+      new THREE.Vector3(40, -20, 5),
+      new THREE.Vector3(-12, 9, 20),
+      58,
+      progress,
+    );
+
+    for (const axis of ["x", "y", "z"]) {
+      close(first.camera.position[axis], second.camera.position[axis]);
+      close(first.renderedAim[axis], targetAim[axis]);
+      close(second.renderedAim[axis], targetAim[axis]);
+    }
+    close(first.camera.fov, second.camera.fov);
+    assertFiniteVector(first.camera.position);
+    assertFiniteVector(first.renderedAim);
+
+    const targetOffset = targetPosition.clone().sub(targetAim);
+    const renderedOffset = first.camera.position.clone().sub(first.renderedAim);
+    const horizontalCross = targetOffset.x * renderedOffset.z - targetOffset.z * renderedOffset.x;
+    const horizontalDot = targetOffset.x * renderedOffset.x + targetOffset.z * renderedOffset.z;
+    const yaw = Math.abs(Math.atan2(horizontalCross, horizontalDot));
+    assert.ok(yaw <= 0.025 + 1e-9);
+    assert.ok(targetOffset.angleTo(renderedOffset) <= 0.025 + 1e-9);
+    const ratio = visibleSpan(first.camera, first.renderedAim) / targetSpan;
+    assert.ok(ratio >= 1 - 1e-9 && ratio <= 1.018 + 1e-9);
+    if (progress === 0) close(yaw, 0.025, 1e-9);
+    if (progress === 1) {
+      assert.ok(first.camera.position.distanceTo(targetPosition) < 1e-9);
+      close(ratio, 1, 1e-9);
+    }
   }
-});
-
-test("a fast reverse retargets from the rendered pose and clear stops further morphing", () => {
-  const transition = new MusicLayoutTransition();
-  const source = matrixAt([-3, 1, 2], [0.1, -0.2, 0.3]);
-  const outboundTarget = matrixAt([9, 4, -5], [0.5, 1.2, -0.4], [1.4, 0.8, 1.2]);
-  const camera = new THREE.PerspectiveCamera(34, 16 / 9, 0.1, 100);
-  camera.position.set(0, 1, 12);
-  const renderedAim = new THREE.Vector3(0, 0, 0);
-
-  transition.begin(new Map([["rack", source.clone()]]), source, camera, renderedAim, false, true);
-  transition.advance(0.58);
-  const inFlight = outboundTarget.clone();
-  transition.apply(inFlight, "rack");
-  const renderedPose = inFlight.clone();
-
-  transition.begin(
-    new Map([["rack", renderedPose.clone()]]),
-    renderedPose,
-    camera,
-    renderedAim,
-    true,
-    false,
-  );
-  const reverseStart = source.clone();
-  transition.apply(reverseStart, "rack");
-  assertPoseNear(reverseStart, renderedPose);
-  close(transition.shelfAmount, 1);
-
-  transition.advance(2);
-  const reverseEnd = source.clone();
-  transition.apply(reverseEnd, "rack");
-  assertPoseNear(reverseEnd, source);
-  close(transition.shelfAmount, 0);
-
-  transition.clear();
-  assert.equal(transition.active, false);
-  close(transition.progress, 1);
-  close(transition.shelfAmount, 0);
-  const unchanged = outboundTarget.clone();
-  const beforeClearApply = unchanged.clone();
-  transition.apply(unchanged, "rack");
-  assertPoseNear(unchanged, beforeClearApply);
 });

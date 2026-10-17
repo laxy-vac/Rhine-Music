@@ -59,7 +59,8 @@ import { qualitySelectionWave, qualityIdleGain, qualityWaveLimit, qualityPulseLi
 import { MusicArrayMotion, MusicArrayCaseMotion, arrayLaneAppearance, ARRAY_SELECTED_EXTRA_LIFT, ARRAY_SELECTED_BELL_LIFT } from "./music-array-motion";
 import { MusicArrayAppearance } from "./music-array-appearance";
 import { MusicArrayFadePass } from "./music-array-fade-pass";
-import { MusicLayoutTransition, shelfEntryPose, shelfEntryCamera } from "./music-layout-transition";
+import { MusicLayoutTransition, shelfEntryFrame, shelfEntryCamera } from "./music-layout-transition";
+import { MusicArchiveComposite } from "./music-archive-composite";
 import { MusicMatrixDrag } from "./music-matrix-drag";
 import {
   archiveWave,
@@ -97,6 +98,7 @@ export class ArchiveScene {
   private composer: EffectComposer;
   private playbackGlass?: PlaybackGlassPass;
   private arrayFade?: MusicArrayFadePass;
+  private archiveComposite?: MusicArchiveComposite;
   private ao: SSAOPass;
   private bokeh: BokehPass;
   private instances: THREE.InstancedMesh[] = [];
@@ -131,8 +133,9 @@ export class ArchiveScene {
   private matrixDrag = new MusicMatrixDrag();
   private layoutTransition = new MusicLayoutTransition();
   private layoutWarmFrame = false;
-  private layoutGhost?: THREE.Group;
-  private layoutFloorY = -4.63;
+  private shelfEntryHidden = new Map<THREE.Object3D, boolean>();
+  private shelfEntryBaseCaptured = false;
+  private shelfEntryPhase: string | undefined;
   private shoulder = { value: 12, velocity: 0 };
   private laneFocus = { value: 2, velocity: 0 };
   private columnCamera = { value: 0, velocity: 0 };
@@ -302,6 +305,8 @@ export class ArchiveScene {
     if (musicLibrary) {
       this.arrayFade = new MusicArrayFadePass(this.scene, this.camera, this.arrayAppearance);
       this.composer.addPass(this.arrayFade);
+      this.archiveComposite = new MusicArchiveComposite();
+      this.composer.addPass(this.archiveComposite);
     }
     this.bindPointer();
   }
@@ -745,7 +750,7 @@ export class ArchiveScene {
       !this.musicPresentation.holdsDetail && this.detail < .01 && previousDesign === value.design &&
       (value.design !== "archive" || this.caseGeometryKey.startsWith("punk:")) &&
       previousCanvas !== nextLayout.canvas && !this.displayLayout.grid && !nextLayout.grid;
-    if (morph) this.beginLayoutTransition(nextLayout.canvas === "shelf");
+    if (morph) this.beginLayoutTransition();
     else if (nextLayout.grid || previousDesign !== value.design) this.clearLayoutTransition();
     this.musicStyle = normalizeMusicStyle(value);
     this.displayBleed = Number.parseFloat(getComputedStyle(this.container.closest(".music-app") ?? this.container).getPropertyValue("--foobar-scene-bleed")) || 0;
@@ -769,31 +774,13 @@ export class ArchiveScene {
       this.setTheme(this.theme, _animate);
   }
 
-  private beginLayoutTransition(toShelf: boolean) {
-    const entries = new Map<string, THREE.Matrix4>(), distances = new Map<string, number>();
-    const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
-    this.model.updateMatrix();
-    for (let i = 0; i < this.cells.length; i++) {
-      const key = this.cells[i].foobarEntryKey;
-      if (!key || !this.instances[0]) continue;
-      this.instances[0].getMatrixAt(i, matrix); matrix.decompose(position, rotation, scale);
-      if (scale.x < .001) continue;
-      const distance = position.distanceToSquared(this.model.position);
-      if (distance < (distances.get(key) ?? Infinity)) {
-        distances.set(key, distance); entries.set(key, matrix.clone());
-      }
-    }
-    if (this.selectedCell.foobarEntryKey) entries.set(this.selectedCell.foobarEntryKey, this.model.matrix.clone());
-    this.layoutTransition.begin(entries, this.model.matrix, this.camera, this.cameraAim, this.shelfView, toShelf);
+  private beginLayoutTransition() {
+    if (!this.archiveComposite?.capture(this.renderer)) return;
+    this.layoutTransition.begin();
     // A management page pauses scene frames. Its elapsed time must not consume
     // a fresh layout gesture on the first frame after returning to the archive.
     this.last = this.lastInteraction = performance.now() / 1000;
     this.musicCamera = new MusicCameraMotion();
-    const ghost = new THREE.Group();
-    if (this.sceneResources?.group.visible) ghost.add(this.sceneResources.group.clone(true));
-    if (this.layoutGhost) ghost.add(this.layoutGhost);
-    this.layoutGhost = ghost; this.scene.add(ghost);
-    this.layoutFloorY = this.floor.position.y;
     this.layoutWarmFrame = true;
     this.container.dataset.layoutTransition = "true";
   }
@@ -801,12 +788,7 @@ export class ArchiveScene {
   private clearLayoutTransition() {
     this.layoutTransition.clear();
     this.layoutWarmFrame = false;
-    if (this.layoutGhost) {
-      this.layoutGhost.removeFromParent();
-      this.layoutGhost.traverse(child => { if (child instanceof THREE.InstancedMesh) child.dispose(); });
-      this.layoutGhost = undefined;
-    }
-    if (this.sceneResources) this.sceneResources.group.position.y = 0;
+    this.archiveComposite?.setFrame(0, this.scene.background as THREE.Color);
     delete this.container.dataset.layoutTransition;
   }
 
@@ -1746,6 +1728,9 @@ export class ArchiveScene {
     this.last = time;
     this.clock = time;
     if (!this.loaded) return;
+    // Restore exactly the visibility that existed before the rack-only frame.
+    for (const [object, visible] of this.shelfEntryHidden) object.visible = visible;
+    this.shelfEntryHidden.clear();
     const shelfIntroTime = cinematic?.musicIntro && cinematic.entryLayout === "shelf" ? cinematic.time : undefined;
     if (shelfIntroTime !== undefined) { cinematic = undefined; this.reveal = this.targetReveal = 1; }
     if (!this.layoutWarmFrame) this.layoutTransition.advance(elapsed);
@@ -2112,17 +2097,6 @@ export class ArchiveScene {
     // a missing file for one frame at the ownership handoff.
     const hidden = new Set(this.outgoing.map((o) => cellKey(o.cell)));
     hidden.add(cellKey(this.selectedCell));
-    const primaryCopies = new Map<string, { index: number; distance: number }>();
-    if (this.layoutTransition.active) {
-      this.layoutTransition.prepareTarget(new THREE.Vector3(chosen.x - trackX,
-        selectedBase + this.lift.value, chosen.z + entryZ + railAt(selectedLane)));
-      for (let i = 0; i < this.cells.length; i++) {
-        const cell = this.cells[i], key = cell.foobarEntryKey;
-        if (!key) continue;
-        const distance = (cell.lane - selectedLane) ** 2 * 16 + (cell.row - selectedRow) ** 2;
-        if (distance < (primaryCopies.get(key)?.distance ?? Infinity)) primaryCopies.set(key, { index: i, distance });
-      }
-    }
     let lastRenderable = -1;
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i];
@@ -2143,11 +2117,6 @@ export class ArchiveScene {
           : 1,
       );
       this.dummy.updateMatrix();
-      if (this.dummy.scale.x > 0) {
-        const key = this.cells[i].foobarEntryKey;
-        this.layoutTransition.apply(this.dummy.matrix, key, false, !!key && primaryCopies.get(key)?.index === i);
-        if (shelfIntroTime !== undefined) shelfEntryPose(this.dummy.matrix, shelfIntroTime, lane - selectedLane, row - selectedRow);
-      }
       this.caseHitProxy?.setMatrixAt(i, this.dummy.matrix);
       for (const inst of this.instances) {
         inst.setMatrixAt(i, this.dummy.matrix);
@@ -2220,9 +2189,6 @@ export class ArchiveScene {
       0,
     );
     this.model.updateMatrix();
-    this.layoutTransition.apply(this.model.matrix, this.selectedCell.foobarEntryKey, true);
-    if (shelfIntroTime !== undefined) shelfEntryPose(this.model.matrix, shelfIntroTime, 0, 0);
-    this.model.matrix.decompose(this.model.position, this.model.quaternion, this.model.scale);
     // Measured from frame 787: X edge (382,-204), adjacent row (78,38).
     // The label vertical edge constrains height; the file base is occluded.
     // Do not calibrate field of view from the visible fragment of a file.
@@ -2434,7 +2400,7 @@ export class ArchiveScene {
     const cameraPosition = cameraAim
       .clone()
       .addScaledVector(viewDirection, distance);
-    if (!cinematic && !this.reduced && (!musicLibrary || !this.musicPresentation.holdsDetail)) {
+    if (!cinematic && shelfIntroTime === undefined && !this.reduced && (!musicLibrary || !this.musicPresentation.holdsDetail)) {
       cameraPosition.x += this.pointer.x * 0.12;
       cameraPosition.y -= this.pointer.y * 0.12;
     }
@@ -2544,10 +2510,6 @@ export class ArchiveScene {
     this.caseIllumination.update(this.model, !!this.caseGeometryKey && records.length > 0 && this.model.visible);
     const shelfBottom = MUSIC_ARRAY_VIEW.floorY + this.caseLayout.bounds.min[1];
     this.floor.position.y = this.shelfView ? shelfBottom - MUSIC_SHELF_VIEW.floorDrop : -4.63;
-    if (this.layoutTransition.active) {
-      this.floor.position.y = THREE.MathUtils.lerp(this.layoutFloorY, this.floor.position.y, this.layoutTransition.progress);
-      if (this.layoutGhost) this.layoutGhost.position.y = -6 * this.layoutTransition.progress;
-    }
     this.sceneResources?.update({
       shelf: this.shelfView,
       slots: this.shelfView ? this.positions.map((position, index) => ({ x: position.x - trackX + this.caseLayout.center.x, y: shelfBottom,
@@ -2561,9 +2523,8 @@ export class ArchiveScene {
       environment: this.scene.environment, environmentIntensity: this.scene.environmentIntensity,
       guideOriginX: this.caseLayout.center.x, guideOriginZ: this.caseLayout.center.z,
     });
-    if (this.sceneResources) this.sceneResources.group.position.y = this.shelfView
-      ? this.layoutTransition.active ? -3 * (1 - this.layoutTransition.progress)
-        : shelfIntroTime !== undefined ? -.7 * (1 - ease((shelfIntroTime - 22) / 1.3)) : 0 : 0;
+    // Racks are always complete at their final coordinates, including entry.
+    if (this.sceneResources) this.sceneResources.group.position.y = 0;
     const shadowCamera = this.light.shadow.camera;
     const shelfShadowExtent = this.shelfView
       ? Math.ceil(Math.max(24, Math.abs(spacing.row) * (MUSIC_SHELF_VIEW.slots + 3), Math.abs(spacing.column) * 5)) : 16;
@@ -2584,6 +2545,30 @@ export class ArchiveScene {
       this.renderer.shadowMap.needsUpdate = true;
     this.covers?.flushUploads(this.renderer);
     this.playbackGlass?.update(performance.now() / 1000, this.reduced, 1 - this.themeWarmth.value);
+    const background = this.scene.background as THREE.Color;
+    if (shelfIntroTime !== undefined) {
+      const entry = shelfEntryFrame(shelfIntroTime);
+      this.shelfEntryPhase = entry.phase;
+      if (!entry.casesVisible) {
+        this.shelfEntryBaseCaptured = false;
+        for (const object of [this.model, ...this.instances, this.covers?.array, this.covers?.arrayInsert,
+          this.caseTitles?.array, this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge]) {
+          if (!object) continue;
+          this.shelfEntryHidden.set(object, object.visible); object.visible = false;
+        }
+        this.archiveComposite?.setFrame(2, background, 0, 1, entry.structure);
+      } else {
+        if (!this.shelfEntryBaseCaptured && entry.catalog < 1)
+          this.shelfEntryBaseCaptured = this.archiveComposite?.capture(this.renderer, true) ?? false;
+        this.archiveComposite?.setFrame(this.shelfEntryBaseCaptured && entry.catalog < 1 ? 3 : 0,
+          background, 0, 1, entry.catalog);
+      }
+    } else {
+      this.shelfEntryPhase = undefined;
+      this.shelfEntryBaseCaptured = false;
+      const frame = this.layoutTransition.frame;
+      this.archiveComposite?.setFrame(this.layoutTransition.active ? 1 : 0, background, frame.outgoing, frame.incoming);
+    }
     if (!(musicLibrary && this.displayLayout.grid && !this.musicPresentation.holdsDetail && this.detail < .001)) this.composer.render();
     if (this.layoutWarmFrame && this.layoutTransition.active) {
       this.layoutWarmFrame = false;
@@ -2696,7 +2681,10 @@ export class ArchiveScene {
         target: this.selectionLighting.spot.target.position.toArray(),
       } : null,
       selectedCell: { ...this.selectedCell },
-      layoutTransition: { active: this.layoutTransition.active, progress: this.layoutTransition.progress },
+      layoutTransition: { active: this.layoutTransition.active, progress: this.layoutTransition.progress,
+        ...this.layoutTransition.frame, snapshotRevision: this.archiveComposite?.snapshotRevision ?? 0 },
+      shelfEntry: { phase: this.shelfEntryPhase, hiddenCases: this.shelfEntryHidden.size,
+        baseCaptured: this.shelfEntryBaseCaptured },
       matrixDrag: { phase: this.matrixDrag.phase, position: this.matrixDrag.position, moving: this.matrixDrag.moving },
       matrixHover: { cell: this.matrixHoverCell ?? null, height: this.matrixHoverCell ? this.matrixHover.get(cellKey(this.matrixHoverCell)) ?? 0 : 0 },
       coordinateOrigin: { ...this.coordinateOrigin },

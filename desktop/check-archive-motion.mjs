@@ -7,9 +7,10 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function checkArchiveMotion({ browserWindow, outputDirectory, probeReport, getPreferences, getReadyCount }) {
   const wc = browserWindow.webContents;
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
-  const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [], summary: {} };
+  const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [], entryTimeline: [], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
+  let transitionSequence = 0;
   const originalBackgroundThrottling = wc.getBackgroundThrottling?.() ?? true;
   const stateScript = String.raw`(() => {
     const stage = document.querySelector('#stage');
@@ -19,6 +20,10 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const info = document.querySelector('.foobar-home-info');
     const tools = document.querySelector('.foobar-catalog-tools');
     const workspace = document.querySelector('.foobar-workspace');
+    const toolButtons = Array.from(document.querySelectorAll('.foobar-catalog-tools button, .foobar-workspace button, .foobar-workspace [role="button"]'));
+    const randomButton = toolButtons.find(button => /\brandom\b/i.test([
+      button.textContent, button.getAttribute('aria-label'), button.dataset.action, button.dataset.value,
+    ].filter(Boolean).join(' ')));
     const rect = node => {
       if (!node) return null;
       const r = node.getBoundingClientRect();
@@ -68,6 +73,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         cameraPosition:stats.cameraPosition ?? null,
         modelPosition:stats.modelPosition ?? null,
         layoutTransition:stats.layoutTransition ?? null,
+        shelfEntry:stats.shelfEntry ?? null,
         matrixDrag:stats.matrixDrag ?? null,
         matrixHover:stats.matrixHover ?? null,
         caseStructure:stats.caseStructure ?? null,
@@ -89,6 +95,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       canvasRect,
       infoRect,
       toolsRect,
+      randomButtonRect:rect(randomButton),
+      randomButtonLabel:randomButton?.textContent?.trim() ?? randomButton?.getAttribute('aria-label') ?? null,
       canvasClipPath:clipPath,
       canvasClipRight:clipRight,
       canvasVisibleRight:canvasRect && clipRight !== null ? canvasRect.right - clipRight : canvasRect?.right ?? null,
@@ -125,8 +133,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       viewLayout:stats?.displayLayout?.requested ?? stage?.dataset.musicLayout ?? null,
       selectedAlbumId:stats?.selectedAlbumId ?? app?.selectedAlbum?.id ?? null,
       selectedEntryKey:stats?.selectedCell?.foobarEntryKey ?? null,
-      stats:stats ? { layoutTransition:stats.layoutTransition, cameraPosition:stats.cameraPosition,
-        modelPosition:stats.modelPosition, musicPresentationPhase:stats.musicPresentationPhase } : null,
+      entry:app?.entry ? { active:app.entry.active, time:app.entry.time, phase:app.entry.phase } : null,
+      stats:stats ? { layoutTransition:stats.layoutTransition, shelfEntry:stats.shelfEntry ?? null,
+        musicPresentationPhase:stats.musicPresentationPhase } : null,
     };
   })()`;
   const snapshot = async () => {
@@ -153,11 +162,15 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     while (Date.now() < deadline) {
       const sampleStartedAt = Date.now();
       latest = await fastSnapshot();
-      if (transitionProbeStartedAt) result.transitionSamples.push({ context:transitionProbeContext,
-        sinceClickMs:Date.now() - transitionProbeStartedAt, sampleMs:Date.now() - sampleStartedAt,
-        active:latest.stats?.layoutTransition?.active ?? null,
-        progress:latest.stats?.layoutTransition?.progress ?? null,
-        layout:latest.viewLayout ?? null });
+      if (transitionProbeStartedAt) {
+        const transition = latest.stats?.layoutTransition ?? {};
+        result.transitionSamples.push({ context:transitionProbeContext,
+          sinceClickMs:Date.now() - transitionProbeStartedAt, sampleMs:Date.now() - sampleStartedAt,
+          active:transition.active ?? null, progress:transition.progress ?? null,
+          phase:transition.phase ?? null,
+          outgoing:transition.outgoing ?? null, incoming:transition.incoming ?? null,
+          snapshotRevision:transition.snapshotRevision ?? null, layout:latest.viewLayout ?? null });
+      }
       if (!latest.sampleError && predicate(latest)) return latest;
       await pause(intervalMs);
     }
@@ -185,16 +198,17 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const shortState = state => ({
     design:state.design, page:state.page, viewLayout:state.viewLayout,
     selectedAlbumId:state.selectedAlbumId, selectedEntryKey:state.selectedEntryKey,
-    transition:state.stats?.layoutTransition, matrixDrag:state.stats?.matrixDrag,
+    transition:state.stats?.layoutTransition, shelfEntry:state.stats?.shelfEntry,
+    matrixDrag:state.stats?.matrixDrag,
     matrixHover:state.stats?.matrixHover, entry:state.entry,
   });
-  const takeScreenshot = async name => {
+  const takeScreenshot = async (name, details = null, settleMs = 100) => {
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-    await pause(100);
+    if (settleMs > 0) await pause(settleMs);
     const image = await browserWindow.capturePage();
     const file = path.join(screenshotDirectory, `${name}.png`);
     await fs.writeFile(file, image.toPNG());
-    result.screenshots.push({ name, file, size:image.getSize() });
+    result.screenshots.push({ name, file, size:image.getSize(), ...(details === null ? {} : { details }) });
     process.stdout.write(`ARCHIVE_MOTION_SCREENSHOT:${file}\n`);
     return file;
   };
@@ -202,32 +216,88 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const clickLayout = async layout => click(layoutSelector(layout));
   const identityMatches = (state, identity) => state.selectedAlbumId === identity.selectedAlbumId &&
     state.selectedEntryKey === identity.selectedEntryKey && !!state.selectedEntryKey;
-  const vectorDistance = (left, right) => {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length < 3 || right.length < 3) return Infinity;
-    return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
+  const auditTransition = context => {
+    const samples = result.transitionSamples.filter(sample => sample.context === context && sample.active === true &&
+      Number.isFinite(sample.progress));
+    const phaseSequence = [];
+    let previousPhase = null;
+    let phaseBoundaryErrorCount = 0;
+    let doubleExposureCount = 0;
+    let invalidWeightCount = 0;
+    let releaseMonotonicErrorCount = 0;
+    let resolveMonotonicErrorCount = 0;
+    let previousReleaseOutgoing = null;
+    let previousResolveIncoming = null;
+    for (const sample of samples) {
+      const progress = sample.progress;
+      if (sample.phase !== previousPhase) phaseSequence.push(sample.phase);
+      previousPhase = sample.phase;
+      const outgoing = sample.outgoing, incoming = sample.incoming;
+      if (!Number.isFinite(outgoing) || !Number.isFinite(incoming) || outgoing < -0.002 || outgoing > 1.002 ||
+          incoming < -0.002 || incoming > 1.002) invalidWeightCount++;
+      if (outgoing > 0.002 && incoming > 0.002) doubleExposureCount++;
+      if ((sample.phase === 'release' && progress >= 0.34) || (sample.phase === 'resolve' && progress < 0.34)) phaseBoundaryErrorCount++;
+      if (sample.phase === 'release') {
+        if (previousReleaseOutgoing !== null && outgoing > previousReleaseOutgoing + 0.01) releaseMonotonicErrorCount++;
+        previousReleaseOutgoing = outgoing;
+      }
+      if (sample.phase === 'resolve') {
+        if (previousResolveIncoming !== null && incoming < previousResolveIncoming - 0.01) resolveMonotonicErrorCount++;
+        previousResolveIncoming = incoming;
+      }
+    }
+    return {
+      sampleCount:samples.length, phaseSequence,
+      phaseOrderOkay:phaseSequence[0] === 'release' && phaseSequence.includes('resolve') &&
+        phaseSequence.indexOf('release') < phaseSequence.indexOf('resolve'),
+      phaseBoundaryErrorCount, doubleExposureCount, invalidWeightCount,
+      releaseMonotonicErrorCount, resolveMonotonicErrorCount,
+      snapshotRevisions:[...new Set(samples.map(sample => sample.snapshotRevision).filter(Number.isInteger))],
+    };
   };
   const transitionTo = async (designLabel, target, identity, captureMidEnd = false) => {
     let current = await snapshot();
     if (current.viewLayout === target) return current;
-    transitionProbeContext = `${designLabel} ${target}`;
+    const context = `${designLabel} ${target} #${++transitionSequence}`;
+    transitionProbeContext = context;
     transitionProbeStartedAt = Date.now();
     await clickLayout(target);
     const active = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) > 0.03 && state.viewLayout === target,
+      Number(state.stats.layoutTransition.progress) > 0 && state.viewLayout === target,
     `${designLabel} ${target} transition active`, 7000, 12);
     record(`${designLabel} ${target} has an active intermediate frame`,
       active.stats.layoutTransition.progress > 0 && active.stats.layoutTransition.progress < 1 && identityMatches(active, identity), shortState(active));
-    const middle = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) >= 0.32 && Number(state.stats.layoutTransition.progress) <= 0.88,
-    `${designLabel} ${target} transition midpoint`, 7000, 12);
-    record(`${designLabel} ${target} midpoint preserves selection identity`, identityMatches(middle, identity), shortState(middle));
-    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-mid`);
+    const release = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
+      state.stats.layoutTransition.phase === 'release' && Number(state.stats.layoutTransition.progress) >= 0.08,
+    `${designLabel} ${target} release phase`, 7000, 12);
+    record(`${designLabel} ${target} release frame preserves selection identity`, identityMatches(release, identity), shortState(release));
+    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-release`, {
+      progress:release.stats.layoutTransition.progress, phase:release.stats.layoutTransition.phase,
+      snapshotRevision:release.stats.layoutTransition.snapshotRevision,
+    });
+    const resolve = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
+      state.stats.layoutTransition.phase === 'resolve' && Number(state.stats.layoutTransition.progress) > 0.6,
+    `${designLabel} ${target} resolve phase above 0.6`, 7000, 12);
+    record(`${designLabel} ${target} resolve frame preserves selection identity`, identityMatches(resolve, identity), shortState(resolve));
+    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-resolve`, {
+      progress:resolve.stats.layoutTransition.progress, phase:resolve.stats.layoutTransition.phase,
+      snapshotRevision:resolve.stats.layoutTransition.snapshotRevision,
+    });
     const end = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false,
       `${designLabel} ${target} endpoint`, 10000, 12);
     record(`${designLabel} ${target} reaches its endpoint with identity intact`, identityMatches(end, identity), shortState(end));
     if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-end`);
+    const audit = auditTransition(context);
+    record(`${designLabel} ${target} transition reports release then resolve`, audit.phaseOrderOkay, audit);
+    record(`${designLabel} ${target} curtain weights stay bounded and move in order`, audit.sampleCount > 0 &&
+      audit.phaseBoundaryErrorCount === 0 && audit.doubleExposureCount === 0 && audit.invalidWeightCount === 0 &&
+      audit.releaseMonotonicErrorCount === 0 && audit.resolveMonotonicErrorCount === 0, audit);
+    record(`${designLabel} ${target} has a static target layout and identity after reveal`,
+      end.viewLayout === target && end.stats?.layoutTransition?.active === false && identityMatches(end, identity), shortState(end));
     result.timeline.push({ design:designLabel, target, activeProgress:active.stats.layoutTransition.progress,
-      middleProgress:middle.stats.layoutTransition.progress, endpoint:end.viewLayout,
+      releaseProgress:release.stats.layoutTransition.progress, resolveProgress:resolve.stats.layoutTransition.progress,
+      phaseSequence:audit.phaseSequence,
+      snapshotRevision:resolve.stats.layoutTransition.snapshotRevision, endpoint:end.viewLayout,
       selectedAlbumId:end.selectedAlbumId, entryKey:end.selectedEntryKey });
     transitionProbeStartedAt = 0;
     transitionProbeContext = '';
@@ -236,34 +306,45 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const exerciseLayoutTransitions = async (designLabel, identity) => {
     await transitionTo(designLabel, 'shelf', identity, designLabel === 'Future');
     await transitionTo(designLabel, 'array', identity, designLabel === 'Future');
-    transitionProbeContext = `${designLabel} rapid forward`;
+    const forwardContext = `${designLabel} rapid forward`;
+    transitionProbeContext = forwardContext;
     transitionProbeStartedAt = Date.now();
     await clickLayout('shelf');
     const forward = await waitForFast(state => state.viewLayout === 'shelf' && state.stats?.layoutTransition?.active === true &&
       Number(state.stats.layoutTransition.progress) > 0.12,
     `${designLabel} rapid-forward transition`, 7000, 12);
     record(`${designLabel} rapid-forward frame retains identity`, identityMatches(forward, identity), shortState(forward));
-    transitionProbeContext = `${designLabel} rapid reverse`;
+    const reverseContext = `${designLabel} rapid reverse`;
+    transitionProbeContext = reverseContext;
     transitionProbeStartedAt = Date.now();
     await clickLayout('array');
     const reverse = await waitForFast(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === true &&
       Number(state.stats.layoutTransition.progress) > 0.02,
     `${designLabel} rapid reverse transition`, 7000, 12);
-    const cameraJump = vectorDistance(forward.stats.cameraPosition, reverse.stats.cameraPosition);
-    const modelJump = vectorDistance(forward.stats.modelPosition, reverse.stats.modelPosition);
-    record(`${designLabel} rapid reverse retargets without a camera snap`, cameraJump < 8 && modelJump < 8,
-      { cameraJump, modelJump, from:forward.stats.layoutTransition, to:reverse.stats.layoutTransition });
+    const forwardRevision = forward.stats.layoutTransition.snapshotRevision;
+    const reverseRevision = reverse.stats.layoutTransition.snapshotRevision;
+    record(`${designLabel} rapid reverse retains the prior composed snapshot`, Number.isInteger(forwardRevision) &&
+      Number.isInteger(reverseRevision) && reverseRevision > forwardRevision,
+    { forwardRevision, reverseRevision, from:forward.stats.layoutTransition, to:reverse.stats.layoutTransition });
     record(`${designLabel} rapid reverse preserves identity`, identityMatches(reverse, identity), shortState(reverse));
-    const middle = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) >= 0.3 && state.viewLayout === 'array',
-    `${designLabel} rapid reverse midpoint`, 7000, 12);
-    record(`${designLabel} rapid reverse has a visible intermediate frame`, middle.stats.layoutTransition.progress < 1 && identityMatches(middle, identity), shortState(middle));
+    const resolve = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
+      state.stats.layoutTransition.phase === 'resolve' && Number(state.stats.layoutTransition.progress) > 0.6 &&
+      state.viewLayout === 'array', `${designLabel} rapid reverse resolve phase`, 7000, 12);
+    record(`${designLabel} rapid reverse reaches its reveal phase with identity intact`,
+      identityMatches(resolve, identity), shortState(resolve));
     const end = await waitForFast(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === false,
       `${designLabel} rapid reverse endpoint`, 10000, 12);
-    record(`${designLabel} rapid reverse ends at MATRIX`, identityMatches(end, identity), shortState(end));
+    record(`${designLabel} rapid reverse ends at a static MATRIX layout`, identityMatches(end, identity) &&
+      end.stats?.layoutTransition?.active === false, shortState(end));
+    const audit = auditTransition(reverseContext);
+    record(`${designLabel} rapid reverse reports release then resolve`, audit.phaseOrderOkay, audit);
+    record(`${designLabel} rapid reverse keeps one curtain image visible at a time`,
+      audit.sampleCount > 0 && audit.phaseBoundaryErrorCount === 0 && audit.doubleExposureCount === 0 &&
+      audit.invalidWeightCount === 0 && audit.releaseMonotonicErrorCount === 0 && audit.resolveMonotonicErrorCount === 0, audit);
     result.timeline.push({ design:designLabel, target:'array', rapidReverse:true,
-      activeProgress:reverse.stats.layoutTransition.progress, middleProgress:middle.stats.layoutTransition.progress,
-      cameraJump, modelJump, endpoint:end.viewLayout });
+      activeProgress:reverse.stats.layoutTransition.progress, resolveProgress:resolve.stats.layoutTransition.progress,
+      phaseSequence:audit.phaseSequence, snapshotRevisionFrom:forwardRevision,
+      snapshotRevisionTo:reverseRevision, endpoint:end.viewLayout });
     transitionProbeStartedAt = 0;
     transitionProbeContext = '';
     return end;
@@ -394,8 +475,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const verifyPunkChrome = async (name, expectedBleed) => {
     const state = await waitFor(value => value.design === 'archive' && value.page === 'music' &&
       value.infoVisible && value.controls.layout?.visible, `${name} Punk chrome visible`);
+    verifyPunkCompactTools(state, name);
     const expected = Number.parseFloat(state.sceneBleed) || 0;
-    const edgeDelta = state.toolsInfoEdgeDelta;
     const clipDelta = state.canvasVisibleRight !== null && state.infoRect ? state.canvasVisibleRight - state.infoRect.x : Infinity;
     const blendWidth = Number.parseFloat(state.blendWidth) || 0;
     if (state.viewport?.width > 720) record(`${name} Punk scene clip reaches the soft info transition`, expected === expectedBleed &&
@@ -403,8 +484,6 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       { sceneBleed:state.sceneBleed, expectedBleed, canvasVisibleRight:state.canvasVisibleRight, infoLeft:state.infoRect?.x, clipDelta, clipPath:state.canvasClipPath });
     else record(`${name} narrow Punk layout removes scene bleed`, expected === 0 && expectedBleed === 0,
       { sceneBleed:state.sceneBleed, expectedBleed });
-    if (state.viewport?.width > 720) record(`${name} Punk top rail aligns with the info edge`, Math.abs(edgeDelta) <= 4,
-      { toolsRight:state.toolsRect?.right, infoLeft:state.infoRect?.x, edgeDelta });
     record(`${name} Punk info keeps its actions and format label`, state.playAction && state.openAction && state.formatVisible,
       { playAction:state.playAction, openAction:state.openAction, formatText:state.formatText, infoBackground:state.infoBackground });
     record(`${name} Punk right column uses one gradient surface behind the info panel`,
@@ -416,6 +495,62 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     await pause(700);
     await takeScreenshot(name);
   };
+  const verifyPunkCompactTools = (state, label) => {
+    const fields = ['show','layout','group','sort'];
+    const fieldRects = fields.map(field => ({ field, rect:state.controls[field]?.rect }))
+      .filter(item => item.rect && item.rect.width > 0 && item.rect.height > 0);
+    const rows = [];
+    for (const item of fieldRects) {
+      const centerY = item.rect.y + item.rect.height / 2;
+      let row = rows.find(candidate => Math.abs(candidate.centerY - centerY) <= 16);
+      if (!row) { row = { centerY, fields:[], rects:[] }; rows.push(row); }
+      row.fields.push(item.field);
+      row.rects.push(item.rect);
+      row.centerY = row.rects.reduce((sum, rect) => sum + rect.y + rect.height / 2, 0) / row.rects.length;
+    }
+    rows.sort((left, right) => left.centerY - right.centerY);
+    const controlsRight = fieldRects.length ? Math.max(...fieldRects.map(item => item.rect.right)) : -Infinity;
+    const controlsLeft = fieldRects.length ? Math.min(...fieldRects.map(item => item.rect.x)) : Infinity;
+    const controlsTop = fieldRects.length ? Math.min(...fieldRects.map(item => item.rect.y)) : Infinity;
+    const controlsBottom = fieldRects.length ? Math.max(...fieldRects.map(item => item.rect.bottom)) : -Infinity;
+    const tools = state.toolsRect;
+    const viewport = state.viewport ?? {};
+    const sceneTop = state.canvasRect?.y ?? 0;
+    const compactUpperLeft = !!tools && tools.width > 0 && tools.height > 0 &&
+      tools.x >= -1 && tools.x <= Math.max(44, viewport.width * 0.06) &&
+      tools.y >= sceneTop - 1 && tools.y - sceneTop <= 44 &&
+      tools.width <= Math.min(560, viewport.width * 0.74) &&
+      tools.height <= Math.min(180, viewport.height * 0.26);
+    const twoRows = rows.length === 2 && rows.every(row => row.fields.length === 2) &&
+      rows[1].centerY - rows[0].centerY >= 18 && rows[1].centerY - rows[0].centerY <= 100;
+    const random = state.randomButtonRect;
+    const randomBesideRows = !!random && (random.right <= controlsLeft + 3 || random.x >= controlsRight - 3) &&
+      random.y + random.height >= controlsTop - 6 && random.y <= controlsBottom + 6;
+    const detail = { viewport, tools, rows:rows.map(row => ({ fields:row.fields, centerY:row.centerY })),
+      randomButtonRect:random, randomButtonLabel:state.randomButtonLabel,
+      compactUpperLeft, twoRows, randomBesideRows };
+    record(`${label} Punk tools form a compact upper-left two-row cluster`, compactUpperLeft && twoRows, detail);
+    record(`${label} Punk Random stays beside the two control rows`, randomBesideRows, detail);
+  };
+  const verifyPunkNarrowWindow = async () => {
+    if (typeof browserWindow.getSize !== 'function' || typeof browserWindow.setSize !== 'function' ||
+        browserWindow.isFullScreen?.() === true) return;
+    const originalSize = browserWindow.getSize();
+    const originalViewportWidth = (await snapshot()).viewport?.width;
+    try {
+      browserWindow.setSize(800, originalSize[1]);
+      const narrow = await waitFor(state => state.design === 'archive' && state.page === 'music' &&
+        state.mode === 'archive' && state.controls.layout?.visible && state.viewport?.width >= 720 &&
+        state.viewport.width <= 800, '800px Punk tools viewport', 5000, 30);
+      verifyPunkCompactTools(narrow, '800px');
+      const expectedBleed = narrow.viewport.width <= 720 ? 0 : 32;
+      await verifyPunkChrome('punk-tools-800px', expectedBleed);
+    } finally {
+      browserWindow.setSize(originalSize[0], originalSize[1]);
+      if (Number.isFinite(originalViewportWidth)) await waitFor(state => Math.abs(state.viewport?.width - originalViewportWidth) <= 2,
+        'restore archive motion viewport size', 5000, 30);
+    }
+  };
   const replayFutureArrayEntry = async label => {
     const settings = await enterInterfaceSettings(label);
     record(`${label} entry settings are available in Future ARRAY with automatic entry off`,
@@ -425,6 +560,37 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     await click('[data-action="entry-replay"]');
     return waitFor(state => state.entry?.active === true && state.overlayPresent && state.page === 'music' &&
       state.viewLayout === 'shelf' && state.mode === 'archive', `${label} Future ARRAY replay starts`, 10000, 35);
+  };
+  let entryTimelineStartedAt = 0;
+  let lastEntryTimelineKey = '';
+  const entryStamp = state => ({
+    sinceReplayMs:entryTimelineStartedAt ? Date.now() - entryTimelineStartedAt : null,
+    entryTime:Number.isFinite(Number(state.entry?.time)) ? Number(state.entry.time) : null,
+    active:state.entry?.active ?? null,
+    entryPhase:state.entry?.phase ?? null,
+    shelfPhase:state.stats?.shelfEntry?.phase ?? null,
+    hiddenCases:state.stats?.shelfEntry?.hiddenCases ?? null,
+    baseCaptured:state.stats?.shelfEntry?.baseCaptured ?? null,
+  });
+  const recordEntryState = (state, force = false) => {
+    const stamp = entryStamp(state);
+    const key = [stamp.active, stamp.entryPhase, stamp.shelfPhase, stamp.hiddenCases, stamp.baseCaptured].join('|');
+    if (force || key !== lastEntryTimelineKey) result.entryTimeline.push(stamp);
+    lastEntryTimelineKey = key;
+    return stamp;
+  };
+  const sampleEntryUntil = async (time, label, timeoutMs = 30000) => {
+    const deadline = Date.now() + timeoutMs;
+    let latest;
+    while (Date.now() < deadline) {
+      latest = await fastSnapshot();
+      if (!latest.sampleError) {
+        recordEntryState(latest);
+        if (Number(latest.entry?.time) >= time || latest.entry?.active === false) return latest;
+      }
+      await pause(20);
+    }
+    throw new Error(`Timed out waiting for Future ARRAY entry ${label}: ${JSON.stringify(latest)}`);
   };
 
   try {
@@ -469,6 +635,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const width = (await snapshot()).viewport?.width ?? 0;
     const expectedBleed = width <= 720 ? 0 : width <= 1100 ? 32 : 64;
     await verifyPunkChrome('punk-array-controls', expectedBleed);
+    await verifyPunkNarrowWindow();
     await transitionTo('Punk', 'array', identity);
     await exercisePunkControls();
     await takeScreenshot('punk-matrix-controls');
@@ -490,44 +657,90 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       identity);
     if (future.viewLayout !== 'shelf') future = await transitionTo('Future', 'shelf', identity);
     const skippedEntry = await replayFutureArrayEntry('manual skip');
-    await waitFor(state => state.entry?.active === true && Number(state.entry.time) >= 3.76,
-      'Future ARRAY entry has played for about two seconds', 10000, 35);
-    await takeScreenshot('future-array-entry-skip-point');
+    const skipFrame = await waitForFast(state => state.entry?.active === true && Number(state.entry.time) >= 22.15,
+      'Future ARRAY structure phase before manual skip', 30000, 12);
+    record('manual skip is available while shelf structure is assembled',
+      skipFrame.entry.phase === 'shelf-structure' && Number(skipFrame.entry.time) <= 22.7,
+      { time:skipFrame.entry.time, entryPhase:skipFrame.entry.phase, shelfEntry:skipFrame.stats?.shelfEntry });
     await click('.future-entry-skip');
     const skipped = await waitFor(state => state.entry?.active === false && !state.overlayPresent &&
-      state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive' && state.detailHidden === true,
+      state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive' && state.detailHidden === true &&
+      state.stats?.shelfEntry?.hiddenCases === 0 && state.stats?.shelfEntry?.phase == null,
     'Future ARRAY entry skip returns to overview', 10000, 35);
     record('manual skip returns to Future ARRAY overview', skipped.viewLayout === 'shelf' &&
       skipped.presentation?.phase === 'archive' && skipped.detailHidden === true && getPreferences()?.entryOnOpen === false,
     { state:shortState(skipped), entryOnOpen:getPreferences()?.entryOnOpen, start:shortState(skippedEntry) });
+    record('manual skip clears hidden rack cases and restores the static shelf',
+      skipped.stats?.shelfEntry?.hiddenCases === 0 && skipped.stats?.shelfEntry?.phase == null,
+      { shelfEntry:skipped.stats?.shelfEntry });
 
     const naturalEntry = await replayFutureArrayEntry('natural replay');
     record('manual replay starts the Future ARRAY layout', naturalEntry.entry?.layout === 'shelf' || naturalEntry.viewLayout === 'shelf',
       { entryLayout:naturalEntry.entry?.layout, viewLayout:naturalEntry.viewLayout });
-    let lastEntryTime = Number(naturalEntry.entry?.time) || 1.76;
-    let nextCaptureAt = 22.15;
-    let tailCaptureCount = 0;
     const startedAt = Date.now();
-    while (Date.now() - startedAt < 40000) {
-      const timeToCaptureMs = Math.max(5000, Math.min(30000, (nextCaptureAt - lastEntryTime + 3) * 1000));
-      const state = await waitFor(value => !value.entry?.active || Number(value.entry?.time) >= nextCaptureAt,
-        `Future ARRAY entry reaches ${nextCaptureAt.toFixed(2)}s or ends`, timeToCaptureMs, 60);
-      if (!state.entry?.active) { lastEntryTime = Math.max(lastEntryTime, Number(state.entry?.time) || lastEntryTime); break; }
-      lastEntryTime = Math.max(lastEntryTime, Number(state.entry.time) || 0);
-      const shot = `future-array-entry-${String(Math.floor(nextCaptureAt)).padStart(2,'0')}-${String(Math.round((nextCaptureAt % 1) * 10)).padStart(1,'0')}`;
-      await takeScreenshot(shot);
-      tailCaptureCount++;
-      nextCaptureAt += 0.9;
+    entryTimelineStartedAt = Date.now();
+    lastEntryTimelineKey = '';
+    recordEntryState(naturalEntry, true);
+    const keyframeTimes = [22.35,22.7,23.15,23.75,24.2,25.3,25.9];
+    let keyframeCount = 0;
+    for (const targetTime of keyframeTimes) {
+      const beforeCapture = await sampleEntryUntil(Math.max(0, targetTime - 0.12),
+        `key frame ${targetTime.toFixed(2)}s`);
+      const beforeStamp = recordEntryState(beforeCapture, true);
+      const name = `future-array-entry-${targetTime.toFixed(2).replace('.', '-')}`;
+      await takeScreenshot(name, { requestedEntryTime:targetTime, beforeCapture:beforeStamp }, 0);
+      keyframeCount++;
+      const afterCapture = await fastSnapshot();
+      if (!afterCapture.sampleError) {
+        const afterStamp = recordEntryState(afterCapture, true);
+        result.screenshots.at(-1).details.afterCapture = afterStamp;
+      }
     }
     const naturalEnd = await waitFor(state => state.entry?.active === false && !state.overlayPresent &&
-      state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive',
+      state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive' &&
+      state.stats?.layoutTransition?.active === false && state.stats?.shelfEntry?.hiddenCases === 0 &&
+      state.stats?.shelfEntry?.phase == null,
     'natural Future ARRAY entry completion', 10000, 40);
     const naturalPlaybackSeconds = (Date.now() - startedAt) / 1000;
+    recordEntryState(naturalEnd, true);
     await takeScreenshot('future-array-entry-final-overview');
+    const expectedEntryPhases = ['shelf-structure','shelf-catalog','shelf-ready','settle'];
+    const observedEntryPhases = [];
+    for (const sample of result.entryTimeline) {
+      if (sample.entryPhase && sample.entryPhase !== observedEntryPhases.at(-1)) observedEntryPhases.push(sample.entryPhase);
+    }
+    const phaseStarts = Object.fromEntries(expectedEntryPhases.map(phase => [phase,
+      result.entryTimeline.find(sample => sample.entryPhase === phase)?.entryTime ?? null]));
+    const phaseOrderOkay = expectedEntryPhases.every((phase, index) => observedEntryPhases.indexOf(phase) >= 0 &&
+      (index === 0 || observedEntryPhases.indexOf(phase) > observedEntryPhases.indexOf(expectedEntryPhases[index - 1])));
+    // Screenshots block sampling for several frames. First observation is not
+    // a phase boundary; exact boundaries are covered by the offline clock test.
+    const phaseTimingOkay = expectedEntryPhases.every((phase, index) => Number.isFinite(phaseStarts[phase]) &&
+      phaseStarts[phase] >= 21.9 && phaseStarts[phase] <= 26.3 &&
+      (index === 0 || phaseStarts[phase] >= phaseStarts[expectedEntryPhases[index - 1]]));
+    const structureSamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-structure');
+    const catalogSamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-catalog');
+    const readySamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-ready');
+    record('Future ARRAY timeline reports structure, catalog, ready and settle in order', phaseOrderOkay,
+      { observedEntryPhases, phaseStarts });
+    record('Future ARRAY scene phases follow the shared prelude in time order', phaseTimingOkay, { phaseStarts });
+    record('Future ARRAY structure reveals complete racks with catalog cases hidden',
+      structureSamples.some(sample => sample.shelfPhase === 'structure' && sample.hiddenCases > 0 && sample.baseCaptured === false),
+      structureSamples);
+    record('Future ARRAY catalog shows all covers over the captured rack',
+      catalogSamples.some(sample => sample.shelfPhase === 'catalog' && sample.hiddenCases === 0 && sample.baseCaptured === true),
+      catalogSamples);
+    record('Future ARRAY ready phase reaches the static shelf state',
+      readySamples.some(sample => sample.shelfPhase === 'ready'), readySamples);
     record('Future ARRAY intro completes naturally after the original prelude and tail',
-      tailCaptureCount >= 3 && naturalPlaybackSeconds >= 23 && naturalPlaybackSeconds <= 40 &&
+      keyframeCount === keyframeTimes.length && naturalPlaybackSeconds >= 23 && naturalPlaybackSeconds <= 40 &&
       naturalEnd.viewLayout === 'shelf' && naturalEnd.presentation?.phase === 'archive' && naturalEnd.detailHidden === true,
-    { tailCaptureCount, playbackSeconds:naturalPlaybackSeconds, lastEntryTime, state:shortState(naturalEnd) });
+    { keyframeCount, keyframeTimes, playbackSeconds:naturalPlaybackSeconds, state:shortState(naturalEnd) });
+    record('Future ARRAY entry returns to a static shelf with rack-only state cleared',
+      naturalEnd.entry?.active === false && naturalEnd.stats?.layoutTransition?.active === false &&
+      naturalEnd.stats?.shelfEntry?.phase == null && naturalEnd.stats?.shelfEntry?.hiddenCases === 0,
+    { shelfEntry:naturalEnd.stats?.shelfEntry,
+      transition:naturalEnd.stats?.layoutTransition, entry:naturalEnd.entry });
     record('entry replay leaves automatic entry off and does not open an album',
       getPreferences()?.entryOnOpen === false && naturalEnd.viewLayout === 'shelf' &&
       naturalEnd.detailHidden === true && naturalEnd.presentation?.phase === 'archive',
@@ -535,7 +748,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
 
     result.ok = Object.values(result.assertions).every(Boolean);
     result.summary = { ok:result.ok, cases:result.cases.length, screenshots:result.screenshots.length,
-      layoutTransitions:result.timeline.length, tailCaptureCount, naturalPlaybackSeconds,
+      layoutTransitions:result.timeline.length, entryPhaseSequence:observedEntryPhases,
+      keyframeCount, naturalPlaybackSeconds,
       finalLayout:naturalEnd.viewLayout, selectedAlbumId:naturalEnd.selectedAlbumId };
     return result;
   } catch (error) {

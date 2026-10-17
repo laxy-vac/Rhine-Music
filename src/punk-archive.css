@@ -54,7 +54,10 @@
   [data-foobar-layout="future"]
 ) .foobar-catalog-tools {
   top: 14px;
-  right: calc(var(--foobar-info-width) + 24px);
+  right: auto;
+  left: 24px;
+  width: max-content;
+  max-width: calc(100% - var(--foobar-info-width) - 72px);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-color: color-mix(in srgb, var(--muted) 48%, transparent) transparent;
@@ -80,12 +83,14 @@
   [data-foobar-layout="array"],
   [data-foobar-layout="future"]
 ) .foobar-catalog-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content;
   width: max-content;
-  min-width: calc(100% - 140px);
+  min-width: 0;
+  max-width: calc(100% - 140px);
   align-items: stretch;
-  justify-content: flex-start;
-  gap: 0;
+  justify-content: start;
+  gap: 2px;
   margin-left: 140px;
   border-block: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
   background: color-mix(in srgb, var(--page-bg) 94%, transparent);
@@ -95,7 +100,11 @@
   [data-foobar-layout="array"],
   [data-foobar-layout="future"]
 ) .foobar-catalog-toolbar__row {
-  display: contents;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  gap: 2px;
+  min-width: 0;
 }
 
 .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
@@ -250,6 +259,8 @@
     top: 12px;
     right: 16px;
     left: 16px;
+    width: auto;
+    max-width: none;
   }
 
   .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
@@ -264,6 +275,7 @@
     [data-foobar-layout="future"]
   ) .foobar-catalog-toolbar {
     margin-left: 126px;
+    max-width: calc(100% - 126px);
   }
 }
 
@@ -289,5 +301,6 @@
     [data-foobar-layout="future"]
   ) .foobar-catalog-toolbar {
     margin-left: 118px;
+    max-width: calc(100% - 118px);
   }
 }
