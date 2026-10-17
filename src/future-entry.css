@@ -1,0 +1,117 @@
+.future-entry {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  color: #080a08;
+  pointer-events: auto;
+}
+
+.future-entry::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #e4e1dc;
+  opacity: var(--future-entry-backdrop-opacity, 1);
+}
+
+.future-entry-film {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--future-entry-scale, 1));
+  transform-origin: center;
+  color: #080a08;
+  pointer-events: none;
+}
+
+.future-entry-film,
+.future-entry-film * {
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
+}
+
+.future-entry-film .boot-background {
+  z-index: 0;
+}
+
+/* Music navigation SVGs default to 20px. These are full-size film surfaces. */
+.music-app .future-entry-film svg {
+  width: 100%;
+  height: 100%;
+}
+
+.future-entry-branding {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  opacity: var(--future-entry-brand-opacity, 1);
+}
+
+.music-app .future-entry-film .boot {
+  z-index: 3;
+  opacity: 1;
+  visibility: visible;
+}
+
+.music-app .future-entry-skip {
+  position: absolute;
+  top: clamp(12px, 2.5vh, 32px);
+  right: clamp(12px, 2.5vw, 40px);
+  z-index: 101;
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  opacity: calc(.55 * var(--future-entry-brand-opacity, 1));
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.music-app .future-entry-skip:hover,
+.music-app .future-entry-skip:focus-visible {
+  opacity: var(--future-entry-brand-opacity, 1);
+}
+
+.music-app .future-entry-skip:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.music-app[data-future-entry] > :is(
+  .music-header,
+  .music-browse,
+  .music-bottomline,
+  .music-playback,
+  .album-panel,
+  .album-panel-veil,
+  .library-status,
+  .music-empty,
+  .music-vignette
+) {
+  opacity: var(--future-entry-ui-opacity, 0) !important;
+  transition: none !important;
+}
+
+.music-app[data-future-entry][data-theme="night"] > .future-entry {
+  color: #f0eee8;
+}
+
+.music-app[data-future-entry][data-theme="night"] > .future-entry::before {
+  background: #17191b;
+}
+
+.music-app[data-future-entry][data-theme="night"] .future-entry-film {
+  filter: invert(1) hue-rotate(180deg);
+}

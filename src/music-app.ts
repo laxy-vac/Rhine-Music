@@ -74,6 +74,7 @@ import { dsdBadgeMarkup, hiResBadgeMarkup, isDsdAlbum, isDsdTrack, isHiResAlbum,
 import { SurfaceTransition, PageScanTransition } from "./ui-transitions";
 import { qualityMarkup, syncQualityUI } from "./quality-settings";
 import { ArchiveScene } from "./scene";
+import { FutureEntry, futureEntryEnd, futureEntryShot } from "./future-entry";
 import { mountQualityDetection } from "./quality-detection";
 import {
   records,
@@ -458,6 +459,7 @@ let scene: ArchiveScene | undefined,
   ready = false,
   apiAvailable = true,
   refreshing = false;
+let futureEntry: FutureEntry | undefined;
 let introductionsStarting = false,
   libraryStateVersion = 0,
   introductionRequestError = "";
@@ -797,7 +799,7 @@ const presentation = new MusicPresentation({
   showBrowse: showBrowseSurface,
 });
 const albumInteraction = setupAlbumInteraction(stage, {
-  enabled: () => ready && page === "music" && !!albums.length && !panel && !viewer?.isOpen,
+  enabled: () => ready && !futureEntry?.active && page === "music" && !!albums.length && !panel && !viewer?.isOpen,
   stepAlbum, stepShelf: stepGenre,
   scrollTarget: () => albumPanel.scrollTarget(),
   tab: direction => { setTab(direction < 0 ? "tracks" : "about");$("#tab-" + musicApplication.activeTab).focus({ preventScroll: true }); },
@@ -4375,9 +4377,14 @@ let lastFrame = 0,
 function frame(ms: number) {
   foobarShell?.tick(ms / 1000, preferences.reduced);
   if (!document.hidden && scene && page === "music") {
-    if (!viewer?.isOpen) scene.update(ms / 1000);
+    const entryWasActive = !!futureEntry?.active;
+    const entryShot = futureEntry?.update(ms);
+    // The prepared WebGL frame stays beneath the opaque terminal film. Start
+    // rendering its cinematic path when the welcome screen actually releases it.
+    if (!viewer?.isOpen && (!entryShot || entryShot.time >= 21.9) &&
+      !(entryWasActive && !futureEntry?.active)) scene.update(ms / 1000, entryShot);
     viewer?.update(ms / 1000);
-    if (!viewer?.isOpen) presentation.update();
+    if (!viewer?.isOpen && !futureEntry?.active) presentation.update();
     const phase = presentation.phase;
     if (stage.dataset.presentation !== phase) stage.dataset.presentation = phase;
     const cameraPhase = scene.musicPresentationPhase;
@@ -4479,17 +4486,17 @@ async function start() {
     scene.setReduced(preferences.reduced);
     await scene.warmup();
     scene.onSelect = (index, cell) => {
-      if (presentation.phase === "archive" && !panel && page === "music") {
+      if (!futureEntry?.active && presentation.phase === "archive" && !panel && page === "music") {
         if(cell?.foobarEntryKey)focusMusicEntry(cell.foobarEntryKey);
         select(index, cell ? { cell } : undefined);
       }
     };
     scene.onOpenAlbum = index => {
-      if (presentation.phase === "archive" && !panel && !viewer?.isOpen && page === "music" && index === musicApplication.selectedIndex)
+      if (!futureEntry?.active && presentation.phase === "archive" && !panel && !viewer?.isOpen && page === "music" && index === musicApplication.selectedIndex)
         setMode("detail");
     };
     scene.onNavigate = (axis, direction) => {
-      if (presentation.phase === "archive" && !panel && page === "music")
+      if (!futureEntry?.active && presentation.phase === "archive" && !panel && page === "music")
         axis === "lane" ? stepGenre(direction) : stepAlbum(direction);
     };
     updateSelection();
@@ -4505,10 +4512,29 @@ async function start() {
       openSettingsPage();
     }
     if (restoreTheme) openThemePage();
+    // Only the Future album MATRIX has an approved entry composition so far.
+    // Saved layouts, the Punk theme, empty libraries and reduced motion retain
+    // the existing immediate archive path; settings returns keep their page.
+    if (preferences.style.design === "rhine" && musicApplication.view.layout === "array" &&
+      musicApplication.view.show === "albums" && albums.length && !preferences.reduced &&
+      !restoreSettings && !restoreTheme) {
+      futureEntry = new FutureEntry(stage, (skipped, ms) => {
+        const now = ms / 1000;
+        if (skipped) scene?.showMusicArchiveImmediately(now);
+        else {
+          scene?.update(now, futureEntryShot(futureEntryEnd));
+          scene?.finishMusicIntro(now);
+        }
+        syncSelectionMotion();
+      });
+    }
     requestAnimationFrame((ms) => {
       stage.classList.add("theme-motion-ready");
       frame(ms);
-      requestAnimationFrame(() => window.rhineDesktop?.frontendReady?.());
+      requestAnimationFrame(() => {
+        window.rhineDesktop?.frontendReady?.();
+        futureEntry?.arm();
+      });
     });
   } catch (error) {
     console.error(error);
@@ -4521,6 +4547,7 @@ async function start() {
 void start();
 Object.assign(window, {
   rhineMusic: {
+    get entry() { return futureEntry?.state ?? { active: false, phase: "archive" }; },
     get design() { return { ...preferences.style }; },
     get library() {
       return library;

@@ -102,8 +102,11 @@ async function runLauncher() {
   const projectRoot = path.resolve(__dirname, '..');
   const themeFollowMode = process.argv.includes('--theme-follow');
   const futurePanelsMode = process.argv.includes('--future-panels');
-  if (themeFollowMode && futurePanelsMode) throw new Error('Choose one isolated checker mode per Electron process.');
-  const toolRoot = path.join(projectRoot, '.tools', futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
+  const futureEntryMode = process.argv.includes('--future-entry');
+  const syntheticFixtureMode = futurePanelsMode || futureEntryMode;
+  if ([themeFollowMode, futurePanelsMode, futureEntryMode].filter(Boolean).length > 1)
+    throw new Error('Choose one isolated checker mode per Electron process.');
+  const toolRoot = path.join(projectRoot, '.tools', futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -133,7 +136,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
+    mode: futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -200,16 +203,16 @@ async function runLauncher() {
       musicBrainzContact: '',
       fetcher: globalThis.fetch,
     }).init();
-    if (futurePanelsMode) {
+    if (syntheticFixtureMode) {
       syntheticPanelLibrary = makeSyntheticPanelLibrary();
       store.snapshot = () => structuredClone(syntheticPanelLibrary);
     }
     const initialLibrary = store.snapshot();
-    if (!futurePanelsMode && (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0)) {
+    if (!syntheticFixtureMode && (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0)) {
       throw new Error('Isolated library must start empty and without music roots.');
     }
-    if (futurePanelsMode && (initialLibrary.albums.length !== 36 || initialLibrary.roots.length !== 0 || !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')))) {
-      throw new Error('Future panels fixture must contain only the deterministic synthetic album set.');
+    if (syntheticFixtureMode && (initialLibrary.albums.length !== 36 || initialLibrary.roots.length !== 0 || !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')))) {
+      throw new Error('Synthetic fixture must contain only the deterministic 36-album set.');
     }
     store.scan = async () => {
       scanCalls++;
@@ -269,10 +272,15 @@ async function runLauncher() {
         volume: 0,
         reduced: false,
         output: { backend: 'browser' },
+        ...(futureEntryMode ? {
+          style: { design: 'rhine' },
+          view: { layout: 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
+        } : {}),
       },
-      reloadOnce: !themeFollowMode && !futurePanelsMode,
+      reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode,
       themeFollow: themeFollowMode,
       futurePanels: futurePanelsMode,
+      futureEntry: futureEntryMode,
       syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
       runDirectory,
     };
@@ -283,6 +291,9 @@ async function runLauncher() {
     }
     if (futurePanelsMode) {
       await fs.copyFile(path.join(projectRoot, 'desktop', 'check-future-panels.mjs'), path.join(appDirectory, 'check-future-panels.mjs'));
+    }
+    if (futureEntryMode) {
+      await fs.copyFile(path.join(projectRoot, 'desktop', 'check-future-entry.mjs'), path.join(appDirectory, 'check-future-entry.mjs'));
     }
     await fs.writeFile(path.join(appDirectory, 'package.json'), `${JSON.stringify({
       name: 'rhine-isolated-startup-entry-probe',
@@ -330,14 +341,19 @@ async function runLauncher() {
     report.adapterCalls = adapterCalls;
     report.onlineMockCalls = panelOnlineCalls;
     report.libraryScanCalls = scanCalls;
-    report.initialLibrary = { albums: initialLibrary.albums.length, roots: initialLibrary.roots.length, syntheticPanelFixture: futurePanelsMode };
+    report.initialLibrary = {
+      albums: initialLibrary.albums.length,
+      roots: initialLibrary.roots.length,
+      syntheticPanelFixture: futurePanelsMode,
+      syntheticFutureEntryFixture: futureEntryMode,
+    };
 
     const unsafeNativeCalls = adapterCalls.native.start || adapterCalls.native.queue || adapterCalls.native.control;
     const unsafeSonyCalls = adapterCalls.sony.prepare || adapterCalls.sony.audio || adapterCalls.sony.growingAudio;
     report.isolationChecks = {
       electronChildExitedCleanly: childResult.code === 0,
       electronReportWritten: Boolean(electronReport && !electronReport.reportMissing),
-      libraryContainsOnlyAuthorizedSyntheticFixture: futurePanelsMode
+      libraryContainsOnlyAuthorizedSyntheticFixture: syntheticFixtureMode
         ? initialLibrary.albums.length === 36 && initialLibrary.roots.length === 0 && initialLibrary.albums.every(album => album.id.startsWith('fixture-album-'))
         : initialLibrary.albums.length === 0 && initialLibrary.roots.length === 0,
       libraryScanWasNotRequested: scanCalls === 0,
@@ -379,6 +395,7 @@ async function runLauncher() {
       readyAtMs: report.electron?.firstFrontendReadyAtMs ?? null,
       themeFollow: report.electron?.themeFollow?.summary ?? null,
       futurePanels: report.electron?.futurePanels?.summary ?? null,
+      futureEntry: report.electron?.futureEntry?.summary ?? null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
       revealedBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'frontend-ready')?.effective ?? null,
       runDirectory,
@@ -430,6 +447,7 @@ async function runElectronProbe() {
   let themeFollowHarness;
   let themeFollowModule;
   let futurePanelsModule;
+  let futureEntryModule;
   let mockPreferences;
   let selectPreferencesForMock;
   let currentStartedAt = 0;
@@ -549,6 +567,8 @@ async function runElectronProbe() {
         stageExists:!!document.querySelector('#stage'),
         musicAppBridge:typeof app,
         desktopBridge:typeof window.rhineDesktop,
+        entry:app?.entry??null,
+        design:app?.design?.design??null,
         canvas:canvas?{width:canvas.width,height:canvas.height,clientWidth:canvas.clientWidth,clientHeight:canvas.clientHeight}:null,
         stats:sceneStats?{
           loaded:sceneStats.loaded,
@@ -606,6 +626,9 @@ async function runElectronProbe() {
   try {
     if (!configPath) throw new Error('Missing RHINE_STARTUP_PROBE_CONFIG.');
     config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+    if (config.futureEntry) report.mode = 'real-electron-future-entry';
+    else if (config.futurePanels) report.mode = 'real-electron-future-panels';
+    else if (config.themeFollow) report.mode = 'real-electron-theme-follow';
     for (const directory of Object.values(config.appPaths)) await fs.mkdir(directory, { recursive: true });
     for (const [name, directory] of Object.entries(config.appPaths)) app.setPath(name, directory);
     app.setAppLogsPath(config.appPaths.logs);
@@ -626,7 +649,7 @@ async function runElectronProbe() {
 
     instrumentIpcMain();
     ipcMain.on('rhine:preferences:get', event => {
-      const value = config.themeFollow ? mockPreferences : config.preferences;
+      const value = config.themeFollow || config.futureEntry ? mockPreferences : config.preferences;
       if (config.themeFollow) report.preferenceReads.push({ theme: value.theme, followSystemTheme: value.followSystemTheme, keys: Object.keys(value).length });
       event.returnValue = value;
     });
@@ -634,7 +657,7 @@ async function runElectronProbe() {
       event.returnValue = { ok: true, exists: false, value: { schemaVersion: 1, activeId: null, presets: [], eqBanks: {} } };
     });
     ipcMain.handle('rhine:preferences:save', async (_event, value) => {
-      if (!config.themeFollow) return { ok: true };
+      if (!config.themeFollow && !config.futureEntry) return { ok: true };
       try {
         mockPreferences = selectPreferencesForMock(value);
         report.preferenceSaves.push({ index: report.preferenceSaves.length + 1, theme: mockPreferences.theme, followSystemTheme: mockPreferences.followSystemTheme, allowedFollowField: Object.hasOwn(mockPreferences, 'followSystemTheme') });
@@ -849,6 +872,14 @@ async function runElectronProbe() {
       });
     }
     if (firstResult.ready && config.futurePanels) {
+      await browserWindow.webContents.executeJavaScript(
+        '(() => { const button = document.querySelector(".future-entry-skip"); if (button) button.click(); return Boolean(button); })()',
+        true,
+      );
+      await browserWindow.webContents.executeJavaScript(
+        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+        true,
+      );
       futurePanelsModule = await import(pathToFileURL(path.join(__dirname, 'check-future-panels.mjs')).href);
       report.futurePanels = await futurePanelsModule.checkFuturePanels({
         browserWindow,
@@ -861,6 +892,26 @@ async function runElectronProbe() {
           browserWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode });
         },
       });
+    }
+    if (firstResult.ready && config.futureEntry) {
+      futureEntryModule = await import(pathToFileURL(path.join(__dirname, 'check-future-entry.mjs')).href);
+      try {
+        report.futureEntry = await futureEntryModule.checkFutureEntry({
+          browserWindow,
+          outputDirectory: config.runDirectory,
+          getPreferences: () => structuredClone(mockPreferences),
+          setPreferences: value => { mockPreferences = structuredClone(value); },
+          getReadyCount: () => report.frontendReadyCount,
+          sendKey: key => {
+            const keyCode = key === 'ESC' ? 'Escape' : key === 'ENTER' ? 'Enter' : key === 'TAB' ? 'Tab' : key;
+            browserWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+            browserWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+          },
+        });
+      } catch (error) {
+        report.futureEntry = error.futureEntryResult ?? { ok: false, error: String(error?.stack ?? error) };
+        throw error;
+      }
     }
 
     report.finishedAtMs = Date.now() - currentStartedAt;
@@ -900,9 +951,10 @@ async function runElectronProbe() {
       productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
       themeFollowBehaviorPassed: !config.themeFollow || report.themeFollow?.ok === true,
       futurePanelsBehaviorPassed: !config.futurePanels || report.futurePanels?.ok === true,
+      futureEntryBehaviorPassed: !config.futureEntry || report.futureEntry?.ok === true,
     };
   } catch (error) {
-    report.startupOutcome = config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.startupOutcome = config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });
   } finally {
     try { await themeFollowHarness?.detach(); } catch (error) { report.themeFollowDetachError = error.message; }

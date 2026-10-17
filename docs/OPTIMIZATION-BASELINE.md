@@ -1,6 +1,6 @@
 # 下一步优化基线
 
-更新：2026-10-17。用户已确认本对话目标全部完成。本文件统一记录已交付结果、仍需完善的工作和下一步的验收口径；当前功能地图见[PROJECT-STATUS](PROJECT-STATUS.md)。
+更新：2026-10-17。本文件统一记录已交付结果、仍需完善的工作和下一步的验收口径；当前功能地图见[PROJECT-STATUS](PROJECT-STATUS.md)。
 
 ## 已完成并关闭
 
@@ -17,6 +17,7 @@
 | 系统日夜跟随 | 开启时按系统当前状态对齐，之后仅跟随真实变化；手动选择不被持续纠正，重启保留手动状态 |
 | 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
 | 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
+| Future MATRIX 入场 | ALBUMS/MATRIX 复用参考 Logo/终端/圆环/欢迎时间轴，现有 renderer 展开阵列后停在总览；昼夜、跳过与减少动态按主题规范处理 |
 
 缓存更新、纸卡闪烁、旧顶栏横滑条、控件漏光和本轮已反馈的界面问题不再作为未完成任务保留。已结束的统一架构迁移也不再按阶段重新排期。
 
@@ -26,7 +27,7 @@
 | --- | --- | --- |
 | 启动耗时 | 已实现加载好再显示；尚无真实曲库的分阶段耗时基线 | 分开测服务/偏好/索引、资源读取、场景创建、着色器与首帧，定位关键路径和窗口等待时间 |
 | RTX 5080 掉帧 | 已有用户掉帧反馈，瓶颈未测定；不是已定位的 GPU 或 CPU 故障 | 固定场景采集帧时间、主线程/GPU负载、资源与内存；分别比较静止、切专辑、滚动、开合和页面切换 |
-| 统一入场 | 用户要求以后与性能一起设计；当前产品不播放旧 intro | 在就绪信号与性能预算明确后设计统一入场，覆盖昼夜、两主题和减少动态；不恢复旧 spinner/intro |
+| 其他入场构图 | 当前只为 Future ALBUMS/MATRIX 接入用户给定参考；其他主题与排列保持直接显示 | 按用户后续参考逐项确定，沿用公共状态、首帧门与 renderer，不自动推广当前镜头或恢复旧加载页 |
 | 资源与交互开销 | 两主题已共用 renderer/资源；ARRAY 仍有遮罩合成、玻璃与阴影等实际成本 | 依据测量处理首载、重复工作、资源生命周期和长任务，验证视觉质量及选择/点击命中不退化 |
 | 复杂音频实时性 | LSP 当前使用通用 DSP 核，复杂设置的实时性能未全面测量 | 如另行开展音频优化，独立测处理耗时、缓冲和输出，不用图形 FPS 推断音频稳定性 |
 
@@ -56,6 +57,7 @@
 | 基本离线检查 | `npm test` |
 | 界面类型与构建 | `node scripts/build-source-preview.mjs --interface-only` |
 | 真实前端隐藏启动/重载 | `node desktop/check-startup-entry.cjs` |
+| Future MATRIX 入场与总览交接 | `node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
 | 系统跟随语义与整窗交互 | `node --experimental-strip-types --test scripts/check-music-theme-follow.mjs`；`node desktop/check-startup-entry.cjs --theme-follow` |
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
