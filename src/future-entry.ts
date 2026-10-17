@@ -14,7 +14,7 @@ import "./future-entry.css";
 export const futureEntryStart = 1.76;
 export const futureEntryEnd = 27.12;
 export type FutureEntryLayout = "shelf" | "array";
-export const futureShelfEntryEnd = 26.3;
+export const futureShelfEntryEnd = 27;
 export const futureEntryEndFor = (layout: FutureEntryLayout) => layout === "shelf" ? futureShelfEntryEnd : futureEntryEnd;
 export function futureEntryShot(time: number, entryLayout: FutureEntryLayout = "array") {
   return { reveal: smooth(progress(time, 22, 22.4)), lift: 0, zoom: 0,
@@ -154,15 +154,15 @@ export class FutureEntry {
     const motion = this.sequence.update(this.time);
     this.overlay.style.setProperty("--future-entry-backdrop-opacity", String(motion.backgroundOpacity));
     const shelf = this.layout === "shelf";
-    const settleAt = shelf ? 24.95 : 25.3;
+    const settleAt = shelf ? 25.5 : 25.3;
     const phase = this.time >= settleAt ? "settle" : this.time >= 22
-      ? shelf ? this.time < 22.75 ? "shelf-structure" : this.time < 24.1 ? "shelf-catalog" : "shelf-ready" : "array" : motion.step;
+      ? shelf ? this.time < 25 ? "shelf-assembly" : "shelf-ready" : "array" : motion.step;
     if (this.stage.dataset.futureEntry !== phase) this.stage.dataset.futureEntry = phase;
     this.overlay.style.setProperty("--future-entry-brand-opacity", String(1 - smooth(progress(this.time, settleAt - .4, settleAt))));
-    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, settleAt, shelf ? 25.7 : 26.72))));
+    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, settleAt, shelf ? 26.35 : 26.72))));
     this.overlay.style.setProperty("--future-entry-caption-opacity", String(shelf
-      ? smooth(progress(this.time, 22, 22.25)) * (1 - smooth(progress(this.time, 24.5, 24.95))) : 0));
-    this.overlay.style.setProperty("--future-entry-caption-progress", String(progress(this.time, 22, 24.1)));
+      ? smooth(progress(this.time, 22, 22.25)) * (1 - smooth(progress(this.time, 25, 25.5))) : 0));
+    this.overlay.style.setProperty("--future-entry-caption-progress", String(progress(this.time, 22, 25)));
   }
 
   private end(skipped: boolean, ms = performance.now()) {

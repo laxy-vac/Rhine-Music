@@ -7,6 +7,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { deflateSync } = require('node:zlib');
 const { pathToFileURL } = require('node:url');
 
 if (process.versions.electron) {
@@ -21,19 +22,126 @@ if (process.versions.electron) {
   });
 }
 
-function makeSyntheticPanelLibrary() {
+const pngCrcTable = new Uint32Array(256);
+for (let index = 0; index < pngCrcTable.length; index++) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit++) value = (value & 1) ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+  pngCrcTable[index] = value >>> 0;
+}
+
+function pngCrc32(bytes) {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = (value >>> 8) ^ pngCrcTable[(value ^ byte) & 0xff];
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, payload) {
+  const tag = Buffer.from(type, 'ascii');
+  const chunk = Buffer.alloc(payload.length + 12);
+  chunk.writeUInt32BE(payload.length, 0);
+  tag.copy(chunk, 4);
+  payload.copy(chunk, 8);
+  chunk.writeUInt32BE(pngCrc32(Buffer.concat([tag, payload])), payload.length + 8);
+  return chunk;
+}
+
+function fixtureColor(number) {
+  const hue = (number * 137.508) % 360;
+  const saturation = 0.66, lightness = 0.42;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const segment = hue / 60;
+  const secondary = chroma * (1 - Math.abs(segment % 2 - 1));
+  const rgb = segment < 1 ? [chroma, secondary, 0]
+    : segment < 2 ? [secondary, chroma, 0]
+    : segment < 3 ? [0, chroma, secondary]
+    : segment < 4 ? [0, secondary, chroma]
+    : segment < 5 ? [secondary, 0, chroma]
+    : [chroma, 0, secondary];
+  const offset = lightness - chroma / 2;
+  return rgb.map(channel => Math.round((channel + offset) * 255));
+}
+
+const fixtureDigitFont = {
+  '0':['11111','10001','10011','10101','11001','10001','11111'],
+  '1':['00100','01100','00100','00100','00100','00100','01110'],
+  '2':['11111','00001','00001','11111','10000','10000','11111'],
+  '3':['11111','00001','00001','01111','00001','00001','11111'],
+  '4':['10001','10001','10001','11111','00001','00001','00001'],
+  '5':['11111','10000','10000','11111','00001','00001','11111'],
+  '6':['01111','10000','10000','11111','10001','10001','01111'],
+  '7':['11111','00001','00010','00100','01000','01000','01000'],
+  '8':['01110','10001','10001','01110','10001','10001','01110'],
+  '9':['01110','10001','10001','01111','00001','00001','11110'],
+};
+
+function makeFixturePngDataUrl(number) {
+  const width = 128, height = 128, scale = 10, stride = width * 4 + 1;
+  const base = fixtureColor(number);
+  const accent = base.map(channel => Math.max(0, Math.round(channel * 0.46)));
+  const raw = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    const rowOffset = y * stride;
+    raw[rowOffset] = 0;
+    for (let x = 0; x < width; x++) {
+      const color = (x < 40 && y < 40) || (x >= 88 && y >= 88) ? accent : base;
+      const offset = rowOffset + 1 + x * 4;
+      raw[offset] = color[0]; raw[offset + 1] = color[1]; raw[offset + 2] = color[2]; raw[offset + 3] = 255;
+    }
+  }
+  const digits = String(number).padStart(2, '0');
+  const textWidth = 11 * scale, originX = Math.floor((width - textWidth) / 2), originY = Math.floor((height - 7 * scale) / 2);
+  const drawText = (color, offsetX, offsetY) => {
+    [...digits].forEach((digit, digitIndex) => {
+      const glyph = fixtureDigitFont[digit];
+      glyph.forEach((row, rowIndex) => {
+        [...row].forEach((pixel, columnIndex) => {
+          if (pixel !== '1') return;
+          const left = originX + (digitIndex * 6 + columnIndex) * scale + offsetX;
+          const top = originY + rowIndex * scale + offsetY;
+          for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) {
+            if (left + dx < 0 || left + dx >= width || top + dy < 0 || top + dy >= height) continue;
+            const offset = (top + dy) * stride + 1 + (left + dx) * 4;
+            raw[offset] = color[0]; raw[offset + 1] = color[1]; raw[offset + 2] = color[2]; raw[offset + 3] = 255;
+          }
+        });
+      });
+    });
+  };
+  drawText([0, 0, 0], 2, 3);
+  drawText([255, 248, 232], 0, 0);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4);
+  header[8] = 8; header[9] = 6; header[10] = 0; header[11] = 0; header[12] = 0;
+  const png = Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+function makeSyntheticPanelLibrary({ archiveMotion = false } = {}) {
   const genres = [
     { id: 'fixture-ambient', name: 'Fixture Ambient' },
     { id: 'fixture-electronic', name: 'Fixture Electronic' },
     { id: 'fixture-cinematic', name: 'Fixture Cinematic' },
   ];
   const colors = ['#d96f32', '#2e6f89', '#648755', '#745785', '#bb8539', '#446c72'];
-  const albums = Array.from({ length: 36 }, (_, albumIndex) => {
+  const genreSizes = archiveMotion ? [7, 28, 3] : [12, 12, 12];
+  const albumCount = genreSizes.reduce((total, count) => total + count, 0);
+  const genreIndexForAlbum = albumIndex => {
+    let firstIndex = 0;
+    for (let genreIndex = 0; genreIndex < genreSizes.length; genreIndex++) {
+      firstIndex += genreSizes[genreIndex];
+      if (albumIndex < firstIndex) return genreIndex;
+    }
+    return genreSizes.length - 1;
+  };
+  const albums = Array.from({ length: albumCount }, (_, albumIndex) => {
     const number = String(albumIndex + 1).padStart(2, '0');
     const title = albumIndex === 0
       ? 'Needlemark Fixture Album — An Exceptionally Long Synthetic Title for Search and Ellipsis Checks'
       : `Synthetic Long-Title Catalog Album ${number} — The Quiet Geometry of Several Imaginary Listening Rooms`;
-    const genre = genres[albumIndex % genres.length];
+    const genre = genres[archiveMotion ? genreIndexForAlbum(albumIndex) : albumIndex % genres.length];
     const tracks = Array.from({ length: 3 }, (_, trackIndex) => ({
       id: `fixture-track-${number}-${trackIndex + 1}`, albumId: `fixture-album-${number}`,
       title: albumIndex === 0 && trackIndex === 0
@@ -48,7 +156,8 @@ function makeSyntheticPanelLibrary() {
     return {
       id: `fixture-album-${number}`, title, artist: `Synthetic Artist ${number}`, year: 1990 + albumIndex,
       genreId: genre.id, rawGenres: [genre.name], folder: `synthetic-fixture/${number}`,
-      coverUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+      coverUrl: archiveMotion ? makeFixturePngDataUrl(albumIndex + 1)
+        : `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
       tracks, producers: [], offline: false, online: { status: 'unqueried' },
     };
   });
@@ -108,6 +217,7 @@ async function runLauncher() {
   const futurePanelsMode = process.argv.includes('--future-panels');
   const futureEntryMode = process.argv.includes('--future-entry');
   const archiveMotionMode = process.argv.includes('--archive-motion');
+  const expectedSyntheticAlbumCount = archiveMotionMode ? 38 : 36;
   const syntheticFixtureMode = futurePanelsMode || futureEntryMode || caseGlassMode || archiveMotionMode;
   if ([themeFollowMode, futurePanelsMode, futureEntryMode, caseGlassMode, archiveMotionMode].filter(Boolean).length > 1)
     throw new Error('Choose one isolated checker mode per Electron process.');
@@ -209,7 +319,7 @@ async function runLauncher() {
       fetcher: globalThis.fetch,
     }).init();
     if (syntheticFixtureMode) {
-      syntheticPanelLibrary = makeSyntheticPanelLibrary();
+      syntheticPanelLibrary = makeSyntheticPanelLibrary({ archiveMotion:archiveMotionMode });
       if (caseGlassMode) {
         for (const track of syntheticPanelLibrary.albums[0].tracks) Object.assign(track, {
           format: 'FLAC', codec: 'FLAC', lossless: true, sampleRate: 96000, bitsPerSample: 24,
@@ -217,19 +327,18 @@ async function runLauncher() {
         const coverPng = await fs.readFile(path.join(projectRoot, 'public', 'icons', 'icon-512.png'));
         syntheticPanelLibrary.albums[0].coverUrl = `data:image/png;base64,${coverPng.toString('base64')}`;
       }
-      if (archiveMotionMode) {
-        const coverPng = await fs.readFile(path.join(projectRoot, 'public', 'icons', 'icon-512.png'));
-        const coverUrl = `data:image/png;base64,${coverPng.toString('base64')}`;
-        for (const album of syntheticPanelLibrary.albums) album.coverUrl = coverUrl;
-      }
       store.snapshot = () => structuredClone(syntheticPanelLibrary);
     }
     const initialLibrary = store.snapshot();
     if (!syntheticFixtureMode && (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0)) {
       throw new Error('Isolated library must start empty and without music roots.');
     }
-    if (syntheticFixtureMode && (initialLibrary.albums.length !== 36 || initialLibrary.roots.length !== 0 || !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')))) {
-      throw new Error('Synthetic fixture must contain only the deterministic 36-album set.');
+    const expectedGenreCounts = archiveMotionMode ? [7, 28, 3] : [12, 12, 12];
+    const actualGenreCounts = syntheticPanelLibrary?.genres.map(genre => genre.albumCount) ?? [];
+    if (syntheticFixtureMode && (initialLibrary.albums.length !== expectedSyntheticAlbumCount || initialLibrary.roots.length !== 0 ||
+        !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')) ||
+        actualGenreCounts.some((count, index) => count !== expectedGenreCounts[index]) || actualGenreCounts.length !== expectedGenreCounts.length)) {
+      throw new Error(`Synthetic fixture must contain only the deterministic ${expectedSyntheticAlbumCount}-album set with its expected genre groups.`);
     }
     store.scan = async () => {
       scanCalls++;
@@ -304,7 +413,10 @@ async function runLauncher() {
       caseGlass: caseGlassMode,
       archiveMotion: archiveMotionMode,
       syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
-      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 36 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
+      syntheticPanelGenreCounts: syntheticPanelLibrary?.genres.map(genre => genre.albumCount) ?? [],
+      archiveMotionLongGroupProbeAlbumId: archiveMotionMode
+        ? `fixture-album-${String((syntheticPanelLibrary?.genres[0]?.albumCount ?? 0) + 21).padStart(2, '0')}` : null,
+      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 38 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
       caseGlassFixtureHiRes: !caseGlassMode || (syntheticPanelLibrary?.albums[0]?.tracks.length > 0 && syntheticPanelLibrary.albums[0].tracks.every(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
       runDirectory,
     };
@@ -361,7 +473,7 @@ async function runLauncher() {
       let stderr = '';
       // Entry covers the cinematic, text edits and both themes. Theme-follow
       // covers palette/layout cases and reload. Keep watchdogs mode-specific.
-      const timeout = setTimeout(() => child.kill(), archiveMotionMode ? 180000 : futureEntryMode || caseGlassMode ? 210000 : themeFollowMode ? 150000 : 90000);
+      const timeout = setTimeout(() => child.kill(), archiveMotionMode ? 300000 : futureEntryMode || caseGlassMode ? 210000 : themeFollowMode ? 150000 : 90000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); if (caseGlassMode || archiveMotionMode) process.stdout.write(chunk); });
@@ -395,6 +507,7 @@ async function runLauncher() {
       syntheticFutureEntryFixture: futureEntryMode,
       syntheticCaseGlassFixture: caseGlassMode,
       syntheticArchiveMotionFixture: archiveMotionMode,
+      genres: syntheticPanelLibrary?.genres.map(genre => ({ id: genre.id, albumCount: genre.albumCount })) ?? [],
       caseGlassHiResAlbum: caseGlassMode ? { trackCount: initialLibrary.albums[0]?.tracks.length ?? 0, hiResTrackCount: initialLibrary.albums[0]?.tracks.filter(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24).length } : null,
     };
 
@@ -404,7 +517,9 @@ async function runLauncher() {
       electronChildExitedCleanly: childResult.code === 0,
       electronReportWritten: Boolean(electronReport && !electronReport.reportMissing),
       libraryContainsOnlyAuthorizedSyntheticFixture: syntheticFixtureMode
-        ? initialLibrary.albums.length === 36 && initialLibrary.roots.length === 0 && initialLibrary.albums.every(album => album.id.startsWith('fixture-album-'))
+        ? initialLibrary.albums.length === expectedSyntheticAlbumCount && initialLibrary.roots.length === 0 &&
+          initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')) &&
+          (!archiveMotionMode || syntheticPanelLibrary?.genres.map(genre => genre.albumCount).join(',') === '7,28,3')
         : initialLibrary.albums.length === 0 && initialLibrary.roots.length === 0,
       libraryScanWasNotRequested: scanCalls === 0,
       noNativeAudioOperations: !unsafeNativeCalls,
@@ -416,7 +531,7 @@ async function runLauncher() {
       onlineSearchUsedLocalRoute: !futurePanelsMode || serviceRequests.filter(entry => entry.path.startsWith('/api/online/search')).length >= 4,
       serviceDataInsideRunDirectory: path.resolve(serviceDataDirectory).startsWith(path.resolve(runDirectory)),
       caseGlassFixtureIsHiRes: !caseGlassMode || (initialLibrary.albums[0]?.tracks.length > 0 && initialLibrary.albums[0].tracks.every(track => track.format === 'FLAC' && track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
-      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 36 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
+      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 38 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
     };
     report.ok = report.isolationChecks.electronChildExitedCleanly
       && report.isolationChecks.electronReportWritten
@@ -694,6 +809,8 @@ async function runElectronProbe() {
     config = JSON.parse(await fs.readFile(configPath, 'utf8'));
     report.syntheticArchiveMotionFixture = config.archiveMotion === true;
     report.syntheticArchiveMotionAlbumCount = config.archiveMotion ? config.syntheticPanelAlbumCount : null;
+    report.syntheticArchiveMotionGenreCounts = config.archiveMotion ? config.syntheticPanelGenreCounts : null;
+    report.syntheticArchiveMotionLongGroupProbeAlbumId = config.archiveMotion ? config.archiveMotionLongGroupProbeAlbumId : null;
     report.archiveMotionUsesOnlyPngCovers = config.archiveMotionUsesOnlyPngCovers === true;
     if (config.archiveMotion) report.mode = 'real-electron-archive-motion';
     else if (config.caseGlass) report.mode = 'real-electron-case-glass';

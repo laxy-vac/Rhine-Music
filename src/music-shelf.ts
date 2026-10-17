@@ -5,6 +5,7 @@ import { ROW_SPACING } from "./archive-loop";
 import { MusicArrayAppearance } from "./music-array-appearance";
 import { createMusicShelfTextures, disposeMusicShelfTextures } from "./music-shelf-textures";
 import { createMusicShelfBedGeometry, createMusicShelfSeparatorGeometry, MUSIC_SHELF_TRAY_THICKNESS } from "./music-shelf-rail";
+import { shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment";
 import type { StylePalette } from "./music-style";
 
 type ShelfPart = {
@@ -22,6 +23,9 @@ export class MusicShelf {
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private boxDisposed = false;
   private readonly matrix = new THREE.Matrix4();
+  private readonly deploymentScale = new THREE.Matrix4();
+  private readonly deploymentFromAnchor = new THREE.Matrix4();
+  private readonly deploymentToAnchor = new THREE.Matrix4();
   private readonly position = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
   private readonly rotation = new THREE.Quaternion();
@@ -102,19 +106,49 @@ export class MusicShelf {
     }
   }
 
-  setSlot(index: number, x: number, y: number, z: number, visible = true, alpha = 1, tint = 0) {
+  setSlot(index: number, x: number, y: number, z: number, visible = true, alpha = 1, tint = 0, deployment = 1) {
     if (index < 0 || index >= this.slotCapacity) return;
+    const deployed = clamp01(deployment);
     for (const part of this.parts) {
       this.scale.copy(part.size);
+      if (deployed < 1) this.scale.y *= deployed;
       if (!visible) this.scale.set(0, 0, 0);
       for (let copy = 0; copy < part.offsets.length; copy++) {
         const offset = part.offsets[copy]!;
-        this.position.set(x + offset.x, y + offset.y, z + offset.z);
+        this.position.set(x + offset.x, y + offset.y * deployed, z + offset.z);
         this.matrix.compose(this.position, this.rotation, this.scale);
         const instanceIndex = index + this.slotCapacity * copy;
         part.mesh.setMatrixAt(instanceIndex, this.matrix);
         this.appearance.write(part.mesh, instanceIndex, alpha, tint);
       }
+    }
+  }
+
+  /** Apply the lane's world XZ expansion once, after writing final slot poses. */
+  setSlotDeployment(index: number, laneX: number, frontZ: number, width: number, length: number) {
+    if (index < 0 || index >= this.slotCapacity || (width >= 1 && length >= 1)) return;
+    for (const part of this.parts) for (let copy = 0; copy < part.offsets.length; copy++) {
+      const instanceIndex = index + this.slotCapacity * copy;
+      part.mesh.getMatrixAt(instanceIndex, this.matrix);
+      applyWorldAffine(this.matrix, laneX, 0, frontZ, width, 1, length,
+        this.deploymentScale, this.deploymentFromAnchor, this.deploymentToAnchor);
+      part.mesh.setMatrixAt(instanceIndex, this.matrix);
+    }
+  }
+
+  /** Apply the same world-space slot assembly used by its record case. */
+  setSlotAssembly(index: number, amount: number, slot: ShelfSlotFrame) {
+    if (index < 0 || index >= this.slotCapacity) return;
+    const assembly = shelfAssemblySlot(amount, slot);
+    if (assembly.width === 1 && assembly.length === 1 && assembly.slotProgress === 1 && assembly.deckY === slot.floorY) return;
+    for (const part of this.parts) for (let copy = 0; copy < part.offsets.length; copy++) {
+      const instanceIndex = index + this.slotCapacity * copy;
+      part.mesh.getMatrixAt(instanceIndex, this.matrix);
+      applyWorldAffine(this.matrix, slot.laneX, slot.floorY, slot.frontZ,
+        assembly.width, 1, assembly.length,
+        this.deploymentScale, this.deploymentFromAnchor, this.deploymentToAnchor);
+      this.matrix.elements[13] += assembly.deckY - slot.floorY - .06 * (1 - assembly.slotProgress);
+      part.mesh.setMatrixAt(instanceIndex, this.matrix);
     }
   }
 
@@ -263,4 +297,29 @@ function positive(value: number, fallback: number) {
 
 function same(a: number, b: number) {
   return Math.abs(a - b) < 1e-4;
+}
+
+function clamp01(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+}
+
+function applyWorldAffine(
+  matrix: THREE.Matrix4,
+  anchorX: number,
+  anchorY: number,
+  anchorZ: number,
+  scaleX: number,
+  scaleY: number,
+  scaleZ: number,
+  scale: THREE.Matrix4,
+  fromAnchor: THREE.Matrix4,
+  toAnchor: THREE.Matrix4,
+) {
+  if (scaleX >= 1 && scaleY >= 1 && scaleZ >= 1) return;
+  fromAnchor.makeTranslation(-anchorX, -anchorY, -anchorZ);
+  scale.makeScale(scaleX, scaleY, scaleZ);
+  toAnchor.makeTranslation(anchorX, anchorY, anchorZ);
+  matrix.premultiply(fromAnchor);
+  matrix.premultiply(scale);
+  matrix.premultiply(toAnchor);
 }

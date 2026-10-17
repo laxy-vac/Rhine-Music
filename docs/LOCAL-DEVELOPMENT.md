@@ -20,7 +20,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 调试界面缺失时仍有旧 `dist` 回退；它不能代表新版，先补当前构建。
 - 磁盘修改不会替换旧窗口内存或已载入模型。构建后完整退出并重开窗口。
 - 窗口在后台初始化与首帧就绪后首次显示；已显示窗口重载保持可见，无旧加载页或 Punk intro。
-- Future 的 ALBUMS/MATRIX、ALBUMS/ARRAY 默认每次新开窗口在显示后播放对应入场并停在总览；按钮、Enter、Esc 可全程跳过。ARRAY 在共用欢迎前导后依次揭示完整货架、归位唱片与操作界面，MATRIX 保留阵列演出。设置 → 界面与交互 → 终端入场可配置自动播放、欢迎文案与 ID 或手动重播；Punk 入场暂缓，保留禁用入口。两主题的 STYLE 页面只管理主题、日夜配色、文字字号、盒体与场景外观预览。
+- Future 的 ALBUMS/MATRIX、ALBUMS/ARRAY 默认每次新开窗口在显示后播放对应入场并停在总览；按钮、Enter、Esc 可全程跳过。ARRAY 在共用欢迎前导后于 22–25 秒按共同槽位锚点连续展开货架结构与专辑，25.5 秒完成结构段，界面显现至约 27 秒到总览；MATRIX 保留自己的空间入场。设置 → 界面与交互 → 终端入场可配置自动播放、欢迎文案与 ID 或手动重播；Punk 不播放入场，设置入口保持禁用。两主题的 STYLE 页面只管理主题、日夜配色、文字字号、盒体与场景外观预览。
 - Settings → 界面与交互管理语言、减少动态、唱片波动、入场和界面声音；Settings → 显示与性能管理窗口比例、全屏、渲染画质、优先显卡与性能检测。各项控件只出现于对应类别，Style 页面不重复这些设置。显卡选择完全退出并重开后生效；默认自动，设备按物理 PnP 身份归并，不安装工具或改系统配置。若选卡后无法正常启动，可运行 `node scripts/launch-source-preview.mjs --gpu-auto` 仅本次使用自动，再到 Settings → 显示与性能选择自动恢复默认；安装版也接受 `--gpu-auto` 启动参数。
 - Future 的 STYLE → LIGHT 下可选“暖白 / 原版”，选择随 Future 主题档案保存；切 DARK 或 Punk 不覆盖它。旧偏好缺少此字段时保持暖白。`node scripts/check-day-palette.mjs` 检查规范化/保存结构和颜色映射；`node desktop/check-startup-entry.cjs --graphics` 包含双层胶囊、颜色过渡、键盘/焦点和日夜/Punk 隔离检查。
 - Future 的 STYLE → 简单粗糙提供玻璃透光率、磨砂度调节，实时预览并保存；封面和金边保持独立。“恢复玻璃默认设置”只恢复主体与背板的这两项参数，保留其他材质与结构设置。
@@ -67,7 +67,7 @@ node scripts/build-source-preview.mjs --interface-only
 
 隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实音频设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
 
-两主题 MATRIX/ARRAY 过渡、MATRIX 鼠标拖动/悬停、Punk 资料区与工具轨、Future ARRAY 入场使用 `node desktop/check-startup-entry.cjs --archive-motion`。它保留真实前端、合成 PNG 封面与 mock 音频，产物位于 `.tools/archive-motion-2026-10-18/`，不扫描个人曲库或连接真实输出设备。纯运动边界检查为 `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`。
+两主题 MATRIX/ARRAY 使用共享固定 q 几何路径，按 entry 和物理副本保留盒体身份；快速反向从当前 q/速度接续，终态恢复原物理坐标后可立即再次切换。纯运动与边界检查为 `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；合成几何检查为 `node scripts/check-archive-geometry.mjs`，报告写入 `.tools/animation-refinement-2026-10-18/check-archive-geometry.json`，覆盖 3 个合成目录、9×48 MATRIX 池中的 9×16 局部窗口及固定盒体尺寸。当前 21 项纯测和 2,652 帧有限几何采样已通过。隔离真实窗口回归命令为 `node desktop/check-startup-entry.cjs --archive-motion`，已通过 193 项检查、9 次转场和 Future ARRAY 的部分展开跳过、自然重播；33 张截图及 21 帧真实盒体矩阵保存在当次 `.tools/archive-motion-2026-10-18/` 目录。测试保留真实前端、合成 PNG 封面与 mock 音频，不扫描个人曲库或连接真实输出设备；有限采样不代表全库、全部盒型或硬件性能验收。Punk 不播放入场。
 
 Future 界面音效可用 `node scripts/check-interface-audio.mjs` 验证模拟设备路由、主题/播放互斥、迟到请求取消、WAV 校验及缓存上限。`node desktop/check-interface-audio.cjs` 使用既有 Electron 的隔离隐藏页验证真实离线合成及外部 sink 生命周期，不调用真实音频设备。原生会话检查须在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only` 再执行 `node --test scripts/check-native-output.mjs`；不加此设置的既有套件包含真实设备检查，不能作为默认离线命令。
 

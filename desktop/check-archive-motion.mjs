@@ -7,7 +7,8 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function checkArchiveMotion({ browserWindow, outputDirectory, probeReport, getPreferences, getReadyCount }) {
   const wc = browserWindow.webContents;
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
-  const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [], entryTimeline: [], summary: {} };
+  const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [],
+    geometryFrames:[], entryTimeline:[], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
   let transitionSequence = 0;
@@ -70,10 +71,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         projectedCenter:stats.projectedCenter ?? null,
         selectedAlbumId:stats.selectedAlbumId ?? null,
         selectedCell:stats.selectedCell ?? null,
-        cameraPosition:stats.cameraPosition ?? null,
+        frameTime:stats.frameTime ?? null, cameraPosition:stats.cameraPosition ?? null,
+        cameraAim:stats.cameraAim ?? null,
         modelPosition:stats.modelPosition ?? null,
         layoutTransition:stats.layoutTransition ?? null,
         shelfEntry:stats.shelfEntry ?? null,
+        motionGeometrySamples:stats.motionGeometrySamples ?? [],
+        motionViewport:stats.motionViewport ?? null,
+        rackDeployment:stats.rackDeployment ?? null,
         matrixDrag:stats.matrixDrag ?? null,
         matrixHover:stats.matrixHover ?? null,
         caseStructure:stats.caseStructure ?? null,
@@ -135,7 +140,30 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       selectedEntryKey:stats?.selectedCell?.foobarEntryKey ?? null,
       entry:app?.entry ? { active:app.entry.active, time:app.entry.time, phase:app.entry.phase } : null,
       stats:stats ? { layoutTransition:stats.layoutTransition, shelfEntry:stats.shelfEntry ?? null,
-        musicPresentationPhase:stats.musicPresentationPhase } : null,
+        selectedCell:stats.selectedCell ?? null, frameTime:stats.frameTime ?? null, motionViewport:stats.motionViewport ?? null,
+        cameraPosition:stats.cameraPosition ?? null, cameraAim:stats.cameraAim ?? null,
+        modelPosition:stats.modelPosition ?? null, motionGeometrySamples:stats.motionGeometrySamples ?? [],
+        rackDeployment:stats.rackDeployment ?? null, musicPresentationPhase:stats.musicPresentationPhase } : null,
+    };
+  })()`;
+  const geometryStateScript = String.raw`(() => {
+    const stage = document.querySelector('#stage');
+    const app = window.rhineMusic;
+    const stats = app?.stats?.(true) ?? null;
+    return {
+      page:stage?.dataset.page ?? null,
+      mode:stage?.dataset.mode ?? null,
+      design:app?.design?.design ?? stage?.dataset.design ?? null,
+      viewLayout:stats?.displayLayout?.requested ?? stage?.dataset.musicLayout ?? null,
+      selectedAlbumId:stats?.selectedAlbumId ?? app?.selectedAlbum?.id ?? null,
+      selectedEntryKey:stats?.selectedCell?.foobarEntryKey ?? null,
+      stats:stats ? { layoutTransition:stats.layoutTransition, frameTime:stats.frameTime ?? null,
+        shelfEntry:stats.shelfEntry ?? null,
+        selectedCell:stats.selectedCell ?? null,
+        motionGeometry:stats.motionGeometry ?? null, motionGeometrySamples:stats.motionGeometrySamples ?? [],
+        motionViewport:stats.motionViewport ?? null, cameraPosition:stats.cameraPosition ?? null,
+        cameraAim:stats.cameraAim ?? null, modelPosition:stats.modelPosition ?? null,
+        rackDeployment:stats.rackDeployment ?? null } : null,
     };
   })()`;
   const snapshot = async () => {
@@ -144,6 +172,10 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   };
   const fastSnapshot = async () => {
     try { return await evaluate(transitionStateScript); }
+    catch (error) { return { sampleError:String(error?.message ?? error) }; }
+  };
+  const geometrySnapshot = async () => {
+    try { return await evaluate(geometryStateScript); }
     catch (error) { return { sampleError:String(error?.message ?? error) }; }
   };
   const waitFor = async (predicate, label, timeoutMs = 12000, intervalMs = 35) => {
@@ -167,9 +199,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         result.transitionSamples.push({ context:transitionProbeContext,
           sinceClickMs:Date.now() - transitionProbeStartedAt, sampleMs:Date.now() - sampleStartedAt,
           active:transition.active ?? null, progress:transition.progress ?? null,
-          phase:transition.phase ?? null,
-          outgoing:transition.outgoing ?? null, incoming:transition.incoming ?? null,
-          snapshotRevision:transition.snapshotRevision ?? null, layout:latest.viewLayout ?? null });
+          q:transition.q ?? null, qVelocity:transition.qVelocity ?? null, desiredEnd:transition.desiredEnd ?? null,
+          phase:transition.phase ?? null, heading:transition.heading ?? null,
+          rowSpacing:transition.rowSpacing ?? null, transitionRackDeployment:transition.rackDeployment ?? null,
+          geometric:transition.geometric ?? null, frameTime:latest.stats?.frameTime ?? null, cameraPosition:latest.stats?.cameraPosition ?? null,
+          cameraAim:latest.stats?.cameraAim ?? null, modelPosition:latest.stats?.modelPosition ?? null,
+          rackDeployment:latest.stats?.rackDeployment ?? null,
+          motionGeometrySamples:latest.stats?.motionGeometrySamples ?? [],
+          motionViewport:latest.stats?.motionViewport ?? null, layout:latest.viewLayout ?? null });
       }
       if (!latest.sampleError && predicate(latest)) return latest;
       await pause(intervalMs);
@@ -202,60 +239,268 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     matrixDrag:state.stats?.matrixDrag,
     matrixHover:state.stats?.matrixHover, entry:state.entry,
   });
-  const takeScreenshot = async (name, details = null, settleMs = 100) => {
+  const transitionStamp = state => {
+    const transition = state?.stats?.layoutTransition ?? {};
+    return { frameTime:state?.stats?.frameTime ?? null, active:transition.active ?? null,
+      q:transition.q ?? null, progress:transition.progress ?? null, phase:transition.phase ?? null,
+      desiredEnd:transition.desiredEnd ?? null, viewLayout:state?.viewLayout ?? null };
+  };
+  const takeScreenshot = async (name, details = null, settleMs = 100, captureTransitionClock = false) => {
+    let uniqueName = name, suffix = 2;
+    while (result.screenshots.some(screenshot => screenshot.name === uniqueName)) uniqueName = `${name}-${suffix++}`;
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     if (settleMs > 0) await pause(settleMs);
+    const captureBefore = captureTransitionClock ? transitionStamp(await fastSnapshot()) : null;
     const image = await browserWindow.capturePage();
-    const file = path.join(screenshotDirectory, `${name}.png`);
+    const captureAfter = captureTransitionClock ? transitionStamp(await fastSnapshot()) : null;
+    const file = path.join(screenshotDirectory, `${uniqueName}.png`);
     await fs.writeFile(file, image.toPNG());
-    result.screenshots.push({ name, file, size:image.getSize(), ...(details === null ? {} : { details }) });
+    const screenshotDetails = details === null ? {} : { ...details };
+    if (captureTransitionClock) {
+      screenshotDetails.captureBefore = captureBefore;
+      screenshotDetails.captureAfter = captureAfter;
+    }
+    result.screenshots.push({ name:uniqueName, ...(uniqueName !== name ? { requestedName:name } : {}), file, size:image.getSize(),
+      ...(details === null && !captureTransitionClock ? {} : { details:screenshotDetails }) });
     process.stdout.write(`ARCHIVE_MOTION_SCREENSHOT:${file}\n`);
     return file;
   };
   const layoutSelector = layout => `.foobar-catalog-tools .foobar-tool-group[data-field="layout"] [data-music-layout="${layout}"], .foobar-catalog-tools .foobar-tool-group[data-field="layout"] [data-value="${layout}"], #music-browse [data-music-layout="${layout}"]`;
   const clickLayout = async layout => click(layoutSelector(layout));
+  const retargetLayoutAtomically = async layout => {
+    const selector = layoutSelector(layout);
+    const script = `(() => {
+      const node = Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(node => {
+        const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+        return !node.disabled && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+      });
+      if (!node) return { clicked:false, reason:'missing visible enabled layout control' };
+      const before = (${geometryStateScript});
+      node.click();
+      const after = (${geometryStateScript});
+      return { clicked:true, before, after };
+    })()`;
+    const captured = await evaluate(script);
+    if (!captured?.clicked) throw new Error(`Could not atomically retarget archive layout: ${captured?.reason ?? selector}`);
+    return captured;
+  };
   const identityMatches = (state, identity) => state.selectedAlbumId === identity.selectedAlbumId &&
     state.selectedEntryKey === identity.selectedEntryKey && !!state.selectedEntryKey;
-  const auditTransition = context => {
+  const xyz = value => Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every(Number.isFinite)
+    ? value.slice(0, 3).map(Number) : null;
+  const geometryPoseMap = samples => new Map((Array.isArray(samples) ? samples : [])
+    .filter(sample => sample && (sample.id || sample.motionId || sample.entry || sample.cell) && xyz(sample.position) && xyz(sample.scale))
+    .map(sample => [sample.id || sample.motionId || sample.entry || sample.cell,
+      { position:xyz(sample.position), scale:xyz(sample.scale) }]));
+  const compareGeometry = (left, right) => {
+    const a = geometryPoseMap(left?.motionGeometrySamples ?? left?.stats?.motionGeometrySamples);
+    const b = geometryPoseMap(right?.motionGeometrySamples ?? right?.stats?.motionGeometrySamples);
+    const changes = [];
+    for (const [key, pose] of a) {
+      const next = b.get(key);
+      if (!next) continue;
+      const positionDelta = Math.hypot(...pose.position.map((value, index) => value - next.position[index]));
+      const scaleDelta = Math.hypot(...pose.scale.map((value, index) => value - next.scale[index]));
+      changes.push({ key, positionDelta, scaleDelta, delta:Math.hypot(positionDelta, scaleDelta) });
+    }
+    return { matchedCount:changes.length, changedCount:changes.filter(change => change.delta > 0.04).length,
+      maxDelta:changes.reduce((maximum, change) => Math.max(maximum, change.delta), 0) };
+  };
+  const actualMatrixMap = state => new Map((Array.isArray(state?.stats?.motionGeometry?.instances)
+    ? state.stats.motionGeometry.instances : []).filter(instance => instance?.id && Array.isArray(instance.matrix) &&
+      instance.matrix.length === 16 && instance.matrix.every(Number.isFinite)).map(instance => [instance.id, instance.matrix]));
+  const compareActualMatrices = (left, right) => {
+    const a = actualMatrixMap(left), b = actualMatrixMap(right), deltas = [];
+    for (const [id, matrix] of a) {
+      const next = b.get(id);
+      if (next) deltas.push({ id, maxElementDelta:Math.max(...matrix.map((value, index) => Math.abs(value - next[index]))) });
+    }
+    const selectedA = left?.stats?.motionGeometry?.selectedMatrix;
+    const selectedB = right?.stats?.motionGeometry?.selectedMatrix;
+    const selectedMatrixDelta = Array.isArray(selectedA) && selectedA.length === 16 &&
+      Array.isArray(selectedB) && selectedB.length === 16
+      ? Math.max(...selectedA.map((value, index) => Math.abs(value - selectedB[index]))) : null;
+    return { matchedCount:deltas.length, maxElementDelta:deltas.reduce((maximum, value) => Math.max(maximum, value.maxElementDelta), 0),
+      selectedMatrixDelta };
+  };
+  const viewportAudit = viewport => {
+    const width = Number(viewport?.width), height = Number(viewport?.height), bounds = viewport?.bounds;
+    const corners = Array.isArray(viewport?.selectedCorners) ? viewport.selectedCorners : [];
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 ||
+        !bounds || !['minX','maxX','minY','maxY'].every(key => Number.isFinite(Number(bounds[key]))) ||
+        corners.length !== 8 || !corners.every(point => Array.isArray(point) && point.length >= 2 && point.slice(0, 2).every(Number.isFinite)))
+      return { ok:false, cornerCount:corners.length, viewport, reason:'missing or malformed projection data' };
+    const pixelBounds = { minX:(Number(bounds.minX) + 1) * width / 2,
+      maxX:(Number(bounds.maxX) + 1) * width / 2,
+      minY:(1 - Number(bounds.maxY)) * height / 2,
+      maxY:(1 - Number(bounds.minY)) * height / 2 };
+    const marginPx = 6;
+    const outsideCorners = corners.map((point, index) => ({ index, x:point[0], y:point[1] }))
+      .filter(point => point.x < pixelBounds.minX - marginPx || point.x > pixelBounds.maxX + marginPx ||
+        point.y < pixelBounds.minY - marginPx || point.y > pixelBounds.maxY + marginPx);
+    return { ok:outsideCorners.length === 0, cornerCount:corners.length, outsideCorners, pixelBounds, marginPx };
+  };
+  const viewportPixelBounds = viewport => {
+    const width = Number(viewport?.width), height = Number(viewport?.height), bounds = viewport?.bounds;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 ||
+        !bounds || !['minX','maxX','minY','maxY'].every(key => Number.isFinite(Number(bounds[key])))) return null;
+    return { minX:(Number(bounds.minX) + 1) * width / 2,
+      maxX:(Number(bounds.maxX) + 1) * width / 2,
+      minY:(1 - Number(bounds.maxY)) * height / 2,
+      maxY:(1 - Number(bounds.minY)) * height / 2 };
+  };
+  const centerInsideViewport = (center, viewport) => {
+    const bounds = viewportPixelBounds(viewport);
+    if (!bounds || !Array.isArray(center) || center.length < 2 ||
+        !Number.isFinite(Number(center[0])) || !Number.isFinite(Number(center[1]))) return false;
+    const [x, y] = center.map(Number);
+    return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY;
+  };
+  const neighborMotionAudit = samples => {
+    const allProjectedSpeeds = [], visibleSpeeds = [];
+    for (let index = 1; index < samples.length; index++) {
+      const previous = samples[index - 1], current = samples[index];
+      const seconds = Number(current.frameTime) - Number(previous.frameTime);
+      if (!Number.isFinite(seconds) || seconds <= 0) continue;
+      const previousNeighbors = new Map((previous.motionViewport?.neighbors ?? [])
+        .filter(neighbor => neighbor?.id && Array.isArray(neighbor.center) && neighbor.center.length >= 2)
+        .map(neighbor => [neighbor.id, neighbor]));
+      for (const neighbor of current.motionViewport?.neighbors ?? []) {
+        const before = previousNeighbors.get(neighbor?.id);
+        if (!before || !Array.isArray(neighbor.center) || neighbor.center.length < 2) continue;
+        const pxDelta = Math.hypot(Number(neighbor.center[0]) - Number(before.center[0]),
+          Number(neighbor.center[1]) - Number(before.center[1]));
+        if (!Number.isFinite(pxDelta)) continue;
+        const speed = { id:neighbor.id, entry:neighbor.entry ?? null, pxPerSecond:pxDelta / seconds };
+        allProjectedSpeeds.push(speed);
+        if (seconds < 0.1 && centerInsideViewport(before.center, previous.motionViewport) &&
+            centerInsideViewport(neighbor.center, current.motionViewport)) visibleSpeeds.push(speed);
+      }
+    }
+    const summarize = speeds => {
+      const sorted = speeds.map(item => item.pxPerSecond).sort((left, right) => left - right);
+      const byId = new Map();
+      for (const speed of speeds) {
+        const old = byId.get(speed.id) ?? { id:speed.id, entry:speed.entry, sampleCount:0, maxPxPerSecond:0 };
+        old.sampleCount++;
+        old.maxPxPerSecond = Math.max(old.maxPxPerSecond, speed.pxPerSecond);
+        byId.set(speed.id, old);
+      }
+      const percentile = p => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))] : null;
+      return { pairCount:speeds.length, medianPxPerSecond:percentile(.5), p95PxPerSecond:percentile(.95),
+        maxPxPerSecond:sorted.at(-1) ?? null,
+        byId:[...byId.values()].sort((a, b) => b.maxPxPerSecond - a.maxPxPerSecond).slice(0, 8) };
+    };
+    const allProjected = summarize(allProjectedSpeeds), visible = summarize(visibleSpeeds);
+    return { ...allProjected, allProjected, visible,
+      visibleCriteria:{ bothCentersInsideTheirFrameBounds:true, maxAdjacentFrameTimeSecondsExclusive:0.1 } };
+  };
+  const distance3 = (left, right) => {
+    const a = xyz(left), b = xyz(right);
+    return a && b ? Math.hypot(...a.map((value, index) => value - b[index])) : null;
+  };
+  const auditTransition = (context, target) => {
     const samples = result.transitionSamples.filter(sample => sample.context === context && sample.active === true &&
       Number.isFinite(sample.progress));
     const phaseSequence = [];
     let previousPhase = null;
-    let phaseBoundaryErrorCount = 0;
-    let doubleExposureCount = 0;
-    let invalidWeightCount = 0;
-    let releaseMonotonicErrorCount = 0;
-    let resolveMonotonicErrorCount = 0;
-    let previousReleaseOutgoing = null;
-    let previousResolveIncoming = null;
     for (const sample of samples) {
-      const progress = sample.progress;
       if (sample.phase !== previousPhase) phaseSequence.push(sample.phase);
       previousPhase = sample.phase;
-      const outgoing = sample.outgoing, incoming = sample.incoming;
-      if (!Number.isFinite(outgoing) || !Number.isFinite(incoming) || outgoing < -0.002 || outgoing > 1.002 ||
-          incoming < -0.002 || incoming > 1.002) invalidWeightCount++;
-      if (outgoing > 0.002 && incoming > 0.002) doubleExposureCount++;
-      if ((sample.phase === 'release' && progress >= 0.34) || (sample.phase === 'resolve' && progress < 0.34)) phaseBoundaryErrorCount++;
-      if (sample.phase === 'release') {
-        if (previousReleaseOutgoing !== null && outgoing > previousReleaseOutgoing + 0.01) releaseMonotonicErrorCount++;
-        previousReleaseOutgoing = outgoing;
-      }
-      if (sample.phase === 'resolve') {
-        if (previousResolveIncoming !== null && incoming < previousResolveIncoming - 0.01) resolveMonotonicErrorCount++;
-        previousResolveIncoming = incoming;
-      }
     }
-    return {
-      sampleCount:samples.length, phaseSequence,
-      phaseOrderOkay:phaseSequence[0] === 'release' && phaseSequence.includes('resolve') &&
-        phaseSequence.indexOf('release') < phaseSequence.indexOf('resolve'),
-      phaseBoundaryErrorCount, doubleExposureCount, invalidWeightCount,
-      releaseMonotonicErrorCount, resolveMonotonicErrorCount,
-      snapshotRevisions:[...new Set(samples.map(sample => sample.snapshotRevision).filter(Number.isInteger))],
-    };
+    const findFrame = (phase, predicate) => samples.find(sample => sample.phase === phase && predicate(sample)) ?? null;
+    const release = findFrame('release', sample => sample.progress > 0.04 && sample.progress < 0.16);
+    const reconfigure = findFrame('reconfigure', sample => Number(sample.q) > 0.48 && Number(sample.q) < 0.54);
+    const dock = findFrame('dock', sample => Number(sample.q) > 0.93 && Number(sample.q) < 0.97);
+    const midpointViewport = viewportAudit(reconfigure?.motionViewport);
+    const neighborMotionPxPerSecond = neighborMotionAudit(samples);
+    const progressInBounds = samples.length > 0 && samples.every(sample => sample.progress >= 0 && sample.progress <= 1);
+    const progressMonotonic = samples.every((sample, index) => index === 0 || sample.progress + 0.01 >= samples[index - 1].progress);
+    const geometricFlag = samples.length > 0 && samples.every(sample => sample.geometric === true);
+    const rackTrackConsistent = samples.length > 0 && samples.every(sample =>
+      Number.isFinite(Number(sample.rackDeployment)) && Number.isFinite(Number(sample.transitionRackDeployment)) &&
+      Math.abs(Number(sample.rackDeployment) - Number(sample.transitionRackDeployment)) < 0.08);
+    const geometricFrames = [release, reconfigure, dock].filter(Boolean);
+    const matricesPresent = geometricFrames.length === 3 && geometricFrames.every(sample => {
+      const poses = sample.motionGeometrySamples;
+      return Array.isArray(poses) && poses.length > 0 && poses.length <= 8 && poses.every(pose =>
+        xyz(pose.position) && xyz(pose.scale));
+    });
+    const releaseToReconfigure = compareGeometry(release, reconfigure);
+    const reconfigureToDock = compareGeometry(reconfigure, dock);
+    const geometryMovesThroughMiddle = matricesPresent && releaseToReconfigure.matchedCount > 0 &&
+      reconfigureToDock.matchedCount > 0 && releaseToReconfigure.changedCount > 0 && reconfigureToDock.changedCount > 0;
+    const releaseSpacing = Number(release?.rowSpacing), middleSpacing = Math.max(...samples.filter(sample =>
+      sample.phase === 'reconfigure').map(sample => Number(sample.rowSpacing))), dockSpacing = Number(dock?.rowSpacing);
+    const rowSpacingExpands = [releaseSpacing, middleSpacing, dockSpacing].every(Number.isFinite) &&
+      middleSpacing > Math.max(releaseSpacing, dockSpacing) + 0.05;
+    const headingValues = samples.map(sample => Number(sample.heading));
+    const headingFinite = headingValues.length > 1 && headingValues.every(Number.isFinite);
+    const headingDelta = release && dock ? Number(dock.heading) - Number(release.heading) : NaN;
+    const targetHeadingDirection = target === 'shelf' ? 1 : -1;
+    const headingMovesTowardTarget = Number.isFinite(headingDelta) && Math.sign(headingDelta) === targetHeadingDirection &&
+      Math.abs(headingDelta) > 0.15;
+    const maxHeadingStep = headingValues.slice(1).reduce((maximum, heading, index) =>
+      Math.max(maximum, Math.abs(heading - headingValues[index])), 0);
+    const headingContinuous = headingFinite && samples.slice(1).every((sample, index) =>
+      Math.abs(Number(sample.heading) - Number(samples[index].heading)) <=
+        8 * Math.max(.016, sample.frameTime - samples[index].frameTime));
+    const cameraSamples = samples.map(sample => ({ position:xyz(sample.cameraPosition), aim:xyz(sample.cameraAim), time:sample.frameTime }))
+      .filter(sample => sample.position && sample.aim);
+    const cameraStepSizes = cameraSamples.slice(1).map((sample, index) =>
+      distance3(sample.position, cameraSamples[index].position));
+    const aimStepSizes = cameraSamples.slice(1).map((sample, index) =>
+      distance3(sample.aim, cameraSamples[index].aim));
+    const cameraContinuous = cameraSamples.length > 1 && cameraSamples.slice(1).every((sample, index) => {
+      const seconds = Math.max(.016, sample.time - cameraSamples[index].time);
+      return cameraStepSizes[index] < 450 * seconds && aimStepSizes[index] < 80 * seconds;
+    });
+    const cameraYaws = cameraSamples.map(sample => Math.atan2(sample.position[0] - sample.aim[0],
+      sample.position[2] - sample.aim[2]));
+    let unwrappedCameraYaw = 0, previousCameraYaw = null;
+    const cameraYawTrack = cameraYaws.map(yaw => {
+      if (previousCameraYaw !== null) unwrappedCameraYaw += Math.atan2(Math.sin(yaw - previousCameraYaw), Math.cos(yaw - previousCameraYaw));
+      previousCameraYaw = yaw;
+      return unwrappedCameraYaw;
+    });
+    const cameraYawDelta = cameraYawTrack.length > 1 ? cameraYawTrack.at(-1) - cameraYawTrack[0] : NaN;
+    const cameraMovesWithHeading = Number.isFinite(cameraYawDelta) && Math.abs(cameraYawDelta) <= 97 * Math.PI / 180 + 0.04 &&
+      Math.abs(cameraYawDelta) > 0.02 && Math.sign(cameraYawDelta) === Math.sign(headingDelta);
+    const phaseOrderOkay = ['release','reconfigure','dock'].every((phase, index) =>
+      phaseSequence.indexOf(phase) >= 0 && (index === 0 || phaseSequence.indexOf(phase) > phaseSequence.indexOf(['release','reconfigure','dock'][index - 1])));
+    return { sampleCount:samples.length, phaseSequence, phaseOrderOkay, progressInBounds, progressMonotonic,
+      geometricFlag, rackTrackConsistent,
+      releaseProgress:release?.progress ?? null, reconfigureProgress:reconfigure?.progress ?? null, dockProgress:dock?.progress ?? null,
+      matricesPresent, releaseToReconfigure, reconfigureToDock, geometryMovesThroughMiddle,
+      releaseSpacing, middleSpacing, dockSpacing, rowSpacingExpands,
+      headingFinite, headingDelta, headingMovesTowardTarget, maxHeadingStep, headingContinuous,
+      cameraSampleCount:cameraSamples.length, cameraContinuous, cameraYawDelta, cameraMovesWithHeading,
+      midpointViewport, neighborMotionPxPerSecond };
   };
-  const transitionTo = async (designLabel, target, identity, captureMidEnd = false) => {
+  const captureGeometryFrame = async (context, target, phase, sample) => {
+    const detailed = await geometrySnapshot();
+    const geometry = detailed.stats?.motionGeometry ?? null;
+    const transition = detailed.stats?.layoutTransition ?? null;
+    const instances = geometry?.instances ?? [];
+    const matricesValid = Array.isArray(instances) && instances.length > 0 && instances.every(instance =>
+      instance?.id && Array.isArray(instance.matrix) && instance.matrix.length === 16 && instance.matrix.every(Number.isFinite));
+    const boundsValid = xyz(geometry?.bounds?.min) && xyz(geometry?.bounds?.max);
+    const selectedValid = Array.isArray(geometry?.selectedMatrix) && geometry.selectedMatrix.length === 16 &&
+      geometry.selectedMatrix.every(Number.isFinite);
+    const frame = { context, target, phase, q:transition?.q ?? null, progress:transition?.progress ?? null,
+      waitObservedProgress:sample.stats?.layoutTransition?.progress ?? null,
+      frameTime:detailed.stats?.frameTime ?? null, selectedAlbumId:detailed.selectedAlbumId,
+      selectedEntryKey:detailed.selectedEntryKey, motionGeometry:geometry,
+      layoutTransition:transition,
+      motionViewport:detailed.stats?.motionViewport ?? null };
+    result.geometryFrames.push(frame);
+    record(`${context} ${phase} captures actual bounds and occurrence matrices`,
+      matricesValid && boundsValid && selectedValid,
+      { phase, instanceCount:instances.length, bounds:geometry?.bounds ?? null,
+        selectedMatrixLength:geometry?.selectedMatrix?.length ?? null });
+    return frame;
+  };
+  const transitionTo = async (designLabel, target, identity) => {
     let current = await snapshot();
     if (current.viewLayout === target) return current;
     const context = `${designLabel} ${target} #${++transitionSequence}`;
@@ -268,86 +513,251 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     record(`${designLabel} ${target} has an active intermediate frame`,
       active.stats.layoutTransition.progress > 0 && active.stats.layoutTransition.progress < 1 && identityMatches(active, identity), shortState(active));
     const release = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'release' && Number(state.stats.layoutTransition.progress) >= 0.08,
+      state.stats.layoutTransition.phase === 'release' && Number(state.stats.layoutTransition.progress) > 0.04 &&
+      Number(state.stats.layoutTransition.progress) < 0.16,
     `${designLabel} ${target} release phase`, 7000, 12);
     record(`${designLabel} ${target} release frame preserves selection identity`, identityMatches(release, identity), shortState(release));
-    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-release`, {
-      progress:release.stats.layoutTransition.progress, phase:release.stats.layoutTransition.phase,
-      snapshotRevision:release.stats.layoutTransition.snapshotRevision,
-    });
-    const resolve = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'resolve' && Number(state.stats.layoutTransition.progress) > 0.6,
-    `${designLabel} ${target} resolve phase above 0.6`, 7000, 12);
-    record(`${designLabel} ${target} resolve frame preserves selection identity`, identityMatches(resolve, identity), shortState(resolve));
-    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-resolve`, {
-      progress:resolve.stats.layoutTransition.progress, phase:resolve.stats.layoutTransition.phase,
-      snapshotRevision:resolve.stats.layoutTransition.snapshotRevision,
-    });
+    await captureGeometryFrame(context, target, 'release', release);
+    const releaseGeometry = result.geometryFrames.at(-1);
+    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-release`,
+      { phase:'release', geometryReadQ:releaseGeometry.q }, 0, true);
+    const reconfigure = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
+      state.stats.layoutTransition.phase === 'reconfigure' && Number(state.stats.layoutTransition.q) > 0.49 &&
+      Number(state.stats.layoutTransition.q) < 0.52,
+    `${designLabel} ${target} geometric reconfiguration`, 7000, 12);
+    record(`${designLabel} ${target} reconfiguration frame preserves selection identity`, identityMatches(reconfigure, identity), shortState(reconfigure));
+    const middleGeometry = await captureGeometryFrame(context, target, 'middle', reconfigure);
+    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-middle`,
+      { phase:'reconfigure', geometryReadQ:middleGeometry.q }, 0, true);
+    const dock = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
+      state.stats.layoutTransition.phase === 'dock' && Number(state.stats.layoutTransition.q) > 0.94 &&
+      Number(state.stats.layoutTransition.q) < 0.955,
+    `${designLabel} ${target} dock phase`, 7000, 12);
+    record(`${designLabel} ${target} dock frame preserves selection identity`, identityMatches(dock, identity), shortState(dock));
+    const dockGeometry = await captureGeometryFrame(context, target, 'dock', dock);
+    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-dock`,
+      { phase:'dock', geometryReadQ:dockGeometry.q }, 0, true);
+    if (designLabel === 'Future' && target === 'shelf' && context === 'Future shelf #1' &&
+        identity.selectedAlbumId === 'fixture-album-28') {
+      const handoffFrames = [middleGeometry, dockGeometry];
+      const completeLongGroupHandoff = handoffFrames.every(frame =>
+        (frame.motionGeometry?.instances?.length ?? 0) >= 17 &&
+        Number(frame.layoutTransition?.matched) === 18 && Number(frame.layoutTransition?.arriving) === 0);
+      record('Future long-group shelf handoff retains 18 matched occurrences without arrivals', completeLongGroupHandoff,
+        handoffFrames.map(frame => ({ phase:frame.phase, q:frame.q, matched:frame.layoutTransition?.matched,
+          arriving:frame.layoutTransition?.arriving, nonzeroInstances:frame.motionGeometry?.instances?.length ?? 0 })));
+    }
     const end = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false,
       `${designLabel} ${target} endpoint`, 10000, 12);
     record(`${designLabel} ${target} reaches its endpoint with identity intact`, identityMatches(end, identity), shortState(end));
-    if (captureMidEnd) await takeScreenshot(`${designLabel.toLowerCase()}-${target}-transition-end`);
-    const audit = auditTransition(context);
-    record(`${designLabel} ${target} transition reports release then resolve`, audit.phaseOrderOkay, audit);
-    record(`${designLabel} ${target} curtain weights stay bounded and move in order`, audit.sampleCount > 0 &&
-      audit.phaseBoundaryErrorCount === 0 && audit.doubleExposureCount === 0 && audit.invalidWeightCount === 0 &&
-      audit.releaseMonotonicErrorCount === 0 && audit.resolveMonotonicErrorCount === 0, audit);
+    const audit = auditTransition(context, target);
+    record(`${designLabel} ${target} reports bounded progress and release, reconfigure, dock in order`,
+      audit.progressInBounds && audit.progressMonotonic && audit.geometricFlag && audit.phaseOrderOkay, audit);
+    record(`${designLabel} ${target} changes actual sampled mesh matrices through an intermediate pose`,
+      audit.geometryMovesThroughMiddle, audit);
+    record(`${designLabel} ${target} expands row spacing during reconfiguration`, audit.rowSpacingExpands, audit);
+    record(`${designLabel} ${target} keeps all selected-case corners inside the available scene viewport at midpoint`,
+      audit.midpointViewport.ok, audit.midpointViewport);
+    record(`${designLabel} ${target} heading and camera move continuously in the same direction`,
+      audit.headingMovesTowardTarget && audit.headingContinuous && audit.cameraContinuous && audit.cameraMovesWithHeading, audit);
+    const expectedRackDeployment = target === 'shelf' ? 1 : 0;
+    const actualRackDeployment = Number(end.stats?.rackDeployment);
+    const transitionRackDeployment = Number(end.stats?.layoutTransition?.rackDeployment);
+    const rackEndpointOkay = Number.isFinite(actualRackDeployment) && Number.isFinite(transitionRackDeployment) &&
+      Math.abs(actualRackDeployment - expectedRackDeployment) < 0.06 &&
+      Math.abs(transitionRackDeployment - expectedRackDeployment) < 0.06;
+    record(`${designLabel} ${target} rack deployment reaches its endpoint`, rackEndpointOkay,
+      { expectedRackDeployment, actualRackDeployment:end.stats?.rackDeployment,
+        transitionRackDeployment:end.stats?.layoutTransition?.rackDeployment });
+    record(`${designLabel} ${target} rack resources follow the reported deployment while moving`, audit.rackTrackConsistent, audit);
     record(`${designLabel} ${target} has a static target layout and identity after reveal`,
       end.viewLayout === target && end.stats?.layoutTransition?.active === false && identityMatches(end, identity), shortState(end));
     result.timeline.push({ design:designLabel, target, activeProgress:active.stats.layoutTransition.progress,
-      releaseProgress:release.stats.layoutTransition.progress, resolveProgress:resolve.stats.layoutTransition.progress,
-      phaseSequence:audit.phaseSequence,
-      snapshotRevision:resolve.stats.layoutTransition.snapshotRevision, endpoint:end.viewLayout,
+      releaseProgress:release.stats.layoutTransition.progress, reconfigureProgress:reconfigure.stats.layoutTransition.progress,
+      dockProgress:dock.stats.layoutTransition.progress, phaseSequence:audit.phaseSequence,
+      midpointViewport:audit.midpointViewport, neighborMotionPxPerSecond:audit.neighborMotionPxPerSecond,
+      rackDeployment:end.stats?.rackDeployment, endpoint:end.viewLayout,
       selectedAlbumId:end.selectedAlbumId, entryKey:end.selectedEntryKey });
     transitionProbeStartedAt = 0;
     transitionProbeContext = '';
     return end;
   };
   const exerciseLayoutTransitions = async (designLabel, identity) => {
-    await transitionTo(designLabel, 'shelf', identity, designLabel === 'Future');
-    await transitionTo(designLabel, 'array', identity, designLabel === 'Future');
-    const forwardContext = `${designLabel} rapid forward`;
-    transitionProbeContext = forwardContext;
+    const sourceState = await snapshot();
+    const sourceSelectedCell = { lane:Number(sourceState.stats?.selectedCell?.lane), row:Number(sourceState.stats?.selectedCell?.row) };
+    record(`${designLabel} fixed-plan retarget starts at the current MATRIX source coordinates`,
+      sourceState.viewLayout === 'array' && Number.isFinite(sourceSelectedCell.lane) && Number.isFinite(sourceSelectedCell.row) &&
+      identityMatches(sourceState, identity), { sourceSelectedCell, identity, state:shortState(sourceState) });
+    const retargetContext = `${designLabel} fixed-plan retargets`;
+    transitionProbeContext = retargetContext;
     transitionProbeStartedAt = Date.now();
     await clickLayout('shelf');
-    const forward = await waitForFast(state => state.viewLayout === 'shelf' && state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) > 0.12,
-    `${designLabel} rapid-forward transition`, 7000, 12);
-    record(`${designLabel} rapid-forward frame retains identity`, identityMatches(forward, identity), shortState(forward));
-    const reverseContext = `${designLabel} rapid reverse`;
-    transitionProbeContext = reverseContext;
-    transitionProbeStartedAt = Date.now();
-    await clickLayout('array');
-    const reverse = await waitForFast(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) > 0.02,
-    `${designLabel} rapid reverse transition`, 7000, 12);
-    const forwardRevision = forward.stats.layoutTransition.snapshotRevision;
-    const reverseRevision = reverse.stats.layoutTransition.snapshotRevision;
-    record(`${designLabel} rapid reverse retains the prior composed snapshot`, Number.isInteger(forwardRevision) &&
-      Number.isInteger(reverseRevision) && reverseRevision > forwardRevision,
-    { forwardRevision, reverseRevision, from:forward.stats.layoutTransition, to:reverse.stats.layoutTransition });
-    record(`${designLabel} rapid reverse preserves identity`, identityMatches(reverse, identity), shortState(reverse));
-    const resolve = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'resolve' && Number(state.stats.layoutTransition.progress) > 0.6 &&
-      state.viewLayout === 'array', `${designLabel} rapid reverse resolve phase`, 7000, 12);
-    record(`${designLabel} rapid reverse reaches its reveal phase with identity intact`,
-      identityMatches(resolve, identity), shortState(resolve));
+    const qWindow = (minimum, maximum, desiredEnd, label) => waitForFast(state =>
+      state.stats?.layoutTransition?.active === true &&
+      Number(state.stats.layoutTransition.desiredEnd) === desiredEnd &&
+      Number(state.stats.layoutTransition.q) >= minimum && Number(state.stats.layoutTransition.q) <= maximum,
+    `${designLabel} ${label}`, 20000, 8);
+    const q02 = await qWindow(0.16, 0.24, 1, 'retarget q near 0.2');
+    record(`${designLabel} retarget starts on a stable MATRIX identity`, identityMatches(q02, identity), shortState(q02));
+    const qSamples = [{ target:0.2, observed:Number(q02.stats.layoutTransition.q), desiredEnd:q02.stats.layoutTransition.desiredEnd }];
+    const retargetAndCheck = async (targetLayout, nextDesiredEnd, flipNumber) => {
+      const requestStartedAt = Date.now();
+      const atomic = await retargetLayoutAtomically(targetLayout);
+      const before = atomic.before;
+      const atomicAfter = atomic.after;
+      const beforeTransition = before.stats?.layoutTransition ?? {};
+      const confirmation = await waitForFast(state => state.viewLayout === targetLayout &&
+        state.stats?.layoutTransition?.active === true &&
+        Number(state.stats.layoutTransition.desiredEnd) === nextDesiredEnd,
+      `${designLabel} retarget ${flipNumber} to ${targetLayout}`, 10000, 8);
+      const atomicRetargeted = Number(atomicAfter.stats?.layoutTransition?.desiredEnd) === nextDesiredEnd;
+      const after = atomicRetargeted ? atomicAfter : await geometrySnapshot();
+      const elapsedWallSeconds = (Date.now() - requestStartedAt) / 1000;
+      const frameDelta = Number(after.stats?.frameTime) - Number(before.stats?.frameTime);
+      const elapsedSeconds = Number.isFinite(frameDelta) && frameDelta > 0
+        ? Math.min(0.8, frameDelta) : Math.min(0.8, elapsedWallSeconds);
+      const afterTransition = after.stats?.layoutTransition ?? {};
+      const qBefore = Number(beforeTransition.q), qAfter = Number(afterTransition.q);
+      const velocityBefore = Number(beforeTransition.qVelocity), velocityAfter = Number(afterTransition.qVelocity);
+      const qDelta = Math.abs(qAfter - qBefore), velocityDelta = Math.abs(velocityAfter - velocityBefore);
+      const geometryContinuity = compareGeometry(before, after);
+      const actualMatrixContinuity = compareActualMatrices(before, after);
+      const cameraContinuity = distance3(before.stats?.cameraPosition, after.stats?.cameraPosition);
+      const aimContinuity = distance3(before.stats?.cameraAim, after.stats?.cameraAim);
+      const modelContinuity = distance3(before.stats?.modelPosition, after.stats?.modelPosition);
+      const headingContinuity = Math.abs(Number(beforeTransition.heading) - Number(afterTransition.heading));
+      const rowContinuity = Math.abs(Number(beforeTransition.rowSpacing) - Number(afterTransition.rowSpacing));
+      const qLimit = atomicRetargeted ? 0.001 : 0.13 + elapsedSeconds * 0.5;
+      const velocityLimit = atomicRetargeted ? 0.001 : 0.28 + elapsedSeconds * 1.2;
+      const matrixLimit = atomicRetargeted ? 0.001 : 1.25 + elapsedSeconds * 8;
+      const poseLimit = atomicRetargeted ? 0.001 : 2.5 + elapsedSeconds * 16;
+      const qContinuous = Number.isFinite(qBefore) && Number.isFinite(qAfter) && qDelta <= qLimit;
+      const qVelocityContinuous = Number.isFinite(velocityBefore) && Number.isFinite(velocityAfter) &&
+        velocityDelta <= velocityLimit && (atomicRetargeted || Math.abs(velocityBefore) < 0.12 ||
+          Math.sign(velocityBefore) === Math.sign(velocityAfter) || elapsedSeconds > 0.25);
+      const poseContinuous = geometryContinuity.matchedCount > 0 && geometryContinuity.maxDelta <= matrixLimit &&
+        actualMatrixContinuity.matchedCount > 0 && actualMatrixContinuity.maxElementDelta <= matrixLimit &&
+        Number.isFinite(actualMatrixContinuity.selectedMatrixDelta) && actualMatrixContinuity.selectedMatrixDelta <= matrixLimit &&
+        Number.isFinite(cameraContinuity) && cameraContinuity <= poseLimit &&
+        Number.isFinite(aimContinuity) && aimContinuity <= poseLimit &&
+        Number.isFinite(modelContinuity) && modelContinuity <= poseLimit &&
+        headingContinuity <= (atomicRetargeted ? 0.001 : 0.35 + elapsedSeconds) &&
+        rowContinuity <= (atomicRetargeted ? 0.001 : 0.35 + elapsedSeconds * 2);
+      const retargetedInPlace = Number(beforeTransition.desiredEnd) === 1 - nextDesiredEnd &&
+        Number(afterTransition.desiredEnd) === nextDesiredEnd;
+      record(`${designLabel} flip ${flipNumber} retargets the same plan with q, velocity and matrices continuous`,
+        retargetedInPlace && qContinuous && qVelocityContinuous && poseContinuous,
+        { targetLayout, qBefore, qAfter, qDelta, velocityBefore, velocityAfter, velocityDelta,
+          atomicRetargeted, elapsedSeconds, qLimit, velocityLimit, matrixLimit, geometryContinuity,
+          actualMatrixContinuity, cameraContinuity, aimContinuity, modelContinuity,
+          headingContinuity, rowContinuity, desiredEndBefore:beforeTransition.desiredEnd,
+          desiredEndAfter:afterTransition.desiredEnd,
+          timingSource:Number.isFinite(frameDelta) && frameDelta > 0 ? 'scene frameTime' : 'wall-clock fallback' });
+      record(`${designLabel} flip ${flipNumber} preserves selected identity`, identityMatches(confirmation, identity), shortState(confirmation));
+      return confirmation;
+    };
+    await retargetAndCheck('array', 0, 1);
+    const q03 = await qWindow(0.01, 0.06, 0, 'retarget q near 0.03');
+    qSamples.push({ target:0.03, observed:Number(q03.stats.layoutTransition.q), desiredEnd:q03.stats.layoutTransition.desiredEnd });
+    await retargetAndCheck('shelf', 1, 2);
+    const q05 = await qWindow(0.44, 0.56, 1, 'retarget q near 0.5');
+    qSamples.push({ target:0.5, observed:Number(q05.stats.layoutTransition.q), desiredEnd:q05.stats.layoutTransition.desiredEnd });
+    const q08 = await qWindow(0.75, 0.85, 1, 'retarget q near 0.8');
+    qSamples.push({ target:0.8, observed:Number(q08.stats.layoutTransition.q), desiredEnd:q08.stats.layoutTransition.desiredEnd });
+    const q097 = await qWindow(0.93, 0.99, 1, 'retarget q near 0.97');
+    qSamples.push({ target:0.97, observed:Number(q097.stats.layoutTransition.q), desiredEnd:q097.stats.layoutTransition.desiredEnd });
+    const afterFlip3 = await retargetAndCheck('array', 0, 3);
+    record(`${designLabel} fixed-plan retarget probe samples q near 0.03/0.2/0.5/0.8/0.97`,
+      qSamples.length === 5 && qSamples.every(sample => Number.isFinite(sample.observed)), qSamples);
     const end = await waitForFast(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === false,
-      `${designLabel} rapid reverse endpoint`, 10000, 12);
-    record(`${designLabel} rapid reverse ends at a static MATRIX layout`, identityMatches(end, identity) &&
+      `${designLabel} fixed-plan retarget endpoint`, 30000, 12);
+    record(`${designLabel} three retarget flips settle at a static MATRIX layout`, identityMatches(end, identity) &&
       end.stats?.layoutTransition?.active === false, shortState(end));
-    const audit = auditTransition(reverseContext);
-    record(`${designLabel} rapid reverse reports release then resolve`, audit.phaseOrderOkay, audit);
-    record(`${designLabel} rapid reverse keeps one curtain image visible at a time`,
-      audit.sampleCount > 0 && audit.phaseBoundaryErrorCount === 0 && audit.doubleExposureCount === 0 &&
-      audit.invalidWeightCount === 0 && audit.releaseMonotonicErrorCount === 0 && audit.resolveMonotonicErrorCount === 0, audit);
-    result.timeline.push({ design:designLabel, target:'array', rapidReverse:true,
-      activeProgress:reverse.stats.layoutTransition.progress, resolveProgress:resolve.stats.layoutTransition.progress,
-      phaseSequence:audit.phaseSequence, snapshotRevisionFrom:forwardRevision,
-      snapshotRevisionTo:reverseRevision, endpoint:end.viewLayout });
+    const finalSelectedCell = end.stats?.selectedCell ?? null;
+    const sourceCoordinatesRestored = Number(finalSelectedCell?.lane) === sourceSelectedCell.lane &&
+      Number(finalSelectedCell?.row) === sourceSelectedCell.row;
+    record(`${designLabel} three retarget flips restore the original MATRIX lane and row with identity intact`,
+      sourceCoordinatesRestored && identityMatches(end, identity),
+      { sourceSelectedCell, finalSelectedCell, selectedAlbumId:end.selectedAlbumId, selectedEntryKey:end.selectedEntryKey });
+    const reverseRackOkay = Number.isFinite(Number(end.stats?.rackDeployment)) &&
+      Math.abs(Number(end.stats.rackDeployment)) < 0.06 &&
+      Math.abs(Number(end.stats?.layoutTransition?.rackDeployment)) < 0.06;
+    record(`${designLabel} retargeted plan docks with the rack retracted`, reverseRackOkay,
+      { rackDeployment:end.stats?.rackDeployment, transitionRackDeployment:end.stats?.layoutTransition?.rackDeployment });
+    const retargetSamples = result.transitionSamples.filter(sample => sample.context === retargetContext);
+    const activeRetargetSamples = retargetSamples.filter(sample => sample.active === true);
+    const rackTrackConsistent = activeRetargetSamples.length > 0 && activeRetargetSamples.every(sample =>
+      Number.isFinite(Number(sample.rackDeployment)) && Number.isFinite(Number(sample.transitionRackDeployment)) &&
+      Math.abs(Number(sample.rackDeployment) - Number(sample.transitionRackDeployment)) < 0.08);
+    record(`${designLabel} retargeted rack resources follow the reported deployment`, rackTrackConsistent,
+      { sampleCount:activeRetargetSamples.length });
     transitionProbeStartedAt = 0;
     transitionProbeContext = '';
-    return end;
+    let settledFrameHandoff = null;
+    if (designLabel === 'Future' && identity.selectedAlbumId === 'fixture-album-28') {
+      const terminal = await geometrySnapshot();
+      const terminalFrameTime = Number(terminal.stats?.frameTime);
+      const nextFrameFast = await waitForFast(state => state.stats?.layoutTransition?.active === false &&
+        Number(state.stats?.frameTime) > terminalFrameTime,
+      'Future MATRIX ordinary frame after settled retarget endpoint', 5000, 4);
+      const nextFrame = await geometrySnapshot();
+      const entriesAroundSource = state => {
+        const instances = state.stats?.motionGeometry?.instances ?? [];
+        const byKey = new Map(), byCell = new Map(), lanes = new Set();
+        for (const instance of instances) {
+          const cell = instance?.cell;
+          const lane = Number(cell?.lane), row = Number(cell?.row);
+          const entry = String(instance?.entry ?? cell?.foobarEntryKey ?? '');
+          const matrix = instance?.matrix;
+          if (!entry || !Number.isFinite(lane) || !Number.isFinite(row) ||
+              Math.abs(lane - sourceSelectedCell.lane) > 2 || Math.abs(row - sourceSelectedCell.row) > 8 ||
+              !Array.isArray(matrix) || matrix.length !== 16 || !matrix.every(Number.isFinite)) continue;
+          const cellKey = `${lane}:${row}`;
+          byKey.set(`${entry}|${cellKey}`, { entry, lane, row, matrix });
+          byCell.set(cellKey, entry);
+          lanes.add(lane);
+        }
+        return { byKey, byCell, lanes:[...lanes].sort((left, right) => left - right) };
+      };
+      const terminalNeighborhood = entriesAroundSource(terminal), nextNeighborhood = entriesAroundSource(nextFrame);
+      const sharedKeys = [...terminalNeighborhood.byKey.keys()].filter(key => nextNeighborhood.byKey.has(key));
+      const missingKeys = [...terminalNeighborhood.byKey.keys()].filter(key => !nextNeighborhood.byKey.has(key));
+      const cellEntryChanges = [...terminalNeighborhood.byCell.entries()]
+        .filter(([cell, entry]) => nextNeighborhood.byCell.has(cell) && nextNeighborhood.byCell.get(cell) !== entry)
+        .map(([cell, before]) => ({ cell, before, after:nextNeighborhood.byCell.get(cell) }));
+      const matrixMaxDelta = sharedKeys.reduce((maximum, key) => {
+        const before = terminalNeighborhood.byKey.get(key).matrix, after = nextNeighborhood.byKey.get(key).matrix;
+        return Math.max(maximum, Math.max(...before.map((value, index) => Math.abs(value - after[index]))));
+      }, 0);
+      const terminalSelectedMatrix = terminal.stats?.motionGeometry?.selectedMatrix;
+      const nextSelectedMatrix = nextFrame.stats?.motionGeometry?.selectedMatrix;
+      const selectedMatrixDelta = Array.isArray(terminalSelectedMatrix) && terminalSelectedMatrix.length === 16 &&
+        Array.isArray(nextSelectedMatrix) && nextSelectedMatrix.length === 16
+        ? Math.max(...terminalSelectedMatrix.map((value, index) => Math.abs(value - nextSelectedMatrix[index]))) : Infinity;
+      const frameTimeDelta = Number(nextFrame.stats?.frameTime) - terminalFrameTime;
+      const laneCoverage = terminalNeighborhood.lanes.length >= 3;
+      const handoffOkay = frameTimeDelta > 0 && identityMatches(terminal, identity) && identityMatches(nextFrame, identity) &&
+        Number(terminal.stats?.selectedCell?.lane) === sourceSelectedCell.lane &&
+        Number(terminal.stats?.selectedCell?.row) === sourceSelectedCell.row &&
+        Number(nextFrame.stats?.selectedCell?.lane) === sourceSelectedCell.lane &&
+        Number(nextFrame.stats?.selectedCell?.row) === sourceSelectedCell.row &&
+        terminalNeighborhood.byKey.size > 0 && laneCoverage && missingKeys.length === 0 &&
+        cellEntryChanges.length === 0 && matrixMaxDelta <= 0.1 && selectedMatrixDelta <= 0.1;
+      settledFrameHandoff = { terminalFrameTime, nextFrameTime:nextFrame.stats?.frameTime, frameTimeDelta,
+        sourceSelectedCell, terminalSelectedCell:terminal.stats?.selectedCell ?? null,
+        nextSelectedCell:nextFrame.stats?.selectedCell ?? null,
+        terminalNeighborhoodKeys:terminalNeighborhood.byKey.size, nextNeighborhoodKeys:nextNeighborhood.byKey.size,
+        sharedKeys:sharedKeys.length, missingKeys, cellEntryChanges, laneCoverage:terminalNeighborhood.lanes,
+        matrixMaxDelta, selectedMatrixDelta, identityStable:identityMatches(terminal, identity) && identityMatches(nextFrame, identity),
+        nextFrameFastTime:nextFrameFast.stats?.frameTime ?? null };
+      record('Future settled retarget preserves entry/cell matrices through the next ordinary frame', handoffOkay,
+        settledFrameHandoff);
+    }
+    result.timeline.push({ design:designLabel, target:'array', retargetFlips:3, qSamples, sourceSelectedCell, finalSelectedCell,
+      finalDesiredEnd:0, rackDeployment:end.stats?.rackDeployment, settledFrameHandoff,
+      endpoint:end.viewLayout });
+    await transitionTo(designLabel, 'shelf', identity);
+    return transitionTo(designLabel, 'array', identity);
   };
   const enterInterfaceSettings = async label => {
     await click('[data-action="settings"]');
@@ -569,16 +979,32 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     active:state.entry?.active ?? null,
     entryPhase:state.entry?.phase ?? null,
     shelfPhase:state.stats?.shelfEntry?.phase ?? null,
-    hiddenCases:state.stats?.shelfEntry?.hiddenCases ?? null,
-    baseCaptured:state.stats?.shelfEntry?.baseCaptured ?? null,
+    deployment:state.stats?.shelfEntry?.deployment ?? null,
+    caseScaleY:state.stats?.shelfEntry?.caseScaleY ?? null,
+    fullCaseHeight:state.stats?.shelfEntry?.fullCaseHeight ?? null,
+    visibleCaseHeight:state.stats?.shelfEntry?.visibleCaseHeight ?? null,
+    deckY:state.stats?.shelfEntry?.deckY ?? null,
+    rackDeployment:state.stats?.rackDeployment ?? null,
+    modelPosition:state.stats?.modelPosition ?? null,
+    motionGeometrySamples:state.stats?.motionGeometrySamples ?? [],
   });
   const recordEntryState = (state, force = false) => {
     const stamp = entryStamp(state);
-    const key = [stamp.active, stamp.entryPhase, stamp.shelfPhase, stamp.hiddenCases, stamp.baseCaptured].join('|');
+    const key = [stamp.active, stamp.entryPhase, stamp.shelfPhase].join('|');
     if (force || key !== lastEntryTimelineKey) result.entryTimeline.push(stamp);
     lastEntryTimelineKey = key;
     return stamp;
   };
+  const unitGeometryScales = samples => Array.isArray(samples) && samples.length > 0 && samples.length <= 8 &&
+    samples.every(sample => {
+      const scale = xyz(sample?.scale);
+      return scale && scale.every(value => Math.abs(value - 1) <= 0.06);
+    });
+  const partialGeometryScales = samples => Array.isArray(samples) && samples.length > 0 && samples.length <= 8 &&
+    samples.some(sample => {
+      const scale = xyz(sample?.scale);
+      return scale && scale.some(value => value > 0.01 && value < 0.97);
+    });
   const sampleEntryUntil = async (time, label, timeoutMs = 30000) => {
     const deadline = Date.now() + timeoutMs;
     let latest;
@@ -603,20 +1029,47 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       initial.viewLayout === 'array' && initial.entry?.active === false && !initial.overlayPresent &&
       getPreferences()?.entryOnOpen === false && (getReadyCount?.() ?? 1) >= 1,
       { viewLayout:initial.viewLayout, entry:initial.entry, entryOnOpen:getPreferences()?.entryOnOpen, readyCount:getReadyCount?.() ?? null });
-    record('production renderer uses the isolated 36 album library',
-      probeReport.syntheticArchiveMotionFixture === true && probeReport.syntheticArchiveMotionAlbumCount === 36 &&
+    record('production renderer uses the isolated 38 album fixture with 7/28/3 genre groups',
+      probeReport.syntheticArchiveMotionFixture === true && probeReport.syntheticArchiveMotionAlbumCount === 38 &&
+      probeReport.syntheticArchiveMotionGenreCounts?.join(',') === '7,28,3' &&
       probeReport.archiveMotionUsesOnlyPngCovers === true,
       { syntheticFixture:probeReport.syntheticArchiveMotionFixture, albumCount:probeReport.syntheticArchiveMotionAlbumCount,
-        pngCovers:probeReport.archiveMotionUsesOnlyPngCovers });
+        genreCounts:probeReport.syntheticArchiveMotionGenreCounts, pngCovers:probeReport.archiveMotionUsesOnlyPngCovers });
 
     const firstAlbum = initial.selectedAlbumId;
     await click('.music-navigation [data-action="next"]');
-    const selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== firstAlbum && state.selectedEntryKey,
+    let selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== firstAlbum && state.selectedEntryKey,
       'select a stable non-first fixture album', 10000, 35);
-    let identity = { selectedAlbumId:selected.selectedAlbumId, selectedEntryKey:selected.selectedEntryKey };
     record('non-first album and catalog entry are selected before transition checks',
+      selected.selectedAlbumId === selected.selectedAlbumFromApp && !!selected.selectedEntryKey,
+      { selectedAlbumId:selected.selectedAlbumId, selectedEntryKey:selected.selectedEntryKey,
+        selectedAlbumFromApp:selected.selectedAlbumFromApp });
+    const longGroupAlbumId = probeReport.syntheticArchiveMotionLongGroupProbeAlbumId ?? 'fixture-album-28';
+    // Row navigation wraps inside the current MATRIX genre. Enter the long
+    // middle genre before walking to its 21st item.
+    for (let lane = 0; lane < 3 && !/^fixture-album-(?:0[8-9]|[12][0-9]|3[0-5])$/.test(selected.selectedAlbumId); lane++) {
+      const previousAlbumId = selected.selectedAlbumId;
+      await click('.music-navigation [data-action="genre-next"]');
+      selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== previousAlbumId,
+        'enter the long Fixture genre', 10000, 35);
+    }
+    for (let advance = 0; advance < 38 && selected.selectedAlbumId !== longGroupAlbumId; advance++) {
+      const previousAlbumId = selected.selectedAlbumId;
+      await click('.music-navigation [data-action="next"]');
+      selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== previousAlbumId && state.selectedEntryKey,
+        `advance MATRIX selection toward long-group entry ${longGroupAlbumId}`, 10000, 35);
+    }
+    let identity = { selectedAlbumId:selected.selectedAlbumId, selectedEntryKey:selected.selectedEntryKey };
+    record('long-group album and catalog identity are selected before transition checks',
       identity.selectedAlbumId === selected.selectedAlbumFromApp && !!identity.selectedEntryKey,
       { ...identity, selectedAlbumFromApp:selected.selectedAlbumFromApp });
+    record('the 21st album in the long Fixture genre is selected before a MATRIX round trip',
+      identity.selectedAlbumId === longGroupAlbumId && !!identity.selectedEntryKey,
+      { ...identity, expectedAlbumId:longGroupAlbumId, genreCounts:probeReport.syntheticArchiveMotionGenreCounts });
+    await pause(1000);
+    const stableBeforeFirstTransition = await snapshot();
+    record('selected long-group identity remains stable for one second before the first layout transition',
+      identityMatches(stableBeforeFirstTransition, identity), shortState(stableBeforeFirstTransition));
 
     await exerciseLayoutTransitions('Future', identity);
     await takeScreenshot('future-matrix-overview');
@@ -656,23 +1109,43 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       !!identity.selectedAlbumId && !!identity.selectedEntryKey && future.selectedAlbumId === future.selectedAlbumFromApp,
       identity);
     if (future.viewLayout !== 'shelf') future = await transitionTo('Future', 'shelf', identity);
+    let fixtureCaseHeight = null;
     const skippedEntry = await replayFutureArrayEntry('manual skip');
-    const skipFrame = await waitForFast(state => state.entry?.active === true && Number(state.entry.time) >= 22.15,
-      'Future ARRAY structure phase before manual skip', 30000, 12);
-    record('manual skip is available while shelf structure is assembled',
-      skipFrame.entry.phase === 'shelf-structure' && Number(skipFrame.entry.time) <= 22.7,
-      { time:skipFrame.entry.time, entryPhase:skipFrame.entry.phase, shelfEntry:skipFrame.stats?.shelfEntry });
+    const skipFrame = await waitForFast(state => state.entry?.active === true &&
+      Number(state.entry.time) >= 23.2 && Number(state.entry.time) <= 24.5 && state.entry.phase === 'shelf-assembly' &&
+      Number(state.stats?.shelfEntry?.visibleCaseHeight) > 0,
+    'Future ARRAY partial shelf assembly before manual skip', 30000, 12);
+    recordEntryState(skipFrame, true);
+    fixtureCaseHeight = Number(skipFrame.stats?.shelfEntry?.fullCaseHeight);
+    const skipDeployment = Number(skipFrame.stats?.shelfEntry?.deployment);
+    const skipRackDeployment = Number(skipFrame.stats?.rackDeployment);
+    const skipVisibleCaseHeight = Number(skipFrame.stats?.shelfEntry?.visibleCaseHeight);
+    const skipCasePartiallyVisible = Number.isFinite(fixtureCaseHeight) && fixtureCaseHeight > 0 &&
+      skipVisibleCaseHeight > 0.01 && skipVisibleCaseHeight < fixtureCaseHeight - 0.01;
+    record('manual skip is available during partial shelf assembly',
+      skipFrame.entry.phase === 'shelf-assembly' && skipFrame.stats?.shelfEntry?.phase === 'assemble' &&
+      skipDeployment > 0.01 && skipDeployment < 0.99 && skipRackDeployment > 0.01 && skipRackDeployment < 0.99 &&
+      skipCasePartiallyVisible,
+      { time:skipFrame.entry.time, entryPhase:skipFrame.entry.phase, shelfEntry:skipFrame.stats?.shelfEntry,
+        rackDeployment:skipFrame.stats?.rackDeployment, fullCaseHeight:fixtureCaseHeight,
+        partialPlanarScaleSample:partialGeometryScales(skipFrame.stats?.motionGeometrySamples),
+        motionGeometrySamples:skipFrame.stats?.motionGeometrySamples });
     await click('.future-entry-skip');
     const skipped = await waitFor(state => state.entry?.active === false && !state.overlayPresent &&
       state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive' && state.detailHidden === true &&
-      state.stats?.shelfEntry?.hiddenCases === 0 && state.stats?.shelfEntry?.phase == null,
+      state.stats?.shelfEntry?.phase == null,
     'Future ARRAY entry skip returns to overview', 10000, 35);
     record('manual skip returns to Future ARRAY overview', skipped.viewLayout === 'shelf' &&
       skipped.presentation?.phase === 'archive' && skipped.detailHidden === true && getPreferences()?.entryOnOpen === false,
     { state:shortState(skipped), entryOnOpen:getPreferences()?.entryOnOpen, start:shortState(skippedEntry) });
-    record('manual skip clears hidden rack cases and restores the static shelf',
-      skipped.stats?.shelfEntry?.hiddenCases === 0 && skipped.stats?.shelfEntry?.phase == null,
-      { shelfEntry:skipped.stats?.shelfEntry });
+    const skippedSamples = skipped.stats?.motionGeometrySamples ?? [];
+    const skipRestored = Math.abs(Number(skipped.stats?.shelfEntry?.deployment) - 1) < 0.06 &&
+      Math.abs(Number(skipped.stats?.shelfEntry?.caseScaleY) - 1) < 0.06 &&
+      Math.abs(Number(skipped.stats?.rackDeployment) - 1) < 0.06 &&
+      skipped.stats?.shelfEntry?.phase == null && (skippedSamples.length === 0 || unitGeometryScales(skippedSamples));
+    record('manual skip restores unit model and case scale with the rack fully deployed', skipRestored,
+      { shelfEntry:skipped.stats?.shelfEntry, rackDeployment:skipped.stats?.rackDeployment,
+        reportedGeometryCount:skippedSamples.length, motionGeometrySamples:skippedSamples });
 
     const naturalEntry = await replayFutureArrayEntry('natural replay');
     record('manual replay starts the Future ARRAY layout', naturalEntry.entry?.layout === 'shelf' || naturalEntry.viewLayout === 'shelf',
@@ -681,65 +1154,88 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     entryTimelineStartedAt = Date.now();
     lastEntryTimelineKey = '';
     recordEntryState(naturalEntry, true);
-    const keyframeTimes = [22.35,22.7,23.15,23.75,24.2,25.3,25.9];
+    const keyframeTimes = [22.3,22.8,23.4,24.0,24.6,25.3,26.5];
     let keyframeCount = 0;
     for (const targetTime of keyframeTimes) {
       const beforeCapture = await sampleEntryUntil(Math.max(0, targetTime - 0.12),
         `key frame ${targetTime.toFixed(2)}s`);
       const beforeStamp = recordEntryState(beforeCapture, true);
+      beforeStamp.requestedEntryTime = targetTime;
       const name = `future-array-entry-${targetTime.toFixed(2).replace('.', '-')}`;
       await takeScreenshot(name, { requestedEntryTime:targetTime, beforeCapture:beforeStamp }, 0);
       keyframeCount++;
       const afterCapture = await fastSnapshot();
       if (!afterCapture.sampleError) {
         const afterStamp = recordEntryState(afterCapture, true);
+        afterStamp.requestedEntryTime = targetTime;
         result.screenshots.at(-1).details.afterCapture = afterStamp;
       }
     }
     const naturalEnd = await waitFor(state => state.entry?.active === false && !state.overlayPresent &&
       state.viewLayout === 'shelf' && state.page === 'music' && state.mode === 'archive' &&
-      state.stats?.layoutTransition?.active === false && state.stats?.shelfEntry?.hiddenCases === 0 &&
-      state.stats?.shelfEntry?.phase == null,
+      state.stats?.layoutTransition?.active === false && state.stats?.shelfEntry?.phase == null,
     'natural Future ARRAY entry completion', 10000, 40);
     const naturalPlaybackSeconds = (Date.now() - startedAt) / 1000;
     recordEntryState(naturalEnd, true);
     await takeScreenshot('future-array-entry-final-overview');
-    const expectedEntryPhases = ['shelf-structure','shelf-catalog','shelf-ready','settle'];
+    const expectedEntryPhases = ['shelf-assembly','shelf-ready','settle'];
+    const naturalSamples = result.entryTimeline.filter(sample => Number.isFinite(sample.sinceReplayMs));
     const observedEntryPhases = [];
-    for (const sample of result.entryTimeline) {
+    for (const sample of naturalSamples) {
       if (sample.entryPhase && sample.entryPhase !== observedEntryPhases.at(-1)) observedEntryPhases.push(sample.entryPhase);
     }
-    const phaseStarts = Object.fromEntries(expectedEntryPhases.map(phase => [phase,
-      result.entryTimeline.find(sample => sample.entryPhase === phase)?.entryTime ?? null]));
     const phaseOrderOkay = expectedEntryPhases.every((phase, index) => observedEntryPhases.indexOf(phase) >= 0 &&
       (index === 0 || observedEntryPhases.indexOf(phase) > observedEntryPhases.indexOf(expectedEntryPhases[index - 1])));
-    // Screenshots block sampling for several frames. First observation is not
-    // a phase boundary; exact boundaries are covered by the offline clock test.
-    const phaseTimingOkay = expectedEntryPhases.every((phase, index) => Number.isFinite(phaseStarts[phase]) &&
-      phaseStarts[phase] >= 21.9 && phaseStarts[phase] <= 26.3 &&
-      (index === 0 || phaseStarts[phase] >= phaseStarts[expectedEntryPhases[index - 1]]));
-    const structureSamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-structure');
-    const catalogSamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-catalog');
-    const readySamples = result.entryTimeline.filter(sample => sample.entryPhase === 'shelf-ready');
-    record('Future ARRAY timeline reports structure, catalog, ready and settle in order', phaseOrderOkay,
-      { observedEntryPhases, phaseStarts });
-    record('Future ARRAY scene phases follow the shared prelude in time order', phaseTimingOkay, { phaseStarts });
-    record('Future ARRAY structure reveals complete racks with catalog cases hidden',
-      structureSamples.some(sample => sample.shelfPhase === 'structure' && sample.hiddenCases > 0 && sample.baseCaptured === false),
-      structureSamples);
-    record('Future ARRAY catalog shows all covers over the captured rack',
-      catalogSamples.some(sample => sample.shelfPhase === 'catalog' && sample.hiddenCases === 0 && sample.baseCaptured === true),
-      catalogSamples);
-    record('Future ARRAY ready phase reaches the static shelf state',
-      readySamples.some(sample => sample.shelfPhase === 'ready'), readySamples);
+    const assemblySamples = naturalSamples.filter(sample => sample.entryPhase === 'shelf-assembly');
+    const readySamples = naturalSamples.filter(sample => sample.entryPhase === 'shelf-ready');
+    const settleSamples = naturalSamples.filter(sample => sample.entryPhase === 'settle');
+    const orderedAssemblyHeights = assemblySamples.filter(sample => Number.isFinite(Number(sample.entryTime)) &&
+      Number.isFinite(Number(sample.visibleCaseHeight))).sort((left, right) => Number(left.entryTime) - Number(right.entryTime));
+    const assemblyHeightDeltas = orderedAssemblyHeights.slice(1).map((sample, index) =>
+      Number(sample.visibleCaseHeight) - Number(orderedAssemblyHeights[index].visibleCaseHeight));
+    const assemblyHeightRange = orderedAssemblyHeights.length
+      ? Math.max(...orderedAssemblyHeights.map(sample => Number(sample.visibleCaseHeight))) -
+        Math.min(...orderedAssemblyHeights.map(sample => Number(sample.visibleCaseHeight))) : 0;
+    const assemblyHeightMonotonic = orderedAssemblyHeights.length >= 2 &&
+      assemblyHeightDeltas.every(delta => delta >= -0.02) && assemblyHeightRange > 0.2;
+    const partialAssemblyObserved = assemblySamples.some(sample => sample.shelfPhase === 'assemble' &&
+      Number(sample.deployment) > 0.01 && Number(sample.deployment) < 0.99 &&
+      Number(sample.rackDeployment) > 0.01 && Number(sample.rackDeployment) < 0.99 &&
+      Number.isFinite(fixtureCaseHeight) && fixtureCaseHeight > 0 &&
+      Number(sample.visibleCaseHeight) > 0.01 && Number(sample.visibleCaseHeight) < fixtureCaseHeight - 0.01);
+    const readyPoseObserved = readySamples.some(sample => sample.shelfPhase === 'ready' &&
+      Math.abs(Number(sample.deployment) - 1) < 0.06 && Math.abs(Number(sample.rackDeployment) - 1) < 0.06 &&
+      Math.abs(Number(sample.caseScaleY) - 1) < 0.06 && Number.isFinite(Number(sample.fullCaseHeight)) &&
+      Math.abs(Number(sample.visibleCaseHeight) - Number(sample.fullCaseHeight)) < 0.03);
+    const settlePoseObserved = settleSamples.some(sample => sample.shelfPhase === 'ready' &&
+      Math.abs(Number(sample.deployment) - 1) < 0.06 && Math.abs(Number(sample.rackDeployment) - 1) < 0.06 &&
+      Math.abs(Number(sample.caseScaleY) - 1) < 0.06 && Number.isFinite(Number(sample.fullCaseHeight)) &&
+      Math.abs(Number(sample.visibleCaseHeight) - Number(sample.fullCaseHeight)) < 0.03 &&
+      unitGeometryScales(sample.motionGeometrySamples));
+    record('Future ARRAY timeline reports assembly, ready and settle in order', phaseOrderOkay,
+      { observedEntryPhases, entrySamples:naturalSamples.length });
+    record('Future ARRAY assembly exposes a partial rigid case above the shared deck', partialAssemblyObserved,
+      { fullCaseHeight:fixtureCaseHeight, samples:assemblySamples.map(sample => ({ entryTime:sample.entryTime,
+        visibleCaseHeight:sample.visibleCaseHeight, deckY:sample.deckY, deployment:sample.deployment,
+        rackDeployment:sample.rackDeployment, caseScaleY:sample.caseScaleY,
+        partialPlanarScale:partialGeometryScales(sample.motionGeometrySamples) })) });
+    record('Future ARRAY visible case height rises monotonically during assembly', assemblyHeightMonotonic,
+      { samples:orderedAssemblyHeights.map(sample => ({ entryTime:sample.entryTime,
+        visibleCaseHeight:sample.visibleCaseHeight, deckY:sample.deckY })), deltas:assemblyHeightDeltas,
+        heightRange:assemblyHeightRange });
+    record('Future ARRAY ready phase reaches full rack and unit model scale', readyPoseObserved, readySamples);
+    record('Future ARRAY settle phase has unit scale across sampled case matrices', settlePoseObserved, settleSamples);
     record('Future ARRAY intro completes naturally after the original prelude and tail',
       keyframeCount === keyframeTimes.length && naturalPlaybackSeconds >= 23 && naturalPlaybackSeconds <= 40 &&
       naturalEnd.viewLayout === 'shelf' && naturalEnd.presentation?.phase === 'archive' && naturalEnd.detailHidden === true,
     { keyframeCount, keyframeTimes, playbackSeconds:naturalPlaybackSeconds, state:shortState(naturalEnd) });
     record('Future ARRAY entry returns to a static shelf with rack-only state cleared',
       naturalEnd.entry?.active === false && naturalEnd.stats?.layoutTransition?.active === false &&
-      naturalEnd.stats?.shelfEntry?.phase == null && naturalEnd.stats?.shelfEntry?.hiddenCases === 0,
-    { shelfEntry:naturalEnd.stats?.shelfEntry,
+      naturalEnd.stats?.shelfEntry?.phase == null &&
+      Math.abs(Number(naturalEnd.stats?.shelfEntry?.deployment) - 1) < 0.06 &&
+      Math.abs(Number(naturalEnd.stats?.shelfEntry?.caseScaleY) - 1) < 0.06 &&
+      Math.abs(Number(naturalEnd.stats?.rackDeployment) - 1) < 0.06,
+    { shelfEntry:naturalEnd.stats?.shelfEntry, rackDeployment:naturalEnd.stats?.rackDeployment,
       transition:naturalEnd.stats?.layoutTransition, entry:naturalEnd.entry });
     record('entry replay leaves automatic entry off and does not open an album',
       getPreferences()?.entryOnOpen === false && naturalEnd.viewLayout === 'shelf' &&
@@ -748,7 +1244,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
 
     result.ok = Object.values(result.assertions).every(Boolean);
     result.summary = { ok:result.ok, cases:result.cases.length, screenshots:result.screenshots.length,
-      layoutTransitions:result.timeline.length, entryPhaseSequence:observedEntryPhases,
+      layoutTransitions:result.timeline.length, geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
       keyframeCount, naturalPlaybackSeconds,
       finalLayout:naturalEnd.viewLayout, selectedAlbumId:naturalEnd.selectedAlbumId };
     return result;
@@ -756,7 +1252,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     result.ok = false;
     result.error = String(error?.stack ?? error);
     result.summary = { ok:false, cases:result.cases.length, screenshots:result.screenshots.length,
-      layoutTransitions:result.timeline.length };
+      layoutTransitions:result.timeline.length, geometryFrames:result.geometryFrames.length };
     error.archiveMotionResult = result;
     throw error;
   } finally {

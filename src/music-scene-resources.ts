@@ -5,6 +5,7 @@ import type { MusicStyle, StylePalette } from "./music-style";
 import { MusicShelf, musicShelfFinish } from "./music-shelf";
 import { createMusicShelfRailGeometry, MUSIC_SHELF_TRAY_THICKNESS } from "./music-shelf-rail";
 import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout";
+import { shelfDeployment, shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment";
 import { createMusicSurfaceTextures, disposeMusicSurfaceTextures, musicLabFloorColor } from "./music-surface-textures";
 
 export type MusicSceneSlot = {
@@ -16,10 +17,12 @@ export type MusicSceneSlot = {
   lane: number;
   alpha?: number;
   tint?: number;
+  assembly?: ShelfSlotFrame;
 };
 
 export type MusicSceneResourceUpdate = {
   shelf: boolean;
+  deployment?: number;
   slots: readonly MusicSceneSlot[];
   width: number;
   depth: number;
@@ -31,7 +34,13 @@ export type MusicSceneResourceUpdate = {
   guideOriginZ?: number;
 };
 
-type Lane = { x: number; minZ: number; maxZ: number; minRow: number; maxRow: number; alpha: number; tint: number };
+type Lane = { x: number; minZ: number; maxZ: number; minRow: number; maxRow: number; alpha: number; tint: number;
+  assembly?: ShelfSlotFrame };
+type DeploymentTransform = {
+  anchorX: number; anchorY: number; anchorZ: number;
+  x: number; y: number; z: number;
+};
+type SlotFrame = { slot?: MusicSceneSlot; alpha: number; tint: number; finite: boolean; valid: boolean };
 type RowLabel = {
   canvas: HTMLCanvasElement;
   context: CanvasRenderingContext2D;
@@ -112,6 +121,9 @@ export class MusicSceneResources {
   private readonly floorTicks: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material>;
   private readonly rowLabels: RowLabel[] = [];
   private readonly matrix = new THREE.Matrix4();
+  private readonly deploymentScale = new THREE.Matrix4();
+  private readonly deploymentFromAnchor = new THREE.Matrix4();
+  private readonly deploymentToAnchor = new THREE.Matrix4();
   private readonly position = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
   private readonly identity = new THREE.Quaternion();
@@ -121,6 +133,8 @@ export class MusicSceneResources {
   private rowLabelColor = "#283b48";
   private silverEnvironmentFactor = 1;
   private plateEnvironmentFactor = 1;
+  private visibleDeployment = 0;
+  private lastShelfFrame?: Omit<MusicSceneResourceUpdate, "deployment">;
 
   constructor(count: number, appearance?: MusicArrayAppearance) {
     this.capacity = Math.max(1, Math.floor(count));
@@ -190,6 +204,7 @@ export class MusicSceneResources {
     this.floorGuideMaterial.map = this.surfaceTextures.guide;
     this.floorGuide = new THREE.Mesh(this.plane, this.floorGuideMaterial);
     this.floorGuide.name = "Music lab floor orange guide";
+    this.floorGuide.matrixAutoUpdate = false;
     this.floorGuide.quaternion.copy(this.horizontal);
     this.floorGuide.frustumCulled = false;
     this.floorGuide.visible = false;
@@ -198,6 +213,14 @@ export class MusicSceneResources {
     this.group.add(this.trays.group);
     this.group.name = "Music shelf and floor resources";
     this.group.visible = false;
+  }
+
+  get deployment() { return this.group.visible ? this.visibleDeployment : 0; }
+
+  captureShelfFrame(): MusicSceneResourceUpdate | undefined {
+    const frame = this.lastShelfFrame;
+    return frame ? { ...frame, slots: frame.slots.map(slot => ({ ...slot,
+      ...(slot.assembly ? { assembly: { ...slot.assembly } } : {}) })) } : undefined;
   }
 
   setStyle(style: MusicStyle, night: boolean, palette: StylePalette): void {
@@ -296,14 +319,23 @@ export class MusicSceneResources {
 
   update(options: MusicSceneResourceUpdate): void {
     const style = this.style;
+    const requestedDeployment = options.deployment;
+    const deployment = requestedDeployment === undefined || !Number.isFinite(requestedDeployment)
+      ? 1 : clamp01(requestedDeployment);
     if (!style || !options.shelf) {
       this.group.visible = false;
       this.trays.group.visible = false;
       this.floorGuide.visible = false;
+      this.visibleDeployment = 0;
       return;
     }
 
     this.group.visible = true;
+    this.visibleDeployment = deployment;
+    // The caller owns a fresh, immutable frame; snapshots copy slots only when requested.
+    const shelfFrame: MusicSceneResourceUpdate = { ...options };
+    delete shelfFrame.deployment;
+    this.lastShelfFrame = shelfFrame;
     // An implicit StandardMaterial environment uses scene.environmentIntensity
     // directly. Borrow it explicitly only for Punk silver to retain its calibrated
     // reflection multiplier, while still following the Scene's changing light.
@@ -330,28 +362,31 @@ export class MusicSceneResources {
     const rowSpacing = Math.max(positive(options.rowSpacing, .62), depth + .2);
     const floorY = Number.isFinite(options.floorY) ? options.floorY : -4.6;
     const groundY = floorY - MUSIC_SHELF_VIEW.floorDrop;
+    const deploymentShape = shelfDeployment(deployment);
+    const deckY = shelfAssemblySlot(deployment, { laneX: 0, frontZ: 0, floorY, rowRatio: 0 }).deckY;
     // Like the original fixed floor plate, this is one world-space line. It
     // never travels with a column's remembered slot position or row alpha.
     this.floorGuide.visible = style.design === "archive" && style.floor === "deck";
     this.floorGuide.position.set((options.guideOriginX ?? 0) + width / 2 + .8, groundY + .001,
       (options.guideOriginZ ?? 0) + MUSIC_ARRAY_VIEW.inspectionZ - 22 * rowSpacing);
     this.floorGuide.scale.set(.10, 51 * rowSpacing, 1);
+    this.floorGuide.updateMatrix();
+    this.applyDeployment(this.floorGuide.matrix, options.guideOriginX ?? 0, groundY,
+      this.floorGuide.position.z + this.floorGuide.scale.y / 2,
+      deploymentShape.width, 1, deploymentShape.length);
+    this.floorGuide.matrixWorldNeedsUpdate = true;
     this.trays.setDimensions(width, depth, rowSpacing);
     this.laneEndPlatforms.geometry = this.trays.bedGeometry;
 
     const lanes = new Map<number, Lane>();
+    const slotFrames: SlotFrame[] = [];
     for (let index = 0; index < this.capacity; index++) {
       const slot = options.slots[index];
       const alpha = Number.isFinite(slot?.alpha) ? clamp01(slot!.alpha!) : 1;
       const tint = Number.isFinite(slot?.tint) ? clamp01(slot!.tint!) : 0;
       const finite = Boolean(slot && finiteSlot(slot));
       const valid = Boolean(slot?.visible && finite && alpha > 0);
-      this.trays.setSlot(index, finite ? slot!.x : 0, floorY, finite ? slot!.z : 0,
-        valid && rackVisible, valid ? alpha : 0, tint);
-      const tickVisible = valid && slot!.row % 5 === 0;
-      this.writeBox(this.floorTicks, index, slot?.x ?? 0, groundY + .0005, slot?.z ?? 0,
-        [.12, .001, .006], tickVisible);
-      this.appearance.write(this.floorTicks, index, valid ? alpha : 0, tint);
+      slotFrames[index] = { slot, alpha, tint, finite, valid };
       if (!valid) continue;
       const lane = lanes.get(slot!.lane);
       if (lane) {
@@ -360,10 +395,34 @@ export class MusicSceneResources {
         lane.minRow = Math.min(lane.minRow, slot!.row);
         lane.maxRow = Math.max(lane.maxRow, slot!.row);
       } else {
-        lanes.set(slot!.lane, { x: slot!.x, minZ: slot!.z, maxZ: slot!.z, minRow: slot!.row, maxRow: slot!.row, alpha, tint });
+        lanes.set(slot!.lane, { x: slot!.assembly?.laneX ?? slot!.x, minZ: slot!.z, maxZ: slot!.z,
+          minRow: slot!.row, maxRow: slot!.row, alpha, tint, assembly: slot!.assembly });
       }
     }
     const laneList = [...lanes.entries()].sort(([a], [b]) => a - b).slice(0, this.capacity);
+    for (let index = 0; index < this.capacity; index++) {
+      const frame = slotFrames[index]!;
+      const slot = frame.slot;
+      const lane = frame.valid && slot ? lanes.get(slot.lane) : undefined;
+      const front = lane ? lane.assembly?.frontZ ?? lane.maxZ + rowSpacing * 1.5 : frame.finite ? slot!.z : 0;
+      const span = lane ? Math.max(rowSpacing, lane.maxZ - lane.minZ + rowSpacing * 3) : rowSpacing;
+      const rowRatio = lane && slot ? clamp01((front - slot.z) / span) : 0;
+      const x = frame.finite ? slot!.x : 0;
+      const z = frame.finite ? slot!.z : 0;
+      const assembly = slot?.assembly ?? { laneX: lane?.x ?? x, frontZ: front, floorY, rowRatio };
+      this.trays.setSlot(index, x, assembly.floorY, z, frame.valid && rackVisible,
+        frame.valid ? frame.alpha : 0, frame.tint);
+      if (lane) this.trays.setSlotAssembly(index, deployment, assembly);
+
+      const tickVisible = frame.valid && slot!.row % 5 === 0;
+      const tickTransform: DeploymentTransform | undefined = lane ? {
+        anchorX: assembly.laneX, anchorY: groundY, anchorZ: assembly.frontZ,
+        x: deploymentShape.width, y: 1, z: deploymentShape.length,
+      } : undefined;
+      this.writeBox(this.floorTicks, index, slot?.x ?? 0, groundY + .0005, slot?.z ?? 0,
+        [.12, .001, .006], tickVisible, this.identity, tickTransform);
+      this.appearance.write(this.floorTicks, index, frame.valid ? frame.alpha : 0, frame.tint);
+    }
     const laneCount = laneList.length;
     this.laneBase.count = laneCount;
     this.laneLeftGuide.count = laneCount;
@@ -388,62 +447,75 @@ export class MusicSceneResources {
       // to its twenty regular slots. Both ends have a full empty landing.
       const span = Math.max(rowSpacing, lane.maxZ - lane.minZ + rowSpacing * 3);
       const centerZ = (lane.minZ + lane.maxZ) / 2;
-      this.writeBox(this.laneBase, laneIndex, lane.x, floorY - .1475, centerZ,
-        [width + .22, .135, span + .08], rackVisible);
+      const front = lane.assembly?.frontZ ?? lane.maxZ + rowSpacing * 1.5;
+      const anchor = (factors: { x: number; y: number; z: number }, anchorY = deckY): DeploymentTransform => ({
+        anchorX: lane.x, anchorY, anchorZ: front,
+        x: factors.x, y: factors.y, z: factors.z,
+      });
+      const baseTransform = anchor({ x: deploymentShape.width, y: 1, z: deploymentShape.length });
+      const railTransform = anchor({ x: deploymentShape.width, y: deploymentShape.rails, z: deploymentShape.rails });
+      const supportTransform = baseTransform;
+      const floorTransform = anchor({ x: deploymentShape.width, y: 1, z: deploymentShape.length }, groundY);
+      this.writeBox(this.laneBase, laneIndex, lane.x, deckY - .1475, centerZ,
+        [width + .22, .135, span + .08], rackVisible, this.identity, baseTransform);
       this.appearance.write(this.laneBase, laneIndex, lane.alpha, lane.tint);
       const sideX = width / 2 + .10;
       for (let side = 0; side < 2; side++) {
         const direction = side ? 1 : -1;
         const index = laneIndex * 2 + side;
         const guide = side ? this.laneRightGuide : this.laneLeftGuide;
-        this.writeBox(guide, laneIndex, lane.x + direction * sideX, floorY, centerZ,
-          [1, 1, span + .07], rackVisible, side ? this.identity : this.reverseRail);
+        this.writeBox(guide, laneIndex, lane.x + direction * sideX, deckY, centerZ,
+          [1, 1, span + .07], rackVisible, side ? this.identity : this.reverseRail, railTransform);
         this.appearance.write(guide, laneIndex, lane.alpha, lane.tint);
-        this.writeBox(this.laneAccentLines, index, lane.x + direction * (sideX + .101), floorY - (side ? .16 : .09), centerZ,
-          [.006, .014, span], rackVisible);
+        this.writeBox(this.laneAccentLines, index, lane.x + direction * (sideX + .101), deckY - (side ? .16 : .09), centerZ,
+          [.006, .014, span], rackVisible, this.identity, railTransform);
         const endZ = centerZ + direction * (span / 2 + .018);
-        this.writeBox(this.laneEndCaps, index, lane.x, floorY - .1475, endZ,
-          [width + .38, .135, .072], rackVisible);
-        this.writeBox(this.laneEndPlatforms, index, lane.x, floorY - .08 + MUSIC_SHELF_TRAY_THICKNESS / 2,
+        this.writeBox(this.laneEndCaps, index, lane.x, deckY - .1475, endZ,
+          [width + .38, .135, .072], rackVisible, this.identity, baseTransform);
+        this.writeBox(this.laneEndPlatforms, index, lane.x, deckY - .08 + MUSIC_SHELF_TRAY_THICKNESS / 2,
           side ? lane.maxZ + rowSpacing : lane.minZ - rowSpacing,
-          [Math.max(.1, width - .09), MUSIC_SHELF_TRAY_THICKNESS, rowSpacing * .99], rackVisible);
+          [Math.max(.1, width - .09), MUSIC_SHELF_TRAY_THICKNESS, rowSpacing * .99], rackVisible, this.identity, baseTransform);
         // Two round longitudinal rods sit under the tray, just inboard of
         // the bare square posts. They must not form ribs on the record deck.
         this.writeBox(this.laneUnderframe, index, lane.x + direction * (width * .38 - .08),
-          floorY - .275, centerZ, [.14, .14, span + .04], rackVisible);
+          deckY - .275, centerZ, [.14, .14, span + .04], rackVisible, this.identity, supportTransform);
         for (const mesh of [this.laneAccentLines,
           this.laneEndCaps, this.laneEndPlatforms, this.laneUnderframe]) this.appearance.write(mesh, index, lane.alpha, lane.tint);
         for (let foot = 0; foot < 2; foot++) {
           const footIndex = laneIndex * 4 + side * 2 + foot;
-          const legTop = floorY - .16;
+          const legTop = deckY - .16;
           const legZ = endZ - direction * .02;
           this.writeBox(this.laneFeet, footIndex, lane.x + (foot ? 1 : -1) * width * .38,
-            (legTop + groundY) / 2, legZ, [.15, legTop - groundY, .14], rackVisible);
+            (legTop + groundY) / 2, legZ, [.15, Math.max(0, legTop - groundY), .14], rackVisible, this.identity, supportTransform);
           this.writeBox(this.laneFootPins, footIndex, lane.x + (foot ? 1 : -1) * width * .38,
-            floorY - .32, legZ + direction * .073, [.055, .055, .018], rackVisible);
+            deckY - .32, legZ + direction * .073, [.055, .055, .018], rackVisible, this.identity, supportTransform);
           this.appearance.write(this.laneFeet, footIndex, lane.alpha, lane.tint);
           this.appearance.write(this.laneFootPins, footIndex, lane.alpha, lane.tint);
           // A bounded contact-AO approximation complements the actual shadow
           // map, like the original floor's separate shade layer. Fade its alpha
           // toward the ground; do not tint a rectangular patch of that ground.
           this.writePlane(this.laneContactShadows, footIndex, lane.x + (foot ? 1 : -1) * width * .38,
-            groundY + .0006, legZ, [.42, .34], rackVisible);
+            groundY + .0006, legZ, [.42, .34], rackVisible, false, floorTransform);
           this.appearance.write(this.laneContactShadows, footIndex, lane.alpha * (1 - lane.tint), 0);
         }
       }
 
-      const frontZ = lane.maxZ + rowSpacing * 1.5 + .063;
-      const plateY = floorY - .1475;
+      const frontZ = front + .063;
+      const plateY = deckY - .1475;
+      const labelTransform: DeploymentTransform = { anchorX: lane.x + width * .32, anchorY: plateY, anchorZ: frontZ,
+        x: deploymentShape.labels, y: deploymentShape.labels, z: deploymentShape.labels };
+      const hazardTransform = { ...labelTransform, anchorX: lane.x - width * .16, anchorZ: frontZ + .0065 };
       this.writePlane(this.laneHazards, laneIndex, lane.x - width * .16, plateY, frontZ + .0065,
-        [width * .68, .10], rackVisible, true);
+        [width * .68, .10], rackVisible, true, hazardTransform);
       this.appearance.write(this.laneHazards, laneIndex, lane.alpha, lane.tint);
-      this.writeBox(this.lanePlates, laneIndex, lane.x + width * .32, plateY, frontZ, [.82, .105, .012], rackVisible);
+      this.writeBox(this.lanePlates, laneIndex, lane.x + width * .32, plateY, frontZ, [.82, .105, .012], rackVisible,
+        this.identity, labelTransform);
       this.appearance.write(this.lanePlates, laneIndex, lane.alpha, lane.tint);
       this.writeBox(this.plateMarks, laneIndex, lane.x + width * .32 - .35, plateY + .047, frontZ + .007,
-        [.04, .008, .003], rackVisible);
+        [.04, .008, .003], rackVisible, this.identity, labelTransform);
       this.appearance.write(this.plateMarks, laneIndex, lane.alpha, lane.tint);
       this.writePlane(this.floorPanels, laneIndex, lane.x, panelFloor, centerZ,
-        [width + .48, span + .18], options.shelf && floorHasPanel);
+        [width + .48, span + .18], options.shelf && floorHasPanel, false, floorTransform);
       this.appearance.write(this.floorPanels, laneIndex, lane.alpha, lane.tint);
     });
 
@@ -458,10 +530,14 @@ export class MusicSceneResources {
       }
       const [laneNumber, lane] = entry;
       if (label.lane !== laneNumber) this.drawRowLabel(label, laneNumber, this.rowLabelColor);
-      const plateY = floorY - .1475;
-      const plateFront = lane.maxZ + rowSpacing * 1.5 + .070;
+      const plateY = deckY - .1475;
+      const plateFront = (lane.assembly?.frontZ ?? lane.maxZ + rowSpacing * 1.5) + .070;
       label.mesh.position.set(lane.x + width * .32, plateY, plateFront);
       label.mesh.scale.set(.72, .09, 1);
+      label.mesh.updateMatrix();
+      this.applyDeployment(label.mesh.matrix, lane.x + width * .32, plateY, plateFront - .007,
+        deploymentShape.labels, deploymentShape.labels, deploymentShape.labels);
+      label.mesh.matrixWorldNeedsUpdate = true;
       label.material.opacity = lane.alpha * (1 - lane.tint);
       label.mesh.visible = rackVisible && lane.alpha > 0;
     }
@@ -531,6 +607,7 @@ export class MusicSceneResources {
       });
       const mesh = new THREE.Mesh(this.plane, material);
       mesh.name = `Music shelf row label ${index + 1}`;
+      mesh.matrixAutoUpdate = false;
       mesh.visible = false;
       this.group.add(mesh);
       this.rowLabels.push({ canvas, context, texture, material, mesh, lane: null });
@@ -552,21 +629,45 @@ export class MusicSceneResources {
 
   private writeBox(mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>, index: number,
     x: number, y: number, z: number, dimensions: readonly [number, number, number], visible: boolean,
-    rotation = this.identity) {
+    rotation = this.identity, deployment?: DeploymentTransform) {
     this.position.set(x, y, z);
-    this.scale.set(dimensions[0], dimensions[1], dimensions[2]);
+    this.scale.set(dimensions[0], dimensions[1] === 0 && dimensions[0] > 0 && dimensions[2] > 0 ? 1e-5 : dimensions[1], dimensions[2]);
     if (!visible) this.scale.set(0, 0, 0);
     this.matrix.compose(this.position, rotation, this.scale);
+    if (deployment) this.applyDeployment(this.matrix, deployment.anchorX, deployment.anchorY, deployment.anchorZ,
+      deployment.x, deployment.y, deployment.z);
     mesh.setMatrixAt(index, this.matrix);
   }
 
   private writePlane(mesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.Material>, index: number,
-    x: number, y: number, z: number, dimensions: readonly [number, number], visible: boolean, vertical = false) {
+    x: number, y: number, z: number, dimensions: readonly [number, number], visible: boolean, vertical = false,
+    deployment?: DeploymentTransform) {
     this.position.set(x, y, z);
     this.scale.set(dimensions[0], dimensions[1], 1);
     if (!visible) this.scale.set(0, 0, 0);
     this.matrix.compose(this.position, vertical ? this.identity : this.horizontal, this.scale);
+    if (deployment) this.applyDeployment(this.matrix, deployment.anchorX, deployment.anchorY, deployment.anchorZ,
+      deployment.x, deployment.y, deployment.z);
     mesh.setMatrixAt(index, this.matrix);
+  }
+
+  private applyDeployment(matrix: THREE.Matrix4, anchorX: number, anchorY: number, anchorZ: number,
+    scaleX: number, scaleY: number, scaleZ: number) {
+    if (scaleX >= 1 && scaleY >= 1 && scaleZ >= 1) return;
+    // A collapsed single axis can leave visible faces with singular normals.
+    // Keep only those area-bearing sheets invertible; fully stowed lines and
+    // points retain their exact zero dimensions.
+    if (scaleX > 0 && scaleY > 0) scaleZ = Math.max(1e-5, scaleZ);
+    if (scaleX > 0 && scaleZ > 0) scaleY = Math.max(1e-5, scaleY);
+    if (scaleY > 0 && scaleZ > 0) scaleX = Math.max(1e-5, scaleX);
+    this.deploymentFromAnchor.makeTranslation(-anchorX, -anchorY, -anchorZ);
+    this.deploymentScale.makeScale(scaleX, scaleY, scaleZ);
+    this.deploymentToAnchor.makeTranslation(anchorX, anchorY, anchorZ);
+    // Pre-multiply the instance transform so yawed/local geometry receives the
+    // shelf's world-axis deformation without decomposing or scaling the wrong axis.
+    matrix.premultiply(this.deploymentFromAnchor);
+    matrix.premultiply(this.deploymentScale);
+    matrix.premultiply(this.deploymentToAnchor);
   }
 
   private markUpdated(...meshes: THREE.InstancedMesh[]) {

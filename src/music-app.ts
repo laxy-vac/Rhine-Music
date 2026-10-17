@@ -959,7 +959,7 @@ function startFutureEntry() {
   }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity }, entryLayout);
   // Prepare the real rack/material variants beneath the opaque shared prelude.
   // Compilation must not consume the first visible seconds of the new act.
-  if (entryLayout === "shelf") scene?.update(performance.now() / 1000, futureEntryShot(24.1, entryLayout));
+  if (entryLayout === "shelf") scene?.update(performance.now() / 1000, futureEntryShot(27, entryLayout));
   return true;
 }
 
@@ -4796,7 +4796,7 @@ Object.assign(window, {
     get player() {
       return player.state;
     },
-    stats: () => scene?.getStats(),
+    stats: (includeGeometry = false) => scene?.getStats(includeGeometry),
     get presentation() {
       return { phase: presentation.phase, cameraPhase: scene?.musicPresentationPhase,
         pendingIndex: presentation.pendingSelection?.index,
