@@ -914,6 +914,36 @@
   line-height: 1;
   color: var(--muted);
 }
+.panel-heading > button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: auto;
+}
+.panel-search-field > svg,
+.search-results-heading {
+  display: none;
+}
+.online-search :is(.online-source-field, .online-collection-field, .online-query-field) {
+  display: contents;
+}
+.online-search label > span {
+  display: none;
+}
+.online-service summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.online-service summary::-webkit-details-marker { display: none; }
+.online-service summary > span:first-child { flex: 1; }
+.online-service summary strong { font-size: 12px; font-weight: 500; }
+.online-service summary small { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); }
+.online-service-state { font-size: 10px; color: var(--muted); }
+.online-service summary::after { content: "+"; }
+.online-service[open] summary::after { content: "−"; }
 .panel-intro {
   font-size: 12px;
   color: var(--muted);
@@ -954,10 +984,10 @@
   margin-top: 15px;
   font-size: 11px;
 }
-.primary-button {
-  background: var(--ink) !important;
-  color: var(--surface) !important;
-  padding: 11px 18px !important;
+.music-app .primary-button {
+  background: var(--ink);
+  color: var(--surface);
+  padding: 11px 18px;
   font-size: 11px;
 }
 .scan-status {

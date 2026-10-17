@@ -117,6 +117,7 @@ import { setupAlbumCasePreview } from "./album-case-preview";
 import type { ArchiveRecord } from "./data";
 import "./music-theme-choice.css";
 import "./future-controls.css";
+import "./future-panels.css";
 import { viewportLayout } from "./viewport-layout";
 import { applyWindowAspect, windowAspectMarkup } from "./window-aspect";
 import { normalizeWindowAspect, type WindowAspectId as WindowAspect } from "./window-aspect-model.mjs";
@@ -435,6 +436,7 @@ let caseEditor: ReturnType<typeof setupCaseEditor> | undefined;
 let audioSettingsSection: AudioSettingsSection = "source";
 const settingsScrollPositions = new Map<SettingsCategory, number>();
 let settingsSelectControls: ReturnType<typeof enhanceSettingsSelectControls> | undefined;
+let panelSelectControls: ReturnType<typeof enhanceSettingsSelectControls> | undefined;
 let eqControls: ReturnType<typeof setupEqControls> | undefined;
 const standardEqPresetState = createStandardEqPresetState();
 let standardEqPresets: ReturnType<typeof setupStandardEqPresets> | undefined;
@@ -1954,11 +1956,14 @@ function closePanel(after?: () => void) {
   pendingPanelAfter = after;
   if (panelClosing) return;
   panelClosing = true;
+  panelSelectControls?.close();
   panelTransition?.hide(preferences.reduced, () => {
     panel = null;
     panelClosing = false;
     panelTransition?.dispose();
     panelTransition = undefined;
+    panelSelectControls?.destroy();
+    panelSelectControls = undefined;
     $("#music-panel-root").innerHTML = "";
     for (const node of [
       $("#music-browse"),
@@ -1985,6 +1990,8 @@ function openPanel(next: Panel) {
   closeManagementPage(false);
   cancelTrackReveal();
   panelTransition?.dispose();
+  panelSelectControls?.destroy();
+  panelSelectControls = undefined;
   pendingPanelAfter = undefined;
   panelClosing = false;
   if (!panel) panelFocus = document.activeElement as HTMLElement;
@@ -1994,7 +2001,7 @@ function openPanel(next: Panel) {
     online: ["ONLINE LIBRARY", trUi("在线曲库")],
   };
   $("#music-panel-root").innerHTML =
-    ui`<div class="music-panel-scrim" data-action="dismiss-panel"><section class="music-panel" role="dialog" aria-modal="true" aria-labelledby="music-panel-title"><div class="panel-heading"><div><small>${titles[next][0]}</small><h2 id="music-panel-title">${titles[next][1]}</h2></div><button data-action="close-panel" aria-label="关闭">×</button></div><div id="panel-body"></div></section></div>`;
+    ui`<div class="music-panel-scrim" data-action="dismiss-panel"><section class="music-panel" data-panel="${next}" role="dialog" aria-modal="true" aria-labelledby="music-panel-title"><div class="panel-heading"><div><small>${titles[next][0]}</small><h2 id="music-panel-title">${titles[next][1]}</h2></div><button type="button" data-action="close-panel" aria-label="关闭">${svg('<path d="m6 6 12 12M18 6 6 18"/>')}</button></div><div id="panel-body"></div></section></div>`;
   for (const node of [
     $("#music-browse"),
     $("#music-detail"),
@@ -2192,7 +2199,7 @@ function locatePlaying(albumId: string, trackId: string) {
 }
 async function renderOnlinePanel() {
   $("#panel-body").innerHTML =
-    trUi(`<p class="panel-intro">在线专辑存放在独立的「在线专辑架」和下面的列表里，不会混入本地音乐库。只有你点击搜索、加入或播放时才会联网；音频和封面由本机服务转发，浏览器不会直接访问第三方站点。</p><div id="online-body"><p class="scan-status">正在读取在线曲库…</p></div>`);
+    trUi(`<p class="panel-intro">发现音乐，加入独立的在线专辑架。仅在搜索、加入或播放时联网。</p><div id="online-body"><p class="scan-status">正在读取在线曲库…</p></div>`);
   try {
     const [sources, snapshot] = await Promise.all([
       request<OnlineSourceInfo>("/api/online/sources"),
@@ -2207,12 +2214,12 @@ async function renderOnlinePanel() {
   }
   if (panel !== "online") return;
   $("#online-body").innerHTML = ui`<div class="genre-filters shelf-switch" id="shelf-switch"></div>
-    <section class="panel-section"><h3>搜索在线曲库</h3>
+    <section class="panel-section online-discover"><h3>搜索在线曲库</h3>
       <div class="online-search">
-        <select id="online-source" aria-label="来源"></select>
-        <select id="online-collection" aria-label="合集">${onlineCollections.map(([value, name]) => `<option value="${value}" ${onlineSearch.collection === value ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
-        <input class="album-search" id="online-query" type="search" placeholder="专辑、歌手、关键词…" aria-label="搜索在线专辑" value="${esc(onlineSearch.q)}">
-        <button class="primary-button" data-action="online-search">搜索 ↗</button>
+        <label class="online-source-field"><span>来源</span><select id="online-source" aria-label="来源"></select></label>
+        <label class="online-collection-field"><span>合集</span><select id="online-collection" aria-label="合集">${onlineCollections.map(([value, name]) => `<option value="${value}" ${onlineSearch.collection === value ? "selected" : ""}>${esc(name)}</option>`).join("")}</select></label>
+        <div class="panel-search-field online-query-field">${icons.search}<input class="album-search" id="online-query" type="search" placeholder="专辑、歌手、关键词…" aria-label="搜索在线专辑" value="${esc(onlineSearch.q)}"></div>
+        <button type="button" class="primary-button" data-action="online-search">搜索 ↗</button>
       </div>
       <p class="online-note" id="online-source-note"></p>
       <div id="online-results"></div></section>
@@ -2223,6 +2230,7 @@ async function renderOnlinePanel() {
   drawOnlineResults();
   drawOnlineList();
   drawSubsonicForm();
+  if (preferences.style.design === "rhine") panelSelectControls = enhanceSettingsSelectControls($("#panel-body"));
 }
 function drawShelfSwitch() {
   const el = document.querySelector("#shelf-switch");
@@ -2237,12 +2245,13 @@ function drawOnlineSources() {
   if (!configured && onlineSearch.source === "subsonic") onlineSearch.source = "internetarchive";
   select.innerHTML = `<option value="internetarchive">Internet Archive</option>${configured ? trUi('<option value="subsonic">自有音乐服务</option>') : ""}`;
   select.value = onlineSearch.source;
+  panelSelectControls?.sync();
   updateOnlineSourceNote();
 }
 function updateOnlineSourceNote() {
   const source = document.querySelector<HTMLSelectElement>("#online-source")?.value;
   const ia = source !== "subsonic";
-  const collection = document.querySelector<HTMLElement>("#online-collection");
+  const collection = document.querySelector<HTMLElement>(".online-collection-field");
   if (collection) collection.hidden = !ia;
   const note = document.querySelector("#online-source-note");
   if (note)
@@ -2275,7 +2284,7 @@ function drawOnlineResults() {
     s.items
       .map(
         (hit) =>
-          `<div class="online-row"><span class="result-copy"><strong>${esc(hit.title)}</strong><small>${esc(hit.artist)}${hit.year ? ` · ${hit.year}` : ""}${showLicense ? ` · ${esc(licenseLabel(hit.license))}` : ""}</small>${hit.url && /^https?:\/\//.test(hit.url) ? ui`<a class="online-link" href="${esc(hit.url)}" target="_blank" rel="noopener noreferrer">条目页 ↗</a>` : ""}</span><button data-action="online-add" data-ref="${esc(hit.ref)}" ${hit.added ? "disabled" : ""}>${hit.added ? trUi("已加入") : trUi("加入 ↗")}</button></div>`,
+          `<div class="online-row"><span class="result-copy"><strong title="${esc(hit.title)}">${esc(hit.title)}</strong><small>${esc(hit.artist)}${hit.year ? ` · ${hit.year}` : ""}${showLicense ? ` · ${esc(licenseLabel(hit.license))}` : ""}</small>${hit.url && /^https?:\/\//.test(hit.url) ? ui`<a class="online-link" href="${esc(hit.url)}" target="_blank" rel="noopener noreferrer">条目页 ↗</a>` : ""}</span><button data-action="online-add" data-ref="${esc(hit.ref)}" ${hit.added ? "disabled" : ""}>${hit.added ? trUi("已加入") : trUi("加入 ↗")}</button></div>`,
       )
       .join("") +
     (s.hasMore
@@ -2292,7 +2301,7 @@ function drawOnlineList() {
     ? items
         .map(
           (a) =>
-            ui`<div class="online-row has-cover"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong>${esc(a.title)}</strong><small>${esc(a.artist)} · ${a.tracks.length} 首 · ${esc(a.folder)}</small></span><span class="online-buttons"><button data-action="online-reveal" data-id="${esc(a.id)}">在架上查看 ↗</button><button data-action="online-remove" data-id="${esc(a.id)}">移除</button></span></div>`,
+            ui`<div class="online-row has-cover"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong title="${esc(a.title)}">${esc(a.title)}</strong><small title="${esc(a.artist)} · ${esc(a.folder)}">${esc(a.artist)} · ${a.tracks.length} 首 · ${esc(a.folder)}</small></span><span class="online-buttons"><button data-action="online-reveal" data-id="${esc(a.id)}">在架上查看 ↗</button><button data-action="online-remove" data-id="${esc(a.id)}">移除</button></span></div>`,
         )
         .join("")
     : trUi('<p class="scan-status">还没有在线专辑。搜索后点“加入”，它们会出现在在线专辑架上。</p>');
@@ -2301,12 +2310,13 @@ function drawSubsonicForm() {
   const el = document.querySelector("#online-subsonic");
   if (!el) return;
   const config = onlineSources?.subsonic;
-  el.innerHTML = ui`<h3>自有音乐服务（Subsonic 兼容）</h3><p>连接你自己的 Navidrome、Jellyfin（Subsonic 插件）、Airsonic 等服务。地址、账号和密码只保存在本机数据目录的 online.json（密码为明文，建议使用只给播放器用的账号），不会写进项目文件夹。</p>
+  const expanded = el.querySelector<HTMLDetailsElement>("details")?.open ?? preferences.style.design !== "rhine";
+  el.innerHTML = ui`<details class="online-service" ${expanded ? "open" : ""}><summary><span><strong>自有音乐服务</strong><small>Subsonic · Navidrome · Jellyfin</small></span><span class="online-service-state">${config?.baseUrl ? trUi("已配置") : trUi("连接服务")}</span></summary><div class="online-service-fields"><p>连接你自己的 Navidrome、Jellyfin（Subsonic 插件）、Airsonic 等服务。地址、账号和密码只保存在本机数据目录的 online.json（密码为明文，建议使用只给播放器用的账号），不会写进项目文件夹。</p>
     <label class="field-label" for="subsonic-url">服务地址<span>例如 http://192.168.1.10:4533</span></label><input id="subsonic-url" type="text" autocomplete="off" spellcheck="false" value="${esc(config?.baseUrl || "")}">
     <label class="field-label online-gap" for="subsonic-user">账号</label><input id="subsonic-user" type="text" autocomplete="off" spellcheck="false" value="${esc(config?.username || "")}">
     <label class="field-label online-gap" for="subsonic-pass">密码<span>${config?.passwordSet ? trUi("已保存，留空则保持不变") : ""}</span></label><input id="subsonic-pass" type="password" autocomplete="new-password">
     <div class="panel-actions"><button class="primary-button" data-action="subsonic-save">保存</button><button data-action="subsonic-test">测试连接</button>${config ? trUi('<button data-action="subsonic-clear">清除</button>') : ""}</div>
-    <p id="subsonic-status" class="scan-status" role="status" aria-live="polite"></p>`;
+    <p id="subsonic-status" class="scan-status" role="status" aria-live="polite"></p></div></details>`;
 }
 function subsonicFields() {
   const read = (id: string) => document.querySelector<HTMLInputElement>(id)?.value ?? "";
@@ -2417,11 +2427,12 @@ document.addEventListener("keydown", (event) => {
 });
 
 function renderSearchPanel() {
+  searchGenre = "";
   $("#panel-body").innerHTML =
-    ui`<input class="album-search" id="album-search" type="search" placeholder="专辑、歌曲、歌手、流派…" aria-label="搜索专辑与歌曲"><div class="genre-filters"><button data-filter="" class="active">全部</button>${genres
+    ui`<div class="panel-search-field">${icons.search}<input class="album-search" id="album-search" type="search" placeholder="专辑、歌曲、歌手、流派…" aria-label="搜索专辑与歌曲"></div><div class="genre-filters" aria-label="流派筛选"><button type="button" data-filter="" class="active" aria-pressed="true">全部</button>${genres
       .filter((g) => albums.some((a) => a.genreId === g.id))
-      .map((g) => `<button data-filter="${esc(g.id)}">${esc(g.name)}</button>`)
-      .join("")}</div><div id="album-results"></div>`;
+      .map((g) => `<button type="button" data-filter="${esc(g.id)}" aria-pressed="false">${esc(g.name)}</button>`)
+      .join("")}</div><div class="search-results-heading"><span>匹配结果</span><span id="search-result-count" role="status" aria-live="polite"></span></div><div id="album-results"></div>`;
   renderSearchResults();
 }
 let searchGenre = "";
@@ -2433,18 +2444,19 @@ function renderSearchResults() {
   for (const a of albums) {
     if (searchGenre && a.genreId !== searchGenre) continue;
     if (!query || `${a.title} ${a.artist} ${genreName(a.genreId)}`.toLocaleLowerCase().includes(query)) {
-      results.push(ui`<button class="album-result" data-album="${esc(a.id)}"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong>${esc(a.title)}</strong><small>${esc(a.artist)} · ${esc(genreName(a.genreId))}</small></span><em>专辑</em><i>↗</i></button>`);
+      results.push(ui`<button type="button" class="album-result" data-album="${esc(a.id)}"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong title="${esc(a.title)}">${esc(a.title)}</strong><small title="${esc(a.artist)} · ${esc(genreName(a.genreId))}">${esc(a.artist)} · ${esc(genreName(a.genreId))}</small></span><em>专辑</em><i aria-hidden="true">↗</i></button>`);
     }
     if (!query) continue;
     for (const track of a.tracks) {
       if (!`${track.title} ${track.artist}`.toLocaleLowerCase().includes(query)) continue;
       // Preserve the exact song identity; selecting a result navigates without playing.
-      results.push(ui`<button class="album-result song-result" data-album="${esc(a.id)}" data-search-track="${esc(track.id)}" aria-label="定位歌曲 ${esc(track.title)}，${esc(a.title)}"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong>${esc(track.title)}</strong><small>${esc(track.artist)} · ${esc(a.title)}</small></span><em>歌曲</em><i>↗</i></button>`);
+      results.push(ui`<button type="button" class="album-result song-result" data-album="${esc(a.id)}" data-search-track="${esc(track.id)}" aria-label="定位歌曲 ${esc(track.title)}，${esc(a.title)}"><span class="result-cover">${cover(a)}</span><span class="result-copy"><strong title="${esc(track.title)}">${esc(track.title)}</strong><small title="${esc(track.artist)} · ${esc(a.title)}">${esc(track.artist)} · ${esc(a.title)}</small></span><em>歌曲</em><i aria-hidden="true">↗</i></button>`);
     }
   }
   $("#album-results").innerHTML = results.length
     ? results.join("")
     : trUi('<div class="no-results">没有找到专辑或歌曲。</div>');
+  $("#search-result-count").textContent = String(results.length).padStart(2, "0");
 }
 function processingPresetMarkup() {
   const activeId = processingPresetStore.activeId || "current";
@@ -3836,12 +3848,11 @@ document.addEventListener("click", (e) => {
     searchGenre = target.dataset.filter;
     document
       .querySelectorAll("[data-filter]")
-      .forEach((b) =>
-        b.classList.toggle(
-          "active",
-          (b as HTMLElement).dataset.filter === searchGenre,
-        ),
-      );
+      .forEach((b) => {
+        const active = (b as HTMLElement).dataset.filter === searchGenre;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
+      });
     renderSearchResults();
     return;
   }

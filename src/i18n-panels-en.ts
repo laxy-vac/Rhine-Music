@@ -1,4 +1,9 @@
 export const panelsEnglish: Record<string, string> = {
+  "发现音乐，加入独立的在线专辑架。仅在搜索、加入或播放时联网。": "Discover music for your online shelf. Connects only when you search, add, or play.",
+  "匹配结果": "Matches",
+  "流派筛选": "Filter by genre",
+  "连接服务": "Connect",
+  "已配置": "Configured",
   "，已锁定": ", locked",
   "，打开设置": ", open Settings",
   "，未启用": ", not enabled",

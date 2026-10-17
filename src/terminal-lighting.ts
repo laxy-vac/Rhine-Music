@@ -12,7 +12,7 @@ const RECEIVER_SELECTOR = [
   // Surface receivers carry the broad environment response; small controls
   // receive the directional inset only while active or being used.
   ".music-settings-page :is(.settings-category, .panel-section)",
-  ".music-panel:has(#online-body)",
+  ".music-panel",
   // Transparent navigation labels do not have a surface to cast a card shadow.
   ".music-topnav > button:is([aria-pressed=true], :hover, :focus-visible)",
   // Light the glass switch once; its moving selection pill already has its own edge.
@@ -30,9 +30,9 @@ const RECEIVER_SELECTOR = [
   "#music-lyrics-page .lyrics-preference-dialog",
   "#music-lyrics-page select:is(:hover, :focus-visible, [aria-expanded=true])",
   "#music-lyrics-page input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
-  ".music-panel:has(#online-body) button:is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], :hover, :focus-visible)",
-  ".music-panel:has(#online-body) select:is(:hover, :focus-visible, [aria-expanded=true])",
-  ".music-panel:has(#online-body) input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
+  ".music-panel button:is([aria-pressed=true], [aria-selected=true], [aria-expanded=true], :hover, :focus-visible)",
+  ".music-panel select:is(:hover, :focus-visible, [aria-expanded=true])",
+  ".music-panel input:is(:checked, [aria-checked=true], :hover, :focus-visible)",
   "#music-signal-page .signal-models button:is([aria-pressed=true], :hover, :focus-visible)",
   "#music-signal-page .signal-trace input[type=range]:is(:hover, :focus-visible)",
   "#playback-toggle:is([aria-pressed=true], :hover, :focus-visible)",
@@ -40,7 +40,7 @@ const RECEIVER_SELECTOR = [
 
 const TERMINAL_SURFACE_SELECTOR = [
   ".music-settings-page :is(.settings-category, .panel-section)",
-  ".music-panel:has(#online-body)",
+  ".music-panel",
   ".music-topnav .theme-switch",
   "#music-lyrics-page .lyrics-preference-dialog",
 ].join(",");
@@ -316,7 +316,7 @@ export function setupTerminalLighting(stage: HTMLElement): {
           };
     const dialog = [
       root.querySelector<HTMLElement>("#music-lyrics-page .lyrics-preference-dialog"),
-      root.querySelector<HTMLElement>(".music-panel:has(#online-body)"),
+      root.querySelector<HTMLElement>(".music-panel"),
     ].find((candidate): candidate is HTMLElement => !!candidate && isVisible(candidate));
     const sources = collectSources(bounds, limits, dialog);
 

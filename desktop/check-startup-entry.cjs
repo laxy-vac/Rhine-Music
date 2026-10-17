@@ -20,12 +20,90 @@ if (process.versions.electron) {
   });
 }
 
+function makeSyntheticPanelLibrary() {
+  const genres = [
+    { id: 'fixture-ambient', name: 'Fixture Ambient' },
+    { id: 'fixture-electronic', name: 'Fixture Electronic' },
+    { id: 'fixture-cinematic', name: 'Fixture Cinematic' },
+  ];
+  const colors = ['#d96f32', '#2e6f89', '#648755', '#745785', '#bb8539', '#446c72'];
+  const albums = Array.from({ length: 36 }, (_, albumIndex) => {
+    const number = String(albumIndex + 1).padStart(2, '0');
+    const title = albumIndex === 0
+      ? 'Needlemark Fixture Album — An Exceptionally Long Synthetic Title for Search and Ellipsis Checks'
+      : `Synthetic Long-Title Catalog Album ${number} — The Quiet Geometry of Several Imaginary Listening Rooms`;
+    const genre = genres[albumIndex % genres.length];
+    const tracks = Array.from({ length: 3 }, (_, trackIndex) => ({
+      id: `fixture-track-${number}-${trackIndex + 1}`, albumId: `fixture-album-${number}`,
+      title: albumIndex === 0 && trackIndex === 0
+        ? 'Needlemark Search Track — A Long Fixture Song Name for Filtering'
+        : `Synthetic Track ${String(trackIndex + 1).padStart(2, '0')} — A Long Fixture Song Title`,
+      artist: `Synthetic Artist ${number}`, trackNumber: trackIndex + 1, discNumber: 1,
+      duration: 186 + trackIndex * 29, format: 'MP3', codec: 'MP3', lossless: false,
+      browserPlayable: true, audioUrl: `/api/audio/fixture-track-${number}-${trackIndex + 1}`,
+      relativePath: `fixture-only/${number}/${trackIndex + 1}.mp3`,
+    }));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480"><rect width="480" height="480" fill="${colors[albumIndex % colors.length]}"/><path d="M0 360 480 90v390H0z" fill="#101820" fill-opacity=".72"/><circle cx="338" cy="152" r="74" fill="none" stroke="#f5ead6" stroke-width="9"/><text x="32" y="420" fill="#fff" font-family="sans-serif" font-size="32">FIXTURE ${number}</text></svg>`;
+    return {
+      id: `fixture-album-${number}`, title, artist: `Synthetic Artist ${number}`, year: 1990 + albumIndex,
+      genreId: genre.id, rawGenres: [genre.name], folder: `synthetic-fixture/${number}`,
+      coverUrl: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`,
+      tracks, producers: [], offline: false, online: { status: 'unqueried' },
+    };
+  });
+  genres.forEach(genre => { genre.albumCount = albums.filter(album => album.genreId === genre.id).length; });
+  return {
+    version: 1, albums, genres, roots: [], scan: { running: false }, onlineEnabled: false,
+    enrich: { running: false, completed: 0, total: 0 },
+    introductions: { running: false, completed: 0, total: 0, updated: 0, notFound: 0, failed: 0 },
+  };
+}
+
+function makeSyntheticPanelOnline() {
+  const panelCalls = { sources: 0, snapshots: 0, searchRequests: [], forbiddenMutations: [] };
+  const emptyLibrary = () => ({
+    version: 1, albums: [], genres: [], roots: [], scan: { running: false }, onlineEnabled: true,
+    enrich: { running: false, completed: 0, total: 0 },
+    introductions: { running: false, completed: 0, total: 0, updated: 0, notFound: 0, failed: 0 },
+  });
+  return {
+    panelCalls,
+    async snapshot() { panelCalls.snapshots++; return emptyLibrary(); },
+    async sources() {
+      panelCalls.sources++;
+      return { sources: [
+        { id: 'internetarchive', name: 'Synthetic Archive', configured: true },
+        { id: 'subsonic', name: 'Synthetic private service', configured: true },
+      ], subsonic: { baseUrl: 'http://fixture.invalid', username: 'fixture-user', passwordSet: false } };
+    },
+    async search(source, query, { page = 1, collection } = {}) {
+      const cleanQuery = String(query ?? '');
+      panelCalls.searchRequests.push({ source, query: cleanQuery, page, collection: collection ?? '' });
+      const items = Array.from({ length: 18 }, (_, index) => ({
+        ref: `fixture-online-${String(index + 1).padStart(2, '0')}`,
+        title: `Fixture Panel ${index + 1} — An Extraordinarily Long Mock Search Result Title for Ellipsis Testing`,
+        artist: `Synthetic Search Artist ${String(index + 1).padStart(2, '0')}`,
+        year: 2000 + index,
+      }));
+      return { total: items.length, page, items, hasMore: false };
+    },
+    async configureSubsonic() { panelCalls.forbiddenMutations.push('configureSubsonic'); throw new Error('Synthetic panel test never submits service details.'); },
+    async testSubsonic() { panelCalls.forbiddenMutations.push('testSubsonic'); throw new Error('Synthetic panel test never connects to a service.'); },
+    async add() { panelCalls.forbiddenMutations.push('add'); throw new Error('Synthetic panel test does not add online content.'); },
+    async remove() { panelCalls.forbiddenMutations.push('remove'); throw new Error('Synthetic panel test does not remove online content.'); },
+    async trackTarget() { return null; },
+    async coverTarget() { return null; },
+  };
+}
+
 async function runLauncher() {
   const { spawn } = require('node:child_process');
   const { pathToFileURL } = require('node:url');
   const projectRoot = path.resolve(__dirname, '..');
   const themeFollowMode = process.argv.includes('--theme-follow');
-  const toolRoot = path.join(projectRoot, '.tools', themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
+  const futurePanelsMode = process.argv.includes('--future-panels');
+  if (themeFollowMode && futurePanelsMode) throw new Error('Choose one isolated checker mode per Electron process.');
+  const toolRoot = path.join(projectRoot, '.tools', futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -46,6 +124,8 @@ async function runLauncher() {
   const originalFetch = globalThis.fetch;
   let service;
   let store;
+  let syntheticPanelLibrary;
+  let panelOnlineCalls;
   let adapterCalls;
   let scanCalls = 0;
   let childResult;
@@ -53,7 +133,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
+    mode: futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -120,9 +200,16 @@ async function runLauncher() {
       musicBrainzContact: '',
       fetcher: globalThis.fetch,
     }).init();
+    if (futurePanelsMode) {
+      syntheticPanelLibrary = makeSyntheticPanelLibrary();
+      store.snapshot = () => structuredClone(syntheticPanelLibrary);
+    }
     const initialLibrary = store.snapshot();
-    if (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0) {
+    if (!futurePanelsMode && (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0)) {
       throw new Error('Isolated library must start empty and without music roots.');
+    }
+    if (futurePanelsMode && (initialLibrary.albums.length !== 36 || initialLibrary.roots.length !== 0 || !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')))) {
+      throw new Error('Future panels fixture must contain only the deterministic synthetic album set.');
     }
     store.scan = async () => {
       scanCalls++;
@@ -132,12 +219,15 @@ async function runLauncher() {
     const native = mockNative();
     const sony = mockSony();
     const ftp = mockFtp();
-    const online = mockOnline();
+    const online = futurePanelsMode ? makeSyntheticPanelOnline() : mockOnline();
+    panelOnlineCalls = online.panelCalls ?? null;
+    const onlineAdapterCalls = observeAdapter(online);
+    if (panelOnlineCalls) onlineAdapterCalls.panelCalls = panelOnlineCalls;
     adapterCalls = {
       native: native.calls,
       sony: sony.calls,
       ftp: observeAdapter(ftp),
-      online: observeAdapter(online),
+      online: onlineAdapterCalls,
     };
     service = await createMusicServer({
       dataDir: serviceDataDirectory,
@@ -169,7 +259,7 @@ async function runLauncher() {
       serviceOrigin: origin,
       appPaths,
       preferences: {
-        language: 'en',
+        language: futurePanelsMode ? 'zh-CN' : 'en',
         theme: 'day',
         followSystemTheme: false,
         themeLayoutVersion: 2,
@@ -180,14 +270,19 @@ async function runLauncher() {
         reduced: false,
         output: { backend: 'browser' },
       },
-      reloadOnce: !themeFollowMode,
+      reloadOnce: !themeFollowMode && !futurePanelsMode,
       themeFollow: themeFollowMode,
+      futurePanels: futurePanelsMode,
+      syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
       runDirectory,
     };
     await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
     await fs.copyFile(__filename, path.join(appDirectory, 'main.cjs'));
     if (themeFollowMode) {
       await fs.copyFile(path.join(projectRoot, 'desktop', 'check-theme-follow.mjs'), path.join(appDirectory, 'check-theme-follow.mjs'));
+    }
+    if (futurePanelsMode) {
+      await fs.copyFile(path.join(projectRoot, 'desktop', 'check-future-panels.mjs'), path.join(appDirectory, 'check-future-panels.mjs'));
     }
     await fs.writeFile(path.join(appDirectory, 'package.json'), `${JSON.stringify({
       name: 'rhine-isolated-startup-entry-probe',
@@ -233,20 +328,26 @@ async function runLauncher() {
     report.serviceRequests = serviceRequests;
     report.deniedNodeFetches = deniedNodeFetches;
     report.adapterCalls = adapterCalls;
+    report.onlineMockCalls = panelOnlineCalls;
     report.libraryScanCalls = scanCalls;
-    report.initialLibrary = { albums: initialLibrary.albums.length, roots: initialLibrary.roots.length };
+    report.initialLibrary = { albums: initialLibrary.albums.length, roots: initialLibrary.roots.length, syntheticPanelFixture: futurePanelsMode };
 
     const unsafeNativeCalls = adapterCalls.native.start || adapterCalls.native.queue || adapterCalls.native.control;
     const unsafeSonyCalls = adapterCalls.sony.prepare || adapterCalls.sony.audio || adapterCalls.sony.growingAudio;
     report.isolationChecks = {
       electronChildExitedCleanly: childResult.code === 0,
       electronReportWritten: Boolean(electronReport && !electronReport.reportMissing),
-      syntheticLibraryStayedEmpty: initialLibrary.albums.length === 0 && initialLibrary.roots.length === 0,
+      libraryContainsOnlyAuthorizedSyntheticFixture: futurePanelsMode
+        ? initialLibrary.albums.length === 36 && initialLibrary.roots.length === 0 && initialLibrary.albums.every(album => album.id.startsWith('fixture-album-'))
+        : initialLibrary.albums.length === 0 && initialLibrary.roots.length === 0,
       libraryScanWasNotRequested: scanCalls === 0,
       noNativeAudioOperations: !unsafeNativeCalls,
       noSonyAudioOperations: !unsafeSonyCalls,
       noExternalNodeFetches: deniedNodeFetches.length === 0,
       rendererExternalRequestsBlocked: electronReport?.externalRequests?.length === 0,
+      noSyntheticConnectionSubmission: !futurePanelsMode || panelOnlineCalls?.forbiddenMutations.length === 0,
+      onlineSearchReachedMock: !futurePanelsMode || (panelOnlineCalls?.searchRequests.length >= 4 && panelOnlineCalls.searchRequests.every(item => item.source === 'internetarchive' && item.query === 'fixturepanel')),
+      onlineSearchUsedLocalRoute: !futurePanelsMode || serviceRequests.filter(entry => entry.path.startsWith('/api/online/search')).length >= 4,
       serviceDataInsideRunDirectory: path.resolve(serviceDataDirectory).startsWith(path.resolve(runDirectory)),
     };
     report.ok = report.isolationChecks.electronChildExitedCleanly
@@ -267,6 +368,7 @@ async function runLauncher() {
     report.serviceRequests = serviceRequests;
     report.deniedNodeFetches = deniedNodeFetches;
     report.adapterCalls = adapterCalls ?? null;
+    report.onlineMockCalls = panelOnlineCalls ?? null;
     report.libraryScanCalls = scanCalls;
     await fs.mkdir(runDirectory, { recursive: true });
     await fs.writeFile(finalReportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8').catch(() => {});
@@ -276,6 +378,7 @@ async function runLauncher() {
       frontendReadyCount: report.electron?.frontendReadyCount ?? null,
       readyAtMs: report.electron?.firstFrontendReadyAtMs ?? null,
       themeFollow: report.electron?.themeFollow?.summary ?? null,
+      futurePanels: report.electron?.futurePanels?.summary ?? null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
       revealedBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'frontend-ready')?.effective ?? null,
       runDirectory,
@@ -326,6 +429,7 @@ async function runElectronProbe() {
   let gate;
   let themeFollowHarness;
   let themeFollowModule;
+  let futurePanelsModule;
   let mockPreferences;
   let selectPreferencesForMock;
   let currentStartedAt = 0;
@@ -744,6 +848,20 @@ async function runElectronProbe() {
         themeProbe: themeFollowHarness,
       });
     }
+    if (firstResult.ready && config.futurePanels) {
+      futurePanelsModule = await import(pathToFileURL(path.join(__dirname, 'check-future-panels.mjs')).href);
+      report.futurePanels = await futurePanelsModule.checkFuturePanels({
+        browserWindow,
+        outputDirectory: runDirectory,
+        report,
+        serviceOrigin: config.serviceOrigin,
+        sendKey: key => {
+          const keyCode = key === 'ESC' ? 'Escape' : key === 'ENTER' ? 'Enter' : key === 'TAB' ? 'Tab' : key;
+          browserWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+          browserWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+        },
+      });
+    }
 
     report.finishedAtMs = Date.now() - currentStartedAt;
     report.finalRendererState = await captureState();
@@ -781,6 +899,7 @@ async function runElectronProbe() {
       noFrontendFailure: report.failedIpcEvents.length === 0,
       productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
       themeFollowBehaviorPassed: !config.themeFollow || report.themeFollow?.ok === true,
+      futurePanelsBehaviorPassed: !config.futurePanels || report.futurePanels?.ok === true,
     };
   } catch (error) {
     report.startupOutcome = config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
