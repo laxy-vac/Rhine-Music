@@ -29,6 +29,6 @@ FTP 扫描只列目录，参数在所选文件下载后读取，结果跨重扫�
 
 当前标签库在部分未压缩 DFF 中未跳过奇数长度块的填充字节。补充读取器按 [Philips DSDIFF 1.5 规范](https://www.sonicstudio.com/pdf/dsd/DSDIFF_1.5_Spec.pdf)校验边界并跳过填充，只读取头部／标签，跳过音频载荷。读取文件始终只读；不修改第三方依赖或源音乐。压缩 DST 解码仍未支持。
 
-运行 `npm run check:hires` 检查官方边界、真实 PCM／DSD 元数据、DFF 填充及无效边界、全 DSD／混合／未知专辑和两个 SVG 原字节。`npm run check:audio` 包含 FTP 原参数持久化检查，`npm run check:music` 包含玻璃材质、独立金边上下文与归还副本检查。一键 EXE 构建自动执行这些检查；窗口实测记录见 [UI 验证](UI-REVIEW-V0.3.0.md)。
+运行 `npm run check:hires` 检查格式边界、真实 PCM／DSD 元数据、DFF 填充、全 DSD／混合／未知专辑和两个 SVG 原字节。相关FTP、材质与盒体检查按改动选择；默认构建不代表已执行全部专项或真实窗口验收。入口与边界见[本地开发](LOCAL-DEVELOPMENT.md)。
 
 Hi-Res Audio 是 Japan Audio Society 的商标；该音源标识不表示设备认证。资源权利及 Sony 信息见 [NOTICE](../NOTICE.md)。

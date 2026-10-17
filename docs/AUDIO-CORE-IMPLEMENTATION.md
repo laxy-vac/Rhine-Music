@@ -1,6 +1,6 @@
 # 当前音频核心实现
 
-更新：2026-10-16。本文描述当前架构/能力，历史专项证据见 [2026-10-10修复报告](AUDIO-CHAIN-FIX-REPORT-2026-10-10.md)，当前进度/授权见 [状态](PROJECT-STATUS.md) 与 [AGENTS](../AGENTS.md)。界面检查与真实音频设备验收分别报告。
+本文描述当前架构与能力，状态见[PROJECT-STATUS](PROJECT-STATUS.md)，工作规则见[AGENTS](../AGENTS.md)。界面检查与真实音频设备验收分别报告，旧修复证据从Git按需追溯。
 
 ## 处理与线程
 
@@ -76,4 +76,4 @@ DSF/未压缩DFF受支持，DST压缩DFF不冒充支持。位流与PCM频谱/缓
 
 组件来源/哈希/许可在vendor/audio/codec-components.json、open-components.json、lsp-plugin/manifest.json；固定SDK/许可提交，运行库/工具/缓存只在.tools。不新装环境或自动准备组件。
 
-2026-10-10专项报告有其离线/数值/回调/默认设备PCM静音证据；后续LSP与模型改动没有自动获得全硬件验收。当前ASIO/DSD/DoP、768kHz真实输出、长文件/复杂切换及LSP整体验收仍有限。构建/启动与报告索引见 [本地开发](LOCAL-DEVELOPMENT.md)，不把历史命令当新测试授权。
+离线数值/回调检查不等于当前ASIO/DSD/DoP、768kHz真实输出、长文件或复杂LSP设置的硬件测量。按实际任务独立核验；构建与检查入口见[本地开发](LOCAL-DEVELOPMENT.md)，优化范围见[基线](OPTIMIZATION-BASELINE.md)。

@@ -1,151 +1,48 @@
 # Future / Punk 统一架构
 
-更新：2026-10-15。记录用户确认的目标和阶段边界；实际完成情况见 [PROJECT-STATUS](PROJECT-STATUS.md)。用户已要求将第三、四阶段记录为基本完成，接下来按反馈逐步修复细节。两阶段实现及必要自动验证均已完成；逐项人工、真实曲库和硬件验收仍按已有证据分别记录。
+本文描述当前实现的职责边界与稳定接口。主题外观见 [THEME-PAGE](THEME-PAGE.md)，歌词行为见 [LYRICS](LYRICS.md)，运行入口见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)。
 
-## 当前阶段
+## 职责边界
 
-| 阶段 | 当前状态 |
-| --- | --- |
-| 1. 公共状态与设置 | 2026-10-14用户验收通过 |
-| 2. 公共展示与交互 | 2026-10-15用户明确确认“第二阶段验收通过了” |
-| 3. 公共渲染与资源 | 基本完成；实现及必要自动验证完成；后续按反馈修复细节 |
-| 4. 旧生产链清退 | 基本完成；实现及必要自动验证完成；后续按反馈修复细节 |
+- [music-app.ts](../src/music-app.ts) 负责应用接线、持久化偏好与页面路由；播放器是两主题共享的一份播放状态。
+- [music-application-state.ts](../src/music-application-state.ts) 保存公共选择与浏览状态：专辑/曲目焦点、详情模式、资料页签与滚动位置、目录视图、查询和运行期网格页码。主题外观和三维坐标不属于此状态。
+- [music-catalog.ts](../src/music-catalog.ts) 负责公共展示条目、筛选、分组、排序和焦点解析；[music-catalog-markup.ts](../src/music-catalog-markup.ts) 与 [music-catalog-grid.ts](../src/music-catalog-grid.ts) 用同一目录生成两主题控件与网格。
+- [scene.ts](../src/scene.ts) 的 <code>ArchiveScene</code> 为唱片货架、连续阵列和网格详情提供同一 Three.js/WebGL 场景、renderer 与资源生命周期。主题皮肤提供色彩、字体、模型和材质，不创建另一套目录状态、交互算法或播放状态。
 
-第二阶段确认对应整体功能与交互验收，不追加性能/真实设备验收结论，也不关闭尚未单独确认的模型专项。第三、四阶段基本完成，当前在main源码上按反馈逐步修复细节；未收到的逐项人工或真实设备测试结果不标通过。
+## 目录身份与视图
 
-## 目标与职责
+<code>MusicDisplayEntry.key</code> 是稳定的专辑或曲目身份；<code>recordIndex</code> 只指向按专辑组织的 canonical records 数组，不能代替 entry 身份。TRACKS 每首曲目有自己的 entry key，同时保留父专辑 ID 与编号。
 
-Future（rhine）和 Punk（archive）是同一个播放器的主题，共用功能、应用状态、展示交互和渲染管线。以现有歌词、EQ、Signal 为参照：整体结构和操作一致，局部细节适应主题。优先保留已完成页面的 DOM、CSS 和操作体验，通过接口适配公共核心；仅为必要接线和缺失功能入口调整界面。右侧信息区保留现有结构与交互。
+<code>MusicCatalogGroup.entryKeys</code> 是目录和各布局之间的公共桥接。[music-catalog-shelves.ts](../src/music-catalog-shelves.ts) 按 entry key 映射货架槽位；实体货架按 20 个槽分页，组内容超过时拆成连续段，首末边界停止导航。连续阵列按公共分组结果形成列并使用空间投影；网格通过 [music-grid-page.ts](../src/music-grid-page.ts) 分页，只绘制当前页，页码不改变选中项或详情身份。
 
-| 部分 | 职责 |
-| --- | --- |
-| 音乐与播放核心 | 音乐库、元数据、队列、音频和歌词等公共能力，复用已有实现 |
-| 公共应用状态 | 专辑/曲目身份、选中项、打开状态、信息页签与公共功能设置 |
-| 公共展示与交互 | 目录结果、货架/阵列/网格、镜头、选择及动画 |
-| 公共渲染 | Three.js + WebGL，资源生命周期、模型、纹理、光照、后期和画质 |
-| 主题资源 | 配色、字体、模型、材质、灯光风格和装饰；包括盒体、货架和地面 |
-| 界面组件 | 保留现有界面，通过适配层使用公共状态和功能 |
-
-主题、布局、画质独立。主题不拥有独立播放器状态、交互算法或渲染器。布局骨架与交互规则共用，主题可调整间距、边距、对齐、局部比例及模型摆放偏移，以同一算法的参数实现。
-
-## 状态与保存
-
-- 全局保存布局、画质、专辑/单曲浏览方式、分组、排序和网格每页数量等功能设置。
-- 盒体款式、材质、颜色和个人外观预设按主题保存；两套个人预设库保留独立。
-- 切主题/布局保留选中专辑、曲目、播放进度、唱片打开状态，以及右侧页签、展开状态和内容。
-- STYLE等管理页通过ARCHIVE/导航按钮返回原唱片上下文，保留详情；已在唱片页主动点击ARCHIVE仍可回架。Esc只处理当前页内返回/关闭弹窗/取消编辑，不跨管理页导航。
-- 播放继续由公共播放器管理；切主题不切换独立的播放顺序记忆。
-- Future保留简单粗糙/精细/Punk拓展，Punk仅自己的Punk盒体；各款已有可调范围和预设规则保留。
-
-第一阶段引入 `src/music-application-state.ts` 的 MusicApplicationState：公共选中 index/album ID、目录 entry/track 身份、打开模式、信息页签/阅读位置、查询和视图设置；网格当前页`gridPage`只在运行期保存。进入管理页前记录阅读位置，返回后恢复；更换专辑清除旧阅读位置。渲染器中的 slot/cell 仍是显示坐标，不作为公共专辑或曲目身份。
-
-全局视图由 `preferences.view` 保存：
+可持久化视图位于 <code>preferences.view</code>，字段定义在 [music-view-settings.ts](../src/music-view-settings.ts)：
 
 | 字段 | 值 |
 | --- | --- |
-| layout | shelf / array / grid |
-| show | albums / tracks |
-| group | genre / artist / decade / az / none |
-| sort | artist / title / year / added |
-| gridPageSize | 10 / 36 / 50 / 75 / 100 / 200；默认36 |
+| layout | <code>shelf</code> / <code>array</code> / <code>grid</code> |
+| show | <code>albums</code> / <code>tracks</code> |
+| group | <code>genre</code> / <code>artist</code> / <code>decade</code> / <code>az</code> / <code>none</code> |
+| sort | <code>artist</code> / <code>title</code> / <code>year</code> / <code>added</code> |
+| gridPageSize | 10 / 36 / 50 / 75 / 100 / 200；默认 36 |
 
-当前可见LAYOUT文案按稳定内部key映射：`shelf`显示ARRAY/阵列，`array`显示MATRIX/矩阵，`grid`显示GRID/网格。标签变化不改`preferences.view.layout`、事件属性或兼容投影中的key。历史偏好兼容映射仍为旧ARRAY→shelf、FUTURE→array、GRID→grid；逐字段读取有效view，再取有效旧foobarArchive，最后回退默认。完全缺失布局时按旧活动主题迁移默认（Future为array、Punk为shelf），只用于首次兼容；有效全局值不受主题影响。保存时view为权威，foobarArchive仅是兼容投影。桌面白名单保留view，迁移后主动持久化。
+可见布局名称映射为 <code>shelf</code>→ARRAY、<code>array</code>→MATRIX、<code>grid</code>→GRID。<code>foobarArchive</code> 只作为兼容投影；有效的 <code>preferences.view</code> 字段优先，旧布局值 <code>array/future/grid</code> 分别迁移为 <code>shelf/array/grid</code>。缺少有效布局时仅用旧主题选择决定首个默认值。网格页码、查询和选中上下文属于运行期状态，不自动恢复到启动会话。
 
-查询、当前选中身份、打开模式、页签和阅读位置是公共运行态，不新增启动时自动恢复曲库/播放的行为。
+查询、SHOW、GROUP、SORT 或每页数量改变目录结果时，网格回到第一页；主题/布局切换保留页码，结果缩小时将页码夹到有效范围。独立选择变化会显露目标 entry 所在页；手动翻页不会被旧选择拉回。三维货架的 20 槽分页与二维网格分页互不影响。
 
-## 布局与场景资源
+## 渲染资源与主题
 
-最终两主题功能一致：专辑/单曲、搜索、分组、排序及货架/阵列/网格。当前同一ArchiveScene的Three.js/WebGL renderer、实例池、封面图集和后期覆盖用于两主题货架、阵列与网格详情；Future选货架不再回退阵列，Punk货架不再走Canvas投影。
+[MusicSceneResources](../src/music-scene-resources.ts)、货架场景和 [MusicCaseTitles](../src/music-case-titles.ts) 为共同场景建立程序货架、地面细节和标签图集。Future 用陶瓷与轻玻璃边，Punk 用工业金属与对应主题色板；共同身份、命中测试、光学和材质生命周期由共享场景承载。程序货架与地面是按现有布局和盒体尺寸估算的几何，不是原作者网格或像素复刻。
 
-不存在可直接复用的原始货架/地面3D网格。`MusicShelf`与`MusicSceneResources`以程序几何构建托盘、货架装饰及局部地面；Future采用陶瓷与轻玻璃边，Punk采用工业金属材质并使用`stylePalette`。`MusicCaseTitles`以纸面图集绘制Punk顶边标题。plain/deck使用轻量刻线或拼缝，real使用程序生成木纹，不贴含预烘焙光照的旧地面投影图。当前几何是估算重建，不是原作者网格或像素复刻；本阶段未改GLB/PNG。
+布局坐标只负责场景投影与镜头，不作为曲库身份。主题或布局变化应保留当前 entry、父专辑、右侧资料、页签和阅读位置；播放队列继续由公共播放器管理。浏览键鼠规则由公共目录和场景使用，主题只改变呈现。
 
-公共货架布局采用有限20槽分页和稳定父曲目entry身份；列沿负X、槽沿负Z，货架浏览相机yaw -38°、elevation 35°。布局间距按变换后盒体bounds拓展，切主题/布局继续保留选中专辑/曲目及右栏详情。
+## 启动与质量边界
 
-## 第二阶段公共展示接口
+桌面启动先完成前端初始化和必要首帧，再显示主窗口；当前流程没有旧 intro。初始化门只处理窗口启动就绪，不承担播放器状态持久化。
 
-- `music-catalog.ts`提供显示条目、过滤/分组/排序、可见专辑及焦点解析。`MusicDisplayEntry.key`是稳定专辑/曲目身份，`recordIndex`只是canonical专辑数组索引；同专辑的多个曲目有不同entry key、相同recordIndex与父编号。目录版本随数据源或视图/查询变化，曲库刷新时焦点不变也会刷新网格与场景缓存。待提交的`AlbumSelection`同时携带entry key，切布局/主题不会把转场目标误回退为专辑首曲；提交时重新校验当前可见目录。
-- `music-catalog-shelves.ts`按entry key映射列/槽并缓存结果，导航返回目标条目，由应用显式提交焦点。阵列按分组形成列并循环导航；货架/网格按20槽分页、导航在边界停止。不分组阵列也按20槽分列。
-- `music-display-layout.ts`集中布局能力解析、阵列镜头及几何参数、拖动阈值；`music-array-layout.ts`把目录条目投影为无限阵列坐标。两主题使用同一算法，Punk继续应用自己的资源与右栏裁切。
-- `music-catalog-grid.ts`只渲染`gridPage`当前页；分组标题count为该组全量条目数，页码变化不重建右侧详情、不改公共selection。Punk使用106px方形封面墙、约26px间距、黑细选框与accent四角，标题/资料只在右栏和卡片无障碍/hover信息中保留；Future维持136px圆角文字卡片及原皮肤。进入详情使用公共阵列镜头。
-- 两主题的浏览页均提供公共SHOW/LAYOUT/GROUP/SORT：Punk在右上分两行（SHOW+LAYOUT、GROUP+SORT），LAYOUT选中显示固定橙色点、未选为空心框；Future在左上用相同两行。可见布局为ARRAY/阵列（内部`shelf`）、MATRIX/矩阵（内部`array`）、GRID/网格（内部`grid`）。Punk查询复用顶栏SEARCH ARCHIVE；目录筛选继续使用公共query，切主题保留view/query。GRID时Punk第一行是SHOW+PER PAGE+LAYOUT，第二行是GROUP+SORT并显示RANDOM，左上显示当前目录结果总数；Future GRID也提供PER PAGE及当前结果总数。非GRID隐藏PER PAGE。Punk实体ARRAY是20槽托盘，波动按排独立，只有选中排沿槽位方向滑动，不跨排传播；Future与MATRIX保留连续波动。画质控件保留`off/basic/reduced/full`值，Archive显示“水波强度”和单排说明，Future显示通用“波动效果”。设置 → 音乐库中的旧排列入口保留为view别名，文案指向浏览工具栏，更新不刷新窗口。STYLE不再包含“视图与浏览”区，只保留外观、盒体和画质设置。
-- `src/music-grid-page.ts`提供分页计算。`MusicViewSettings.gridPageSize`通过`preferences.view`持久化且两主题共享；允许10/36/50/75/100/200，默认36。`MusicApplicationState.gridPage`只属当前运行期。query/show/group/sort/gridPageSize变化优先从第1页开始，layout/theme切换保持页码，结果减少时将页码夹在有效范围。单独改变entry selection key时grid controller显露该entry所在页；手动翻页不被原selection拉回。选择/浏览详情/非首曲身份不随页码变化，网格二维页与3D货架20槽分页互不影响。分页按钮重绘后保留可用的键盘焦点。
-- 按用户第二阶段验收反馈，Future右栏采用悬浮文字/细线、无外框的小号ACCESS ALBUM文字和箭头、分段遮罩揭示；移除整块圆角玻璃底，借用上游设计语言，现有音乐字段、内容、顺序与交互继续保留，Punk外观保持。Future左上两行工具及GRID总数适配网格空间。
-- 第四阶段已清退`foobar-catalog.ts`、`foobar-shelves.ts`、`punk-future-catalog.ts`、`case-sprites.ts`与`ArchiveCaseRenderer`旧生产链。有效Grid/SHOW/GROUP/SORT DOM迁到`music-catalog-markup`并使用公共entryKeys；保留现有DOM类/data钩子及Punk外壳，清除的是旧的隐藏LAYOUT DOM节点；当前Punk工具栏中的可见LAYOUT是公共浏览控件。音乐页点击共用公共view处理器。LegacyCatalogOptions、偏好迁移和兼容投影继续保留。清退前的实现只作历史说明，不作为可以切回旧外观的承诺。
+画质偏好是全局设置，用户主动采用质量建议或手动改档才更新；日常运行不自动切换画质、盒型或材质。性能建议使用合成场景，不能代表实际设备帧率或 RTX 5080 的性能结果。本文不记录硬件性能结论。
 
-键鼠行为共用：方向键/滚轮操作当前列与条目，Home/End选择当前列首尾，G在网格与最近空间布局间切换，R从当前过滤结果随机选取，/打开搜索，网格卡片Enter打开详情。主题只影响外观；Esc遵守页内返回规则。
+## 相关实现
 
-## 画质与性能
-
-- 目标是普通核显流畅运行，独显可提高画质上限；实际设备性能单独验收。
-- 首次中档，沿用现有original/“均衡”；已有设置继续使用。
-- STYLE提供手动画质与主动性能检测。`quality-detection`在独立iframe场景中使用固定80张合成专辑（6组、每专辑2曲），预热四档后测试货架移动与开合盒体；通过RAF采样并以`gl.finish()`保守计时，最高稳定60FPS档位才作为推荐。检测使用合成数据，不启动个人播放器、读取真实曲库或调用音频设备；iframe存储隔离已通过专用profile的浏览器检查。
-- 用户主动采用推荐或手动修改，可以重测；日常运行不自动切档。
-- 画质与盒体选型独立；颜色、透明度和通光率保留，调整相应计算精度。
-- 独显选择能否由应用控制及实际瓶颈待核实。
-- 本轮保留Three.js/WebGL，架构和功能完成后仍卡顿再评估更换管线；不并行开发多引擎后端。
-
-性能检测不在日常运行中自动切档；仅用户点击采用后保存推荐画质，取消则不改设置，也不切换盒型或材质。尺寸/DPR、主题、盒体变化、页面隐藏或离开时取消检测。总构建与隔离真实浏览器流程检查已通过；这套建议不等同于用户设备的帧率实测。
-
-## 迁移顺序
-
-1. 公共状态与设置：统一状态归属和保存，保持现有画面；验证配置、主题切换、曲目身份、打开/页签及右栏保持。
-2. 公共展示与交互：统一目录结果、布局、镜头和操作，通过现有界面接入并补公共入口。
-3. 公共渲染与资源：统一Three.js/WebGL，补Future货架和地面，接主题资源及画质/检测能力。
-4. 清退旧生产链：保留用户可见的公共目录、主题外壳与Scene/GLB行为，把产品身份、鼠标命中、光学、纸面深度和材质生命周期保护迁到当前实现；删除旧Canvas renderer、sprite/foobar目录重复链和隐藏LAYOUT节点，不提供源码内的旧外观回退开关。
-
-构建、纯合成、隔离浏览器、实际窗口和硬件性能分别报告。第三阶段TypeScript/Vite构建、公共状态/目录/转场、控件/返回、实际Scene/GLB/鼠标命中与隔离benchmark流程检查已通过，报告在`.tools/unified-architecture-stage3`；历史manifest全量哈希与隐藏mock GUI复核记录在`.tools/unified-architecture-stage4/stage3-independent-*`。Chrome与Vite曾在沙箱内遇到IPC/realpath限制，以同一命令获准普通权限运行，没有安装组件或修改全局环境。自动验证不等于用户阶段验收或硬件帧率结论。
-
-检测使用当前盒型、材质及显示像素尺寸；每段预热后至少采样1.5秒，尽量收集60帧，最多延长到5秒。低样本档继续返回测量但不能成为推荐；四档完整且候选的货架/开合场景均通过稳定性门槛才推荐。取消、主题/盒体/尺寸变化、后台和离开会使本轮失效；采用旧场景的结果也会被拒绝。当前只验证了合成Chrome流程，没有运行个人播放器或做Electron整窗/硬件60FPS验收。
-
-## 第一阶段验收点
-
-2026-10-14用户确认第一阶段验收通过，进入第二阶段。以下保留第一阶段验收范围，后续阶段必须继续保持这些行为；构建/隔离检查不替代新的阶段验收：
-
-1. Punk TRACKS选择非首曲目，打开专辑并切换右侧页签、滚动信息区；通过STYLE切换主题，再点ARCHIVE返回，检查选中身份、打开状态及页签保持。
-2. 第一阶段当时改变Punk的目录显示/分组/排序/布局，切换主题再切回，检查选项保留；第二阶段另增加Future公共目录和网格，货架仍待第三阶段。
-3. 改画质后切主题，画质保持；两主题盒体/外观分别恢复自己的保存值。
-4. 如已有播放会话，可自行确认切主题不重置进度和播放顺序；本轮自动检查使用模拟音频端口，没有实际播放。
-5. 完整退出重启后检查视图选项、画质及两主题外观设置保存。当前选中/打开/页签是运行态，不新增启动自动恢复行为。
-6. STYLE/EQ/歌词/信号无弹窗时按Esc仍停留当前页；打开当前页弹窗后Esc先关弹窗。唱片页详情中的Esc仍回专辑架。
-
-第一阶段未安装软件、修改依赖、导出模型、打包最终EXE或读取个人配置。阶段日志在忽略目录`.tools/unified-architecture-stage1`。
-
-## 第二阶段验收点
-
-2026-10-15用户确认第二阶段整体验收通过。以下保留当时验收范围与后续回归步骤，不要求用户重新验收；其中STYLE入口是当时的界面路径。近期浏览工具栏调整另按第四阶段回归清单复查；需要复查时完整退出旧源码窗口，再运行“启动源码验证.cmd”：
-
-1. 当时Future进入STYLE → 视图与浏览，选“阵列 / 曲目 / 歌手 / 标题”。返回ARCHIVE，在同一专辑选择第二首或后续曲目，检查标题与曲目身份正确，多个曲目各有一个盒体，盒体编号仍为父专辑编号。此步骤记录历史验收路径；当前设置位置见第四阶段回归。
-2. 打开这张专辑，选“介绍”并滚动。进入STYLE改“网格”，再切Punk，点ARCHIVE返回；详情仍打开、同一专辑/曲目及页签/阅读位置保留。详情按Esc回到Punk网格；切回Future后仍为网格，卡片与主题外观对应。
-3. 两主题分别在网格切到“专辑”显示，单击另一张卡片，检查右侧信息随选择；双击或聚焦卡片按Enter检查详情打开。用G往返网格与最近空间布局，检查选择保留。
-4. 当时通过STYLE更换专辑/曲目、流派/歌手/年代/A-Z/不分组及排序，并输入名称筛选。该历史检查与第二阶段验收保留；当前入口位置见第四阶段回归清单。
-5. 阵列用↑↓选条目、←→换列，首尾可循环；Punk货架在首末列停止，Home/End到当前列首尾。曲目详情中连续切换到另一专辑的非首曲目，动画过程中按G，结束后仍应是请求的曲目。阶段二验收时Future请求shelf暂显示阵列、切Punk恢复货架；这是当时的过渡态，现由第三阶段公共货架实现取代。
-6. 完整退出重启，检查布局/显示/分组/排序保存；查询和当前打开上下文不新增启动恢复。STYLE/EQ/歌词/信号Esc仍停留当前界面，音乐详情Esc回架。
-
-第二阶段Future视觉补验历史记录：在Future浏览页左上角直接切显示/分组/排序，再进入STYLE确认同一选项；日夜模式下检查资料直接浮在场景上、小号ACCESS ALBUM入口及完整原音乐信息。打开/收起专辑、切歌单/介绍时分段揭示正常；快速反向操作与减少动态能立即稳定，切Punk后仍为原皮肤。该检查是当时已验收的控件范围，不代表本轮新增LAYOUT及工具栏位置已复测。
-
-构建及隔离检查日志在`.tools/unified-architecture-stage2`；不读取个人配置/曲库、不调用真实音频设备、不代表整窗人工或60FPS性能验收。
-
-## 第三阶段验收点
-
-第三阶段基本完成，实现及必要自动验证已完成。以下清单保留为后续反馈定位、复现和当前源码回归的参考；通过合成检查不代表真实设备帧率或完整窗口人工验收。
-
-1. 两主题分别切换日/夜，选货架、阵列及网格；确认货架和详情都使用同一场景，主题盒体/材质区分保留，Future不回退阵列，Punk画布仍裁到右栏边界。
-2. 选择分组中间列和非首曲目，在货架、阵列、网格及主题间切换并开合盒体；entry身份、父专辑信息、详情页签/滚动位置保持。过滤到空结果后清除过滤，目录和场景恢复。
-3. 检查货架首末列导航不循环，Home/End留在当前列边界；每列前牌显示`ROW 001`递增，右侧`ALBUM NO.`仍是独立全库编号。
-4. 以改变后的盒体尺寸/深度检查托盘间距和货架/地面范围。分别检查plain定位刻线、deck金属拼缝、real程序木纹；不以预烘焙投影替代实时地面。
-5. 在合成benchmark中检查四档预热、货架移动与开合盒体的测量和最高稳定60FPS推荐；检查采用后保存推荐、取消不改画质，以及尺寸/DPR、主题/盒体变化、页面隐藏和离开时取消。
-6. 确认benchmark使用合成场景；真实曲库、播放音频和硬件帧率仍属于各自单独授权/验收范围。独立profile自动检查已确认iframe存储为空且拒绝写入、父测试哨兵和实际公共目录状态保持，未调用音频API或访问外站/API/音频路由。
-
-## 第四阶段验收点
-
-第四阶段基本完成，实现与必要自动验证已完成。构建、公共状态/目录/控件/导航/指针、当前Scene、完整模型/编辑器/纸卡/标签/生命周期及检测E2E均通过，报告在`.tools/unified-architecture-stage4`；没有个人曲库或真实音频设备测试。当前GRID分页是之后的细节补齐，TSC与统一状态检查通过，UI/分页专项仍在进行，不扩展第四阶段历史验收结论。以下清单保留为后续反馈定位、复现和回归的参考，由用户选择相关项目测试。
-
-已清退`ArchiveCaseRenderer`、`case-sprites`、`foobar-shelves`、`punk-future-catalog`和`foobar-catalog`生产适配链、仅旧sprite实现的断言及隐藏LAYOUT节点。有效目录DOM改由`music-catalog-markup`按公共entryKeys生成；保留Punk皮肤、既有DOM钩子、LegacyCatalogOptions与偏好迁移、非音乐ArchiveScene、编辑器/查看器、原资产和许可。光学、纸面、身份与生命周期保护在当前Scene/GLB继续验证。
-
-1. 退出旧窗口后，通过“启动源码验证.cmd”或 `npm run desktop` 启动当前 `main` 源码；使用原源码验证profile检查两主题日夜、实体托盘/连续排列/网格和右侧资料，记录问题供后续复现与回归。
-2. 分别截图完整Punk右上工具栏及Future左上工具栏，确认两主题均显示SHOW、LAYOUT、GROUP、SORT全部控件，Future工具栏不再有额外筛选框，Punk查询仍用顶栏SEARCH ARCHIVE。逐项检查SHOW的ALBUMS/TRACKS、LAYOUT的ARRAY/MATRIX/GRID（内部key分别为`shelf/array/grid`）、GROUP的GENRE/ARTIST/DECADE/A-Z/NONE、SORT的ARTIST/TITLE/YEAR/ADDED；GROUP/SORT维持现有英文枚举。GRID时检查Punk第一行SHOW/PER PAGE/LAYOUT、第二行GROUP/SORT与RANDOM及左上当前结果总数，Future提供PER PAGE及当前结果总数；离开GRID时两主题均隐藏PER PAGE。Punk截图还要看到完整封面墙和选中样式，Future截图保留136px圆角文字卡片。设置 → 音乐库的排列方式仍作为兼容别名工作，文案指向浏览工具栏且更新不刷新窗口。检查STYLE不再出现“视图与浏览”整块，外观/盒体/画质入口仍在。
-3. 用合成目录验证PER PAGE选项10/36/50/75/100/200及默认36，顶栏总数反映当前目录结果总量，分组标题count反映全组总量，分页仅渲染当前页。检查query/show/group/page-size变化回第一页，layout/theme切换保留页码，结果缩小时页码夹到合法范围。选中项变化时自动显露其所在页；手动翻页不会被选中项拉回，分页不改变selection/非首曲/详情，3D货架仍为独立20槽。检查期间不要把正在进行的UI分页专项写成通过。
-4. 在Punk顶栏查询已有名称、无匹配名称并清空，确认卡片与三维盒体对应过滤结果/恢复。切主题检查公共query状态保持；完整退出重启后查询不自动恢复。截图须完整露出SHOW/LAYOUT/GROUP/SORT，确认Future工具栏无专用搜索输入框；本轮回归未完成前，不把历史截图/检查写成本次通过结果。
-5. 选择非首曲，双击打开后切介绍并滚动；通过浏览工具栏改变布局、在STYLE改主题，再返回ARCHIVE，确认曲目、父专辑编号、详情、页签与阅读位置保持。检查空白双击不打开、拖动不误触，货架首末导航停止。
-6. 使用原有盒体编辑/查看功能检查铭牌、封面、透明窗和部件；保存两主题各自预设，确认外观独立。改变画质不会换盒型或材质；检测的开始、取消、重测和手动采用继续可用。
-7. 完整退出并以当前 `main` 源码验证入口重开，确认布局/显示/分组/排序/每页数量、公共画质和外观保存；网格页码和查询不自动恢复，不新增自动恢复选中/打开/播放行为，并继续使用同一源码验证profile。
+- 状态与 view：[music-application-state.ts](../src/music-application-state.ts)、[music-view-settings.ts](../src/music-view-settings.ts)
+- 目录、货架、网格：[music-catalog.ts](../src/music-catalog.ts)、[music-catalog-shelves.ts](../src/music-catalog-shelves.ts)、[music-catalog-grid.ts](../src/music-catalog-grid.ts)、[music-grid-page.ts](../src/music-grid-page.ts)、[music-spatial-layout.ts](../src/music-spatial-layout.ts)、[music-display-layout.ts](../src/music-display-layout.ts)
+- 场景与资源：[scene.ts](../src/scene.ts)、[music-scene-resources.ts](../src/music-scene-resources.ts)、[music-case-titles.ts](../src/music-case-titles.ts)

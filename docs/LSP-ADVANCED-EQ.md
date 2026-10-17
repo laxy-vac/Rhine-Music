@@ -1,6 +1,6 @@
 # 当前LSP进阶EQ
 
-更新：2026-10-14。当前方案是**固定官方CLAP插件的原生独立窗口**。自绘DSP-only、内嵌、整页自动打开和Rhine原生主题/中文覆盖均已撤回，不是待续功能。状态见 [全局交接](PROJECT-STATUS.md)。
+当前使用**固定官方CLAP插件的原生独立窗口**，由用户主动打开。状态见[PROJECT-STATUS](PROJECT-STATUS.md)。
 
 ## 使用与状态
 
@@ -39,12 +39,10 @@ native/lsp-clap-host.h管理工厂、端口、Float32平面缓冲、Win32父窗�
 
 复用已有Zig及项目内已准备GNU/MSYS2工具；PHP未安装、文档构建关闭。普通构建不下载。缺工具须按授权规则处理，不把旧准备记录当新安装许可。
 
-native主机和界面联合构建入口见 [本地开发](LOCAL-DEVELOPMENT.md)。源码清单检查CLAP/WGL与宿主指纹，不能只换DLL放宽验证。旧retired-ui-checkout副本留作溯源，不借整理删除。
+native主机和界面联合构建入口见[本地开发](LOCAL-DEVELOPMENT.md)。源码清单检查CLAP/WGL与宿主指纹，不能只换DLL放宽验证。
 
-## 已验证与待验收
+## 验证边界
 
-恢复官方独立窗阶段（checkpoint/lsp-popup-restored）已完成插件、宿主、TypeScript/Vite构建与来源/缓存检查；本轮主题/模型检查没有重新验收LSP。
+构建与状态检查不等于复杂算法、不同DPI和设备组合的实时性能测量。后续音频性能按[优化基线](OPTIMIZATION-BASELINE.md)独立开展，不能用界面FPS或旧报告替代。
 
-实际面板开关、参数保存/重启、引擎切换、暂停/seek/切歌、高延迟算法、不同DPI和复杂设备行为仍未全面运行验收。没有新授权不自动补测；旧音频报告不作为当前LSP证明。
-
-历史实现可用Git查看checkpoint/lsp-advanced-eq、checkpoint/lsp-native-panel和checkpoint/lsp-popup-restored。回滚审阅依赖后git revert、按对应版本重建，不重置预设；运行库退役仅在明确任务中审查显式入口。
+回滚时审阅依赖并用git revert、按对应源码重建，不重置用户预设。原生窗口、处理引擎与持久化状态的契约保持一致。

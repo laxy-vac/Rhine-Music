@@ -80,16 +80,11 @@ const archiveReadme = `# Clean source snapshot
 
 This ZIP is a working-tree source snapshot for Rhine Music 0.3.1-preview.1. It has no Git history. Review the files and the repository NOTICE before sharing or publishing it.
 
-To create your own local Git history after extraction:
-
-1. Open a terminal in this extracted directory.
-2. Run \`git init\`.
-3. Review the included files and licenses, then run \`git add -A\` and \`git commit -m "Initial clean source snapshot"\`.
-4. To publish, create your own GitHub repository, add its remote, and push only after reviewing the rights for the included assets. This export never creates a remote or pushes anything.
+This is a delivery artifact, not a second development checkout. Continue normal development and user-managed publication in the original main repository. This export does not initialize Git, create a remote, or push anything.
 
 For local development, read \`README.md\` and \`docs/LOCAL-DEVELOPMENT.md\`. The offline test entry is \`npm test\`; the source preview build is \`npm run build:preview\`. This export script does not install dependencies or contact the network. If a required tool or dependency is missing, stop and use a separately approved offline setup; do not run an automatic install as part of export.
 
-The preview remains incomplete. Read \`docs/PROJECT-STATUS.md\` and \`docs/UNIFIED-ARCHITECTURE.md\` for current progress and acceptance boundaries.\n`;
+Read \`docs/PROJECT-STATUS.md\` for current capabilities and \`docs/OPTIMIZATION-BASELINE.md\` for remaining work and measurement boundaries. An older installer is a separate snapshot, not an automatic build of this source.\n`;
 
 const powershellZipScript = String.raw`
 $ErrorActionPreference = 'Stop'

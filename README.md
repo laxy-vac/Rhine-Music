@@ -1,56 +1,47 @@
-# Rhine Music · Windows 音乐播放器
+# Rhine Music
 
-**朋友品尝版：`0.3.1-preview.1`**。这是仍在开发中的预览，不代表项目完成或正式发布。安装器文件名为 `Rhine-Music-0.3.1-preview.1-Setup.exe`，校验值随 `.sha256` 文件提供，实际验证范围见[品尝版说明](docs/PREVIEW-RELEASE.md)。
+Windows 音乐播放器，基于 RhineLabUI，提供 Future / Rhine 与 Punk / Audio Archive 两套主题、本地及在线专辑架、歌词、均衡器和原生音频输出。
 
-项目基于 RhineLabUI，加入本地音乐播放、Future/Rhine 与 Punk/Audio Archive 两套主题，以及 Windows 原生音频处理。音乐适配与维护：**Copyright (c) 2026 RonaldDeng**；上游：**Copyright (c) 2026 LBEILC**。
+音乐适配与维护：Copyright (c) 2026 RonaldDeng。上游：Copyright (c) 2026 LBEILC。
 
-## 安装品尝版
+## 当前基线
 
-使用 Windows x64 安装器选择普通用户可写的目录，安装后运行其中的 `Rhine Music Preview.exe`。目录内提供 `Uninstall.exe`；应用数据与预设集中在该目录，卸载默认保留，只有用户明确选择清除时才删除。程序不提权、不改目录权限，不可写时也不回退到 AppData。安装和设备验收分开记录，具体步骤见[品尝版安装与交付说明](docs/PREVIEW-RELEASE.md)。
+日常开发使用本仓库的 `main`。两主题共用状态、目录、播放及三维渲染；本轮界面、歌词、控件和启动修复已由用户确认完成。下一步集中处理性能与新的统一入场。
 
-应用不会自动扫描音乐目录。首次使用时由用户在设置中选择目录并主动启动扫描；个人曲库、凭据和现有配置不会随源码交付。
+- [当前状态](docs/PROJECT-STATUS.md)：已完成能力与源码地图。
+- [优化基线](docs/OPTIMIZATION-BASELINE.md)：本轮交付、真实待办、测量与回归要求。
+- [本地开发](docs/LOCAL-DEVELOPMENT.md)：构建、启动、工具及数据位置。
+- [文档索引](docs/README.md)：当前产品与技术规范。
 
-## 源码运行与离线验证
+`package.json` 的版本仍为 `0.3.1-preview.1`；此前品尝版安装器是独立交付快照，不代表当前源码。安装、数据和卸载规则见[品尝版说明](docs/PREVIEW-RELEASE.md)。
 
-当前已有源码验证入口：
+## 源码运行
+
+在已有依赖与桌面工具的项目环境中执行：
 
 ```powershell
 node scripts/build-source-preview.mjs --interface-only
+.\启动源码验证.cmd
 ```
 
-构建完成后运行根目录的 `启动源码验证.cmd`。如果修改了原生宿主或桌面组件，使用 `构建源码验证.cmd`，再完整退出并重新启动窗口。入口复用现有工具，不会自动安装依赖、下载组件或扫描曲库；缺少组件时按项目维护说明处理。
+界面输出到 `.tools/source-preview-interface`。修改宿主、预加载层、服务或原生组件后，按[本地开发](docs/LOCAL-DEVELOPMENT.md)构建并完整退出、重新启动。普通入口不会自动安装依赖、下载组件或扫描音乐库。
 
-本地开发入口为：`npm run desktop`、`npm run build:preview` 和 `npm test`；准备交付物时可用 `npm run package:preview` 生成安装器，或用 `npm run export:source` 生成源码ZIP。`npm test` 运行选定的离线合成检查。全部日常开发与GitHub发布都使用本仓库的同一个 `main`，不需要导出或同步另一份源码。新克隆不包含本机忽略的依赖与桌面工具；新机器按[贡献说明](CONTRIBUTING.md)和[本地开发](docs/LOCAL-DEVELOPMENT.md)准备环境，普通入口不会自动安装依赖或下载工具。
+新克隆不含 `node_modules/`、`.tools/` 或个人数据；环境准备须先获用户授权，见[贡献说明](CONTRIBUTING.md)。
 
-## 项目结构
+## 仓库结构
 
-- `src/`：播放器界面与应用逻辑；`desktop/`：Electron 主进程和预加载层。
-- `native/`、`vendor/`：原生音频代码及依赖；各组件许可和来源不同。
-- `public/`、`art/`：运行资源、模型与建模资料，版权范围见 [NOTICE](NOTICE.md)。
-- `scripts/`、`windows/`：开发、离线检查和 Windows 相关脚本。
-- `docs/`、`verification/`：当前状态、架构、操作说明及历史验收证据。
+| 目录 | 职责 |
+| --- | --- |
+| `src/` | 界面、公共状态、目录、三维场景、主题与交互 |
+| `desktop/` | Electron 宿主、预加载层、窗口与隔离检查 |
+| `scripts/` | 本地服务、构建、导出与验证 |
+| `native/`、`vendor/` | 原生音频代码、第三方组件及许可 |
+| `public/`、`art/`、`content/` | 运行资源、模型、建模与内容资料 |
+| `windows/`、`.github/` | Windows 包装与仓库工作流 |
+| `docs/` | 当前规范、操作和优化基线 |
 
-本仓库是唯一的本地开发仓库，也是用户自行设置GitHub远程后发布的仓库。新的 `main` 从干净基线提交 `167d140` 建立，基线含4062个源码文件；本机现有 `node_modules/`、`.tools/`、`dist/`、`release/` 与运行数据仍留在原位并由Git忽略，main不跟踪它们。源码ZIP只是可选交付物，不是GitHub发布或第二份源码的工作流程。
+本机依赖、工具、构建、日志和个人配置留在忽略目录，不进入源码交付。旧实现和修复报告从 Git 按需追溯，不再作为当前入口。
 
-旧主线改名为本地历史分支 `archive/pre-github-main-2026-10-15`；旧 `local/development`（`052bf9a`）及标签也保留为本地历史。用户自行配置远程并只推送 `main`；不得自动推送历史分支或标签，不使用 `git push --all`、`--mirror` 或强推。
+## 许可
 
-`npm run export:source` 仍可生成不含 `.git`、`node_modules/`、`dist/`、`release/`、`.tools/`、调试符号或本机配置的源码ZIP；它只用于交付，不替代当前仓库的GitHub发布。历史进度Markdown与原有NOTICE继续保留在源码交付物中。
-
-## 当前进度与已知限制
-
-项目仍按四步架构计划推进：
-
-1. **公共状态与设置：验收通过。**
-2. **公共展示与交互：用户于2026-10-15确认验收通过。**
-3. **公共渲染与资源：未实施，按用户要求暂不推进。** 尚未统一 Three.js/WebGL 渲染，Future 货架与地面资源、性能检测也未完成。当前 Future 选择货架时画面暂回退到阵列；Punk 货架尚未迁入公共三维渲染。
-4. **验收后清退旧分支：未实施。** 需要等功能、视觉和性能验收后再进行。
-
-第二阶段已获用户整体验收；本轮仅记录结果，不自动接续第三阶段。RTX 5080 上仍掉帧是用户反馈，尚无基准测试或性能检测结果，完整硬件验收也未完成。阶段细节、证据和其余待办以[全局状态](docs/PROJECT-STATUS.md)及[统一架构方案](docs/UNIFIED-ARCHITECTURE.md)为准。已交付安装器和源码ZIP保留打包时快照，当前验收状态以这些文档为准。
-
-## 许可与署名
-
-有权授权的应用代码、建模脚本和技术文档沿用 [MIT License](LICENSE)，并保留上游与适配者署名。MIT 不自动覆盖模型、字体、商标、原作相关视觉或声音、Sony 组件、BASS/ASIO/DSD 与其他依赖；它们按各自权利和许可处理。请先阅读 [NOTICE](NOTICE.md)，不要将所有资源描述为 MIT 或保证可公开再分发。
-
-## 文档索引
-
-从[文档索引](docs/README.md)进入当前开发说明、产品专项、历史发布记录和验收证据。新用户试用流程以[品尝版安装与交付说明](docs/PREVIEW-RELEASE.md)为准；旧版 Windows EXE 记录仅作历史参考。
+有权授权的应用代码、建模脚本和技术文档沿用 [MIT License](LICENSE)，保留上游与适配者署名。模型、字体、原作视觉、音频、Sony 及其他依赖按各自权利处理，详见 [NOTICE](NOTICE.md)；[上游原说明](README.original.md)保留原始语境。

@@ -1,86 +1,54 @@
-# 歌词页与真实矩形频谱
+# 歌词、缓存与频谱规范
 
-> 更新：2026-10-17。来源/缓存/API规则仍按本文维护；Future/Punk共用三栏与选项弹窗，页面视觉见 [THEME-PAGE](THEME-PAGE.md)。歌词右侧播放卡展示当前曲目的真实盒体预览与同专辑后续队列；Future夜间当前行使用文字与小标记强调，不绘制整行外晕。整体UI最终复核见[本轮报告](../.tools/unified-ui-2026-10-17/unified-ui-report.json)，批准范围见[说明](UI-UNIFICATION-2026-10-17.md)，隐藏绘制专项见[本地报告](../.tools/unified-ui-2026-10-17/hidden-paint/run-1792178372961-43504/report.json)。2026-10-10的查询与界面检查是旧手动查找流程的历史记录，不代表当前自动匹配行为或全部歌曲、页面和设备验收；当前验证边界见 [PROJECT-STATUS](PROJECT-STATUS.md)。
+Future 与 Punk 共用歌词数据、三栏页面和偏移逻辑；主题只改变页面外观。布局见 [THEME-PAGE](THEME-PAGE.md)，语言规则见 [UI-LANGUAGE](UI-LANGUAGE.md)。
 
-**历史实现记录（2026-10-10）：** 当时QQ使用smartbox搜索，网易云/QQ以曲名和歌手检索、多源请求分别回报成功/无匹配/错误，并由用户选择候选。旧公开演示查询和隔离mock只代表当时接口样例与手动流程；它们不验证当前自动匹配、当前平台状态或所有曲目。接口和内容供应仍可能变化。
+## 来源选择与有效内容
 
-## 使用
+歌词选项只有“本地歌词”和“云歌词”两页。打开弹窗时定位到用户当前选择的 <code>activeKind</code>；这是页签偏好，不等同于当前显示文档的来源。
 
-全局配置位于设置 → 歌词：管理默认云端provider、共享歌词源与缓存目录。本曲没有独立的默认来源设置。中央标题区保留无文字小图标，打开“歌词选项”弹窗；页签为“本地歌词”和“云歌词”，打开时定位到当前`activeKind`。`activeKind`是用户偏好的页签，跨页面返回和弹窗重开时保留；Cloud回退不会改变它或递增`selectionRevision`。
+点击“本地歌词”只切换到 Local 页，不打开文件选择器。若本地 bank 为空，界面读取 Cloud bank；没有缓存时可按全局默认来源自动解析。API 以 <code>effectiveKind</code> 标出实际文档，并在回退时设置 <code>usingCloudFallback</code>。Local 页签仍保持选中，显示“无本地歌词，使用云歌词”，本地偏移控件禁用，不能把校准写入 Cloud。Cloud 也无内容时歌词区保持空白。
 
-点击Local只切换页签，不自动打开文件选择器。有本地文档时显示本地；缺失时显示Cloud缓存，若Cloud也无缓存则按全局provider执行云端解析。回退时`activeKind`仍为Local，API的`effectiveKind`标明实际使用Cloud文档，`usingCloudFallback`标记本地缺失；Local面板提示“无本地歌词，使用云歌词”，本地偏移校准禁用，绝不将偏移写进Cloud。Cloud也没有可用歌词时正文保持空白；只有点击Import才打开文件选择器，导入成功后立即使用Local。
+显式选择 Cloud 后保持 Cloud，即使之后出现本地文档也不自动切回。只有点击 Import 才打开本地选择器；导入成功立即选用 Local。导入或选用云候选后，弹窗保持打开以调整当前 bank 的偏移。弹窗临时选择的 provider 只用于本次查找；自动来源默认来自全局设置。
 
-点击Cloud会显式选择Cloud、显示该bank并开始搜索；此选择跨页面保存，之后不会自动回退到Local。默认provider来自全局设置，弹窗中的临时provider选择不保存为本曲默认。导入或选用候选后弹窗保持打开，方便调整当前bank的偏移。来源管理位于全局设置，其按钮高38px、使用统一材质和主题圆角，悬停不加下划线，Punk保持方角。Esc关闭弹窗而不切页，音乐继续播放。
+V3 使用 <code>activeKind</code> 保存选择，<code>userSelected</code> 标识明确选择，<code>selectionRevision</code> 在明确切换或导入时递增。自动结果和导入提交都核对选择版本，迟到结果不能覆盖之后的用户选择或切歌后的文档。旧的单曲来源偏好文件和 API 继续兼容；当前不提供单曲默认来源 UI，自动解析与云搜索默认也不读取它们。
 
-顶栏“歌词”与音乐库、EQ平级。左侧播放信息可独立滚动，底部频谱固定保留完整高度；中央阅读歌词，右侧播放卡展示当前曲目及其真实盒体3D预览，并列出同专辑后续队列。盒体配置随当前主题的已保存设置，内容绑定播放中的专辑，不随唱片浏览选择漂移；普通封面图在此卡隐藏。
+## V3 缓存与迁移
 
-两主题底部进度条上方显示当前播放的原文歌词句。`setupLyricsPage().currentLine(position?)`复用当前文档、解析结果与页面活动行的偏移判断，歌词页隐藏时仍可读取；状态推进和`lyrics-content-changed`事件同步底栏，不额外搜索或下载。文档加载/切源/校准后立即刷新，换曲时拒绝旧track文档；无定时歌词或首句尚未到达时留空。固定18px歌词槽单行省略，完整文本保留在title中。
+每首曲目对应一个 SHA-256 命名的 JSON 容器，按 track ID 识别。容器含 <code>local</code>、<code>cloud</code> 两个独立 bank，以及当前选择和 revision；每个 bank 最多保存一份歌词文档及其偏移。
 
-Future歌词选项弹窗整体作为一块玻璃承接环境光；内部仅hover/focus-visible/selected/expanded控件显示inset表面亮边，不逐按钮生成外投光晕。弹窗打开时暂停背后接收器，关闭后恢复。夜间当前行以字重、颜色和小标记突出，不使用大胶囊或整行受光。该规则保留off/local/full光效质量档与Punk皮肤。
+默认数据位于应用数据目录的 <code>lyrics/cache</code>，全局来源与缓存目录设置在 <code>lyrics/settings.json</code>，自定义来源在 <code>lyrics/sources.json</code>。读取依次检查当前目录、最多 16 个旧配置目录和默认目录。更换目录设置本身不移动文件；后续保存将同曲目可确认的 bank 合并写入当前目录，原子写入成功后清理被合并的旧副本。
 
-1. 每曲缓存为一个按曲目ID的SHA-256命名V3 JSON容器，包含独立的`local`/`cloud` bank，以及`userSelected`和`selectionRevision`。每个bank最多一份歌词内容和一份偏移。选择偏好与有效内容类型分开：Local缺失时可以使用Cloud缓存或自动解析的Cloud结果，但实际`effectiveKind`为Cloud并设`usingCloudFallback=true`；回退不改变`activeKind`、`userSelected`或revision。显式选择Cloud后保持Cloud，即使Local文档随后出现也不会自动切回。
-2. 播放器识别当前曲目后立即后台解析，即使歌词页未打开也会开始。Local偏好下，本地bank有文档则直接显示；缺失时读取Cloud bank，未命中才按全局provider执行云端解析，最多20秒逐源回退。Cloud也没有可靠结果时正文为空。自动匹配要求曲名可靠匹配，艺人可用时同时核对艺人；艺人未知时再用专辑或时长辅助。每个来源最多尝试三个候选，来源错误或候选不可靠时继续回退。服务区分“未找到可靠匹配”和“来源暂时不可用”，无法保证每首歌曲都有可用歌词。
-3. 云歌词页中的手动查找显示分来源状态和候选。用户选用候选只替换云bank并显式选择Cloud；用户导入只替换本地bank并立即显示Local，两者都不清除另一bank，并在保存后保持弹窗打开。Local fallback期间偏移控件禁用，保存偏移不会跨写Cloud。自动结果或导入若迟到，不能覆盖不匹配的选择revision或用户更新。离开歌词页会取消手动界面请求，但当前曲目的自动解析继续；切换曲目后，旧曲结果不会替换新曲显示。
-4. 偏移只修改当前选中bank，不切换`activeKind`或改变`userSelected`。偏移范围为±30秒，正值表示提前，并写入该bank缓存LRC的`[offset]`标签；`offsetMs`记录相对原歌词的用户调整量，重复调整不叠加。旧缓存中的已有`[offset]`会兼容解析，播放同步与点击定位只应用一次。Local回退到Cloud时本地校准禁用，不跨写Cloud；导入或选用后弹窗保持打开，偏移控件按当前bank及回退状态启用。
-5. 导入UTF-8 LRC/TXT（最多96KiB）时，界面将文件内容作为文本副本发送给本机服务；API不接收原文件路径，原始文件绝不改写或删除。纯文本只阅读，不模拟时间轴；暂不处理平台加密逐字歌词。点击有时间的行定位歌曲。
-6. 跟随播放默认开启，并在切歌和返回歌词页时重新启用。用户滚轮、触摸、拖动滚动条或歌词区滚动按键会暂时关闭跟随；程序自动滚动不会关闭。手动滚动后可勾选“跟随播放”或按“回到当前行”恢复。
+V1/V2 文档在读取时只于内存中归一化；写入时保存为 V3。仅合并可确认属于同一 track ID 的内容。坏文件、未知格式、非普通文件或链接不会被覆盖；不扫描配置目录之外的缓存。
 
-## 来源适配与本机数据
+## 偏移与导入
 
-`scripts/lyrics-library.mjs`独立负责来源搜索、自动可靠匹配、候选、歌词获取与保存。网易云和QQ分别适配，没有下载或加载foobar插件二进制。自动解析逐源尝试，单个来源错误不会阻止后续来源；自动请求总时限20秒。手动`sourceId=auto`仍并行查询已启用来源并分别回报来源状态，候选按真实来源缓存，选用时不会把auto误作服务器ID。全局默认provider和自定义源配置保存在全局设置；弹窗中选择的provider只用于当前云端查找，不成为单曲默认。旧单曲来源偏好文件与API保留兼容，但自动解析与云端搜索默认不再读取它们，也不再提供每曲默认来源UI。来源错误、验证页、HTTP错误与空候选分别回报，不使用代理、登录Cookie或伪造地域标头。
+偏移按 bank 独立保存，范围为 −30 至 +30 秒，正值使歌词提前。偏移写入缓存副本的 LRC <code>[offset]</code> 标签，同时以 <code>offsetMs</code> 记录相对原歌词的用户调整量；既有 LRC offset 保留且只应用一次。校准不改变 <code>activeKind</code> 或用户来源选择，Local fallback 时不得跨写 Cloud。
 
-歌词缓存默认位于`MUSIC_DATA_DIR/lyrics/cache/<trackId的SHA-256>.json`；可通过Windows文件夹选择器指定缓存目录。更换目录本身不搬运缓存。读取按当前目录、最多16个配置历史目录、默认目录回退。V1/V2缓存只在读取时于内存归一化；写入时升级为V3，并只合并能确认属于同一hash的历史bank。未知、损坏、非普通文件、符号链接和路径别名遵循原有保护规则，不扫描其他曲目或配置目录之外的路径。全局provider/目录在`MUSIC_DATA_DIR/lyrics/settings.json`，共享自定义来源在`MUSIC_DATA_DIR/lyrics/sources.json`；旧单曲来源偏好文件/API保留兼容，但不用于当前弹窗、自动解析或搜索默认。
+导入只接受最多 96 KiB 的 UTF-8 LRC/TXT 文本。界面把内容副本发送给本机服务，不发送源文件路径；原始歌词文件和音乐文件不会被改写或删除，也不写音频标签。TXT 作为纯文本显示，不伪造时间轴。
 
-这些本机数据不进入Git，不写音频标签。原始导入文件与音乐文件都不会被修改或删除；坏缓存/配置及不能确认用途的文件会报告并保留。正常写入使用串行原子替换。偏移只写所选bank，不影响来源选择；V3 revision保护阻止迟到自动结果覆盖后续明确选择。离页只停止手动界面请求；自动当前曲目解析继续。
+## 自动与手动查找
 
-自定义源支持HTTPS JSON GET接口，本机localhost/127.0.0.1/::1服务可用HTTP。默认搜索响应形如：
+首次尚无本地副本时优先使用云歌词，来源由全局设置决定（默认QQ音乐）；导入成功后立即选用Local，之后以用户显式选择为准，不因重新打开设置或晚到请求改变来源。
 
-```json
-{"results":[{"id":"song-id","title":"歌名","artist":"歌手","album":"专辑","duration":240}]}
-```
+播放器识别当前曲目后即可在后台解析，不要求用户先打开歌词页。自动匹配要求曲名可靠；有艺人资料时同时核对艺人，艺人未知时使用专辑或时长辅助。每个来源最多尝试三个可信候选；来源错误会显示状态并继续尝试。来源接口可能变化，也无法保证每首歌曲都有可用歌词。
 
-歌词响应形如：
+Cloud 页可手动查找不同版本并查看来源状态。选中候选仅替换 Cloud bank；导入仅替换 Local bank。两种操作都保留另一 bank。页面离开会取消手动界面请求，当前曲目的自动解析可继续；切歌后旧请求不能更新新曲显示。
 
-```json
-{"lrc":"[00:01.00]歌词内容","translation":"[00:01.00]翻译内容"}
-```
+## 跟随与当前句
 
-URL模板支持`{query}`、`{title}`、`{artist}`、`{album}`、`{id}`，各值独立URL编码。高级映射可指定点分字段路径，例如`{"results":"data.songs","id":"mid","title":"name","artist":"singer","album":"album.name","lrc":"data.lrc","translation":"data.translation"}`。艺人可为文本或带name的数组，时长按秒。最大12个自定义源；不执行用户脚本，不从候选中的任意地址下载文件。
+跟随播放默认开启。滚轮、触摸、拖动滚动条或歌词区滚动按键等用户滚动会暂停跟随；程序滚动不会暂停。用户可打开“跟随播放”或按“回到当前行”恢复。切歌与返回歌词页重新启用跟随。
 
-## 频谱来自哪里
+底栏当前句由 <code>setupLyricsPage().currentLine(position)</code> 从当前曲目文档、解析结果和偏移计算。歌词页隐藏时仍可读取；加载、切源或校准后以 <code>lyrics-content-changed</code> 同步。换曲时不显示旧曲文档。无定时歌词或首句尚未到达时留空；底栏保留 18px 单行槽并以完整 title 提供全文。
 
-- WASAPI/ASIO PCM：`native/pcm-spectrum.h`收集真实PCM，在DSP、SRC和队列混音之后、主音量/淡变/量化之前取样。实时回调仅复制固定容量原子环形缓冲，FFT在status线程最多每100ms计算一次；不修改音乐样本。切曲/定位/暂停/停止重置历史，切轨或环形窗口覆盖时丢弃分析结果。
-- 显示使用32个对数频段，范围20Hz至min(20kHz,Nyquist)，左右声道取较大能量，映射约-72至0dBFS。FFT窗口随采样率在4096至32768帧之间选择。这是视觉近似，不是精密频谱测量；取样精度不属于音乐输出处理精度链路。
-- 浏览器兼容播放：歌词页可见时才接入当前歌曲的Web Audio Analyser，8192点FFT、32个对数频段；使用真实当前歌曲数据。分析不包含独立BGM或界面音效。
-- 歌词页与文档可见时通过`setSpectrumDemand("lyrics", true)`启用已有原生100ms状态轮询；离页、文档隐藏和销毁时释放需求，兼容信号页的独立需求。不改PCM分析窗口或音频输出处理。浏览器/原生快照最多约30Hz读取，32柱按`requestAnimationFrame`与实际帧间时间连续绘制：上升时间常数45ms、回落180ms，移除旧160ms CSS过渡。仅对同一频段的显示值做时间平滑，不混合相邻频段或生成虚构波动；静止输入会收敛。暂停/不可用回落至0，切歌/隐藏清旧峰值；系统减少动态时直接跟随100ms采样，不做补间。这是绘制调度规则，不是硬件FPS结论。
-- 原生DSD/DoP直出暂无PCM频谱，不把DSD载荷或DoP容器当成音乐PCM分析；页面明确显示不可用。歌词进度仍可同步。
+## 真实频谱
 
-## foobar2000参考与接口资料
+WASAPI/ASIO 的 PCM 频谱取自 DSP、SRC 和队列混音之后、主音量之前的实际 PCM；原生回调只写固定容量样本槽，FFT 在线程状态侧最多每 100ms 计算一次。显示 32 个对数频段，范围 20Hz 至 min(20kHz, Nyquist)。它用于可视化，不是精密测量，也不改变音乐输出。
 
-参考[foobar官方OpenLyrics页面](https://www.foobar2000.org/components/view/foo_openlyrics)及维护者的[来源适配器目录](https://github.com/jacquesh/foo_openlyrics/tree/main/src/sources)：采用独立来源、本地优先与可取消请求。自动解析按来源顺序尝试并只采用可靠匹配；手动多源搜索用于云bank的查找与覆盖。Local偏好时，缺少本地文档先读取Cloud bank，未命中才按全局provider解析Cloud；点击Local页签不会打开选择器，也不会阻止Cloud回退。显式Cloud选择后保持Cloud；只有显式点击Import才打开文件选择器。页面离开不取消当前曲目的自动解析。没有复制C++实现或加载其插件ABI。
+歌词页可见、文档未隐藏时才请求频谱快照；离页、隐藏或销毁时释放需求并清空显示。32 根柱按动画帧绘制，各频段独立平滑：上升时间常数 45ms、回落 180ms；静止输入会收敛，减少动态时直接跟随采样。浏览器播放使用当前歌曲的 Web Audio 分析。原生 DSD/DoP 没有 PCM 频谱，页面明确显示不可用，不把 DSD 载荷或 DoP 容器当作音频分析。
 
-协议参考OpenLyrics的[网易](https://github.com/jacquesh/foo_openlyrics/blob/main/src/sources/netease.cpp)和[QQ](https://github.com/jacquesh/foo_openlyrics/blob/main/src/sources/qqmusic.cpp)适配器。2026-10-10公开演示“晴天 / 周杰伦”检查中，旧QQ Desktop POST返回服务码2001；smartbox HTTPS GET返回歌曲mid，既有歌词HTTPS GET返回retcode=0及非空定时歌词。网易云GET也返回code=200和可解析候选。这些是当时样例健康结果，不保证所有歌曲/地区或平台接口长期可用，不将无法访问当作“没有歌词”。Local偏好下，本地bank缺失时先使用Cloud缓存或按全局provider解析Cloud；显式切到Cloud后保持Cloud。点击Local本身不打开选择器，只有点击Import才进入导入流程。
+## 实现入口
 
-来源接口与歌词内容保留各自权利，不改授本项目MIT；歌词缓存只留本机，不分发歌词内容。
-
-## 当前实现验证状态
-
-底栏当前句专项：TypeScript/1662模块界面构建及`node scripts/check-foobar-layout.mjs --playback-lyrics`通过，报告`.tools/playback-lyrics/playback-lyrics.json`。真实LyricsPage与播放条、主程序生产callbacks/冒泡事件在全mock下覆盖歌词页隐藏时异步缓存载入（一次resolve）、时间推进、currentLine纯getter、LRC内/外偏移一次应用、本地/云切换与校准、换曲清除旧文、无歌词和长句。空文本虽高0，18px网格槽和时间轴/轨道不变。两主题日夜四组、生产SHUFFLE ALL/ORDER/seek与6张稳定截图已验，主Agent复核Future日间和Punk夜间；未访问真实歌词服务、个人曲库、音频设备或实际播放器整窗。
-
-频谱连续运动修正：TypeScript与1662模块interface-only构建通过，日志在`.tools/lyrics-spectrum-motion/build.log`。`node scripts/check-lyrics-page.mjs --spectrum-motion`最终报告11项全通过，报告/四张稳定绘制截图在`.tools/lyrics-spectrum-motion/run-1792159827778-859aa4c4/`。同一快照约162ms内有10个不同生产DOM中间值；近等长上升/回落窗口的目标剩余差比例为0.0357/0.3963，确认快起慢落。静止32频段收敛后恒定，NaN/越界、暂停/不可用归零、切歌清峰、减少动态、页/文档显隐和销毁均通过。真实NativeAudio类配合全mock请求及惰性计时器探针确认250→100→250ms需求切换与signal共存；没有访问设备或真实原生服务，不证明实际网络延迟/FFT吞吐。两主题使用有效`rhine/archive` key与生产日夜颜色，等待离屏paint后核验三栏/32柱；主Agent复核Future日间与Punk夜间截图。无外网请求，未启动个人播放器或验证硬件FPS/实际歌曲观感。下列歌词来源/光效检查属于此前完成的功能验证。
-
-2026-10-16历史单项：Local fallback与Future歌词弹窗光效修正验证完成，产物位于`.tools/lyrics-local-fallback`。TypeScript和1662模块interface-only Vite build通过，日志为`build.log`。`node --test scripts/check-lyrics-library.mjs`最终29/29通过，0失败/取消/跳过，日志为`library-check.log`；首次28/29失败是Windows测试夹具清理临时目录时遇到`ENOTEMPTY`，脚本增加library队列等待和有限重试后复跑通过。
-
-上述历史单项的`node scripts/check-lyrics-page.mjs --lyrics-local-fallback`报告为`ok=true`，11项检查均为true，18张截图位于`.tools/lyrics-local-fallback/run-1792158440496-eaab20df/`。覆盖手动Import、Local的Cloud缓存/自动解析成功与失败回退、bank独立偏移、显式Cloud保持、慢速切源跨页、弹窗开关时背后receiver暂停/恢复，以及Future日夜Manage/Search/Use空闲/悬停/焦点、local/off几何和Punk方角。主Agent复核day空闲、Manage悬停、Search焦点、night Manage焦点、Use悬停、Punk悬停及Local fallback截图。
-
-UI检查使用既有Electron隐藏窗口、全部mock且无外部请求。Windows文件选择器仅拦截调用意图，focus-visible使用CDP伪状态；没有验证真实Windows选择器/键盘、线上歌词服务、个人播放器整窗或音频设备。以下`8581466`、`a684885`记录仍仅作历史，不计入本轮验收。
-
-历史记录：提交`8581466`及`.tools/lyrics-source-refinement/run-1792154817478-3a6a833b`中的28项歌词库mock、26项离屏UI与40个标题用例属于前轮验证。该轮歌词语义是Local无文时直接打开选择器且不回退Cloud，因此不能证明当前Local页签回退、`effectiveKind`/`usingCloudFallback`、禁用Local校准或当前竞态守卫。标题用例记录仍可追溯为独立组件历史结果，但不是本轮构建或歌词规则的验证。
-
-更早的提交`a684885`与`.tools/future-lyrics/`下24/24库检查、18/18离屏UI检查，针对V2单文档及“查找歌词/本曲设置”旧弹窗；它们不覆盖当前V3双bank、`activeKind`与fallback规则，也不代表本轮检查通过。历史检查使用合成曲目与mock来源，不能替代真实Windows选择器/键盘、线上服务、个人整窗或硬件验收。
-
-## 历史本地验证（2026-10-10旧手动流程）
-
-当时的`node --test scripts/check-lyrics-library.mjs`使用mock fetch与合成曲目，检查QQ解析、手动选择保存、网易云搜索词/艺人别名、多源错误/空候选、旧缓存与取消。产物位于仓库旁`.task-tmp`的唯一目录，不进入Git；不会联网或打开音频设备。页面布局检查也使用隔离Electron窗口和mock接口，不加载个人曲库。上述覆盖不验证当前自动匹配、V2迁移或V3双bank行为。
-
-`node scripts/check-lyrics-page.mjs`当时使用现有Electron/Vite和真实页面样式，以隐藏窗口核对1280×840与1100×720。最终报告在仓库旁`.task-tmp/lyrics-page-review/run-1791647912562-32755c9c/report.json`，同目录有两张旧流程合成布局截图。该次验证过频谱高度、标题区32×32按钮、弹窗、手动搜索/候选选择、偏移及Esc关闭；所有API均为mock，没有外网/设备请求，profile和缓存不进Git。它是旧页面样式与手动查找流程记录，不是当前自动解析、Future新样式或缓存version 2的验证。
+- 页面与偏移：[lyrics-page.ts](../src/lyrics-page.ts)
+- 全局来源和缓存目录设置：[lyrics-settings.ts](../src/lyrics-settings.ts)
+- V3 bank、迁移与来源实现：[lyrics-library.mjs](../scripts/lyrics-library.mjs)
+- 原生频谱：[pcm-spectrum.h](../native/pcm-spectrum.h)
