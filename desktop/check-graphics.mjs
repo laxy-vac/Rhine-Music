@@ -141,10 +141,11 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
       if(!button)throw new Error('Missing editable quality range value');
       const output=range.parentElement.querySelector('output[data-quality-output]');
       if(output?.getClientRects().length)throw new Error('Slider value is duplicated by its legacy output');
-      const probe={range,details,original:{value:range.value,min:range.getAttribute('min'),max:range.getAttribute('max'),disabled:range.disabled,detailsOpen:detailsWasOpen},events:[],listener:event=>probe.events.push(event.type)};
+      const probe={range,details,original:{value:range.value,min:range.getAttribute('min'),max:range.getAttribute('max'),disabled:range.disabled,detailsOpen:detailsWasOpen},events:[],pointerEvents:[],pointerEventTypes:['pointerdown','pointermove','pointerup','pointercancel'],listener:event=>probe.events.push(event.type),pointerListener:event=>probe.pointerEvents.push({type:event.type,button:event.button,buttons:event.buttons,pointerType:event.pointerType,targetTag:event.target?.tagName??null,targetId:event.target?.id??null,clientX:event.clientX,clientY:event.clientY,pageX:event.pageX,pageY:event.pageY,offsetX:event.offsetX,offsetY:event.offsetY,movementX:event.movementX,movementY:event.movementY})};
       range.addEventListener('input',probe.listener);
       range.addEventListener('change',probe.listener);
       range.addEventListener('click',probe.listener);
+      for(const type of probe.pointerEventTypes)window.addEventListener(type,probe.pointerListener,true);
       window.__graphicsRangeProbe=probe;
       return {min:Number(range.min),max:Number(range.max),step:Number(range.step)||1,value:Number(range.value),buttonText:button.textContent};
     })()`);
@@ -158,6 +159,44 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     })()`);
     const percent = text => Number(String(text).replace('%',''));
     let mouseIsDown=false;
+    const visualState = () => evaluate(`(async () => {
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const probe=window.__graphicsRangeProbe,range=probe.range;
+      const current=document.querySelector('#graphics-display-settings .quality-settings input[type="range"][data-quality="scale"]');
+      const host=range.closest('.quality-range')||range.parentElement;
+      const button=host.querySelector('.editable-range-value');
+      const readout=host.querySelector('.future-range-readout');
+      const placeholder=host.querySelector('.future-range-placeholder');
+      const style=getComputedStyle(range),thumb=getComputedStyle(range,'::-webkit-slider-thumb');
+      // Chromium may report the host box for this pseudo; these values are diagnostic only.
+      const thumbMatrix=thumb.transform==='none'?new DOMMatrixReadOnly():new DOMMatrixReadOnly(thumb.transform);
+      const rectOf=node=>{if(!node)return null;const r=node.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
+      const buttonStyle=button?getComputedStyle(button):null,readoutStyle=readout?getComputedStyle(readout):null;
+      return {
+        sameNode:range.isConnected&&current===range,
+        hover:range.matches(':hover'),active:range.matches(':active'),focusVisible:range.matches(':focus-visible'),
+        floating:range.hasAttribute('data-future-range-floating'),expanded:range.hasAttribute('data-future-range-expanded'),dragging:range.hasAttribute('data-future-range-dragging'),
+        terminalReceiver:range.hasAttribute('data-terminal-receiver'),
+        rect:rectOf(range),placeholderRect:rectOf(placeholder),buttonRect:rectOf(button),
+        buttonText:button?.textContent?.trim()??null,buttonOpacity:buttonStyle?Number(buttonStyle.opacity):null,buttonPointerEvents:buttonStyle?.pointerEvents??null,
+        readoutText:readout?.textContent?.trim()??null,readoutVisible:!!readout&&readout.getClientRects().length>0&&readoutStyle?.visibility!=='hidden',readoutTag:readout?.tagName??null,readoutPointerEvents:readoutStyle?.pointerEvents??null,
+        background:style.background,backgroundColor:style.backgroundColor,boxShadow:style.boxShadow,borderRadius:style.borderTopLeftRadius,cornerRadius:parseFloat(style.borderTopLeftRadius),
+        thumb:{width:parseFloat(thumb.width),height:parseFloat(thumb.height),transform:thumb.transform,scaleX:thumbMatrix.a,scaleY:thumbMatrix.d},
+        value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),viewportWidth:window.innerWidth
+      };
+    })()`);
+    const captureRangeState = async name => {
+      await pause(140);
+      const file=path.join(outputDirectory,`graphics-${design}-sliders-${theme}-${name}.png`);
+      await fs.writeFile(file,(await browserWindow.capturePage()).toPNG());
+      screenshots.push(file);
+    };
+    const assertStableRect = (actual,expected,label) => {
+      for(const key of ['left','top','right','bottom','width','height'])
+        assert.ok(Math.abs(actual[key]-expected[key])<=0.75,`${design}/${theme} ${label} ${key} must remain stable: ${JSON.stringify({actual,expected})}`);
+    };
+    const assertNoTerminalReceiver = (state,label) =>
+      assert.equal(state.terminalReceiver,false,`${design}/${theme} ${label} range must not receive terminal lighting`);
     try {
       for (const [value, expected] of [[initial.min,0],[middle,50],[initial.max,100]]) {
         const result=await setValue(value);
@@ -180,10 +219,7 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         const rules=[...document.styleSheets].flatMap(sheet=>{try{return [...sheet.cssRules]}catch{return []}});
         const trackRules=rules.filter(rule=>rule.selectorText?.includes('[data-design="rhine"]')&&rule.selectorText.includes('input[type="range"]::-webkit-slider-runnable-track')&&rule.selectorText.includes('#music-settings'));
         const thumbRules=rules.filter(rule=>rule.selectorText?.includes('[data-design="rhine"]')&&rule.selectorText.includes('input[type="range"]::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings')&&!rule.selectorText.includes(':hover')&&!rule.selectorText.includes(':focus-visible')&&!rule.selectorText.includes(':active'));
-        const hoverRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
-        const focusRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:focus-visible:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
-        const activeRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:active:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
-        return {height:parseFloat(input.height),appearance:input.appearance,inputBackground:input.backgroundColor,trackHeight:parseFloat(track.height),trackRadius:track.borderTopLeftRadius,trackImage:track.backgroundImage,trackRuleCount:trackRules.length,trackRuleHeight:parseFloat(trackRules[0]?.style.height),trackRuleText:trackRules[0]?.cssText,thumbWidth:parseFloat(thumb.width),thumbHeight:parseFloat(thumb.height),thumbRadius:thumb.borderTopLeftRadius,thumbShadow:thumb.boxShadow,thumbRuleCount:thumbRules.length,thumbRuleWidth:parseFloat(thumbRules[0]?.style.width),thumbRuleHeight:parseFloat(thumbRules[0]?.style.height),thumbRuleRadius:thumbRules[0]?.style.borderRadius,hoverRuleCount:hoverRules.length,focusRuleCount:focusRules.length,activeRuleCount:activeRules.length,activeTransform:activeRules[0]?.style.transform,children:range.childElementCount,progress:range.style.getPropertyValue('--range-progress')};
+        return {height:parseFloat(input.height),appearance:input.appearance,inputBackground:input.backgroundColor,trackHeight:parseFloat(track.height),trackRadius:track.borderTopLeftRadius,trackImage:track.backgroundImage,trackRuleCount:trackRules.length,trackRuleHeight:parseFloat(trackRules[0]?.style.height),trackRuleText:trackRules[0]?.cssText,thumbWidth:parseFloat(thumb.width),thumbHeight:parseFloat(thumb.height),thumbRadius:thumb.borderTopLeftRadius,thumbShadow:thumb.boxShadow,thumbRuleCount:thumbRules.length,thumbRuleWidth:parseFloat(thumbRules[0]?.style.width),thumbRuleHeight:parseFloat(thumbRules[0]?.style.height),thumbRuleRadius:thumbRules[0]?.style.borderRadius,children:range.childElementCount,progress:range.style.getPropertyValue('--range-progress')};
       })()`);
       assert.equal(metrics.children,0,`${design}/${theme} range must remain a single native input rail`);
       if(design==='rhine'){
@@ -197,10 +233,6 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         assert.equal(metrics.thumbRuleWidth,16,'Future slider thumb rule must be 16px wide');
         assert.equal(metrics.thumbRuleHeight,16,'Future slider thumb rule must be 16px high');
         assert.equal(metrics.thumbRuleRadius,'50%','Future slider thumb must stay round');
-        assert.equal(metrics.hoverRuleCount,1,'Future slider must have a hover thumb state');
-        assert.equal(metrics.focusRuleCount,1,'Future slider must have a focus thumb state');
-        assert.equal(metrics.activeRuleCount,1,'Future slider must have an active thumb state');
-        assert.equal(metrics.activeTransform,'scale(1.08)');
       }else{
         assert.equal(metrics.trackRadius,'0px','Punk slider rail must keep its square corners');
         assert.equal(metrics.thumbRadius,'0px','Punk slider thumb must keep its square corners');
@@ -215,15 +247,21 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
       await evaluate(`(() => {window.__graphicsRangeProbe.range.disabled=window.__graphicsRangeProbe.original.disabled})()`);
 
       await setValue(middle);
-      await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;range.focus()})()`);
       browserWindow.focus();
+      await pause(80);
+      await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;range.focus()})()`);
+      await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+      await pause(40);
       wc.sendInputEvent({type:'keyDown',keyCode:'RIGHT'});
       wc.sendInputEvent({type:'keyUp',keyCode:'RIGHT'});
       await pause(40);
-      const afterArrow=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),focusVisible:range.matches(':focus-visible'),outline:getComputedStyle(range).outlineStyle}})()`);
+      const afterArrow=await evaluate(`(() => {
+        const range=window.__graphicsRangeProbe.range,active=document.activeElement,style=getComputedStyle(range);
+        return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),documentHasFocus:document.hasFocus(),rangeFocused:active===range,rangeMatchesFocus:range.matches(':focus'),focusVisible:range.matches(':focus-visible'),outline:style.outlineStyle,outlineWidth:style.outlineWidth,outlineOffset:style.outlineOffset,activeElement:{tag:active?.tagName??null,id:active?.id??null,className:typeof active?.className==='string'?active.className:null},floating:range.hasAttribute('data-future-range-floating'),expanded:range.hasAttribute('data-future-range-expanded'),dragging:range.hasAttribute('data-future-range-dragging')};
+      })()`);
       assert.ok(afterArrow.value>middle,`${design}/${theme} ArrowRight must advance the native range`);
       assert.ok(percent(afterArrow.progress)>50,`${design}/${theme} ArrowRight must refresh progress`);
-      assert.ok(afterArrow.focusVisible&&afterArrow.outline!=='none',`${design}/${theme} keyboard focus must remain visible`);
+      assert.ok(afterArrow.focusVisible&&afterArrow.outline!=='none',`${design}/${theme} keyboard focus must remain visible: ${JSON.stringify(afterArrow)}`);
       wc.sendInputEvent({type:'keyDown',keyCode:'PAGEUP'});
       wc.sendInputEvent({type:'keyUp',keyCode:'PAGEUP'});
       await pause(40);
@@ -232,42 +270,229 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
       assert.ok(percent(afterPageUp.progress)>percent(afterArrow.progress),`${design}/${theme} PageUp must refresh progress`);
 
       await setValue(middle);
-      const bounds=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {left:r.left,top:r.top,width:r.width,height:r.height}})()`);
-      const y=Math.round(bounds.top+bounds.height/2), startX=Math.round(bounds.left+bounds.width/2), endX=Math.round(bounds.left+bounds.width-2);
+      const bounds=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height,viewportWidth:window.innerWidth}})()`);
+      const y=Math.round(bounds.top+bounds.height/2), startX=Math.round(bounds.left+bounds.width/2);
       browserWindow.focus();
-      await evaluate(`window.__graphicsRangeProbe.nativeEventStart=window.__graphicsRangeProbe.events.length`);
-      wc.sendInputEvent({type:'mouseMove',x:startX,y});
-      await pause(30);
-      const hover=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range,thumb=getComputedStyle(range,'::-webkit-slider-thumb');return {hover:range.matches(':hover'),shadow:thumb.boxShadow}})()`);
-      if(design==='rhine')assert.ok(hover.hover&&metrics.hoverRuleCount===1,`${design}/${theme} hover must visibly respond`);
-      wc.sendInputEvent({type:'mouseMove',x:endX,y,movementX:endX-startX,movementY:0});
-      wc.sendInputEvent({type:'mouseDown',x:endX,y,button:'left',clickCount:1});
-      mouseIsDown=true;
-      const active=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {active:range.matches(':active')}})()`);
-      if(design==='rhine')assert.ok(active.active&&metrics.activeTransform==='scale(1.08)',`${design}/${theme} active drag must visibly respond`);
-      wc.sendInputEvent({type:'mouseUp',x:endX,y,button:'left',clickCount:1});
-      mouseIsDown=false;
-      await pause(40);
-      const afterDrag=await evaluate(`(() => {const probe=window.__graphicsRangeProbe,range=probe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),events:probe.events.slice(probe.nativeEventStart)}})()`);
-      assert.ok(afterDrag.value>middle,`${design}/${theme} native pointer input must update the range: ${JSON.stringify(afterDrag)}`);
-      assert.ok(percent(afterDrag.progress)>50,`${design}/${theme} native pointer input must update progress`);
+      let floatingInteraction=null,afterDrag=null,editorState=null;
+      let expandedBounds=null,dragStartX=0,dragEndX=0;
+      if(design==='rhine'){
+        await evaluate(`window.__graphicsRangeProbe.range.blur()`);
+        const outsideStartX=bounds.left>24?Math.round(bounds.left-24):Math.round(bounds.right+24);
+        wc.sendInputEvent({type:'mouseMove',x:outsideStartX,y});
+        await pause(300);
+        const idle=await visualState();
+        assert.ok(idle.sameNode,`${design}/${theme} floating slider must keep the original native input node`);
+        assert.ok(!idle.floating&&!idle.expanded&&!idle.dragging&&!idle.placeholderRect,`${design}/${theme} idle slider must not retain floating state or placeholder: ${JSON.stringify(idle)}`);
+        assertNoTerminalReceiver(idle,'idle');
+        assertStableRect(idle.rect,bounds,'idle slider');
+
+        wc.sendInputEvent({type:'mouseMove',x:startX,y,movementX:startX-outsideStartX,movementY:0});
+        await pause(280);
+        const hover=await visualState();
+        assert.ok(hover.sameNode&&hover.hover&&!hover.active,`${design}/${theme} pointer hover must preserve the native slider and enter hover: ${JSON.stringify(hover)}`);
+        assert.ok(hover.floating&&hover.expanded&&!hover.dragging,`${design}/${theme} hover must float and expand the slider: ${JSON.stringify(hover)}`);
+        assertNoTerminalReceiver(hover,'hover');
+        assert.ok(hover.rect.width>idle.rect.width+2&&hover.rect.height>idle.rect.height+2,`${design}/${theme} hover must expand the slider in place: ${JSON.stringify({idle:idle.rect,hover:hover.rect})}`);
+        assert.ok(Math.abs(hover.rect.left-idle.rect.left)<=0.75,`${design}/${theme} expanded slider must stay anchored at its original left edge`);
+        assertStableRect(hover.placeholderRect,idle.rect,'hover placeholder');
+        assert.ok(hover.buttonRect&&hover.rect.right>=hover.buttonRect.right-1,`${design}/${theme} expanded slider must cover the value button region: ${JSON.stringify({range:hover.rect,button:hover.buttonRect})}`);
+        assert.ok(hover.cornerRadius>=hover.rect.height/2-1,`${design}/${theme} expanded slider must have capsule corners: ${JSON.stringify({radius:hover.borderRadius,rect:hover.rect})}`);
+        assert.ok(hover.background!==idle.background||hover.boxShadow!==idle.boxShadow,`${design}/${theme} hover must visibly style the slider host`);
+        assert.ok(hover.buttonOpacity!==null&&hover.buttonOpacity<0.1&&hover.buttonPointerEvents==='none',`${design}/${theme} hover must temporarily hide and disable the value button: ${JSON.stringify(hover)}`);
+        assert.ok(hover.readoutVisible&&hover.readoutTag==='OUTPUT'&&hover.readoutPointerEvents==='none',`${design}/${theme} hover must show a noninteractive value readout: ${JSON.stringify(hover)}`);
+        assert.equal(hover.readoutText,hover.buttonText,`${design}/${theme} hover readout must match the numeric value label`);
+        await captureRangeState('hover');
+
+        const middleRatio=(middle-initial.min)/(initial.max-initial.min);
+        const thumbCenterX=Math.round(hover.rect.left+8+Math.max(0,hover.rect.width-16)*middleRatio);
+        const trackY=Math.round(hover.rect.top+hover.rect.height/2);
+        wc.sendInputEvent({type:'mouseMove',x:thumbCenterX,y:trackY,movementX:thumbCenterX-startX,movementY:trackY-y});
+        await evaluate(`(() => {const probe=window.__graphicsRangeProbe;probe.nativeEventStart=probe.events.length;probe.pointerEventStart=probe.pointerEvents.length})()`);
+        wc.sendInputEvent({type:'mouseDown',x:thumbCenterX,y:trackY,button:'left',clickCount:1,modifiers:['leftbuttondown']});
+        mouseIsDown=true;
+        await pause(45);
+        const pressed=await visualState();
+        assert.ok(pressed.sameNode&&pressed.active&&pressed.floating&&pressed.expanded&&pressed.dragging,`${design}/${theme} pointerdown must freeze the expanded native slider for dragging: ${JSON.stringify(pressed)}`);
+        assert.equal(pressed.value,middle,`${design}/${theme} pointerdown at the thumb center must preserve the current value: ${JSON.stringify(pressed)}`);
+        assert.equal(pressed.progress,hover.progress,`${design}/${theme} pointerdown must preserve current progress`);
+        assertNoTerminalReceiver(pressed,'pressed');
+        assertStableRect(pressed.rect,hover.rect,'pressed slider geometry');
+        assertStableRect(pressed.placeholderRect,idle.rect,'pressed placeholder');
+        assertStableRect(pressed.buttonRect,hover.buttonRect,'pressed value button');
+        await captureRangeState('pressed');
+
+        const dragInsideRatio=Math.min(0.78,Math.max(0.7,middleRatio+0.18));
+        const dragInsideX=Math.round(hover.rect.left+8+Math.max(0,hover.rect.width-16)*dragInsideRatio);
+        wc.sendInputEvent({type:'mouseMove',x:dragInsideX,y:trackY,movementX:dragInsideX-thumbCenterX,movementY:0,button:'left',modifiers:['leftbuttondown']});
+        await pause(90);
+        const draggingInside=await visualState();
+        assert.ok(draggingInside.active&&draggingInside.floating&&draggingInside.expanded&&draggingInside.dragging,`${design}/${theme} an in-range held pointer move must keep drag state: ${JSON.stringify(draggingInside)}`);
+        assertStableRect(draggingInside.rect,hover.rect,'in-range drag geometry');
+        assertStableRect(draggingInside.placeholderRect,idle.rect,'in-range drag placeholder');
+        assertStableRect(draggingInside.buttonRect,hover.buttonRect,'in-range drag value button');
+        assert.ok(draggingInside.value>middle&&draggingInside.value<initial.max&&percent(draggingInside.progress)>50&&percent(draggingInside.progress)<100,`${design}/${theme} held pointermove must update to an intermediate value/progress in real time: ${JSON.stringify(draggingInside)}`);
+        const insideProgress=percent(draggingInside.progress),expectedInsideProgress=(draggingInside.value-initial.min)/(initial.max-initial.min)*100;
+        assert.ok(Math.abs(insideProgress-expectedInsideProgress)<0.02,`${design}/${theme} in-range drag progress must respect min/max: ${JSON.stringify(draggingInside)}`);
+        assert.equal(draggingInside.readoutText,draggingInside.buttonText,`${design}/${theme} in-range readout and numeric label must stay synchronized`);
+
+        const rightOutside=Math.ceil(hover.rect.right+12),leftOutside=Math.floor(hover.rect.left-12);
+        const dragOutsideX=rightOutside<hover.viewportWidth-2?rightOutside:leftOutside;
+        const dragDirection=dragOutsideX>(hover.rect.left+hover.rect.right)/2?1:-1;
+        wc.sendInputEvent({type:'mouseMove',x:dragOutsideX,y:trackY,movementX:dragOutsideX-dragInsideX,movementY:0,button:'left',modifiers:['leftbuttondown']});
+        await pause(120);
+        const dragging=await visualState();
+        const holdingPointerEvents=await evaluate(`window.__graphicsRangeProbe.pointerEvents.slice(window.__graphicsRangeProbe.pointerEventStart)`);
+        const holdingPointerMoves=holdingPointerEvents.filter(event=>event.type==='pointermove'&&(event.buttons&1)===1);
+        const pointerDown=holdingPointerEvents.find(event=>event.type==='pointerdown');
+        const pointerAfterLeave=holdingPointerMoves.at(-1);
+        assert.ok(pointerAfterLeave&&(pointerAfterLeave.clientX>hover.rect.right||pointerAfterLeave.clientX<hover.rect.left),`${design}/${theme} holding pointermove must reach outside the slider bounds: ${JSON.stringify({pointerAfterLeave,rect:hover.rect})}`);
+        assert.ok(pointerDown&&(pointerDown.buttons&1)===1,`${design}/${theme} pointerdown must report buttons=1: ${JSON.stringify(holdingPointerEvents)}`);
+        assert.ok(dragging.active&&dragging.floating&&dragging.expanded&&dragging.dragging,`${design}/${theme} leaving the slider while held must keep it expanded: ${JSON.stringify(dragging)}`);
+        assertNoTerminalReceiver(dragging,'dragging');
+        assertStableRect(dragging.rect,hover.rect,'dragging slider geometry');
+        assertStableRect(dragging.placeholderRect,idle.rect,'dragging placeholder');
+        assertStableRect(dragging.buttonRect,hover.buttonRect,'dragged value button');
+        assert.equal(dragging.value,dragDirection>0?initial.max:initial.min,`${design}/${theme} held pointermove outside the rail must reach the matching endpoint: ${JSON.stringify({inside:draggingInside,outside:dragging})}`);
+        const draggedProgress=percent(dragging.progress),expectedDraggedProgress=(dragging.value-initial.min)/(initial.max-initial.min)*100;
+        assert.ok(Math.abs(draggedProgress-expectedDraggedProgress)<0.02,`${design}/${theme} drag progress must stay normalized to min/max: ${JSON.stringify(dragging)}`);
+        assert.equal(dragging.readoutText,dragging.buttonText,`${design}/${theme} dragging readout and numeric label must stay synchronized`);
+        const floatingEvents=await evaluate(`window.__graphicsRangeProbe.events.slice(window.__graphicsRangeProbe.nativeEventStart)`);
+        assert.ok(holdingPointerMoves.length>=2,`${design}/${theme} must record in-range and outside pointermoves with buttons=1: ${JSON.stringify(holdingPointerEvents)}`);
+        assert.ok(floatingEvents.includes('input'),`${design}/${theme} held pointermove must keep native input events: ${JSON.stringify(floatingEvents)}`);
+        await captureRangeState('dragging');
+
+        wc.sendInputEvent({type:'mouseUp',x:dragOutsideX,y:trackY,button:'left',clickCount:1,modifiers:[]});
+        mouseIsDown=false;
+        await pause(360);
+        const released=await visualState();
+        assert.ok(released.sameNode&&!released.active&&!released.floating&&!released.expanded&&!released.dragging&&!released.placeholderRect,`${design}/${theme} releasing outside must collapse and clean up the slider: ${JSON.stringify(released)}`);
+        assertNoTerminalReceiver(released,'release');
+        assertStableRect(released.rect,idle.rect,'released slider');
+        assert.ok(released.buttonOpacity!==null&&released.buttonOpacity>0.9&&released.buttonPointerEvents!=='none',`${design}/${theme} release must restore the clickable value button: ${JSON.stringify(released)}`);
+        assert.equal(released.value,dragging.value,`${design}/${theme} release must preserve the dragged value`);
+        assert.equal(released.progress,dragging.progress,`${design}/${theme} release must preserve the normalized fill`);
+        assert.equal(released.buttonText,dragging.buttonText,`${design}/${theme} release must preserve the current numeric label`);
+        await captureRangeState('release');
+
+        const lowPositive=await setValue(Math.min(initial.max,initial.min+initial.step));
+        const lowPositiveValue=Number(lowPositive.value),lowPositivePercent=percent(lowPositive.progress);
+        assert.ok(lowPositiveValue>initial.min&&lowPositivePercent>0,`${design}/${theme} min plus one step must produce visible positive progress: ${JSON.stringify(lowPositive)}`);
+        const expectedLowProgress=(lowPositiveValue-initial.min)/(initial.max-initial.min)*100;
+        assert.ok(Math.abs(lowPositivePercent-expectedLowProgress)<0.02,`${design}/${theme} low positive progress must respect min/max: ${JSON.stringify(lowPositive)}`);
+        await captureRangeState('low-positive');
+
+        await setValue(middle);
+        wc.sendInputEvent({type:'mouseMove',x:startX,y,movementX:startX-dragOutsideX,movementY:0});
+        await pause(280);
+        const beforeTab=await visualState();
+        assert.ok(beforeTab.expanded&&beforeTab.floating,`${design}/${theme} pointer hover must expand before the Tab handoff`);
+        await evaluate(`window.__graphicsRangeProbe.range.focus()`);
+        browserWindow.focus();
+        wc.sendInputEvent({type:'keyDown',keyCode:'TAB'});
+        wc.sendInputEvent({type:'keyUp',keyCode:'TAB'});
+        await pause(100);
+        const tabFocus=await evaluate(`(() => {const probe=window.__graphicsRangeProbe,host=probe.range.closest('.quality-range')||probe.range.parentElement,button=host.querySelector('.editable-range-value');return {onButton:document.activeElement===button}})()`);
+        const afterTab=await visualState();
+        assert.ok(tabFocus.onButton,`${design}/${theme} Tab from the slider must reach its value button`);
+        assert.ok(!afterTab.floating&&!afterTab.expanded&&!afterTab.placeholderRect,`${design}/${theme} keyboard focus on the value button must collapse the floating slider`);
+        assertStableRect(afterTab.rect,idle.rect,'Tab-collapsed slider');
+        assert.ok(afterTab.buttonOpacity!==null&&afterTab.buttonOpacity>0.9&&afterTab.buttonPointerEvents!=='none',`${design}/${theme} Tab must restore the value button for keyboard and pointer use`);
+
+        await evaluate(`(() => {
+          const probe=window.__graphicsRangeProbe,range=probe.range,host=range.closest('.quality-range')||range.parentElement,button=host.querySelector('.editable-range-value');
+          if(!button)throw new Error('Missing editable range value button');
+          probe.eventStart=probe.events.length;
+          button.click();
+        })()`);
+        await pause(40);
+        editorState=await evaluate(`(() => {
+          const probe=window.__graphicsRangeProbe,range=probe.range,host=range.closest('.quality-range')||range.parentElement,editor=host.querySelector('.editable-range-number');
+          return {editor:!!editor,editorFocused:!!editor&&document.activeElement===editor,value:Number(range.value),events:probe.events.slice(probe.eventStart)};
+        })()`);
+        assert.ok(editorState.editor&&editorState.editorFocused,`${design}/${theme} restored numeric button must open and focus its editor`);
+        assert.equal(editorState.value,middle,`${design}/${theme} opening the numeric editor must not change the slider`);
+        assert.ok(!editorState.events.includes('click')&&!editorState.events.includes('input')&&!editorState.events.includes('change'),`${design}/${theme} numeric button must not reactivate its wrapping label`);
+        const editingBeforeHover=await visualState();
+        wc.sendInputEvent({type:'mouseMove',x:outsideStartX,y,movementX:outsideStartX-startX,movementY:0});
+        wc.sendInputEvent({type:'mouseMove',x:startX,y,movementX:startX-outsideStartX,movementY:0});
+        await pause(280);
+        const editingHover=await visualState();
+        assert.ok(editingHover.hover&&editingHover.sameNode,`${design}/${theme} editing probe must place the pointer over the native range`);
+        assert.ok(!editingHover.floating&&!editingHover.expanded&&!editingHover.placeholderRect,`${design}/${theme} open numeric editing must suppress hover expansion: ${JSON.stringify(editingHover)}`);
+        assertStableRect(editingHover.rect,editingBeforeHover.rect,'editing hover slider');
+        assert.equal(editingHover.value,middle,`${design}/${theme} hover during numeric editing must not change the value`);
+        assertNoTerminalReceiver(editingHover,'editing hover');
+        await evaluate(`(() => {const probe=window.__graphicsRangeProbe,editor=probe.range.closest('.quality-range')?.querySelector('.editable-range-number')||probe.range.parentElement.querySelector('.editable-range-number');editor?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))})()`);
+        wc.sendInputEvent({type:'mouseMove',x:outsideStartX,y,movementX:outsideStartX-startX,movementY:0});
+        await pause(360);
+        const cleanupVisual=await visualState();
+        assert.ok(!cleanupVisual.floating&&!cleanupVisual.expanded&&!cleanupVisual.dragging&&!cleanupVisual.placeholderRect,`${design}/${theme} ending the pointer/editing check must leave no floating input or placeholder`);
+        assertStableRect(cleanupVisual.rect,idle.rect,'interaction cleanup slider');
+        floatingInteraction={hover:{background:hover.background,boxShadow:hover.boxShadow,borderRadius:hover.borderRadius,rect:hover.rect},pressed:{background:pressed.background,boxShadow:pressed.boxShadow,borderRadius:pressed.borderRadius,rect:pressed.rect},dragging:{background:dragging.background,boxShadow:dragging.boxShadow,borderRadius:dragging.borderRadius,value:dragging.value,progress:dragging.progress,rect:dragging.rect,events:floatingEvents,pointerEvents:holdingPointerEvents,moves:{thumbCenterX,trackY,dragInsideX,dragOutsideX}},release:{background:released.background,boxShadow:released.boxShadow,borderRadius:released.borderRadius,value:released.value,progress:released.progress,rect:released.rect},lowPositiveProgress:lowPositivePercent,tabToButton:tabFocus.onButton,editingHoverExpanded:editingHover.expanded};
+      }
 
       await setValue(middle);
-      await evaluate(`(() => {
-        const probe=window.__graphicsRangeProbe,range=probe.range,button=range.parentElement.querySelector('.editable-range-value');
-        if(!button)throw new Error('Missing editable range value button');
-        probe.eventStart=probe.events.length;
-        button.click();
-      })()`);
-      await pause(30);
-      const editorState=await evaluate(`(() => {
-        const probe=window.__graphicsRangeProbe,range=probe.range,editor=range.parentElement.querySelector('.editable-range-number');
-        return {editor:!!editor,editorFocused:!!editor&&document.activeElement===editor,value:Number(range.value),events:probe.events.slice(probe.eventStart)};
-      })()`);
-      assert.ok(editorState.editor&&editorState.editorFocused,`${design}/${theme} numeric button must open and focus its editor without label activation`);
-      assert.equal(editorState.value,middle,`${design}/${theme} opening the numeric editor must not change the slider`);
-      assert.ok(!editorState.events.includes('click')&&!editorState.events.includes('input')&&!editorState.events.includes('change'),`${design}/${theme} numeric button must not reactivate its wrapping label`);
-      await evaluate(`(() => {const probe=window.__graphicsRangeProbe,editor=probe.range.parentElement.querySelector('.editable-range-number');editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))})()`);
+      if(design==='rhine'){
+        await evaluate(`window.__graphicsRangeProbe.range.blur()`);
+        const idleBounds=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}})()`);
+        const outsideX=idleBounds.left>24?Math.round(idleBounds.left-24):Math.round(idleBounds.right+24);
+        wc.sendInputEvent({type:'mouseMove',x:outsideX,y});
+        await pause(300);
+        const collapsed=await visualState();
+        assertStableRect(collapsed.rect,idleBounds,'pre-regression collapsed slider');
+        const nativeStartX=Math.round(idleBounds.left+idleBounds.width/2);
+        wc.sendInputEvent({type:'mouseMove',x:nativeStartX,y,movementX:nativeStartX-outsideX,movementY:0});
+        await pause(280);
+        expandedBounds=(await visualState()).rect;
+        dragStartX=nativeStartX;
+        dragEndX=Math.round(expandedBounds.right-2);
+      }else{
+        dragStartX=startX;
+        dragEndX=Math.round(bounds.right-2);
+      }
+      await evaluate(`window.__graphicsRangeProbe.nativeEventStart=window.__graphicsRangeProbe.events.length`);
+      wc.sendInputEvent({type:'mouseMove',x:dragEndX,y,movementX:dragEndX-dragStartX,movementY:0});
+      wc.sendInputEvent({type:'mouseDown',x:dragEndX,y,button:'left',clickCount:1});
+      mouseIsDown=true;
+      const active=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {active:range.matches(':active')}})()`);
+      if(design==='rhine')assert.ok(active.active,`${design}/${theme} native drag must activate the expanded range`);
+      wc.sendInputEvent({type:'mouseUp',x:dragEndX,y,button:'left',clickCount:1});
+      mouseIsDown=false;
+      await pause(40);
+      afterDrag=await evaluate(`(() => {const probe=window.__graphicsRangeProbe,range=probe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),events:probe.events.slice(probe.nativeEventStart)}})()`);
+      assert.ok(afterDrag.value>middle,`${design}/${theme} native pointer input must update the range: ${JSON.stringify(afterDrag)}`);
+      assert.ok(percent(afterDrag.progress)>50,`${design}/${theme} native pointer input must update progress`);
+      assert.ok(afterDrag.events.includes('input'),`${design}/${theme} native pointer drag must keep input events: ${JSON.stringify(afterDrag)}`);
+      if(design==='rhine'){
+        const currentRect=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}})()`);
+        assertStableRect(currentRect,expandedBounds,'native drag slider');
+        const endOutside=dragEndX+20<bounds.viewportWidth?dragEndX+20:Math.max(2,Math.floor(expandedBounds.left-20));
+        wc.sendInputEvent({type:'mouseMove',x:endOutside,y,movementX:endOutside-dragEndX,movementY:0});
+        await pause(360);
+        const finalPointerState=await visualState();
+        assert.ok(!finalPointerState.floating&&!finalPointerState.expanded&&!finalPointerState.dragging&&!finalPointerState.placeholderRect,`${design}/${theme} native drag regression must leave no floating input or placeholder`);
+        assertNoTerminalReceiver(finalPointerState,'post-drag');
+      }
+
+      if(design!=='rhine'){
+        await setValue(middle);
+        await evaluate(`(() => {
+          const probe=window.__graphicsRangeProbe,range=probe.range,button=range.parentElement.querySelector('.editable-range-value');
+          if(!button)throw new Error('Missing editable range value button');
+          probe.eventStart=probe.events.length;
+          button.click();
+        })()`);
+        await pause(30);
+        editorState=await evaluate(`(() => {
+          const probe=window.__graphicsRangeProbe,range=probe.range,editor=range.parentElement.querySelector('.editable-range-number');
+          return {editor:!!editor,editorFocused:!!editor&&document.activeElement===editor,value:Number(range.value),events:probe.events.slice(probe.eventStart)};
+        })()`);
+        assert.ok(editorState.editor&&editorState.editorFocused,`${design}/${theme} numeric button must open and focus its editor without label activation`);
+        assert.equal(editorState.value,middle,`${design}/${theme} opening the numeric editor must not change the slider`);
+        assert.ok(!editorState.events.includes('click')&&!editorState.events.includes('input')&&!editorState.events.includes('change'),`${design}/${theme} numeric button must not reactivate its wrapping label`);
+        await evaluate(`(() => {const probe=window.__graphicsRangeProbe,editor=probe.range.parentElement.querySelector('.editable-range-number');editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))})()`);
+      }
+
       if(design==='rhine'){
         await setValue(initial.min);
         await capture(`${design}-sliders-${theme}-low`, '#graphics-display-settings .quality-settings .quality-range');
@@ -279,11 +504,16 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         await setValue(middle);
         await capture(`${design}-sliders-${theme}`, '#graphics-display-settings .quality-settings .quality-range');
       }
-      rangeChecks.push({design,theme,minProgress:0,middleProgress:percent((await setValue(middle)).progress),maxProgress:100,dimensions:metrics,disabled,arrowRight:afterArrow.value,pageUp:afterPageUp.value,nativePointer:afterDrag.value,numericButtonFocused:editorState.editorFocused});
+      rangeChecks.push({design,theme,minProgress:0,middleProgress:percent((await setValue(middle)).progress),maxProgress:100,dimensions:metrics,disabled,keyboardFocus:afterArrow,arrowRight:afterArrow.value,pageUp:afterPageUp.value,nativePointer:afterDrag.value,numericButtonFocused:editorState?.editorFocused??false,floatingInteraction});
     } finally {
       if(mouseIsDown){
         const point=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
         wc.sendInputEvent({type:'mouseUp',x:point.x,y:point.y,button:'left',clickCount:1});
+      }
+      if(design==='rhine'){
+        const point=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {x:r.left>24?Math.round(r.left-24):Math.round(r.right+24),y:Math.round(r.top+r.height/2)}})()`);
+        wc.sendInputEvent({type:'mouseMove',x:point.x,y:point.y});
+        await pause(360);
       }
       await evaluate(`(() => {
         const probe=window.__graphicsRangeProbe;
@@ -294,6 +524,7 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         range.removeEventListener('input',listener);
         range.removeEventListener('change',listener);
         range.removeEventListener('click',listener);
+        for(const type of probe.pointerEventTypes)window.removeEventListener(type,probe.pointerListener,true);
         if(original.min===null)range.removeAttribute('min');else range.setAttribute('min',original.min);
         if(original.max===null)range.removeAttribute('max');else range.setAttribute('max',original.max);
         range.disabled=original.disabled;

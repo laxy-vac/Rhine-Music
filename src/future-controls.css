@@ -7,6 +7,7 @@ html .music-app[data-design="rhine"] {
   --future-control-inset: color-mix(in srgb, var(--future-highlight) 62%, transparent);
   --future-range-well: color-mix(in srgb, var(--future-control-well) 58%, var(--future-control-edge));
   --future-range-fill: color-mix(in srgb, var(--accent) 86%, var(--future-control-face));
+  --future-range-hover-face: color-mix(in srgb, var(--accent) 7%, var(--future-control-face));
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page) :is(.settings-category, .panel-section) {
@@ -192,11 +193,50 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
+  box-shadow: none;
   accent-color: var(--accent);
   cursor: grab;
+  transition: background-color var(--future-range-motion, 160ms) ease, box-shadow var(--future-range-motion, 220ms) cubic-bezier(.2, .9, .25, 1.2);
 }
+
+/* The hover controller reserves the short rail's slot and enlarges the same
+   native input over its readout. Pointer-down freezes its visible geometry. */
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"][data-future-range-floating] {
+  transition:
+    width var(--future-range-motion, 220ms) cubic-bezier(.2, .8, .2, 1),
+    height var(--future-range-motion, 220ms) cubic-bezier(.2, .8, .2, 1),
+    left var(--future-range-motion, 220ms) cubic-bezier(.2, .8, .2, 1),
+    top var(--future-range-motion, 220ms) cubic-bezier(.2, .8, .2, 1),
+    background-color var(--future-range-motion, 160ms) ease,
+    box-shadow var(--future-range-motion, 160ms) ease;
+}
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"][data-future-range-expanded],
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:focus-visible:not(:disabled) {
+  background-color: var(--future-range-hover-face);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--future-control-edge) 72%, transparent),
+    0 0 0 0 var(--future-range-hover-face),
+    0 2px 8px color-mix(in srgb, var(--future-shadow) 12%, transparent);
+}
+html .music-app[data-design="rhine"] .future-range-readout {
+  position: absolute;
+  z-index: 5;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--future-control-edge);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--future-control-face);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--future-shadow) 12%, transparent);
+  font: 11px/1.4 ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--future-range-motion, 120ms) ease;
+}
+html .music-app[data-design="rhine"] input[data-future-range-expanded] ~ .future-range-readout { opacity: 1; }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-webkit-slider-runnable-track {
   height: 5px;
@@ -208,7 +248,7 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
       var(--future-range-fill) 0,
       var(--future-range-fill) var(--range-progress, 0%),
       transparent var(--range-progress, 0%) 100%
-    ) 8px center / calc(100% - 16px) 100% no-repeat,
+    ),
     var(--future-range-well);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--future-control-edge) 76%, var(--ink));
 }
@@ -223,7 +263,7 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
   border-radius: 50%;
   background: var(--accent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent), 0 1px 2px color-mix(in srgb, var(--future-shadow) 18%, transparent);
-  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition: background-color var(--future-range-motion, 120ms) ease, box-shadow var(--future-range-motion, 120ms) ease, transform var(--future-range-motion, 120ms) ease;
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-moz-range-track {
@@ -247,7 +287,7 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
   border-radius: 50%;
   background: var(--accent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent), 0 1px 2px color-mix(in srgb, var(--future-shadow) 18%, transparent);
-  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition: background-color var(--future-range-motion, 120ms) ease, box-shadow var(--future-range-motion, 120ms) ease, transform var(--future-range-motion, 120ms) ease;
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb,
@@ -260,8 +300,7 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:active:not(:disabled)::-webkit-slider-thumb {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:hover:not(:disabled)::-moz-range-thumb,
@@ -270,13 +309,23 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:active:not(:disabled)::-moz-range-thumb {
-  transform: scale(1.08);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:disabled {
   opacity: .48;
   cursor: not-allowed;
+}
+
+html .music-app[data-design="rhine"][data-reduced-motion="true"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"] {
+  --future-range-motion: 0s;
+}
+html .music-app[data-design="rhine"][data-reduced-motion="true"] .future-range-readout { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"] {
+    --future-range-motion: 0s;
+  }
+  html .music-app[data-design="rhine"] .future-range-readout { transition: none; }
 }
 
 html .music-app[data-design="rhine"] .settings-select-trigger {

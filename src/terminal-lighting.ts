@@ -322,6 +322,10 @@ export function setupTerminalLighting(stage: HTMLElement): {
 
     const ranked = [...root.querySelectorAll<HTMLElement>(RECEIVER_SELECTOR)]
       .filter((element) => {
+        // Ranges draw their own rounded hover/press surface. Lighting the
+        // rectangular native hit area would add a second, square surface.
+        if (element.matches('input[type="range"]')
+          && element.closest("#music-settings, #music-theme-page, .music-panel")) return false;
         if (element.matches(":disabled") || !isVisible(element)) return false;
         if (!dialog) return true;
         if (element === dialog) return true;

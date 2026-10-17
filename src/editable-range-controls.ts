@@ -1,4 +1,5 @@
 import { trUi, ui } from "./i18n";
+import { setupFutureRangeInteraction } from "./future-range-interaction";
 type EditableRangeRecord = {
   range: HTMLInputElement;
   valueButton: HTMLButtonElement;
@@ -84,6 +85,10 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
   const progressRecords = new Map<HTMLInputElement, RangeProgressRecord>();
   const documentRef = root instanceof Document ? root : root.ownerDocument;
   const observer = new MutationObserver(() => sync());
+  const futureInteraction = setupFutureRangeInteraction(root, range => {
+    const record = records.get(range);
+    return record ? { valueButton: record.valueButton, label: () => valueLabel(record), editing: () => !!record.editor } : undefined;
+  });
 
   const updateRangeProgress = (range: HTMLInputElement) => {
     let progressRecord = progressRecords.get(range);
@@ -243,6 +248,7 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
   };
 
   const sync = () => {
+    futureInteraction.sync();
     const candidates: HTMLInputElement[] = [];
     if (root instanceof Document) candidates.push(...root.querySelectorAll<HTMLInputElement>(RANGE_SELECTOR));
     else {
@@ -278,12 +284,13 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
 
   sync();
   const observeRoot = root instanceof Document ? root.documentElement : root;
-  observer.observe(observeRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ["min", "max", "step", "value", "disabled"] });
+  observer.observe(observeRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ["min", "max", "step", "value", "disabled", "hidden", "inert", "open", "data-page", "data-design"] });
 
   return {
     sync,
     destroy() {
       observer.disconnect();
+      futureInteraction.destroy();
       for (const [range, progressRecord] of progressRecords) restoreRangeProgress(range, progressRecord);
       progressRecords.clear();
       for (const [range, record] of records) {

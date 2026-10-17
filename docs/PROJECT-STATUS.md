@@ -16,7 +16,7 @@
 | 歌词 | 首次云端解析、Local/Cloud 真切换、缺本地回退云、手动导入、副本缓存、独立偏移写回、默认跟随播放 |
 | 歌词与信号展示 | 当前行、盒体与播放资料同步；32 段真实频谱的帧间平滑和需求生命周期；独立信号页 |
 | EQ | 入门图形/参数界面、曲线、频段图例、推子和主题控件；LSP 采用官方 CLAP 原生窗口 |
-| 设置与弹窗 | Future Settings 使用编号目录、统一内距与控件对齐，桌面按内容分栏、窄窗单列，类别不套重复外框；昼夜控件、焦点和光效统一。搜索/在线曲库保留固定标题、内部细滚动条、自绘下拉与紧凑分区 |
+| 设置与弹窗 | Future Settings 使用编号目录、统一内距与控件对齐，桌面按内容分栏、窄窗单列；横向滑杆悬停展成长胶囊，拖动锁定尺寸，浮动读数与精确输入共用原值，填色无左侧固定空边。搜索/在线曲库保留固定标题、内部细滚动条、自绘下拉与紧凑分区 |
 | 唱片盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；编辑、独立预设、铭牌、格式标识和纸面遮挡 |
 | 启动 | 后台初始化及首帧就绪后首次显示窗口；Future ALBUMS/MATRIX 每次打开播放可跳过的入场；欢迎文案/ID 可自定义并限制字母、空格与长度；Punk 保留待适配的禁用入口；已显示窗口重载保持可见 |
 | 音频与来源 | 本地/FTP/在线专辑，PCM/DSD/DoP 输出与处理，Sony 音效、音频信息及明确的设备错误 |
@@ -42,7 +42,7 @@
 
 Future 日间配色通过规范化/色值/主题档案离线检查、五项系统日夜跟随检查及隔离窗口验收；实测中间颜色、两层胶囊快速反向、焦点/滚动、保存、日夜/Punk 往返、减少动态、左侧色点和 800px Appearance 布局。颜色采用参考源码固定提交，播放器专用材质和灯光仍沿现有模型职责处理。
 
-Future Settings 整体布局通过 TypeScript/Vite 构建与隔离 Electron 检查：七类唯一归属、两种日间和夜间、中英文、FTP 六字段及节点/值保持、声音控件保持、长音频表单滚动和折叠说明可达性。25 张截图包含 800×450 固定 16:9 与 800×900 自由比例，横向导航、低高度排版和比例恢复均已验证；合成空库检查未扫描个人曲库或接入播放设备。
+Future Settings 整体布局通过 TypeScript/Vite 构建与隔离 Electron 检查：七类唯一归属、两种日间和夜间、中英文、FTP 六字段及节点/值保持、声音控件保持、长音频表单滚动和折叠说明可达性。25 张设置截图包含 800×450 固定 16:9 与 800×900 自由比例。组合图形检查共 56 张截图，包含 Future 昼夜滑杆悬停延展、真实持键移动时的连续数值与进度、固定几何、移出/松开、Tab 数值编辑与编辑期间抑制展开，以及 Punk 回归；结束不残留浮层或占位。合成空库检查未扫描个人曲库或接入播放设备。
 
 Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项混音/路由/取消检查及 39 项 Electron 离线合成与生命周期检查；6 项硬件检查明确跳过。全部 17 类参考音色均生成不同的非静音 PCM WAV，原生音效路径的 AudioContext 创建数为零；既有原生解码器的无输出模式也已逐样本验证渐进 Float32 输入。Future/Punk 昼夜滑杆填充、拖动、键盘、数字编辑/去重和禁用态均经隔离窗口检查；入场自然播放约 25.36 秒并停在总览，跳过、重播和十次首帧就绪/重载通过。参考触发映射见[界面音效](INTERFACE-AUDIO.md)。上述结果不包含真实设备听音验收。
 
@@ -51,7 +51,7 @@ Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项�
 | 职责 | 首选入口 |
 | --- | --- |
 | 应用编排、路由、偏好 | `src/music-app.ts` |
-| Future Settings 呈现 | `src/future-settings-layout.ts`、`src/future-settings.css` |
+| Future 控件与 Settings 呈现 | `src/future-settings-layout.ts`、`src/future-settings.css`、`src/future-range-interaction.ts`、`src/future-controls.css` |
 | 公共状态、目录、展示 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
 | 场景、布局、货架和资源 | `src/scene.ts`、`src/music-spatial-layout.ts`、`src/music-shelf.ts`、`src/music-scene-resources.ts` |
 | 专辑、队列和焦点 | `src/album-panel.ts`、`src/album-interaction.ts`、`src/album-queue.ts` |
