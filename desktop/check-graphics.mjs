@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { checkDayPalette } from './check-day-palette.mjs';
+import { checkFutureSettings } from './check-future-settings.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const settingsCategories = ['interface', 'appearance', 'audio', 'lyrics', 'library', 'sources', 'about'];
@@ -333,6 +334,7 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     return until(state=>state.page==='theme'&&state.stylePageOpen,'return to STYLE');
   };
   try {
+    const futureSettings = await checkFutureSettings({ browserWindow, outputDirectory });
     if(!(await snapshot()).stylePageOpen) await openStyle();
     for (const design of ['rhine', 'archive']) {
       await openStyle();
@@ -459,21 +461,34 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         })()`);
         try {
           for (const checked of [false, true]) {
-            await evaluate(`window.__settingsSwitchProbe.forEach(({node})=>{node.checked=${checked};node.indeterminate=false;})`);
-            await pause(260);
-            const measurements=await evaluate(`window.__settingsSwitchProbe.map(({node,sourceId})=>{
+            await evaluate(`(() => {
+              window.__settingsSwitchProbe.forEach(({node})=>{
+                node.checked=${checked};node.indeterminate=false;
+                getComputedStyle(node,'::after').transform;
+              });
+              return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+            })()`);
+            const endpointDeadline=Date.now()+2000;
+            let measurements=[];
+            let endpointReached=false;
+            while(Date.now()<endpointDeadline){
+              measurements=await evaluate(`window.__settingsSwitchProbe.map(({node,sourceId})=>{
               const thumb=getComputedStyle(node,'::after'),style=getComputedStyle(node),x=new DOMMatrixReadOnly(thumb.transform==='none'?undefined:thumb.transform).m41;
               const inset=parseFloat(thumb.left),left=inset+x,top=parseFloat(thumb.top),size=parseFloat(thumb.width);
-              return {id:sourceId,checked:node.checked,indeterminate:node.indeterminate,width:node.getBoundingClientRect().width,flexBasis:style.flexBasis,inset,left,right:node.clientWidth-left-size,top,bottom:node.clientHeight-top-parseFloat(thumb.height)};
-            })`);
+              return {id:sourceId,checked:node.checked,indeterminate:node.indeterminate,width:node.getBoundingClientRect().width,flexBasis:style.flexBasis,inset,left,right:node.clientWidth-left-size,top,bottom:node.clientHeight-top-parseFloat(thumb.height),transform:thumb.transform};
+              })`);
+              endpointReached=measurements.length>=4&&measurements.every(item=>item.checked===checked&&Math.abs((checked?item.right:item.left)-item.inset)<=1&&Math.abs(item.top-item.bottom)<=1);
+              if(endpointReached)break;
+              await pause(50);
+            }
             assert.ok(measurements.length>=4, 'The interface category must expose its real settings switches');
             for(const item of measurements){
               assert.equal(item.checked,checked,`${design}/${theme}/${item.id} must retain the requested binary state`);
               assert.equal(item.indeterminate,false);
-              assert.ok(Math.abs((checked?item.right:item.left)-item.inset)<=1,`${design}/${theme}/${item.id} thumb must reach the ${checked?'right':'left'} endpoint: ${JSON.stringify(item)}`);
+              assert.ok(Math.abs((checked?item.right:item.left)-item.inset)<=1,`${design}/${theme}/${item.id} thumb must reach the ${checked?'right':'left'} endpoint within 2s; backgroundThrottling=${wc.getBackgroundThrottling()}: ${JSON.stringify(item)}`);
               assert.ok(Math.abs(item.top-item.bottom)<=1,`${design}/${theme}/${item.id} thumb must be vertically centered`);
             }
-            switchChecks.push({design,theme,checked,measurements});
+            switchChecks.push({design,theme,checked,measurements,backgroundThrottling:wc.getBackgroundThrottling(),endpointReached});
             if(design==='rhine'&&theme==='day') await capture(`future-switches-${checked?'on':'off'}`,'#motion-settings');
           }
         } finally {
@@ -485,7 +500,7 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     await openStyle();
     await click(`aside.theme-mode-controls button[data-theme=${savedTheme}]`);
     const dayPalette = await checkDayPalette({ browserWindow, outputDirectory });
-    return { ok: true, cases, screenshots: [...screenshots, ...dayPalette.screenshots], switchChecks, rangeChecks, dayPalette };
+    return { ok: futureSettings.ok, cases, screenshots: [...screenshots, ...dayPalette.screenshots, ...futureSettings.screenshots], switchChecks, rangeChecks, dayPalette, futureSettings };
   } finally {
     if (!browserWindow.isDestroyed()) { if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false); wc.setBackgroundThrottling(true); }
   }

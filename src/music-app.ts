@@ -127,6 +127,8 @@ import "./future-controls.css";
 import "./future-panels.css";
 import "./future-day-palette.css";
 import "./future-appearance-picker.css";
+import "./future-settings.css";
+import { enhanceFutureSettings } from "./future-settings-layout";
 import { viewportLayout } from "./viewport-layout";
 import { applyWindowAspect } from "./window-aspect";
 import { normalizeWindowAspect, type WindowAspectId as WindowAspect } from "./window-aspect-model.mjs";
@@ -1810,6 +1812,7 @@ function selectSettingsCategory(next: SettingsCategory, focus = false) {
       updateScanStatus();
     }
   }
+  enhanceFutureSettings($("#music-settings"));
   if (focus) $(`#settings-category-${next}`).focus({ preventScroll: true });
 }
 function markAudioSettingsSection(next: AudioSettingsSection) {
