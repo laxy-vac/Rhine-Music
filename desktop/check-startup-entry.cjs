@@ -304,7 +304,7 @@ async function runLauncher() {
     const environment = { ...process.env, RHINE_STARTUP_PROBE_CONFIG: configPath };
     delete environment.ELECTRON_RUN_AS_NODE;
     childResult = await new Promise((resolve, reject) => {
-      const child = spawn(electronPath, [appDirectory], {
+      const child = spawn(electronPath, [appDirectory, ...(futureEntryMode ? ['--future-entry-capture'] : [])], {
         cwd: projectRoot,
         env: environment,
         // Match launch-source-preview.mjs: SW_HIDE at process creation can
@@ -314,7 +314,7 @@ async function runLauncher() {
       });
       let stdout = '';
       let stderr = '';
-      const timeout = setTimeout(() => child.kill(), 90000);
+      const timeout = setTimeout(() => child.kill(), futureEntryMode ? 150000 : 90000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); });
@@ -409,11 +409,16 @@ async function runElectronProbe() {
   const { app, BrowserWindow, ipcMain, dialog } = require('electron');
   const { pathToFileURL } = require('node:url');
   app.commandLine.appendSwitch('force_high_performance_gpu');
+  const captureSchedulingOverrides = process.argv.includes('--future-entry-capture')
+    ? ['disable-backgrounding-occluded-windows', 'disable-renderer-backgrounding'] : [];
+  // Chromium consumes these before app readiness, so set them before any await.
+  for (const option of captureSchedulingOverrides) app.commandLine.appendSwitch(option);
   const runDirectory = path.resolve(__dirname, '..');
   const configPath = process.env.RHINE_STARTUP_PROBE_CONFIG;
   const report = {
     ok: false,
     mode: 'real-electron-hidden-startup-gate',
+    captureSchedulingOverrides,
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
     realDesktopMainExecuted: false,
@@ -638,13 +643,14 @@ async function runElectronProbe() {
     mockPreferences = { ...config.preferences };
     const source = await fs.readFile(path.join(config.projectRoot, 'desktop', 'main.cjs'), 'utf8');
     selectPreferencesForMock = value => value;
-    if (config.themeFollow) {
+    if (config.themeFollow || config.futureEntry) {
       const keysMatch = source.match(/const preferenceKeys=new Set\((\[[\s\S]*?\])\);/);
       const selectMatch = source.match(/const selectPreferences=value=>\{[\s\S]*?\n\};/);
       if (!keysMatch || !selectMatch) throw new Error('Could not extract production preference whitelist and selectPreferences function.');
       const keys = new Set(new Function(`return ${keysMatch[1]};`)());
       selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null);
-      report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
+      if (config.themeFollow) report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
+      if (config.futureEntry) report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
     }
 
     instrumentIpcMain();
@@ -660,7 +666,14 @@ async function runElectronProbe() {
       if (!config.themeFollow && !config.futureEntry) return { ok: true };
       try {
         mockPreferences = selectPreferencesForMock(value);
-        report.preferenceSaves.push({ index: report.preferenceSaves.length + 1, theme: mockPreferences.theme, followSystemTheme: mockPreferences.followSystemTheme, allowedFollowField: Object.hasOwn(mockPreferences, 'followSystemTheme') });
+        report.preferenceSaves.push({
+          index: report.preferenceSaves.length + 1,
+          theme: mockPreferences.theme,
+          followSystemTheme: mockPreferences.followSystemTheme,
+          allowedFollowField: Object.hasOwn(mockPreferences, 'followSystemTheme'),
+          entryOnOpen: mockPreferences.entryOnOpen,
+          allowedEntryOnOpen: Object.hasOwn(mockPreferences, 'entryOnOpen'),
+        });
         return { ok: true };
       } catch (error) {
         report.mockPreferenceSaveErrors ??= [];
@@ -949,6 +962,9 @@ async function runElectronProbe() {
       noUnexpectedDialog: report.dialogCalls.length === 0,
       noFrontendFailure: report.failedIpcEvents.length === 0,
       productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
+      productionWhitelistRetainsEntryOnOpen: !config.futureEntry || report.productionPreferenceWhitelistHasEntryOnOpen === true,
+      productionPreferenceSelectorSavedEntryOnOpenFalse: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === false && item.allowedEntryOnOpen),
+      productionPreferenceSelectorSavedEntryOnOpenTrue: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === true && item.allowedEntryOnOpen),
       themeFollowBehaviorPassed: !config.themeFollow || report.themeFollow?.ok === true,
       futurePanelsBehaviorPassed: !config.futurePanels || report.futurePanels?.ok === true,
       futureEntryBehaviorPassed: !config.futureEntry || report.futureEntry?.ok === true,

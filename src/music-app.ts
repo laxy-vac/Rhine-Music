@@ -133,7 +133,7 @@ type Panel = "search" | "online" | null;
 type SettingsCategory = "appearance" | "interface" | "audio" | "lyrics" | "library" | "sources" | "about";
 const settingsCategories: { id: SettingsCategory; title: string; intro: string; sections: string[] }[] = [
   { id: "appearance", title: trUi("外观与显示"), intro: trUi("选择明暗模式与界面语言。"), sections: ["#appearance-settings"] },
-  { id: "interface", title: trUi("界面与交互"), intro: trUi("调整界面动效、操作音效和氛围配乐。"), sections: ["#motion-settings", "#interface-sound-settings"] },
+  { id: "interface", title: trUi("界面与交互"), intro: trUi("调整界面动效、操作音效和氛围配乐。"), sections: ["#entry-settings", "#motion-settings", "#interface-sound-settings"] },
   { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
   { id: "lyrics", title: trUi("歌词"), intro: trUi("管理默认来源、共享服务器与本地缓存。"), sections: ["#lyrics-global-settings"] },
   { id: "library", title: trUi("音乐库"), intro: trUi("选择音乐文件夹、导入与扫描，管理专辑分类和介绍资料。"), sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
@@ -273,6 +273,7 @@ const preferences = {
     sortMode: "genre" as MusicSortMode,
     quality: "original" as QualityPreset,
     reduced: false,
+    entryOnOpen: true,
     volume: 0.65,
     songFade: true,
     sony: { ...sonyOff },
@@ -302,6 +303,7 @@ const preferences = {
       sortMode: MusicSortMode;
       quality: QualityPreset;
       reduced: boolean;
+      entryOnOpen: boolean;
       volume: number;
       songFade: boolean;
       sony: SonySettings;
@@ -318,6 +320,7 @@ const preferences = {
 };
 preferences.language = uiLanguage();
 preferences.followSystemTheme = preferences.followSystemTheme === true;
+preferences.entryOnOpen = preferences.entryOnOpen !== false;
 preferences.futurePunkPresets = normalizeCaseUserPresets(preferences.futurePunkPresets);
 preferences.archivePunkPresets = normalizeCaseUserPresets(preferences.archivePunkPresets);
 preferences.windowAspect = normalizeWindowAspect(preferences.windowAspect);
@@ -813,6 +816,56 @@ function showBrowseSurface(immediate = false) {
   syncSelectionMotion();
   if (!panel && stage.dataset.operationFocus !== "right") $("#three-scene").focus({ preventScroll: true });
 }
+
+function entryPlaybackUnavailable(): string {
+  if (!ready || !scene) return trUi("终端正在准备，请稍后重播。");
+  if (preferences.style.design !== "rhine" || musicApplication.view.layout !== "array" ||
+    musicApplication.view.show !== "albums") return trUi("当前入场适用于 Future 的 ALBUMS / MATRIX 视图。");
+  if (!albums.length) return trUi("添加专辑后可播放终端入场。");
+  if (preferences.reduced) return trUi("关闭“减少动态效果”后可重播入场。");
+  if (libraryRebuilding) return trUi("曲库正在更新，请稍后重播。");
+  return "";
+}
+
+function syncEntrySettings() {
+  const button = document.querySelector<HTMLButtonElement>('[data-action="entry-replay"]');
+  const note = document.querySelector<HTMLElement>("#entry-replay-note");
+  const reason = entryPlaybackUnavailable();
+  if (button) button.disabled = !!reason;
+  if (note) note.textContent = reason || trUi("重播会回到专辑总览，不影响音乐播放。");
+}
+
+function startFutureEntry() {
+  if (futureEntry?.active || entryPlaybackUnavailable()) return false;
+  futureEntry = new FutureEntry(stage, (skipped, ms) => {
+    const now = ms / 1000;
+    if (skipped) scene?.showMusicArchiveImmediately(now);
+    else {
+      scene?.update(now, futureEntryShot(futureEntryEnd));
+      scene?.finishMusicIntro(now);
+    }
+    syncSelectionMotion();
+  });
+  return true;
+}
+
+function replayFutureEntry() {
+  if (futureEntry?.active) return;
+  const reason = entryPlaybackUnavailable();
+  if (reason) { notify(reason); return; }
+  pageScan.cancelPending();
+  closeManagementPage(false);
+  cancelTrackReveal();
+  presentation.reset();
+  albumPanel.finish();
+  detailTransition.hide(true);
+  $("#music-detail").inert = true;
+  $("#music-detail").setAttribute("aria-hidden", "true");
+  scene?.showMusicArchiveImmediately(performance.now() / 1000);
+  showBrowseSurface(true);
+  effects.setScene("archive");
+  if (startFutureEntry()) futureEntry?.arm();
+}
 function savePrefs() {
   preferences.view = musicApplication.view;
   preferences.foobarArchive = legacyCatalogOptions(musicApplication.view);
@@ -1120,6 +1173,7 @@ function updateStatus() {
 }
 let selectedProfileMarkup = "";
 function updateSelection(navigation?: ArchiveNavigation) {
+  if (page === "settings") syncEntrySettings();
   const a = currentAlbum();
   $<HTMLButtonElement>(".browse-play-album").disabled = !a?.tracks.length || !!a.offline;
   if (!a) {
@@ -1611,6 +1665,7 @@ function selectSettingsCategory(next: SettingsCategory, focus = false) {
   $("#audio-settings-subnav").hidden = next !== "audio";
   if (changed) content.scrollTop = settingsScrollPositions.get(next) ?? 0;
   syncAudioSettingsLocation();
+  if (next === "interface") syncEntrySettings();
   if (next === "lyrics") void lyricsSettings?.refresh();
   if (next === "library") {
     const body = $("#library-page-body");
@@ -3155,6 +3210,7 @@ function renderSettingsPage() {
     ${precisionMarkup()}
     ${bufferMarkup()}
     <section class="panel-section" id="motion-settings"><h3>动效与显示</h3><label class="settings-row"><span>减少动态效果<small>简化镜头、文字加载和页签过渡</small></span><input type="checkbox" id="reduced-motion" ${preferences.reduced ? "checked" : ""}></label><button class="text-button" data-action="fullscreen">切换全屏 ↗</button></section>
+    <section class="panel-section" id="entry-settings"><h3>终端入场</h3><label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""}></label><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><p id="entry-replay-note"></p></section>
     <section class="panel-section" id="interface-sound-settings"><h3>界面声音与氛围</h3><p id="interface-sound-status" class="interface-audio-note" role="status"></p><label class="settings-row"><span>界面音效<small>按钮、卡片和页面切换的提示音</small></span><input type="checkbox" id="sound-setting" ${preferences.sound ? "checked" : ""}></label><label class="settings-row"><span>音效音量</span><input type="range" id="sound-volume" aria-label="音效音量" min="0" max="100" value="${Math.round(preferences.soundVolume * 100)}"></label><button class="text-button" data-action="sound-preview">试听界面音效 ↗</button><label class="settings-row"><span>氛围 BGM<small>音乐停止时播放，开始播放歌曲后淡出</small></span><input type="checkbox" id="bgm-setting" ${preferences.bgm ? "checked" : ""}></label><label class="settings-row"><span>BGM 音量</span><input type="range" id="bgm-volume" aria-label="BGM 音量" min="0" max="100" value="${Math.round(preferences.bgmVolume * 100)}"></label></section>
     <section class="panel-section" id="lyrics-global-settings"></section>
     <section class="panel-section" id="about-settings"><h3>项目与许可</h3><p>音乐适配与维护：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/RonaldDeng/Rhine-Music-Demo/blob/v0.2.0/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
@@ -3162,6 +3218,7 @@ function renderSettingsPage() {
   if (preferences.style.design === "archive") content.querySelector('#about-settings')?.insertAdjacentHTML('beforeend',ui`<p><a href="/licenses/audio-archive-style-mit.txt" target="_blank" rel="noopener">Audio Archive · MIT ↗</a> · <a href="/licenses/geistmono-ofl.txt" target="_blank" rel="noopener">Geist Mono · SIL OFL ↗</a></p>`);
   content.querySelector('#appearance-settings')?.insertAdjacentHTML('beforeend', ui`<label class="settings-row"><span>界面语言<small>切换后重新载入界面</small></span><select id="ui-language" aria-label="界面语言"><option value="zh-CN" ${uiLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${uiLanguage()==='en'?'selected':''}>English</option></select></label><button type="button" class="text-button" data-action="apply-language">应用语言 ↗</button>`);
   content.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(control => control.setAttribute("role", "switch"));
+  syncEntrySettings();
   content.insertAdjacentHTML("beforeend", ui`<section class="panel-section" id="library-management-settings"><h3>导入与目录管理</h3><div id="library-page-body" class="library-settings-body" role="region" aria-label="音乐库导入与目录管理"></div></section>`);
   const categories = settingsCategories.map((category) => {
     const section = document.createElement("section");
@@ -3879,6 +3936,7 @@ document.addEventListener("click", (e) => {
   if (action === "playback-queue") { albumQueue.toggle(target); return; }
   if (action === "audio-info") { albumQueue.close(false);audioInfoPopup.toggle(target); return; }
   if (action === "library") { openArchivePage(); return; }
+  if (action === "entry-replay") { replayFutureEntry(); return; }
   if (action === "eq") { page === "eq" ? closeManagementPage() : openEqPage(); return; }
   if (action === "lyrics") { page === "lyrics" ? closeManagementPage() : openLyricsPage(); return; }
   if (action === "signal") { page === "signal" ? closeManagementPage() : openSignalPage(); return; }
@@ -4104,6 +4162,11 @@ document.addEventListener("keydown", event => {
 });
 document.addEventListener("change", (e) => {
   const control = e.target as HTMLInputElement | HTMLSelectElement;
+  if (control.id === "entry-on-open" && control instanceof HTMLInputElement) {
+    preferences.entryOnOpen = control.checked;
+    savePrefs();
+    return;
+  }
   if (control instanceof HTMLInputElement && control.hasAttribute("data-follow-system-theme")) {
     setFollowSystemTheme(control.checked);
     return;
@@ -4515,19 +4578,7 @@ async function start() {
     // Only the Future album MATRIX has an approved entry composition so far.
     // Saved layouts, the Punk theme, empty libraries and reduced motion retain
     // the existing immediate archive path; settings returns keep their page.
-    if (preferences.style.design === "rhine" && musicApplication.view.layout === "array" &&
-      musicApplication.view.show === "albums" && albums.length && !preferences.reduced &&
-      !restoreSettings && !restoreTheme) {
-      futureEntry = new FutureEntry(stage, (skipped, ms) => {
-        const now = ms / 1000;
-        if (skipped) scene?.showMusicArchiveImmediately(now);
-        else {
-          scene?.update(now, futureEntryShot(futureEntryEnd));
-          scene?.finishMusicIntro(now);
-        }
-        syncSelectionMotion();
-      });
-    }
+    if (preferences.entryOnOpen && !restoreSettings && !restoreTheme) startFutureEntry();
     requestAnimationFrame((ms) => {
       stage.classList.add("theme-motion-ready");
       frame(ms);

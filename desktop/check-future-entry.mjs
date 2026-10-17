@@ -42,6 +42,14 @@ export async function checkFutureEntry({
     '  const scene = document.querySelector("#three-scene");',
     '  const nav = document.querySelector(".music-topnav");',
     '  const detail = document.querySelector("#music-detail");',
+    '  const settings = document.querySelector("#music-settings");',
+    '  const interfaceCategory = document.querySelector(".settings-category[data-settings-category=interface]");',
+    '  const interfaceNav = document.querySelector("[data-settings-category-target=interface]");',
+    '  const entrySettings = document.querySelector("#entry-settings");',
+    '  const entryOnOpen = document.querySelector("#entry-on-open");',
+    '  const entryReplay = document.querySelector("[data-action=entry-replay]");',
+    '  const entrySettingsCategory = entrySettings?.closest(".settings-category");',
+    '  const skipButton = document.querySelector(".future-entry-skip");',
     '  return {',
     '    theme: stage?.dataset.theme ?? null,',
     '    visibility: document.visibilityState,',
@@ -67,7 +75,18 @@ export async function checkFutureEntry({
     '    sceneInert: scene?.inert ?? null,',
     '    navInert: nav?.inert ?? null,',
     '    detailHidden: detail?.hidden ?? null,',
-    '    skipPresent: Boolean(document.querySelector(".future-entry-skip")),',
+    '    settingsHidden: settings?.hidden ?? null,',
+    '    interfaceCategoryHidden: interfaceCategory?.hidden ?? null,',
+    '    interfaceNavCurrent: interfaceNav?.getAttribute("aria-current") === "page",',
+    '    entrySettingsPresent: Boolean(entrySettings),',
+    '    entrySettingsCategory: entrySettingsCategory?.dataset.settingsCategory ?? null,',
+    '    entryControlsInSection: Boolean(entrySettings?.contains(entryOnOpen) && entrySettings?.contains(entryReplay)),',
+    '    entrySettingsText: entrySettings?.textContent?.trim() ?? null,',
+    '    entryOnOpenChecked: entryOnOpen?.checked ?? null,',
+    '    entryReplayDisabled: entryReplay?.disabled ?? null,',
+    '    skipPresent: Boolean(skipButton),',
+    '    skipText: skipButton?.textContent?.trim() ?? null,',
+    '    welcomeDatabase: film?.querySelector(".welcome-database")?.textContent?.trim() ?? null,',
     '    visual: {',
     '      overlayOpacity: overlay ? getComputedStyle(overlay).opacity : null,',
     '      overlayBackground: overlay ? getComputedStyle(overlay).backgroundColor : null,',
@@ -82,6 +101,15 @@ export async function checkFutureEntry({
   ].join('\n');
 
   const evaluate = script => wc.executeJavaScript(script, true);
+  const click = selector => evaluate(
+    `(() => {
+      const selector = ${JSON.stringify(selector)};
+      const element = document.querySelector(selector);
+      if (!element) throw new Error("Missing UI control: " + selector);
+      element.click();
+      return true;
+    })()`,
+  );
   const snapshot = async () => {
     try {
       return await evaluate(stateScript);
@@ -123,6 +151,13 @@ export async function checkFutureEntry({
     browseInert: state.browseInert ?? null,
     sceneInert: state.sceneInert ?? null,
     detailHidden: state.detailHidden ?? null,
+    settingsHidden: state.settingsHidden ?? null,
+    interfaceCategoryHidden: state.interfaceCategoryHidden ?? null,
+    entrySettingsCategory: state.entrySettingsCategory ?? null,
+    entryControlsInSection: state.entryControlsInSection ?? null,
+    entryOnOpenChecked: state.entryOnOpenChecked ?? null,
+    entryReplayDisabled: state.entryReplayDisabled ?? null,
+    entrySettingsText: state.entrySettingsText ?? null,
     visual: state.visual ?? null,
   });
   const check = (name, condition, message) => {
@@ -131,7 +166,6 @@ export async function checkFutureEntry({
   };
   const screenshot = async (name, state) => {
     await pause(120);
-    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     const image = await browserWindow.capturePage();
     const file = path.join(outputDirectory, 'future-entry-' + name + '.png');
     await fs.writeFile(file, image.toPNG());
@@ -143,7 +177,44 @@ export async function checkFutureEntry({
       phase: state.entry?.phase ?? null,
       time: state.entry?.time ?? null,
       visual: state.visual ?? null,
+      entryOnOpenChecked: state.entryOnOpenChecked ?? null,
+      entryReplayDisabled: state.entryReplayDisabled ?? null,
+      entrySettingsText: state.entrySettingsText ?? null,
     });
+  };
+  const openInterfaceSettings = async label => {
+    await click('[data-action=\"settings\"]');
+    await waitFor(state => state.settingsHidden === false, label + ' settings page');
+    await click('[data-action=\"settings-category\"][data-settings-category-target=\"interface\"]');
+    const state = await waitFor(value =>
+      value.interfaceCategoryHidden === false &&
+      value.interfaceNavCurrent === true &&
+      value.entrySettingsPresent &&
+      value.entrySettingsCategory === 'interface' &&
+      value.entryControlsInSection &&
+      value.entryOnOpenChecked !== null,
+    label + ' interface entry settings');
+    result.states.push(compactState(label + '-settings', state));
+    return state;
+  };
+  const setEntryOnOpenFromUI = async (enabled, label, expectedBefore) => {
+    const state = await openInterfaceSettings(label);
+    if (expectedBefore !== undefined) {
+      check(label + ' starts with the expected checkbox state',
+        state.entryOnOpenChecked === expectedBefore,
+        label + ': entryOnOpen checkbox has an unexpected starting value');
+    }
+    if (state.entryOnOpenChecked !== enabled) await click('#entry-on-open');
+    const saved = await waitFor(value =>
+      getPreferences()?.entryOnOpen === enabled &&
+      value.entryOnOpenChecked === enabled,
+    label + ' entryOnOpen=' + enabled + ' persisted', 8000);
+    const preferences = getPreferences();
+    check(label + ' persists entryOnOpen through production preference filtering',
+      Object.hasOwn(preferences, 'entryOnOpen') && preferences.entryOnOpen === enabled,
+      label + ': entryOnOpen must survive the production preference whitelist');
+    result.states.push(compactState(label + '-saved', saved));
+    return saved;
   };
   const assertArchiveOverview = async label => {
     const state = await waitFor(value =>
@@ -153,6 +224,7 @@ export async function checkFutureEntry({
       value.presentation?.menuVisible === false &&
       value.stats?.cameraDetail === 0 &&
       value.stats?.musicArchiveReady === true &&
+      value.settingsHidden === true &&
       value.overlayPresent === false,
     label + ' archive overview', 12000);
     check(label + ' leaves album detail closed', state.presentation.menuVisible === false, label + ': album detail must stay closed');
@@ -185,13 +257,17 @@ export async function checkFutureEntry({
     initialPreferences?.style?.design === 'rhine' &&
       initialPreferences?.view?.layout === 'array' &&
       initialPreferences?.view?.show === 'albums' &&
-      initialPreferences?.reduced === false,
-    'Future entry probe must start with design=rhine, layout=array, show=albums, reduced=false');
+      initialPreferences?.reduced === false &&
+      initialPreferences?.entryOnOpen !== false,
+    'Future entry probe must start with design=rhine, layout=array, show=albums, reduced=false, with automatic entry enabled by default');
   const firstReady = await waitFor(state =>
     readyCount() >= 1 && state.stats?.loaded === true && state.entry?.active === true,
   'entry remains active after first ready', 8000);
   check('entry remains active after first ready', firstReady.entry.active === true,
     'The first frontendReady signal must release the window while the entry is still running');
+  check('skip label remains fixed English',
+    firstReady.skipText === 'SKIP INTRO ↗',
+    'The Future entry skip control must use its fixed English label');
   check('Future matrix scene selected',
     firstReady.design === 'rhine' && firstReady.stats.displayLayout?.effective === 'array',
     'The initial scene must use the Future matrix layout');
@@ -201,7 +277,7 @@ export async function checkFutureEntry({
   result.states.push(compactState('first-ready', firstReady));
 
   const phaseNames = ['logo', 'auth', 'scan', 'welcome', 'array', 'settle'];
-  const captureAt = { logo: 5.0, auth: 8.0, scan: 15.4, welcome: 19.0, array: 24.2, settle: 26.1 };
+  const captureAt = { logo: 5.0, auth: 8.0, scan: 15.4, welcome: 20.4, array: 24.2, settle: 26.1 };
   const capturedPhases = new Set();
   let lastTimelineRecord = 0;
   let handoffBefore;
@@ -229,6 +305,10 @@ export async function checkFutureEntry({
       check(phase + ' boot host is visible',
         state.visual?.bootOpacity === '1' && state.visual?.bootVisibility === 'visible',
         phase + ': boot layer must remain visible inside the isolated overlay');
+      if (phase === 'welcome') {
+        check('welcome identifies the TERMINAL', state.welcomeDatabase === 'TERMINAL',
+          'The welcome screen must say TERMINAL');
+      }
       check(phase + ' SVG surfaces retain their film dimensions',
         state.visual.logoWidth > 100 && state.visual.scanWidth > 500,
         phase + ': music icon CSS must not shrink the full-size animated SVGs');
@@ -309,6 +389,55 @@ export async function checkFutureEntry({
   await evaluate('(() => { const button = document.querySelector(".future-entry-skip"); if (!button) throw new Error("Future entry skip button is missing"); button.click(); return true; })()');
   await assertArchiveOverview('day skip button');
 
+  await setEntryOnOpenFromUI(false, 'disable automatic entry', true);
+  check('automatic entry off persists in the mock profile',
+    getPreferences().entryOnOpen === false,
+    'Turning off automatic entry must persist false through the production preferences selector');
+  const automaticOffReady = await reloadAndWait('automatic entry disabled', false);
+  check('automatic entry off skips the next open',
+    automaticOffReady.entry.active === false && !automaticOffReady.overlayPresent,
+    'Reloading with entryOnOpen=false must not show an entry overlay');
+  await assertArchiveOverview('automatic entry disabled');
+
+  const manualSettings = await openInterfaceSettings('manual replay eligibility');
+  check('manual replay remains available while auto entry is off',
+    manualSettings.entryOnOpenChecked === false && manualSettings.entryReplayDisabled === false,
+    'Manual replay must remain enabled when automatic entry is disabled');
+  // The settings page and its View Transition have separate animation clocks.
+  // Inspect the settled control panel rather than the outgoing archive snapshot.
+  await pause(650);
+  await screenshot('settings-entry-control-auto-off', manualSettings);
+  await click('[data-action="entry-replay"]');
+  const manualReplay = await waitFor(state =>
+    state.entry?.active === true && state.overlayPresent && state.settingsHidden === true,
+  'manual replay starts from the settings page', 8000);
+  check('manual replay uses the Future matrix',
+    manualReplay.design === 'rhine' && manualReplay.stats.displayLayout?.effective === 'array',
+    'Manual replay must use the Future matrix composition');
+  sendKey('ESC');
+  await assertArchiveOverview('manual replay Escape skip');
+  check('manual replay does not re-enable auto entry',
+    getPreferences().entryOnOpen === false,
+    'Manual replay must leave entryOnOpen disabled');
+
+  await setEntryOnOpenFromUI(true, 'enable automatic entry', false);
+  check('automatic entry on persists in the mock profile',
+    getPreferences().entryOnOpen === true,
+    'Turning on automatic entry must persist true through the production preferences selector');
+  const automaticOnReady = await reloadAndWait('automatic entry enabled', true);
+  check('automatic entry on plays on the next open',
+    automaticOnReady.entry.active === true && automaticOnReady.overlayPresent,
+    'Reloading with entryOnOpen=true must start the Future entry');
+  sendKey('ENTER');
+  await assertArchiveOverview('automatic entry enabled Enter skip');
+
+  const repeatedReady = await reloadAndWait('automatic entry repeats', true);
+  check('automatic entry repeats on every open',
+    repeatedReady.entry.active === true && repeatedReady.overlayPresent,
+    'A prior completed entry must not suppress the next window open');
+  await click('.future-entry-skip');
+  await assertArchiveOverview('repeated automatic entry button skip');
+
   await setPreferences({
     ...getPreferences(),
     reduced: true,
@@ -320,6 +449,13 @@ export async function checkFutureEntry({
     'Reduced motion must not create the Future entry overlay');
   check('reduced motion remains enabled', getPreferences().reduced === true,
     'Reduced motion preference should remain enabled for its reload');
+  const reducedSettings = await openInterfaceSettings('reduced motion replay eligibility');
+  check('manual replay is disabled for reduced motion',
+    reducedSettings.entryReplayDisabled === true &&
+      /减少动态|reduce(?:d)? motion/i.test(reducedSettings.entrySettingsText ?? ''),
+    'Reduced motion must disable manual replay and explain the restriction');
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close reduced motion settings');
 
   await setPreferences({
     ...getPreferences(),
@@ -332,6 +468,14 @@ export async function checkFutureEntry({
     'Future entry must not run for the grid layout');
   check('grid layout remains selected', gridOverview.stats.displayLayout?.effective === 'grid',
     'Grid reload must preserve the selected grid layout');
+  const gridSettings = await openInterfaceSettings('grid layout replay eligibility');
+  check('manual replay is disabled and explained outside MATRIX',
+    gridSettings.entryReplayDisabled === true &&
+      /ALBUMS\/MATRIX|MATRIX/i.test(gridSettings.entrySettingsText ?? ''),
+    'The replay control must explain that its entry is limited to Future ALBUMS/MATRIX');
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close grid layout settings');
+  await assertArchiveOverview('grid settings dismissed');
 
   result.summary = {
     naturalDurationSeconds,

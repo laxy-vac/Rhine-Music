@@ -1,5 +1,4 @@
 import { logo, brandHeading } from "./brand";
-import { trUi } from "./i18n";
 
 export function futureEntryMarkup(): string {
   return `
@@ -22,12 +21,12 @@ export function futureEntryMarkup(): string {
             <div class="welcome-panel"></div>
             <div class="welcome-heading">WELCOME TO</div>
             <div class="welcome-company"><strong>RHINE LAB.LLC.</strong><strong class="welcome-highlight" aria-hidden="true">RHINE LAB.LLC.</strong></div>
-            <div class="welcome-database">MUSIC ARCHIVE</div>
+            <div class="welcome-database">TERMINAL</div>
             <div class="welcome-logo">${logo}</div>
           </div>
         </section>
       </div>
-      <button class="future-entry-skip" type="button">${trUi("跳过进场 ↗")}</button>
+      <button class="future-entry-skip" type="button">SKIP INTRO ↗</button>
     </div>
   `;
 }

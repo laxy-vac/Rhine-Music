@@ -20,7 +20,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 调试界面缺失时仍有旧 `dist` 回退；它不能代表新版，先补当前构建。
 - 磁盘修改不会替换旧窗口内存或已载入模型。构建后完整退出并重开窗口。
 - 窗口在后台初始化与首帧就绪后首次显示；已显示窗口重载保持可见，无旧加载页或 Punk intro。
-- Future 的 ALBUMS/MATRIX 在显示后播放入场并停在总览；按钮、Enter、Esc 可跳过，减少动态直接显示。其他主题和排列仍沿用直接显示路径。
+- Future 的 ALBUMS/MATRIX 默认每次新开窗口在显示后播放入场并停在总览；按钮、Enter、Esc 可跳过。设置 → 界面与交互 → 终端入场可关闭自动播放或手动重播；减少动态、其他主题和排列仍直接显示。
 
 `启动音乐播放器.bat`、`.command`及其旧 launcher 保留兼容测试引用，不是当前开发入口。`Build-Windows-EXE.cmd`是当前品尝版打包的兼容包装。
 
