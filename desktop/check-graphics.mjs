@@ -125,6 +125,7 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     screenshots.push(file);
   };
   const cases = [];
+  const switchChecks = [];
   wc.setBackgroundThrottling(false);
   let assertDefaultSettingsCategory = true;
   const openStyle = async () => {
@@ -245,7 +246,45 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
       cases.push({ design, styleAppearanceOnly:true, settingsCategories:settingsCategories, fullscreenInAppearance:true, nativeEnterAndExit:true, escapeExit:true, boundsRestored:true, gpuChoices:gpuLoaded.appearance.gpu.options, gpuInventory:inventory.diagnostics, activeGpu:gpuLoaded.appearance.gpu.active, gpuSaveAndReset:true, invalidGpuRejected:true });
       if(design!=='archive') await closeSettingsToStyle();
     }
-    return { ok: true, cases, screenshots };
+    const savedTheme = await evaluate('document.querySelector("#stage").dataset.theme');
+    for (const design of ['rhine', 'archive']) {
+      for (const theme of ['day', 'night']) {
+        await openStyle();
+        await click(`.design-family-card[data-style-design=${design}]`);
+        await until(state=>state.design===design&&state.styleTitle==='STYLE',`${design} switch appearance`);
+        await click(`aside.theme-mode-controls button[data-theme=${theme}]`);
+        await click('.music-topnav [data-action=settings]');
+        await until(state=>state.page==='settings','Settings switch check');
+        await click('#music-settings [data-settings-category-target=interface]');
+        await until(state=>state.category==='interface','interface switch controls');
+        await evaluate(`(() => {window.__settingsSwitchProbe=[...document.querySelectorAll('#music-settings input[type=checkbox][role=switch]')].filter(node=>node.getClientRects().length).map(node=>({node,checked:node.checked,indeterminate:node.indeterminate}));})()`);
+        try {
+          for (const checked of [false, true]) {
+            await evaluate(`window.__settingsSwitchProbe.forEach(({node})=>{node.checked=${checked};node.indeterminate=false;})`);
+            await pause(260);
+            const measurements=await evaluate(`window.__settingsSwitchProbe.map(({node})=>{
+              const thumb=getComputedStyle(node,'::after'),style=getComputedStyle(node),x=new DOMMatrixReadOnly(thumb.transform==='none'?undefined:thumb.transform).m41;
+              const inset=parseFloat(thumb.left),left=inset+x,top=parseFloat(thumb.top),size=parseFloat(thumb.width);
+              return {id:node.id,checked:node.checked,indeterminate:node.indeterminate,width:node.getBoundingClientRect().width,flexBasis:style.flexBasis,inset,left,right:node.clientWidth-left-size,top,bottom:node.clientHeight-top-parseFloat(thumb.height)};
+            })`);
+            assert.ok(measurements.length>=4, 'The interface category must expose its real settings switches');
+            for(const item of measurements){
+              assert.equal(item.checked,checked,`${design}/${theme}/${item.id} must retain the requested binary state`);
+              assert.equal(item.indeterminate,false);
+              assert.ok(Math.abs((checked?item.right:item.left)-item.inset)<=1,`${design}/${theme}/${item.id} thumb must reach the ${checked?'right':'left'} endpoint: ${JSON.stringify(item)}`);
+              assert.ok(Math.abs(item.top-item.bottom)<=1,`${design}/${theme}/${item.id} thumb must be vertically centered`);
+            }
+            switchChecks.push({design,theme,checked,measurements});
+            if(design==='rhine'&&theme==='day') await capture(`future-switches-${checked?'on':'off'}`,'#motion-settings');
+          }
+        } finally {
+          await evaluate(`window.__settingsSwitchProbe?.forEach(({node,checked,indeterminate})=>{node.checked=checked;node.indeterminate=indeterminate});delete window.__settingsSwitchProbe;`);
+        }
+      }
+    }
+    await openStyle();
+    await click(`aside.theme-mode-controls button[data-theme=${savedTheme}]`);
+    return { ok: true, cases, screenshots, switchChecks };
   } finally {
     if (!browserWindow.isDestroyed()) { if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false); wc.setBackgroundThrottling(true); }
   }
