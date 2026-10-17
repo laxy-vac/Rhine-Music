@@ -73,7 +73,7 @@ import { importPowerampPreset, importRhineProcessingBackup, normalizeProcessing,
 import { dsdBadgeMarkup, hiResBadgeMarkup, isDsdAlbum, isDsdTrack, isHiResAlbum, isHiResTrack } from "./hi-res";
 import { SurfaceTransition, PageScanTransition } from "./ui-transitions";
 import { syncQualityUI } from "./quality-settings";
-import { graphicsSettingsMarkup } from "./graphics-settings";
+import { displaySettingsMarkup, motionSettingsMarkup } from "./graphics-settings";
 import { mountGpuSettings, type GpuReport } from "./gpu-settings";
 import { ArchiveScene } from "./scene";
 import { FutureEntry, futureEntryEnd, futureEntryShot } from "./future-entry";
@@ -179,10 +179,11 @@ type Theme = "day" | "night";
 type Panel = "search" | "online" | null;
 type SettingsCategory = "appearance" | "interface" | "audio" | "lyrics" | "library" | "sources" | "about";
 const settingsCategories: { id: SettingsCategory; title: string; intro: string; sections: string[] }[] = [
-  { id: "appearance", title: trUi("常规"), intro: trUi("管理界面语言。图形、主题和显示选项位于 GRAPHICS。"), sections: ["#appearance-settings"] },
-  { id: "interface", title: trUi("交互与入场"), intro: trUi("设置终端入场、操作音效和氛围配乐。"), sections: ["#entry-settings", "#interface-sound-settings"] },
-  { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
+  { id: "interface", title: trUi("界面与交互"), intro: trUi("管理界面语言、动态效果、入场与操作反馈。"), sections: ["#interface-settings", "#motion-settings", "#entry-settings", "#interface-sound-settings"] },
+  // Retain the old route key for saved in-window settings links.
+  { id: "appearance", title: trUi("显示与性能"), intro: trUi("设置窗口显示、渲染画质、优先显卡与性能检测。"), sections: ["#graphics-display-settings"] },
   { id: "lyrics", title: trUi("歌词"), intro: trUi("管理默认来源、共享服务器与本地缓存。"), sections: ["#lyrics-global-settings"] },
+  { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
   { id: "library", title: trUi("音乐库"), intro: trUi("选择音乐文件夹、导入与扫描，管理专辑分类和介绍资料。"), sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
   { id: "sources", title: trUi("音乐来源"), intro: trUi("连接 FTP 远程音乐库。"), sections: ["#ftp-settings"] },
   { id: "about", title: trUi("关于"), intro: trUi("查看项目来源和使用许可。"), sections: ["#about-settings"] },
@@ -483,7 +484,7 @@ let albums: MusicAlbum[] = [],
   demo = false;
 let panel: Panel = null;
 let page: "music" | "settings" | "eq" | "lyrics" | "signal" | "theme" = "music";
-let settingsCategory: SettingsCategory = "appearance";
+let settingsCategory: SettingsCategory = "interface";
 let themePageScrollTop = 0;
 let foobarShell: ReturnType<typeof setupFoobarShell> | undefined;
 let catalogGrid: ReturnType<typeof setupMusicCatalogGrid> | undefined;
@@ -600,7 +601,7 @@ stage.innerHTML = ui`
   </section>
   <div id="music-empty" class="music-empty" hidden><small>YOUR PRIVATE COLLECTION</small><h1>让音乐进入这座档案馆。</h1><p>在设置中选择本地音乐文件夹，专辑封面会出现在每一张卡片上。</p><button data-action="library-settings">打开音乐库设置 ↗</button><button data-action="demo" class="subtle">先查看演示封面</button></div>
   <section id="music-settings" class="music-settings-page" aria-labelledby="settings-page-title" hidden>
-    <div class="settings-page-heading"><div><small>SYSTEM / SETTINGS</small><h1 id="settings-page-title" tabindex="-1">设置</h1><p>管理通用、音频、入场与音乐库偏好</p></div></div>
+    <div class="settings-page-heading"><div><small>SYSTEM / SETTINGS</small><h1 id="settings-page-title" tabindex="-1">设置</h1><p>管理界面与交互、显示与性能、歌词、音频、音乐库、音乐来源与关于设置。</p></div></div>
     <div class="settings-page-layout"><nav class="settings-page-nav" aria-label="设置分类">${settingsNavigationMarkup()}</nav><div id="settings-page-content" class="settings-page-content" role="region" aria-label="设置内容"></div></div>
   </section>
   <section id="music-eq-page" class="music-settings-page music-eq-page" aria-labelledby="eq-page-title" hidden>
@@ -617,8 +618,8 @@ stage.innerHTML = ui`
   </section>
   <div class="music-page-scan" aria-hidden="true" hidden><div class="music-page-scan-head"></div></div>
   <section id="music-theme-page" class="music-settings-page music-theme-page" aria-labelledby="theme-page-title" hidden>
-    <div class="settings-page-heading"><div><small>GRAPHICS</small><h1 id="theme-page-title" tabindex="-1">图形设置</h1><p>统一调整图形、主题和显示选项。</p></div></div>
-    <div id="theme-page-content" class="settings-page-content" role="region" aria-label="图形、主题与显示"></div>
+    <div class="settings-page-heading"><div><small>STYLE</small><h1 id="theme-page-title" tabindex="-1">主题与外观</h1><p>主题、配色与唱片盒外观在 STYLE 中调整。</p></div></div>
+    <div id="theme-page-content" class="settings-page-content" role="region" aria-label="主题与外观"></div>
   </section>
   ${playbackMarkup()}
   <div class="music-bottomline"><span id="collection-line">LOCAL COLLECTION <i>·</i> <span id="library-count">0 ALBUMS</span></span><span id="runtime-info">THREE.JS / LOCAL</span></div>
@@ -1725,6 +1726,7 @@ function selectSettingsCategory(next: SettingsCategory, focus = false) {
   if (changed) content.scrollTop = settingsScrollPositions.get(next) ?? 0;
   syncAudioSettingsLocation();
   if (next === "interface") syncEntrySettings();
+  if (next === "appearance") mountDisplaySettings();
   if (next === "lyrics") void lyricsSettings?.refresh();
   if (next === "library") {
     const body = $("#library-page-body");
@@ -2007,21 +2009,9 @@ function renderThemePage() {
   const focusFollowing = focused && content.contains(focused) && focused.hasAttribute("data-follow-system-theme");
   settingsSelectControls?.destroy();
   cleanupStylePreview?.();
-  cleanupQualityDetection?.();
-  cleanupGpuSettings?.();
   caseEditor?.destroy();
   caseEditor = undefined;
   content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme, preferences.followSystemTheme);
-  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", graphicsSettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.windowAspect, preferences.reduced));
-  const gpuBridge = window.rhineDesktop;
-  cleanupGpuSettings = mountGpuSettings(content.querySelector<HTMLElement>("[data-gpu-settings]")!, gpuBridge?.gpuInfo && gpuBridge.selectGpu ? { gpuInfo: gpuBridge.gpuInfo, selectGpu: gpuBridge.selectGpu } : undefined);
-  cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#graphics-display-settings .quality-settings")!, {
-    getStyle: () => preferences.style,
-    getTheme: () => preferences.theme === "night" ? "night" : "day",
-    getCaseSettings: () => caseProfiles[preferences.style.design],
-    getSize: () => { const rect = stage.getBoundingClientRect(); return { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }; },
-    apply: quality => { renderQuality = normalizeQuality(quality); updateQuality(); },
-  });
   const editorHost = document.createElement("section");
   editorHost.id = "theme-case-editor";
   content.querySelector("#theme-quality-slot")?.before(editorHost);
@@ -2057,12 +2047,27 @@ function renderThemePage() {
   });
   settingsSelectControls = enhanceSettingsSelectControls(content);
   cleanupStylePreview = setupStylePreview(content, preferences.style, preferences.theme);
-  updateQuality();
   editableRanges?.sync();
   content.scrollTop = scroll;
   syncFullscreenUI();
   const restored = focusField ? content.querySelector<HTMLElement>(`[data-style-field="${focusField}"]`) : focusScheme ? content.querySelector<HTMLElement>(`[data-style-scheme="${focusScheme}"]`) : focusDesign ? content.querySelector<HTMLElement>(`[data-style-design="${focusDesign}"]`) : focusFollowing ? content.querySelector<HTMLElement>("[data-follow-system-theme]") : focusTheme ? content.querySelector<HTMLElement>(`button[data-theme="${focusTheme}"]`) : null;
   restored?.focus({ preventScroll: true });
+}
+
+function mountDisplaySettings() {
+  if (cleanupQualityDetection || page !== "settings" || settingsCategory !== "appearance") return;
+  const host = document.querySelector<HTMLElement>("#graphics-display-settings");
+  if (!host) return;
+  const gpuBridge = window.rhineDesktop;
+  cleanupGpuSettings = mountGpuSettings(host.querySelector<HTMLElement>("[data-gpu-settings]")!, gpuBridge?.gpuInfo && gpuBridge.selectGpu ? { gpuInfo: gpuBridge.gpuInfo, selectGpu: gpuBridge.selectGpu } : undefined);
+  cleanupQualityDetection = mountQualityDetection(host.querySelector<HTMLElement>(".quality-settings")!, {
+    getStyle: () => preferences.style,
+    getTheme: () => preferences.theme === "night" ? "night" : "day",
+    getCaseSettings: () => caseProfiles[preferences.style.design],
+    getSize: () => { const rect = stage.getBoundingClientRect(); return { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }; },
+    apply: quality => { renderQuality = normalizeQuality({ ...quality, wave: renderQuality.wave }); updateQuality(); },
+  });
+  syncFullscreenUI();
 }
 
 let panelFocus: HTMLElement | null = null;
@@ -3259,6 +3264,10 @@ function entrySettingsMarkup() {
 
 function renderSettingsPage() {
   const content = $("#settings-page-content");
+  cleanupQualityDetection?.();
+  cleanupQualityDetection = undefined;
+  cleanupGpuSettings?.();
+  cleanupGpuSettings = undefined;
   settingsSelectControls?.destroy();
   settingsSelectControls = undefined;
   void eqControls?.destroy().catch((error: Error) => notify(error.message));
@@ -3268,7 +3277,9 @@ function renderSettingsPage() {
   lyricsSettings?.destroy();
   lyricsSettings = undefined;
   content.innerHTML =
-    ui`<section class="panel-section" id="appearance-settings"><h3>界面语言</h3><p>图形、主题和显示选项已集中到 GRAPHICS。</p><button type="button" class="text-button" data-action="theme">打开 GRAPHICS ↗</button></section>
+    ui`<section class="panel-section" id="interface-settings"><h3>界面语言</h3><p>主题、配色与唱片盒外观在 STYLE 中调整。</p><button type="button" class="text-button" data-action="theme">打开 STYLE ↗</button></section>
+    ${motionSettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.reduced)}
+    ${displaySettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.windowAspect)}
     <section class="panel-section" id="library-sort-settings"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>${uiLanguage() === "en" ? "Shared with browse toolbar" : "与浏览工具栏共享设置"}</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${musicArrangementPreset() === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}<option value="custom" disabled ${musicArrangementPreset() === "custom" ? "selected" : ""}>${trUi("自定义")}</option></select></label><p>${uiLanguage() === "en" ? "More grouping and sorting options are available in the album browse toolbar." : "更多分组与排序选项可在唱片浏览页工具栏中调整。"}</p></section>
     <section class="panel-section" id="introduction-settings"><h3>专辑介绍</h3><p>从公开百科查询并更新专辑介绍，附上资料来源。介绍保存在本机，不需要配置 MusicBrainz 联系信息；音乐文件不会上传。</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details></section>
     <section class="panel-section" id="current-audio-settings"><h3>当前音源</h3><p id="current-audio-source"></p><p>歌曲文件的格式与音质信息。播放时的处理和输出方式可在音频链路中查看。</p><button class="text-button" data-action="audio-info">查看音频链路 ↗</button></section>
@@ -3289,7 +3300,7 @@ function renderSettingsPage() {
     <section class="panel-section" id="about-settings"><h3>项目与许可</h3><p>音乐适配与维护：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/RonaldDeng/Rhine-Music-Demo/blob/v0.2.0/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
   content.querySelector('#about-settings')?.insertAdjacentHTML('beforeend',trUi('<button type="button" class="text-button known-issues-button" data-action="known-issues">已知问题</button>'));
   if (preferences.style.design === "archive") content.querySelector('#about-settings')?.insertAdjacentHTML('beforeend',ui`<p><a href="/licenses/audio-archive-style-mit.txt" target="_blank" rel="noopener">Audio Archive · MIT ↗</a> · <a href="/licenses/geistmono-ofl.txt" target="_blank" rel="noopener">Geist Mono · SIL OFL ↗</a></p>`);
-  content.querySelector('#appearance-settings')?.insertAdjacentHTML('beforeend', ui`<label class="settings-row"><span>界面语言<small>切换后重新载入界面</small></span><select id="ui-language" aria-label="界面语言"><option value="zh-CN" ${uiLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${uiLanguage()==='en'?'selected':''}>English</option></select></label><button type="button" class="text-button" data-action="apply-language">应用语言 ↗</button>`);
+  content.querySelector('#interface-settings')?.insertAdjacentHTML('beforeend', ui`<label class="settings-row"><span>界面语言<small>切换后重新载入界面</small></span><select id="ui-language" aria-label="界面语言"><option value="zh-CN" ${uiLanguage()==='zh-CN'?'selected':''}>简体中文</option><option value="en" ${uiLanguage()==='en'?'selected':''}>English</option></select></label><button type="button" class="text-button" data-action="apply-language">应用语言 ↗</button>`);
   content.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(control => control.setAttribute("role", "switch"));
   syncEntrySettings();
   entryTextControls.sync();
@@ -3329,6 +3340,9 @@ function renderSettingsPage() {
     }, notify,
   });
   settingsSelectControls = enhanceSettingsSelectControls(content);
+  syncQualityUI(renderQuality, true);
+  syncQualitySummary();
+  syncFullscreenUI();
   selectSettingsCategory(settingsCategory);
   content.scrollTop = settingsScrollPositions.get(settingsCategory) ?? 0;
   markAudioSettingsSection(audioSettingsSection);
@@ -3703,20 +3717,23 @@ function updateQuality() {
   preferences.renderQuality = renderQuality;
   scene?.setQuality(renderQuality);
   viewer?.setQuality(renderQuality);
-  syncQualityUI(renderQuality);
+  syncQualityUI(renderQuality, true);
   terminalLighting.setQuality(renderQuality);
   if (scene) terminalLighting.setDirection(scene.terminalLightDirection());
   caseEditor?.refresh();
   lyricsPage.refreshCasePreview();
   settingsSelectControls?.sync();
+  syncQualitySummary();
+  editableRanges?.sync();
+  savePrefs();
+}
+function syncQualitySummary() {
   const summary = document.querySelector("#quality-summary");
   if (summary) {
     summary.textContent = ui`渲染 ${renderQuality.scale}% · 像素上限 ${renderQuality.pixelRatio}×`;
     if (preferences.style.design === "rhine")
       summary.textContent += ` · ${renderQuality.antialias === "off" ? trUi("原始抗锯齿") : "SMAA"}`;
   }
-  editableRanges?.sync();
-  savePrefs();
 }
 async function editGenres() {
   const body = document.querySelector("#library-page-body");
@@ -4323,7 +4340,7 @@ document.addEventListener("change", (e) => {
   }
   if (el.id === "quality-preset") {
     preferences.quality = el.value as QualityPreset;
-    renderQuality = normalizeQuality(qualityPresets[preferences.quality]);
+    renderQuality = normalizeQuality({ ...qualityPresets[preferences.quality], wave: renderQuality.wave });
     updateQuality();
   }
   if (el.matches("[data-window-aspect]")) {

@@ -18,8 +18,8 @@
 | 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
 | 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
 | Future MATRIX 入场 | ALBUMS/MATRIX 默认每次打开播放终端/Logo/圆环/欢迎与阵列演出后停在总览；英文跳过、昼夜、减少动态、持久化自动播放开关及手动重播按主题规范处理 |
-| Graphics 与入场个性化 | 两主题 GRAPHICS 复用原 Style 页集中图形/主题/显示；Future 欢迎文案与 ID 可改，字母/空格/24 字符边界统一校验；Punk 入场入口预留且禁用 |
-| 显示分组、全屏与实验选卡 | 窗口/动态/显卡/画质合并至显示与渲染；原生全屏往返与状态同步；默认自动并可选当前可用适配器，保存后重开生效，缺失或身份不明明确回退/提示 |
+| STYLE、Settings 与入场个性化 | 两主题 STYLE 只管理主题、日夜配色、文字字号、盒体与场景外观预览；Settings 七类各自拥有唯一控件，界面与交互默认打开；Future 欢迎文案与 ID 可改并受字母/空格/24 字符边界保护，Punk 入场入口预留且禁用 |
+| 显示与性能、全屏与物理显卡 | Settings 中管理比例、全屏、渲染画质、优先显卡与性能检测；原生全屏往返与状态同步；显卡按稳定物理 PnP 身份归并 DXGI 逻辑别名，缺失身份不猜卡，保存后重启生效 |
 
 缓存更新、纸卡闪烁、旧顶栏横滑条、控件漏光和本轮已反馈的界面问题不再作为未完成任务保留。已结束的统一架构迁移也不再按阶段重新排期。
 
@@ -28,7 +28,7 @@
 | 优先项 | 已知事实 | 下一步需要得到的结果 |
 | --- | --- | --- |
 | 启动耗时 | 已实现加载好再显示；尚无真实曲库的分阶段耗时基线 | 分开测服务/偏好/索引、资源读取、场景创建、着色器与首帧，定位关键路径和窗口等待时间 |
-| RTX 5080 掉帧 | 已有用户掉帧反馈，瓶颈未测定；不是已定位的 GPU 或 CPU 故障 | 固定场景采集帧时间、主线程/GPU负载、资源与内存；分别比较静止、切专辑、滚动、开合和页面切换 |
+| RTX 5080 掉帧 | 已确认本机 4 个 DXGI/KMT 逻辑 LUID 映射到同一物理 RTX 5080；掉帧瓶颈仍未测定，不是已定位的 GPU 或 CPU 故障 | 固定场景采集帧时间、主线程/GPU负载、资源与内存；分别比较静止、切专辑、滚动、开合和页面切换 |
 | 其他入场构图 | 当前只为 Future ALBUMS/MATRIX 接入用户给定参考；其他主题与排列保持直接显示 | 按用户后续参考逐项确定，沿用公共状态、首帧门与 renderer，不自动推广当前镜头或恢复旧加载页 |
 | 资源与交互开销 | 两主题已共用 renderer/资源；ARRAY 仍有遮罩合成、玻璃与阴影等实际成本 | 依据测量处理首载、重复工作、资源生命周期和长任务，验证视觉质量及选择/点击命中不退化 |
 | 复杂音频实时性 | LSP 当前使用通用 DSP 核，复杂设置的实时性能未全面测量 | 如另行开展音频优化，独立测处理耗时、缓冲和输出，不用图形 FPS 推断音频稳定性 |
@@ -59,9 +59,9 @@
 | 基本离线检查 | `npm test` |
 | 界面类型与构建 | `node scripts/build-source-preview.mjs --interface-only` |
 | 真实前端隐藏启动/重载 | `node desktop/check-startup-entry.cjs` |
-| Future 入场、文本防呆及两主题 Graphics | `node scripts/check-entry-preferences.mjs`；`node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
+| Future 入场与文本边界 | `node scripts/check-entry-preferences.mjs`；`node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
 | 系统跟随语义与整窗交互 | `node --experimental-strip-types --test scripts/check-music-theme-follow.mjs`；`node desktop/check-startup-entry.cjs --theme-follow` |
-| 显示分类、全屏与实验显卡 | `node scripts/check-gpu-selection.cjs`；`node desktop/check-startup-entry.cjs --graphics`，可加 `--gpu-manual` 验证当前可用卡的启动路径；隔离报告/截图在 `.tools/graphics-2026-10-17/` |
+| Settings 显示与性能、STYLE、全屏和显卡 | `node scripts/check-gpu-selection.cjs`；`node desktop/check-startup-entry.cjs --graphics`（兼容保留的 probe 名称，检查 Settings → 显示与性能及 STYLE）；可加 `--gpu-manual` 验证隔离配置中的物理卡启动路径 |
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
 | 三维资源/盒体专项 | `scripts/check-case-system.mjs`，按相关模式运行 |

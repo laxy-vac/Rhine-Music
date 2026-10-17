@@ -3,34 +3,122 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const settingsCategories = ['interface', 'appearance', 'audio', 'lyrics', 'library', 'sources', 'about'];
+const categoryTitlePatterns = {
+  interface: /界面与交互|interface.{0,24}interaction/i,
+  appearance: /显示与性能|display.{0,24}performance/i,
+  audio: /音频|audio/i,
+  lyrics: /歌词|lyrics/i,
+  library: /音乐库|library/i,
+  sources: /音乐来源|来源|music sources/i,
+  about: /关于|about/i,
+};
 
 export async function checkGraphics({ browserWindow, outputDirectory }) {
   const wc = browserWindow.webContents;
   const evaluate = script => wc.executeJavaScript(script, true);
-  const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const click = selector => evaluate(`(() => { const node=document.querySelector(${JSON.stringify(selector)}); if(!node)throw new Error('Missing UI control: '+${JSON.stringify(selector)}); node.click(); return true; })()`);
   const snapshot = () => evaluate(`(() => {
-    const group=document.querySelector('#graphics-display-settings'),button=group?.querySelector('[data-action=fullscreen]');
-    return {design:document.querySelector('#stage').dataset.design,page:document.querySelector('#stage').dataset.page,
-      title:group?.querySelector('h2')?.textContent.trim(),pressed:button?.getAttribute('aria-pressed'),disabled:button?.disabled,label:button?.textContent,
-      grouped:!!group&&['[data-window-aspect]','#reduced-motion','[data-quality=wave]','#quality-preset','.quality-settings'].every(selector=>group.querySelector(selector)),
-      counts:Object.fromEntries(['select[data-window-aspect]','#reduced-motion','select[data-quality=wave]','[data-action=fullscreen]','#quality-preset'].map(selector=>[selector,document.querySelectorAll(selector).length])),
-      unique:['select[data-window-aspect]','#reduced-motion','select[data-quality=wave]','[data-action=fullscreen]','#quality-preset'].every(selector=>document.querySelectorAll(selector).length===1),
-      motionGroup:!!group?.querySelector('.graphics-motion-settings #reduced-motion')&&!!group?.querySelector('.graphics-motion-settings [data-quality=wave]'),
-      renderWithoutMotion:!group?.querySelector('.quality-settings [data-quality=wave]'),
-      gpu:{value:group?.querySelector('[data-gpu-preference]')?.value,disabled:group?.querySelector('[data-gpu-preference]')?.disabled,
-        options:[...group?.querySelectorAll('[data-gpu-preference] option')||[]].map(option=>({value:option.value,label:option.textContent,disabled:option.disabled})),
-        status:group?.querySelector('[data-gpu-status]')?.textContent,error:group?.querySelector('[data-gpu-error]')?.textContent,active:group?.querySelector('[data-gpu-active]')?.textContent},
-      prefs:JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}')};
+    const settingsCategories=${JSON.stringify(settingsCategories)};
+    const stage=document.querySelector('#stage');
+    const settings=document.querySelector('#music-settings');
+    const stylePage=document.querySelector('#music-theme-page');
+    const display= settings?.querySelector('#graphics-display-settings');
+    const activeCategory=settings?.querySelector('[data-settings-category-target][aria-current="page"]')?.dataset.settingsCategoryTarget??null;
+    const interfaceSection=settings?.querySelector('[data-settings-category="interface"]');
+    const appearanceSection=settings?.querySelector('[data-settings-category="appearance"]');
+    const interfaceSettings=interfaceSection?.querySelector('#interface-settings');
+    const motionSettings=interfaceSection?.querySelector('#motion-settings');
+    const motionGroup=motionSettings?.matches('.graphics-motion-settings')?motionSettings:motionSettings?.querySelector('.graphics-motion-settings');
+    const entrySettings=interfaceSection?.querySelector('#entry-settings');
+    const styleSlot=stylePage?.querySelector('#theme-quality-slot');
+    const categoryDetails=[...settings?.querySelectorAll('[data-settings-category]')??[]].map(section=>({
+      id:section.dataset.settingsCategory,
+      title:section.querySelector(':scope > h2')?.textContent?.trim()??'',
+      titleId:section.getAttribute('aria-labelledby'),
+      titleTarget:section.querySelector(':scope > h2')?.id??'',
+      buttonCount:settings.querySelectorAll('[data-settings-category-target="'+section.dataset.settingsCategory+'"]').length,
+      sectionCount:settings.querySelectorAll('[data-settings-category="'+section.dataset.settingsCategory+'"]').length,
+      buttonLabel:settings.querySelector('[data-settings-category-target="'+section.dataset.settingsCategory+'"]')?.textContent?.trim()??''
+    }));
+    const displaySelectors=['[data-window-aspect]','[data-action=fullscreen]','[data-gpu-preference]','.quality-settings','.quality-detection'];
+    const motionSelectors=['#reduced-motion','[data-quality=wave]'];
+    const styleForbidden='#graphics-display-settings,#motion-settings,#reduced-motion,[data-quality],.quality-settings,[data-gpu-settings],[data-gpu-preference],[data-window-aspect],[data-action=fullscreen],#entry-settings,#ui-language';
+    const gpuSelect=display?.querySelector('[data-gpu-preference]');
+    const fullScreen=display?.querySelector('[data-action=fullscreen]');
+    const caseEditor=stylePage?.querySelector('#theme-case-editor');
+    return {
+      design:stage?.dataset.design??null,
+      page:stage?.dataset.page??null,
+      category:activeCategory,
+      styleTitle:stylePage?.querySelector('#music-style-title')?.textContent?.trim()??null,
+      styleKicker:stylePage?.querySelector('.music-style-heading small')?.textContent?.trim()??null,
+      styleNavLabel:document.querySelector('.music-topnav [data-action=theme]')?.textContent?.trim()??null,
+      stylePageOpen:!!stylePage&&!stylePage.hidden,
+      styleHasThemeCards:!!stylePage?.querySelector('.design-family-card[data-style-design]'),
+      styleHasDayNight:!!stylePage?.querySelector('.theme-mode-controls [data-theme=day]')&&!!stylePage?.querySelector('.theme-mode-controls [data-theme=night]'),
+      styleHasColorChoices:!!stylePage?.querySelector('[data-style-scheme],.theme-choice-preview'),
+      styleHasCaseEditor:!!stylePage?.querySelector('#theme-case-editor .case-editor,.case-editor'),
+      styleHasScenePreview:!!stylePage?.querySelector('[data-style-preview-content],.music-style-preview,.foobar-style-preview,.theme-choice-scene'),
+      styleQualitySlotEmpty:!!styleSlot&&styleSlot.children.length===0,
+      styleCaseEditorBeforeQualitySlot:!!caseEditor&&!!styleSlot&&!!(caseEditor.compareDocumentPosition(styleSlot)&Node.DOCUMENT_POSITION_FOLLOWING),
+      styleHasForbiddenControls:!!stylePage?.querySelector(styleForbidden),
+      categories:categoryDetails,
+      categoryCounts:Object.fromEntries(settingsCategories.map(id=>[id,{
+        buttons:settings?.querySelectorAll('[data-settings-category-target="'+id+'"]').length??0,
+        sections:settings?.querySelectorAll('[data-settings-category="'+id+'"]').length??0
+      }])),
+      activeCategoryCount:settings?.querySelectorAll('[data-settings-category-target][aria-current="page"]').length??0,
+      visibleCategories:[...settings?.querySelectorAll('[data-settings-category]')??[]].filter(section=>!section.hidden).map(section=>section.dataset.settingsCategory),
+      interface:{
+        sectionVisible:!!interfaceSection&&!interfaceSection.hidden,
+        sectionTitle:interfaceSection?.querySelector(':scope > h2')?.textContent?.trim()??null,
+        hasSettings:!!interfaceSettings,
+        hasLanguage:!!interfaceSettings?.querySelector('#ui-language'),
+        hasLanguageApply:!!interfaceSettings?.querySelector('[data-action=apply-language]'),
+        hasStyleLink:!!interfaceSettings?.querySelector('[data-action=theme]'),
+        hasMotion:!!motionSettings,
+        hasMotionGroup:!!motionGroup,
+        hasReducedMotion:!!motionGroup?.querySelector('#reduced-motion'),
+        hasWaveQuality:!!motionGroup?.querySelector('[data-quality=wave]'),
+        hasEntry:!!entrySettings,
+        hasEntryControls:!!entrySettings?.querySelector('#entry-on-open,[data-action=entry-replay],#entry-welcome,#entry-identity'),
+        hasInterfaceSound:!!interfaceSection?.querySelector('#interface-sound-settings'),
+        languageValue:interfaceSettings?.querySelector('#ui-language')?.value??null
+      },
+      appearance:{
+        sectionVisible:!!appearanceSection&&!appearanceSection.hidden,
+        sectionTitle:appearanceSection?.querySelector(':scope > h2')?.textContent?.trim()??null,
+        hasDisplay:!!display,
+        hasWindowAspect:!!display?.querySelector('[data-window-aspect]'),
+        hasFullscreen:!!fullScreen,
+        pressed:fullScreen?.getAttribute('aria-pressed')??null,
+        disabled:fullScreen?.disabled??null,
+        label:fullScreen?.textContent?.trim()??null,
+        hasGpu:!!gpuSelect,
+        hasQuality:!!display?.querySelector('.quality-settings [data-quality]'),
+        hasDetection:!!display?.querySelector('.quality-detection'),
+        hasMotion:!!appearanceSection?.querySelector('#motion-settings,#reduced-motion,.graphics-motion-settings,[data-quality=wave]'),
+        hasLanguage:!!appearanceSection?.querySelector('#ui-language'),
+        grouped:!!display&&displaySelectors.every(selector=>display.querySelector(selector)),
+        motionSelectorsInInterface:!!motionGroup&&motionSelectors.every(selector=>motionGroup.querySelector(selector)),
+        counts:Object.fromEntries(['#interface-settings','#ui-language','[data-action=apply-language]','#motion-settings','#entry-settings','#interface-sound-settings','#graphics-display-settings','select[data-window-aspect]','#reduced-motion','select[data-quality=wave]','[data-action=fullscreen]','#quality-preset','[data-gpu-preference]','.quality-detection'].map(selector=>[selector,document.querySelectorAll(selector).length])),
+        gpu:{value:gpuSelect?.value,disabled:gpuSelect?.disabled,
+          options:[...display?.querySelectorAll('[data-gpu-preference] option')||[]].map(option=>({value:option.value,label:option.textContent?.trim()??'',disabled:option.disabled})),
+          status:display?.querySelector('[data-gpu-status]')?.textContent?.trim()??'',error:display?.querySelector('[data-gpu-error]')?.textContent?.trim()??'',active:display?.querySelector('[data-gpu-active]')?.textContent?.trim()??''}
+      },
+      prefs:JSON.parse(localStorage.getItem('rhine-music-preferences')||'{}')
+    };
   })()`);
   const until = async (predicate, label) => {
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) { const state = await snapshot(); if (predicate(state)) return state; await pause(100); }
     const state = await snapshot();
-    throw new Error(`Timed out: ${label}, ${JSON.stringify({design:state.design,page:state.page,pressed:state.pressed,disabled:state.disabled,gpu:state.gpu})}`);
+    throw new Error(`Timed out: ${label}, ${JSON.stringify({design:state.design,page:state.page,category:state.category,styleTitle:state.styleTitle,fullscreen:state.appearance?.pressed,gpu:state.appearance?.gpu})}`);
   };
   const screenshots = [];
   const capture = async (name, selector) => {
-    await evaluate(`(() => {const page=document.querySelector('#theme-page-content'),node=document.querySelector(${JSON.stringify(selector)});page.scrollTop+=node.getBoundingClientRect().top-page.getBoundingClientRect().top-12;})()`);
+    await evaluate(`(() => {const node=document.querySelector(${JSON.stringify(selector)}),scroller=node?.closest('.settings-page-content,#theme-page-content');if(!node)throw new Error('Missing screenshot target: '+${JSON.stringify(selector)});if(scroller)scroller.scrollTop+=node.getBoundingClientRect().top-scroller.getBoundingClientRect().top-12;else node.scrollIntoView({block:'start'});})()`);
     await pause(500);
     const file = path.join(outputDirectory, `graphics-${name}.png`);
     await fs.writeFile(file, (await browserWindow.capturePage()).toPNG());
@@ -38,47 +126,124 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
   };
   const cases = [];
   wc.setBackgroundThrottling(false);
-  try {
-    if (await evaluate(`document.querySelector('#music-theme-page').hidden`)) {
-      await click('.music-topnav [data-action=theme]');
-      await until(state => state.page === 'theme' && state.grouped, 'open Graphics');
+  let assertDefaultSettingsCategory = true;
+  const openStyle = async () => {
+    const state=await snapshot();
+    if(!state.stylePageOpen) await click('.music-topnav [data-action=theme]');
+    return until(value=>value.page==='theme'&&value.stylePageOpen&&value.styleTitle==='STYLE','open STYLE');
+  };
+  const openAppearanceSettings = async () => {
+    if((await snapshot()).page!=='settings') await click('.music-topnav [data-action=settings]');
+    const opened=await until(state=>state.page==='settings','open Settings');
+    if(assertDefaultSettingsCategory){
+      assert.equal(opened.category,'interface','Settings should open on the Interface & Interaction category by default');
+      assert.ok(opened.interface.sectionVisible&&opened.interface.hasLanguage&&opened.interface.hasLanguageApply&&opened.interface.hasStyleLink&&opened.interface.hasMotion&&opened.interface.hasEntry,
+        'The default Interface & Interaction category must own language, STYLE, motion and entry settings');
+      assertDefaultSettingsCategory=false;
     }
+    await click('#music-settings [data-settings-category-target=appearance]');
+    return until(state=>state.page==='settings'&&state.category==='appearance'&&state.appearance?.grouped,'open display and performance settings');
+  };
+  const closeSettingsToStyle = async () => {
+    await click('.music-topnav [data-action=settings]');
+    await until(state=>state.page!=='settings','close Settings');
+    if((await snapshot()).page!=='theme') await click('.music-topnav [data-action=theme]');
+    return until(state=>state.page==='theme'&&state.stylePageOpen,'return to STYLE');
+  };
+  try {
+    if(!(await snapshot()).stylePageOpen) await openStyle();
     for (const design of ['rhine', 'archive']) {
+      await openStyle();
       await click(`.design-family-card[data-style-design=${design}]`);
-      const before = await until(state => state.design === design && state.grouped, `${design} settings`);
-      assert.ok(before.unique && before.motionGroup && before.renderWithoutMotion, `Settings grouping: ${JSON.stringify({counts:before.counts,motionGroup:before.motionGroup,renderWithoutMotion:before.renderWithoutMotion})}`);
+      const styled=await until(state=>state.design===design&&state.stylePageOpen&&state.styleTitle==='STYLE',`${design} STYLE`);
+      assert.ok(styled.styleTitle==='STYLE'&&/STYLE/i.test(styled.styleKicker??'')&&/STYLE/i.test(styled.styleNavLabel??''),
+        `${design} STYLE route, title, navigation and kicker should all use the STYLE label`);
+      assert.ok(styled.styleHasThemeCards&&styled.styleHasDayNight&&styled.styleHasColorChoices&&styled.styleHasCaseEditor&&styled.styleHasScenePreview,
+        `${design} STYLE should contain theme, day/night, colour, case and scene appearance controls: ${JSON.stringify({theme:styled.styleHasThemeCards,dayNight:styled.styleHasDayNight,colors:styled.styleHasColorChoices,case:styled.styleHasCaseEditor,preview:styled.styleHasScenePreview})}`);
+      assert.ok(styled.styleQualitySlotEmpty&&styled.styleCaseEditorBeforeQualitySlot&&!styled.styleHasForbiddenControls,
+        `${design} STYLE must mount the case editor before an empty quality slot and keep Settings controls out of STYLE`);
+
+      await click('.music-topnav [data-action=settings]');
+      await until(state=>state.page==='settings','open Settings from STYLE');
+      const categories=await openAppearanceSettings();
+      const actualCategoryIds=categories.categories.map(item=>item.id);
+      assert.equal(actualCategoryIds.length,settingsCategories.length,'Settings must expose exactly seven categories');
+      assert.deepEqual([...actualCategoryIds].sort(),[...settingsCategories].sort(),'Settings must expose interface, appearance, audio, lyrics, library, sources and about');
+      assert.equal(categories.activeCategoryCount,1,'Settings must have exactly one active category');
+      assert.deepEqual(categories.visibleCategories,['appearance'],'Only display and performance should be visible for this check');
+      for(const category of categories.categories){
+        assert.equal(categories.categoryCounts[category.id]?.buttons,1,`Settings category ${category.id} must have one navigation button`);
+        assert.equal(categories.categoryCounts[category.id]?.sections,1,`Settings category ${category.id} must have one content section`);
+        assert.ok(category.title&&category.titleId&&category.titleTarget===category.titleId,`Settings category ${category.id} must have a labelled heading`);
+        assert.ok(categoryTitlePatterns[category.id]?.test(category.title)&&categoryTitlePatterns[category.id]?.test(category.buttonLabel),
+          `Settings category ${category.id} title/label mismatch: ${JSON.stringify({title:category.title,label:category.buttonLabel})}`);
+      }
+      assert.ok(Object.values(categories.appearance.counts).every(count=>count===1),
+        `Interface, display, motion and quality controls must each appear once: ${JSON.stringify(categories.appearance.counts)}`);
+      assert.ok(categories.interface.hasSettings&&categories.interface.hasLanguage&&categories.interface.hasLanguageApply&&categories.interface.hasStyleLink&&categories.interface.hasMotion&&categories.interface.hasEntry&&categories.interface.hasInterfaceSound,
+        'Interface must own language, the STYLE link, motion, entry and interface-sound settings');
+      assert.ok(categories.interface.hasReducedMotion&&categories.interface.hasWaveQuality,'Motion category must own reduced motion and wave quality');
+      assert.ok(categories.appearance.hasDisplay&&categories.appearance.hasWindowAspect&&categories.appearance.hasFullscreen&&categories.appearance.hasGpu&&categories.appearance.hasQuality&&categories.appearance.hasDetection,
+        'Display and performance category must own window, fullscreen, GPU, quality and performance detection');
+      assert.ok(!categories.appearance.hasMotion&&!categories.appearance.hasLanguage,'Display and performance must not contain interface settings');
+
+      const before=categories;
+      const originalQualityPreset=await evaluate('document.querySelector("#quality-preset").value');
+      const originalWave=await evaluate('document.querySelector("#motion-settings [data-quality=wave]").value');
       const bounds = browserWindow.getBounds();
       browserWindow.focus();
       await pause(150);
       await click('[data-action=fullscreen]');
-      const entered = await until(state => browserWindow.isFullScreen() && state.pressed === 'true' && !state.disabled, `${design} enter fullscreen`);
-      assert.equal(entered.page, 'theme');
+      const entered = await until(state => browserWindow.isFullScreen() && state.appearance.pressed === 'true' && !state.appearance.disabled, `${design} enter fullscreen`);
+      assert.equal(entered.page,'settings','Entering fullscreen must stay in Settings');
+      assert.equal(entered.category,'appearance','Entering fullscreen must stay in display and performance');
       await click('[data-action=fullscreen]');
-      await until(state => !browserWindow.isFullScreen() && state.pressed === 'false' && !state.disabled, `${design} exit fullscreen`);
+      const buttonExited=await until(state => !browserWindow.isFullScreen() && state.appearance.pressed === 'false' && !state.appearance.disabled, `${design} exit fullscreen`);
+      assert.equal(buttonExited.page,'settings','The fullscreen button must return to Settings');
+      assert.equal(buttonExited.category,'appearance','The fullscreen button must keep display and performance selected');
       await click('[data-action=fullscreen]');
-      await until(state => browserWindow.isFullScreen() && !state.disabled, `${design} reenter fullscreen`);
+      await until(state => browserWindow.isFullScreen() && !state.appearance.disabled, `${design} reenter fullscreen`);
       wc.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
       wc.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
-      const after = await until(state => !browserWindow.isFullScreen() && state.pressed === 'false' && !state.disabled, `${design} Escape exit`);
-      assert.equal(after.page, 'theme', 'Exiting fullscreen must keep the Graphics route');
+      const after = await until(state => !browserWindow.isFullScreen() && state.appearance.pressed === 'false' && !state.appearance.disabled, `${design} Escape exit`);
+      assert.equal(after.page,'settings','Exiting fullscreen must keep Settings open');
+      assert.equal(after.category,'appearance','Exiting fullscreen must keep the display and performance category selected');
       assert.deepEqual(after.prefs, before.prefs, 'Window controls must not change saved graphics preferences');
       assert.ok(Object.entries(browserWindow.getBounds()).every(([key,value])=>Math.abs(value-bounds[key])<=1), 'Fullscreen exit must restore the original window bounds within Windows DPI rounding');
-      const gpuLoaded = await until(state => !state.gpu.disabled && state.gpu.options.length > 1, `${design} usable GPU list`);
-      assert.equal(gpuLoaded.gpu.error, '', 'Real hardware enumeration must succeed');
-      assert.ok(!/Not yet confirmed|尚未确认/.test(gpuLoaded.gpu.active), 'Current driver-reported GPU must be shown');
-      const previousGpu = gpuLoaded.gpu.value;
-      const alternative = previousGpu === 'auto' ? gpuLoaded.gpu.options[1].value : 'auto';
-      await evaluate(`(() => {const select=document.querySelector('[data-gpu-preference]');select.value=${JSON.stringify(alternative)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-      const saved = await until(state => !state.gpu.disabled && state.gpu.value === alternative && /Saved|已保存/.test(state.gpu.status), `${design} save GPU preference`);
-      assert.ok(/reopen|重新打开/.test(saved.gpu.status), 'A changed startup GPU preference must explain the required restart');
+
+      const gpuLoaded = await until(state => !state.appearance.gpu.disabled && state.appearance.gpu.options.some(option=>option.value==='auto') && state.appearance.gpu.options.some(option=>option.value!=='auto'&&!option.disabled), `${design} usable GPU list`);
+      assert.equal(gpuLoaded.appearance.gpu.error,'','Real hardware enumeration must succeed');
+      assert.ok(!/Not yet confirmed|尚未确认/.test(gpuLoaded.appearance.gpu.active), 'Current driver-reported GPU must be shown');
+      const inventory = await evaluate('window.rhineDesktop.gpuInfo()');
+      assert.equal(inventory.adapters.length, new Set(inventory.adapters.map(adapter=>adapter.deviceIdentifier)).size, 'Each physical GPU identity must appear once');
+      assert.ok(inventory.adapters.every(adapter=>adapter.location && !adapter.location.startsWith('@')), 'GPU choices must show readable physical device positions');
+      assert.ok(gpuLoaded.appearance.gpu.options.filter(option=>option.value!=='auto').every(option=>/GiB|PCI|Device|设备/.test(option.label)), 'GPU labels must distinguish the selected device beyond its model name');
+      const previousGpu = gpuLoaded.appearance.gpu.value;
+      const alternative = previousGpu === 'auto'
+        ? gpuLoaded.appearance.gpu.options.find(option=>option.value!=='auto'&&!option.disabled)?.value
+        : 'auto';
+      assert.ok(alternative,'GPU selection needs an available adapter and the automatic option');
+      await evaluate(`(() => {const select=document.querySelector('#graphics-display-settings [data-gpu-preference]');select.value=${JSON.stringify(alternative)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      const saved = await until(state => !state.appearance.gpu.disabled && state.appearance.gpu.value === alternative && /Saved|已保存/.test(state.appearance.gpu.status), `${design} save GPU preference`);
+      assert.ok(/reopen|重新打开/.test(saved.appearance.gpu.status), 'A changed startup GPU preference must explain the required restart');
       const invalidSelectionRejected = await evaluate(`window.rhineDesktop.selectGpu('untrusted-adapter-id').then(()=>false,()=>true)`);
       assert.equal(invalidSelectionRejected, true, 'Forged/nonexistent adapter IDs must not be accepted');
-      await evaluate(`(() => {const select=document.querySelector('[data-gpu-preference]');select.value=${JSON.stringify(previousGpu)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-      await until(state => !state.gpu.disabled && state.gpu.value === previousGpu && /Saved|已保存/.test(state.gpu.status), `${design} restore GPU preference`);
-      await capture(`${design}-window-motion`, '#graphics-display-settings');
+      await evaluate(`(() => {const select=document.querySelector('#graphics-display-settings [data-gpu-preference]');select.value=${JSON.stringify(previousGpu)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await until(state => !state.appearance.gpu.disabled && state.appearance.gpu.value === previousGpu && /Saved|已保存/.test(state.appearance.gpu.status), `${design} restore GPU preference`);
+      await click('#music-settings [data-settings-category-target=interface]');
+      await evaluate(`(() => {const wave=document.querySelector('#motion-settings [data-quality=wave]');wave.value='off';wave.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      const originalRenderQuality={...(await snapshot()).prefs.renderQuality,wave:originalWave};
+      assert.equal(await evaluate('document.querySelector("#quality-preset").value'), originalQualityPreset, 'Changing motion must not turn the unchanged render preset into Custom');
+      await click('#music-settings [data-settings-category-target=appearance]');
+      await evaluate(`(() => {const preset=document.querySelector('#quality-preset');preset.value='performance';preset.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.equal((await snapshot()).prefs.renderQuality.wave,'off','Render presets must retain the independent motion preference');
+      await evaluate(`(() => {const preset=document.querySelector('#quality-preset');preset.value=${JSON.stringify(originalQualityPreset)};preset.dispatchEvent(new Event('change',{bubbles:true}));const wave=document.querySelector('#motion-settings [data-quality=wave]');wave.value=${JSON.stringify(originalWave)};wave.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.deepEqual((await snapshot()).prefs.renderQuality,originalRenderQuality,'The motion/preset check must restore the original render preferences');
+      await capture(`${design}-window`, '#graphics-display-settings');
       await capture(`${design}-gpu`, '#graphics-display-settings .gpu-settings');
       await capture(`${design}-render`, '#graphics-display-settings .quality-settings');
-      cases.push({ design, grouped: true, unique: true, nativeEnterAndExit: true, escapeExit: true, boundsRestored: true, gpuChoices: gpuLoaded.gpu.options, activeGpu: gpuLoaded.gpu.active, gpuSaveAndReset: true, invalidGpuRejected: true });
+      cases.push({ design, styleAppearanceOnly:true, settingsCategories:settingsCategories, fullscreenInAppearance:true, nativeEnterAndExit:true, escapeExit:true, boundsRestored:true, gpuChoices:gpuLoaded.appearance.gpu.options, gpuInventory:inventory.diagnostics, activeGpu:gpuLoaded.appearance.gpu.active, gpuSaveAndReset:true, invalidGpuRejected:true });
+      if(design!=='archive') await closeSettingsToStyle();
     }
     return { ok: true, cases, screenshots };
   } finally {

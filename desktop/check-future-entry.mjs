@@ -50,6 +50,8 @@ export async function checkFutureEntry({
     '  const appearanceCategory = document.querySelector(".settings-category[data-settings-category=appearance]");',
     '  const appearanceNav = document.querySelector("[data-settings-category-target=appearance]");',
     '  const entrySettings = document.querySelector("#entry-settings");',
+    '  const motionSettings = interfaceCategory?.querySelector("#motion-settings");',
+    '  const motionGroup = motionSettings?.matches(".graphics-motion-settings") ? motionSettings : motionSettings?.querySelector(".graphics-motion-settings");',
     '  const entryOnOpen = document.querySelector("#entry-on-open");',
     '  const entryReplay = document.querySelector("[data-action=entry-replay]");',
     '  const entryWelcome = document.querySelector("#entry-welcome[data-entry-text=entryWelcome]");',
@@ -61,12 +63,14 @@ export async function checkFutureEntry({
     '  const entryTextStatus = document.querySelector("#entry-text-status");',
     '  const entrySettingsCategory = entrySettings?.closest(".settings-category");',
     '  const graphicsPage = document.querySelector("#music-theme-page");',
-    '  const graphicsDisplay = document.querySelector("#graphics-display-settings");',
+    '  const graphicsDisplay = appearanceCategory?.querySelector("#graphics-display-settings");',
+    '  const graphicsCaseEditor = graphicsPage?.querySelector("#theme-case-editor");',
     '  const graphicsNav = document.querySelector(".music-topnav [data-action=theme]");',
     '  const settingsInterfaceNav = settings?.querySelector("[data-settings-category-target=interface]");',
     '  const skipButton = document.querySelector(".future-entry-skip");',
     '  return {',
     '    theme: stage?.dataset.theme ?? null,',
+    '    page: stage?.dataset.page ?? null,',
     '    visibility: document.visibilityState,',
     '    design: app?.design?.design ?? null,',
     '    entry,',
@@ -116,20 +120,38 @@ export async function checkFutureEntry({
     '    entryTextHelp: entryTextHelp?.textContent?.trim() ?? null,',
     '    entryTextStatus: entryTextStatus?.textContent?.trim() ?? null,',
     '    settingsInterfaceLabel: settingsInterfaceNav?.textContent?.trim() ?? null,',
+    '    appearanceNavLabel: appearanceNav?.textContent?.trim() ?? null,',
     '    settingsHasMotionSettings: Boolean(settings?.querySelector("#motion-settings")),',
+    '    settingsHasMotionSettingsInInterface: Boolean(motionGroup?.querySelector("#reduced-motion") && motionGroup?.querySelector("[data-quality=wave]")),',
+    '    settingsAppearanceHasMotionSettings: Boolean(appearanceCategory?.querySelector("#motion-settings, #reduced-motion, .graphics-motion-settings, [data-quality=wave]")),',
     '    settingsHasThemeCards: Boolean(settings?.querySelector(".theme-cards, [data-theme=day], [data-theme=night]")),',
-    '    settingsHasLanguageControl: Boolean(settings?.querySelector("#ui-language")),',
-    '    settingsHasGraphicsLink: Boolean(settings?.querySelector("[data-action=theme]")),',
+    '    settingsHasLanguageControl: Boolean(interfaceCategory?.querySelector("#interface-settings #ui-language")),',
+    '    settingsHasLanguageApply: Boolean(interfaceCategory?.querySelector("#interface-settings [data-action=apply-language]")),',
+    '    settingsHasInterfaceSettings: Boolean(interfaceCategory?.querySelector("#interface-settings")),',
+    '    settingsHasGraphicsLink: Boolean(interfaceCategory?.querySelector("#interface-settings [data-action=theme]")),',
+    '    settingsHasEntrySettingsInInterface: Boolean(interfaceCategory?.querySelector("#entry-settings")),',
+    '    settingsHasInterfaceSoundInInterface: Boolean(interfaceCategory?.querySelector("#interface-sound-settings")),',
+    '    settingsAppearanceHasDisplaySettings: Boolean(graphicsDisplay),',
+    '    settingsAppearanceHasLanguageControl: Boolean(appearanceCategory?.querySelector("#ui-language")),',
     '    graphicsPageOpen: !!graphicsPage && !graphicsPage.hidden,',
     '    graphicsTitle: document.querySelector("#music-style-title")?.textContent?.trim() ?? null,',
+    '    graphicsStyleKicker: graphicsPage?.querySelector(".music-style-heading small")?.textContent?.trim() ?? null,',
     '    graphicsNavLabel: graphicsNav?.textContent?.trim() ?? null,',
     '    graphicsHasStyleCard: Boolean(graphicsPage?.querySelector(".design-family-card")),',
-    '    graphicsHasQuality: Boolean(graphicsPage?.querySelector("#theme-quality-slot .quality-settings [data-quality]")),',
-    '    graphicsHasWindowAspect: Boolean(graphicsPage?.querySelector("[data-window-aspect]")),',
+    '    graphicsHasColorChoices: Boolean(graphicsPage?.querySelector("[data-style-scheme], .theme-choice-preview")),',
+    '    graphicsHasCaseEditor: Boolean(graphicsPage?.querySelector("#theme-case-editor .case-editor, .case-editor")),',
+    '    graphicsHasScenePreview: Boolean(graphicsPage?.querySelector("[data-style-preview-content], .music-style-preview, .foobar-style-preview, .theme-choice-scene")),',
+    '    graphicsHasQuality: Boolean(graphicsDisplay?.querySelector(".quality-settings [data-quality]")),',
+    '    graphicsHasWindowAspect: Boolean(graphicsDisplay?.querySelector("[data-window-aspect]")),',
     '    graphicsHasDisplaySettings: Boolean(graphicsDisplay),',
-    '    graphicsHasReducedMotion: Boolean(graphicsDisplay?.querySelector("#reduced-motion")),',
+    '    graphicsHasReducedMotion: Boolean(motionGroup?.querySelector("#reduced-motion")),',
     '    graphicsHasFullscreen: Boolean(graphicsDisplay?.querySelector("[data-action=fullscreen]")),',
+    '    graphicsHasGpu: Boolean(graphicsDisplay?.querySelector("[data-gpu-preference]")),',
+    '    graphicsHasQualityDetection: Boolean(graphicsDisplay?.querySelector(".quality-detection")),',
     '    graphicsHasThemeControls: Boolean(graphicsPage?.querySelector(".theme-mode-controls [data-theme=day]")),',
+    '    graphicsStyleQualitySlotEmpty: Boolean(graphicsPage?.querySelector("#theme-quality-slot") && graphicsPage.querySelector("#theme-quality-slot").children.length === 0),',
+    '    graphicsStyleCaseEditorBeforeQualitySlot: Boolean(graphicsCaseEditor && graphicsPage?.querySelector("#theme-quality-slot") && (graphicsCaseEditor.compareDocumentPosition(graphicsPage.querySelector("#theme-quality-slot")) & Node.DOCUMENT_POSITION_FOLLOWING)),',
+    '    graphicsStyleHasForbiddenControls: Boolean(graphicsPage?.querySelector("#graphics-display-settings, #motion-settings, #reduced-motion, [data-quality], .quality-settings, [data-gpu-settings], [data-gpu-preference], [data-window-aspect], [data-action=fullscreen], #entry-settings, #ui-language")),',
     '    topbarHasThemeSwitcher: Boolean(document.querySelector(".theme-switch")),',
     '    skipPresent: Boolean(skipButton),',
     '    skipText: skipButton?.textContent?.trim() ?? null,',
@@ -221,8 +243,13 @@ export async function checkFutureEntry({
     entryTextHelp: state.entryTextHelp ?? null,
     entryTextStatus: state.entryTextStatus ?? null,
     graphicsTitle: state.graphicsTitle ?? null,
+    graphicsStyleKicker: state.graphicsStyleKicker ?? null,
     graphicsNavLabel: state.graphicsNavLabel ?? null,
     graphicsPageOpen: state.graphicsPageOpen ?? null,
+    graphicsStyleQualitySlotEmpty: state.graphicsStyleQualitySlotEmpty ?? null,
+    graphicsStyleCaseEditorBeforeQualitySlot: state.graphicsStyleCaseEditorBeforeQualitySlot ?? null,
+    graphicsStyleHasForbiddenControls: state.graphicsStyleHasForbiddenControls ?? null,
+    graphicsHasCaseEditor: state.graphicsHasCaseEditor ?? null,
     welcomeLineWidth: state.welcomeLineWidth ?? null,
     welcomeLineScrollWidth: state.welcomeLineScrollWidth ?? null,
     welcomeLineFontSize: state.welcomeLineFontSize ?? null,
@@ -397,11 +424,11 @@ export async function checkFutureEntry({
   const waitForAuthIdentity = async (identity, label) => waitFor(state =>
     state.entry?.active === true && state.entry.time >= 8.6 && state.authIdentity?.includes(identity),
   label + ' full identity text', 10000);
-  const openGraphics = async label => {
+  const openStyle = async label => {
     await click('.music-topnav [data-action="theme"]');
-    return waitFor(state => state.graphicsPageOpen && state.graphicsTitle === 'GRAPHICS', label + ' GRAPHICS page');
+    return waitFor(state => state.graphicsPageOpen && state.graphicsTitle === 'STYLE', label + ' STYLE page');
   };
-  const closeGraphics = async label => {
+  const closeStyle = async label => {
     await click('.music-topnav [data-action="theme"]');
     await waitFor(state => !state.graphicsPageOpen, label + ' return to music');
   };
@@ -650,8 +677,8 @@ export async function checkFutureEntry({
       manualSettings.entryIdentityMaxLength === 24,
     'The interface settings must expose the default welcome and identity with 24 character limits');
   check('interface settings retain the interaction and entry category',
-    /interaction.*entr(?:y|ance)|交互.*入场/i.test(manualSettings.settingsInterfaceLabel ?? ''),
-    'The Settings category should remain interface and display the new interaction and entry label');
+    /interface.*interaction|界面与交互/i.test(manualSettings.settingsInterfaceLabel ?? ''),
+    'The Settings category should be labelled Interface & Interaction');
   check('entry text controls advertise ASCII words and spaces',
     /A-Z/.test(manualSettings.entryWelcomePattern ?? '') &&
       /a-z/.test(manualSettings.entryWelcomePattern ?? '') &&
@@ -804,19 +831,48 @@ export async function checkFutureEntry({
 
   await click('[data-action="settings"]');
   await waitFor(state => state.settingsHidden === false, 'general settings page');
-  await click('[data-action="settings-category"][data-settings-category-target="appearance"]');
-  const generalSettings = await waitFor(state => state.settingsHidden === false &&
-    state.appearanceCategoryHidden === false && state.appearanceNavCurrent && state.settingsHasLanguageControl,
-    'general settings page');
-  check('settings page keeps language and Graphics link only',
-    generalSettings.settingsHasLanguageControl &&
-      generalSettings.settingsHasGraphicsLink &&
-      !generalSettings.settingsHasThemeCards &&
-      !generalSettings.settingsHasMotionSettings,
-    'Settings should keep language and the Graphics link without theme cards or motion controls');
-  await screenshot('settings-general-graphics-link', generalSettings);
+  await click('[data-action="settings-category"][data-settings-category-target="interface"]');
+  const interfaceSettings = await waitFor(state => state.settingsHidden === false &&
+    state.interfaceCategoryHidden === false && state.interfaceNavCurrent && state.settingsHasLanguageControl,
+    'interface settings category');
+  check('interface settings keep language, STYLE link, motion and interaction entry controls',
+    interfaceSettings.settingsHasInterfaceSettings &&
+      interfaceSettings.settingsHasLanguageControl &&
+      interfaceSettings.settingsHasLanguageApply &&
+      interfaceSettings.settingsHasGraphicsLink &&
+      interfaceSettings.settingsHasMotionSettingsInInterface &&
+      interfaceSettings.settingsHasEntrySettingsInInterface &&
+      interfaceSettings.settingsHasInterfaceSoundInInterface &&
+      !interfaceSettings.settingsHasThemeCards &&
+      /interface.*interaction|界面与交互/i.test(interfaceSettings.settingsInterfaceLabel ?? ''),
+    'Interface must own language, the STYLE jump, motion, entry and interface-sound settings');
+  await screenshot('settings-interface-controls', interfaceSettings);
+  await click('#interface-settings [data-action="theme"]');
+  const linkedStyle = await waitFor(state => state.page === 'theme' && state.graphicsPageOpen && state.graphicsTitle === 'STYLE',
+    'STYLE opened from the interface settings link');
+  check('interface settings link opens STYLE', linkedStyle.page === 'theme' && linkedStyle.graphicsTitle === 'STYLE',
+    'The interface settings appearance link must navigate to STYLE');
+  await closeStyle('interface settings STYLE link');
   await click('[data-action="settings"]');
-  await waitFor(state => state.settingsHidden === true, 'close general settings');
+  await waitFor(state => state.settingsHidden === false, 'reopen Settings after STYLE link');
+  await click('[data-action="settings-category"][data-settings-category-target="appearance"]');
+  const appearanceSettings = await waitFor(state => state.settingsHidden === false &&
+    state.appearanceCategoryHidden === false && state.appearanceNavCurrent && state.settingsAppearanceHasDisplaySettings,
+    'display and performance settings category');
+  check('appearance settings own display and performance controls',
+    appearanceSettings.settingsAppearanceHasDisplaySettings &&
+      appearanceSettings.graphicsHasWindowAspect &&
+      appearanceSettings.graphicsHasFullscreen &&
+      appearanceSettings.graphicsHasGpu &&
+      appearanceSettings.graphicsHasQuality &&
+      appearanceSettings.graphicsHasQualityDetection &&
+      !appearanceSettings.settingsAppearanceHasLanguageControl &&
+      !appearanceSettings.settingsAppearanceHasMotionSettings &&
+      /display.*performance|显示与性能/i.test(appearanceSettings.appearanceNavLabel ?? ''),
+    'Appearance compatibility ID must contain display and performance settings only');
+  await screenshot('settings-display-performance', appearanceSettings);
+  await click('[data-action="settings"]');
+  await waitFor(state => state.settingsHidden === true, 'close Settings');
 
   await setPreferences({
     ...getPreferences(),
@@ -827,23 +883,25 @@ export async function checkFutureEntry({
   });
   await reloadAndWait('Future Graphics route', false);
   await assertArchiveOverview('Future Graphics route');
-  await openGraphics('Future Graphics route');
-  const futureGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsHasDisplaySettings,
-    'Future Graphics controls');
-  check('Future Graphics title and topbar label',
-    futureGraphics.graphicsTitle === 'GRAPHICS' && /GRAPHICS/i.test(futureGraphics.graphicsNavLabel ?? ''),
-    'Both the Graphics page title and topbar label must read GRAPHICS');
-  check('Future Graphics retains style, quality, aspect and display controls',
+  await openStyle('Future STYLE route');
+  const futureGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsPageOpen,
+    'Future STYLE controls');
+  check('Future STYLE title and topbar label',
+    futureGraphics.page === 'theme' && futureGraphics.graphicsTitle === 'STYLE' &&
+      /STYLE/i.test(futureGraphics.graphicsNavLabel ?? '') && /STYLE/i.test(futureGraphics.graphicsStyleKicker ?? ''),
+    'The theme route, page title, navigation label and kicker must read STYLE');
+  check('Future STYLE contains appearance previews without interface or display controls',
     futureGraphics.graphicsHasStyleCard &&
-      futureGraphics.graphicsHasQuality &&
-      futureGraphics.graphicsHasWindowAspect &&
-      futureGraphics.graphicsHasReducedMotion &&
-      futureGraphics.graphicsHasFullscreen &&
+      futureGraphics.graphicsHasColorChoices &&
+      futureGraphics.graphicsHasCaseEditor &&
+      futureGraphics.graphicsHasScenePreview &&
       futureGraphics.graphicsHasThemeControls &&
-      !futureGraphics.topbarHasThemeSwitcher,
-    'Graphics must retain theme cards, render quality, window aspect, reduced motion and fullscreen controls');
-  await screenshot('future-graphics', futureGraphics);
-  await closeGraphics('Future Graphics route');
+      futureGraphics.graphicsStyleQualitySlotEmpty &&
+      futureGraphics.graphicsStyleCaseEditorBeforeQualitySlot &&
+      !futureGraphics.graphicsStyleHasForbiddenControls,
+    'STYLE must retain theme, colour and scene appearance controls while display and interface settings stay in Settings');
+  await screenshot('future-style', futureGraphics);
+  await closeStyle('Future STYLE route');
 
   await setPreferences({
     ...getPreferences(),
@@ -894,21 +952,25 @@ export async function checkFutureEntry({
   await screenshot('punk-entry-settings-disabled', await snapshot());
   await click('[data-action="settings"]');
   await waitFor(state => state.settingsHidden === true, 'close Punk entry settings');
-  await openGraphics('Punk Graphics route');
-  const punkGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsHasDisplaySettings,
-    'Punk Graphics controls');
-  check('Punk Graphics title and display controls',
+  await openStyle('Punk STYLE route');
+  const punkGraphics = await waitFor(state => state.graphicsHasStyleCard && state.graphicsPageOpen,
+    'Punk STYLE controls');
+  check('Punk STYLE title and appearance controls',
     punkGraphics.design === 'archive' &&
-      punkGraphics.graphicsTitle === 'GRAPHICS' &&
-      /GRAPHICS/i.test(punkGraphics.graphicsNavLabel ?? '') &&
-      punkGraphics.graphicsHasQuality &&
-      punkGraphics.graphicsHasWindowAspect &&
-      punkGraphics.graphicsHasReducedMotion &&
-      punkGraphics.graphicsHasFullscreen &&
-      punkGraphics.graphicsHasThemeControls,
-    'Punk Graphics must keep the shared style, render quality, window aspect and display controls');
-  await screenshot('punk-graphics', punkGraphics);
-  await closeGraphics('Punk Graphics route');
+      punkGraphics.page === 'theme' &&
+      punkGraphics.graphicsTitle === 'STYLE' &&
+      /STYLE/i.test(punkGraphics.graphicsNavLabel ?? '') &&
+      /STYLE/i.test(punkGraphics.graphicsStyleKicker ?? '') &&
+      punkGraphics.graphicsHasColorChoices &&
+      punkGraphics.graphicsHasCaseEditor &&
+      punkGraphics.graphicsHasScenePreview &&
+      punkGraphics.graphicsHasThemeControls &&
+      punkGraphics.graphicsStyleQualitySlotEmpty &&
+      punkGraphics.graphicsStyleCaseEditorBeforeQualitySlot &&
+      !punkGraphics.graphicsStyleHasForbiddenControls,
+    'Punk STYLE must keep only the shared appearance and preview controls');
+  await screenshot('punk-style', punkGraphics);
+  await closeStyle('Punk STYLE route');
 
   result.summary = {
     nominalDurationSeconds,

@@ -1,10 +1,16 @@
 import { trUi, uiLanguage } from "./i18n";
 
+export type GpuChoice = {
+  id: string; name: string; memoryBytes?: number; location?: string;
+  deviceIdentifier?: string; physicalCount?: number; logicalCount?: number; current?: boolean;
+};
 export type GpuReport = {
   supported: boolean;
-  adapters: { id: string; name: string }[];
+  adapters: GpuChoice[];
   selectedId: string;
   activeName: string | null;
+  activeId?: string | null;
+  diagnostics?: { logicalCount: number; physicalCount: number; mergedCount: number; unidentifiedCount: number };
   restartRequired: boolean;
   warning?: string;
   error?: string;
@@ -24,7 +30,7 @@ function normalizeReport(value: unknown): GpuReport {
   const report = value as Partial<GpuReport>;
   const adapters = Array.isArray(report.adapters)
     ? report.adapters.filter(
-        (adapter): adapter is { id: string; name: string } =>
+        (adapter): adapter is GpuChoice =>
           Boolean(adapter) &&
           typeof adapter.id === "string" &&
           adapter.id.length > 0 &&
@@ -42,6 +48,8 @@ function normalizeReport(value: unknown): GpuReport {
     adapters,
     selectedId: typeof report.selectedId === "string" ? report.selectedId : "",
     activeName: typeof report.activeName === "string" ? report.activeName : null,
+    activeId: typeof report.activeId === "string" ? report.activeId : null,
+    diagnostics: report.diagnostics,
     restartRequired: report.restartRequired === true,
     warning: typeof report.warning === "string" ? report.warning : undefined,
     error: typeof report.error === "string" ? report.error : undefined,
@@ -86,6 +94,9 @@ export function mountGpuSettings(
         </select>
       </label>
       <p class="gpu-settings-active" data-gpu-active></p>
+      <p class="gpu-settings-details" data-gpu-details></p>
+      <p class="gpu-settings-inventory" data-gpu-inventory></p>
+      <details class="gpu-device-identity"><summary>${t("设备标识", "Device identity")}</summary><p data-gpu-identity></p></details>
       <p class="gpu-settings-status" data-gpu-status role="status" aria-live="polite"></p>
       <p class="gpu-settings-error" data-gpu-error role="alert" hidden></p>
       <p class="gpu-settings-warning" data-gpu-warning hidden></p>
@@ -98,6 +109,9 @@ export function mountGpuSettings(
 
   const select = root.querySelector<HTMLSelectElement>("[data-gpu-preference]");
   const activeText = root.querySelector<HTMLElement>("[data-gpu-active]");
+  const detailText = root.querySelector<HTMLElement>("[data-gpu-details]")!;
+  const inventoryText = root.querySelector<HTMLElement>("[data-gpu-inventory]")!;
+  const identityText = root.querySelector<HTMLElement>("[data-gpu-identity]")!;
   const statusText = root.querySelector<HTMLElement>("[data-gpu-status]");
   const errorText = root.querySelector<HTMLElement>("[data-gpu-error]");
   const warningText = root.querySelector<HTMLElement>("[data-gpu-warning]");
@@ -164,7 +178,15 @@ export function mountGpuSettings(
       for (const adapter of report.adapters) {
         if (availableIds.has(adapter.id)) continue;
         availableIds.add(adapter.id);
-        select.add(makeOption(root.ownerDocument, adapter.name, adapter.id));
+        const memory = adapter.memoryBytes ? `${(adapter.memoryBytes / 1024 ** 3).toFixed(1)} GiB` : "";
+        const identityTail = adapter.deviceIdentifier?.split("\\").filter(Boolean).slice(-2, -1)[0] || adapter.id.slice(-8);
+        const location = adapter.location || `${t("设备", "Device")} ${identityTail}`;
+        const peers = report.adapters.filter(other => other.id !== adapter.id && other.name === adapter.name && other.memoryBytes === adapter.memoryBytes && other.location === adapter.location);
+        let identityLength = 6;
+        while (identityLength < adapter.id.length && peers.some(other => other.id.slice(-identityLength) === adapter.id.slice(-identityLength))) identityLength += 2;
+        const identityPrefix = peers.length ? `${t("设备", "Device")} ${adapter.id.slice(-identityLength)} · ` : "";
+        const label = identityPrefix + [adapter.name, memory, location].filter(Boolean).join(" · ") + (adapter.current ? t("（当前使用）", " (in use)") : "");
+        select.add(makeOption(root.ownerDocument, label, adapter.id));
       }
 
       if (report.selectedId !== AUTO_ID && !availableIds.has(report.selectedId)) {
@@ -184,6 +206,17 @@ export function mountGpuSettings(
     }
 
     activeText.textContent = `${t("当前使用：", "Currently using: ")}${report.activeName || t("尚未确认", "Not yet confirmed")}`;
+    const detail = report.adapters.find(adapter => adapter.id === (report.selectedId === AUTO_ID ? report.activeId : report.selectedId));
+    detailText.textContent = detail ? [
+      detail.location ? `${t("物理位置：", "Physical location: ")}${detail.location}` : t("物理位置暂未读取。", "Physical location is unavailable."),
+      detail.memoryBytes ? `${t("驱动报告显存：", "Driver-reported memory: ")}${(detail.memoryBytes / 1024 ** 3).toFixed(1)} GiB` : "",
+      (detail.physicalCount ?? 1) > 1 ? t("此项为多个物理设备组成的关联显卡组。", "This entry is a linked group of physical GPUs.") : "",
+    ].filter(Boolean).join(" · ") : "";
+    identityText.textContent = detail?.deviceIdentifier || t("尚未确认", "Not yet confirmed");
+    const counts = report.diagnostics;
+    inventoryText.textContent = counts ? `${t("已确认物理显卡：", "Confirmed physical GPUs: ")}${counts.physicalCount}` +
+      (counts.mergedCount > 0 ? ` · ${t("同一卡的重复图形接口已合并：", "Duplicate graphics interfaces merged: ")}${counts.mergedCount}` : "") +
+      (counts.unidentifiedCount ? ` · ${t("未确认物理归属的接口未列入选择：", "Interfaces with unconfirmed physical identity excluded: ")}${counts.unidentifiedCount}` : "") : "";
     statusText.textContent = statusFor(
       report,
       !report.error && lastSavedSelection !== null && lastSavedSelection === report.selectedId,

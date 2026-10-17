@@ -156,11 +156,12 @@ export function normalizeQuality(
 
 export function matchingPreset(
   quality: RenderQuality,
+  independentMotion = false,
 ): QualityPreset | "custom" {
   return (
     (Object.keys(qualityPresets) as QualityPreset[]).find((key) =>
       Object.entries(qualityPresets[key]).every(
-        ([field, value]) => quality[field as keyof RenderQuality] === value,
+        ([field, value]) => (independentMotion && field === "wave") || quality[field as keyof RenderQuality] === value,
       ),
     ) ?? "custom"
   );

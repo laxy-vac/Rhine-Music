@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   adapterToPreference,
+  groupPhysicalAdapters,
   normalizeGpuPreference,
   resolveGpuPreference,
   applyGpuPreference,
@@ -39,6 +40,56 @@ function withId(adapter) {
 
 function otherModel(overrides = {}) {
   return rawAdapter({ deviceId: 0x1234, name: 'Other GPU Fixture', ...overrides });
+}
+
+const PHYSICAL_PNP_KEY_A = '\\REGISTRY\\MACHINE\\SYSTEM\\ControlSet001\\Enum\\PCI\\VEN_10DE&DEV_2C02&SUBSYS_89E01043&REV_A1\\INSTANCE-A\\Device Parameters';
+const PHYSICAL_PNP_KEY_B = '\\REGISTRY\\MACHINE\\SYSTEM\\ControlSet001\\Enum\\PCI\\VEN_10DE&DEV_2C02&SUBSYS_89E01043&REV_A1\\INSTANCE-B\\Device Parameters';
+
+function canonicalPhysicalKeys(keys) {
+  return [...new Set(keys.map(key => key.trim().toUpperCase()
+    .replace(/\\SYSTEM\\CONTROLSET[0-9]{3}\\ENUM\\/, '\\SYSTEM\\CURRENTCONTROLSET\\ENUM\\')))].sort();
+}
+
+function withPhysicalId(adapter) {
+  const physicalKeys = canonicalPhysicalKeys(adapter.physicalKeys);
+  const hash = createHash('sha256').update(JSON.stringify(physicalKeys), 'utf8').digest('hex');
+  return {
+    id: `gpu-physical:${hash}`,
+    vendorId: adapter.vendorId,
+    deviceId: adapter.deviceId,
+    subSysId: adapter.subSysId,
+    revision: adapter.revision,
+    name: adapter.name,
+    luidHigh: adapter.luidHigh,
+    luidLow: adapter.luidLow,
+    physicalKeys: adapter.physicalKeys,
+  };
+}
+
+function physicalAdapter(key, overrides = {}) {
+  return rawAdapter({
+    physicalKeys: [key],
+    physicalLocations: ['PCI bus 1, device 0, function 0'],
+    dedicatedMemoryBytes: 16 * 1024 ** 3,
+    pciAddress: 'PCI 1:0.0',
+    identityError: '',
+    ...overrides,
+  });
+}
+
+function unconfirmedAdapter(overrides = {}) {
+  return rawAdapter({
+    physicalKeys: [],
+    physicalLocations: [],
+    dedicatedMemoryBytes: 0,
+    pciAddress: '',
+    identityError: 'physical identity unavailable',
+    ...overrides,
+  });
+}
+
+function luidKey(adapter) {
+  return `${adapter.luidHigh},${adapter.luidLow}`;
 }
 
 function captureSwitches(isReady = false) {
@@ -137,6 +188,150 @@ test('manual mode applies only D3D11 and the signed-high, unsigned-low LUID', ()
   assert.deepEqual(result.switches, ['use-angle=d3d11', 'use-adapter-luid=-2147483648,4294967295']);
 });
 
+test('four logical LUIDs with one physical PnP key group into one GPU with all aliases', () => {
+  const logicalAdapters = Array.from({ length: 4 }, (_, index) => physicalAdapter(PHYSICAL_PNP_KEY_A, {
+    luidHigh: 0,
+    luidLow: 100 + index,
+    physicalLocations: [`PCI bus 1, device 0, function 0`],
+  }));
+  const groups = groupPhysicalAdapters(logicalAdapters);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].identityConfirmed, true);
+  assert.equal(groups[0].id, withPhysicalId(physicalAdapter(PHYSICAL_PNP_KEY_A)).id);
+  assert.deepEqual(groups[0].physicalKeys, canonicalPhysicalKeys([PHYSICAL_PNP_KEY_A]));
+  assert.deepEqual(groups[0].aliases.map(luidKey).sort(), logicalAdapters.map(luidKey).sort());
+});
+
+test('same-model adapters with different physical PnP keys remain separate', () => {
+  const groups = groupPhysicalAdapters([
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 2, luidLow: 201 }),
+    physicalAdapter(PHYSICAL_PNP_KEY_B, { luidHigh: 2, luidLow: 202 }),
+  ]);
+
+  assert.equal(groups.length, 2);
+  assert.notEqual(groups[0].id, groups[1].id);
+  assert.equal(groups[0].name, groups[1].name);
+});
+
+test('duplicate LUID records collapse to one alias while a pre-identified record is accepted', () => {
+  const raw = physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: -3, luidLow: 303 });
+  const identified = withPhysicalId({ ...raw, physicalKeys: [...raw.physicalKeys] });
+  const groups = groupPhysicalAdapters([raw, identified]);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].aliases.length, 1);
+  assert.equal(luidKey(groups[0].aliases[0]), luidKey(raw));
+});
+
+test('different PnP key sets do not merge even when their LUID is the same', () => {
+  const groups = groupPhysicalAdapters([
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 5, luidLow: 505 }),
+    physicalAdapter(PHYSICAL_PNP_KEY_B, { luidHigh: 5, luidLow: 505 }),
+  ]);
+
+  assert.equal(groups.length, 2);
+  assert.notEqual(groups[0].id, groups[1].id);
+});
+
+test('LDA physical-key sets normalize order and remain one linked group', () => {
+  const first = rawAdapter({
+    luidHigh: 6,
+    luidLow: 606,
+    physicalKeys: [PHYSICAL_PNP_KEY_A, PHYSICAL_PNP_KEY_B],
+    physicalLocations: ['PCI bus 1, device 0, function 0', 'PCI bus 2, device 0, function 0'],
+    identityError: '',
+  });
+  const second = rawAdapter({
+    luidHigh: 7,
+    luidLow: 707,
+    physicalKeys: [PHYSICAL_PNP_KEY_B.toLowerCase(), PHYSICAL_PNP_KEY_A.toLowerCase()],
+    physicalLocations: ['PCI bus 2, device 0, function 0', 'PCI bus 1, device 0, function 0'],
+    identityError: '',
+  });
+  const groups = groupPhysicalAdapters([first, second]);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].id, withPhysicalId(first).id);
+  assert.equal(groups[0].physicalKeys.length, 2);
+  assert.equal(groups[0].aliases.length, 2);
+});
+
+test('legacy preferences migrate through an alias LUID to the physical GPU preference', () => {
+  const legacy = withId(rawAdapter({ luidHigh: -8, luidLow: 808 }));
+  const groups = groupPhysicalAdapters([
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: -8, luidLow: 808 }),
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 9, luidLow: 909 }),
+  ]);
+  const result = resolveGpuPreference(legacy, groups);
+
+  assert.equal(result.applied.id, groups[0].id);
+  assert.deepEqual(result.applied.physicalKeys, groups[0].physicalKeys);
+  assert.equal(luidKey(result.applied), luidKey(legacy));
+});
+
+test('a v2 physical preference follows the same PnP device after its LUID changes', () => {
+  const requested = withPhysicalId(physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 10, luidLow: 1010 }));
+  const groups = groupPhysicalAdapters([
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 11, luidLow: 1111 }),
+  ]);
+  const result = resolveGpuPreference(requested, groups);
+
+  assert.equal(result.applied.id, requested.id);
+  assert.equal(luidKey(result.applied), '11,1111');
+});
+
+test('a legacy preference without its exact alias never guesses a same-model physical card', () => {
+  const legacy = withId(rawAdapter({ luidHigh: 20, luidLow: 2020 }));
+  const groups = groupPhysicalAdapters([physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 21, luidLow: 2121 })]);
+  const result = resolveGpuPreference(legacy, groups);
+  assert.equal(result.applied, 'auto');
+  assert.match(result.reason, /物理身份/);
+});
+
+test('missing PnP identity never redirects a preference to another same-model adapter', () => {
+  const requested = withPhysicalId(physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 12, luidLow: 1212 }));
+  const available = groupPhysicalAdapters([
+    physicalAdapter(PHYSICAL_PNP_KEY_B, { luidHigh: 13, luidLow: 1313 }),
+    unconfirmedAdapter({ luidHigh: 14, luidLow: 1414 }),
+  ]);
+  const result = resolveGpuPreference(requested, available);
+
+  assert.equal(result.applied, 'auto');
+});
+
+test('unconfirmed adapters remain separate and cannot be converted to manual preferences', () => {
+  const groups = groupPhysicalAdapters([
+    unconfirmedAdapter({ luidHigh: 15, luidLow: 1515 }),
+    unconfirmedAdapter({ luidHigh: 16, luidLow: 1616 }),
+    physicalAdapter(PHYSICAL_PNP_KEY_A, { luidHigh: 17, luidLow: 1717 }),
+  ]);
+  const unconfirmed = groups.filter(adapter => adapter.identityConfirmed === false);
+  const confirmed = groups.filter(adapter => adapter.identityConfirmed === true);
+
+  assert.equal(groups.length, 3);
+  assert.equal(unconfirmed.length, 2);
+  assert.notEqual(unconfirmed[0].id, unconfirmed[1].id);
+  assert.ok(unconfirmed.every(adapter => adapter.aliases.length === 1));
+  assert.equal(confirmed.length, 1);
+  assert.throws(() => adapterToPreference(unconfirmed[0]), /identity is unavailable/);
+});
+
+test('physical preferences persist PnP keys but exclude display-only metadata', () => {
+  const [group] = groupPhysicalAdapters([physicalAdapter(PHYSICAL_PNP_KEY_A)]);
+  const preference = adapterToPreference(group);
+
+  assert.deepEqual(Object.keys(preference).sort(), [
+    'deviceId', 'id', 'luidHigh', 'luidLow', 'name', 'physicalKeys', 'revision', 'subSysId', 'vendorId',
+  ].sort());
+  assert.deepEqual(preference.physicalKeys, group.physicalKeys);
+  assert.equal('aliases' in preference, false);
+  assert.equal('physicalLocations' in preference, false);
+  assert.equal('dedicatedMemoryBytes' in preference, false);
+  assert.equal('pciAddress' in preference, false);
+  assert.equal('identityError' in preference, false);
+});
+
 // Exercise the production save callbacks without starting Electron or touching
 // any profile. The delayed store exposes races between GPU and ordinary saves.
 function productionWriters(save) {
@@ -157,6 +352,22 @@ function productionWriters(save) {
     return {gpu:value=>gpuWriter(value),regular:value=>regularWriter({},value),state:()=>preferences};
   `)({ save }, { normalizeGpuPreference });
 }
+
+test('persisting a v2 preference keeps physical keys and omits runtime display metadata', async () => {
+  const [group] = groupPhysicalAdapters([physicalAdapter(PHYSICAL_PNP_KEY_A)]);
+  const preference = adapterToPreference(group);
+  let persisted;
+  const writers = productionWriters(async value => { persisted = structuredClone(value); });
+
+  await writers.gpu(preference);
+
+  const expectedFields = [
+    'deviceId', 'id', 'luidHigh', 'luidLow', 'name', 'physicalKeys', 'revision', 'subSysId', 'vendorId',
+  ].sort();
+  assert.deepEqual(Object.keys(writers.state().gpuPreference).sort(), expectedFields);
+  assert.deepEqual(Object.keys(persisted.gpuPreference).sort(), expectedFields);
+  assert.deepEqual(persisted.gpuPreference.physicalKeys, group.physicalKeys);
+});
 
 test('failed GPU save cannot leak through a concurrent ordinary preference save', async () => {
   let rejectFirst, writes = 0, persisted;

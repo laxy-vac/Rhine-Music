@@ -18,7 +18,7 @@ function configureStartupGpu(app, preferenceFile) {
   }
   let selection = { requested: preference, applied: 'auto', reason: null };
   const recoveryAuto = process.argv.includes('--gpu-auto');
-  if (recoveryAuto) warning = '本次启动使用自动选卡；可在 GRAPHICS 中选择自动以恢复默认。';
+  if (recoveryAuto) warning = '本次启动使用自动选卡；可在设置的显示与性能中选择自动以恢复默认。';
   if (preference !== 'auto' && !recoveryAuto) {
     try {
       if (process.platform !== 'win32') throw new Error('Windows only');
@@ -47,7 +47,8 @@ function registerGpuControls({ app, ipcMain, getWindow, getPreference, savePrefe
   const safePreference = value => { try { return normalizeGpuPreference(value); } catch { return 'auto'; } };
   const report = async adapters => {
     const supported = process.platform === 'win32';
-    let activeName = null, warning = startup.warning || startup.reason || undefined;
+    const selectable = adapters.filter(adapter => adapter.identityConfirmed === true);
+    let activeName = null, activeId = null, warning = startup.warning || startup.reason || undefined;
     let timer;
     try {
       const info = await Promise.race([
@@ -57,10 +58,14 @@ function registerGpuControls({ app, ipcMain, getWindow, getPreference, savePrefe
       const active = info.gpuDevice?.filter(device => device.active === true) ?? [];
       const device = active.length === 1 ? active[0] : null;
       activeName = device?.deviceString || info.auxAttributes?.glRenderer || null;
-      if (startup.applied !== 'auto' && device) {
-        const matching = adapters.filter(adapter => adapter.vendorId === device.vendorId && adapter.deviceId === device.deviceId);
-        if (matching.length === 1 && matching[0].id !== startup.applied.id) warning = '驱动报告的当前显卡与启动选择不一致；该实验性选择未得到确认。';
-        else if (matching.length !== 1) warning = '驱动未报告足以区分当前显卡的身份；该实验性选择尚未确认。';
+      if (device) {
+        const matching = selectable.filter(adapter => adapter.vendorId === device.vendorId && adapter.deviceId === device.deviceId &&
+          (device.subSysId === undefined || adapter.subSysId === (device.subSysId >>> 0)));
+        if (matching.length === 1) activeId = matching[0].id;
+        if (startup.applied !== 'auto') {
+          if (activeId && activeId !== startup.applied.id) warning = '驱动报告的当前显卡与启动选择不一致；该实验性选择未得到确认。';
+          else if (!activeId) warning = '驱动未报告足以区分当前显卡的身份；该实验性选择尚未确认。';
+        } else if (matching.length > 1) warning = '驱动未报告足以区分当前显卡的身份；该实验性选择尚未确认。';
       }
     } catch {
       warning ||= '当前使用的显卡暂时无法读取。';
@@ -69,16 +74,23 @@ function registerGpuControls({ app, ipcMain, getWindow, getPreference, savePrefe
     // after the write/rollback finishes, and after all asynchronous GPU reads.
     await waitForPreference();
     const preference = safePreference(getPreference());
-    const resolution = resolveGpuPreference(preference, adapters);
+    const resolution = resolveGpuPreference(preference, selectable);
     const selectedId = preference === 'auto' ? 'auto' : resolution.applied === 'auto' ? 'unavailable' : resolution.applied.id;
-    const choices = adapters.map((adapter, index) => ({
+    const choices = selectable.map(adapter => ({
       id: adapter.id,
-      name: adapters.filter(other => other.name === adapter.name).length > 1 ? `${adapter.name} · ${index + 1}` : adapter.name,
+      name: adapter.name,
+      memoryBytes: adapter.dedicatedMemoryBytes,
+      location: adapter.physicalLocations?.join(' / ') || '',
+      deviceIdentifier: adapter.physicalKeys.join(' | '),
+      physicalCount: adapter.physicalKeys.length,
+      logicalCount: adapter.aliases.length,
+      current: activeId === adapter.id,
     }));
     const samePreference = preference === 'auto'
       ? startup.requested === 'auto'
       : startup.requested !== 'auto' && resolution.applied !== 'auto' && startup.applied !== 'auto' && resolution.applied.id === startup.applied.id;
-    return { supported, adapters: choices, selectedId, activeName, restartRequired: !samePreference, warning };
+    return { supported, adapters: choices, selectedId, activeName, activeId, restartRequired: !samePreference, warning,
+      diagnostics: { logicalCount: adapters.reduce((count, adapter) => count + adapter.aliases.length, 0), physicalCount: selectable.reduce((count, adapter) => count + adapter.physicalKeys.length, 0), mergedCount: selectable.reduce((count, adapter) => count + adapter.aliases.length - 1, 0), unidentifiedCount: adapters.filter(adapter => !adapter.identityConfirmed).length } };
   };
   ipcMain.handle('rhine:gpu:info', async event => {
     if (!owned(event)) throw new Error('Invalid player window');
@@ -94,7 +106,7 @@ function registerGpuControls({ app, ipcMain, getWindow, getPreference, savePrefe
     if (typeof id !== 'string' || id.length > 160) throw new Error('Invalid GPU selection');
     const adapters = await readAdapters().catch(error => { if (id === 'auto') return []; throw error; });
     if (!owned(event)) throw new Error('Player window closed');
-    const adapter = adapters.find(item => item.id === id);
+    const adapter = adapters.find(item => item.id === id && item.identityConfirmed === true);
     if (id !== 'auto' && !adapter) throw new Error('所选显卡已不可用，请刷新列表。');
     await savePreference(id === 'auto' ? 'auto' : adapterToPreference(adapter));
     return report(adapters);

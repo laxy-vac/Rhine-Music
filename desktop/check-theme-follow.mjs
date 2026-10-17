@@ -70,7 +70,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
     result.mediaChanges.push({ theme, beforeEvents: before, afterEvents: after.mql?.events, systemDark: after.mql?.systemDark });
     return after;
   };
-  const openStyle = async () => { await click('.music-topnav [data-action="theme"]'); await waitFor(s => s.stylePageOpen && s.hasLayout && s.graphicsTitle === 'GRAPHICS', 'GRAPHICS theme controls'); await paint(); };
+  const openStyle = async () => { await click('.music-topnav [data-action="theme"]'); await waitFor(s => s.stylePageOpen && s.hasLayout && s.graphicsTitle === 'STYLE', 'STYLE theme controls'); await paint(); };
   const chooseDesign = async design => {
     const before = await state();
     if (before.design !== design) { await click(`.design-family-card[data-style-design="${design}"]`); await waitFor(s => s.design === design, `design ${design}`, 12000); }
@@ -125,7 +125,7 @@ export async function checkThemeFollow({ browserWindow, outputDirectory, probeRe
   await setSystem('night', initial.mql?.systemDark !== true);
   assert.equal((await state()).theme, 'day', 'follow-off must ignore system changes');
   await openStyle();
-  result.checks.graphicsTitleAndTopbarLabel = (await state()).graphicsTitle === 'GRAPHICS' && /GRAPHICS/i.test((await state()).graphicsNavLabel ?? '');
+  result.checks.graphicsTitleAndTopbarLabel = (await state()).graphicsTitle === 'STYLE' && /STYLE/i.test((await state()).graphicsNavLabel ?? '');
   const enableSaves = saves();
   await clickFollow(true);
   const enabled = await waitFor(s => s.theme === 'night' && s.savedFollow === true, 'immediate sync after enabling follow');

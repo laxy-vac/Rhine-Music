@@ -396,6 +396,14 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
     await click('.music-topnav [data-action="settings"]');
     await waitFor(`document.querySelector('#stage')?.dataset.page === 'settings' && document.querySelector('#music-settings') && !document.querySelector('#music-settings').hidden`,
       'independent settings page');
+    const defaultCategory = await evaluate(`(() => ({
+      active: document.querySelector('#music-settings [data-settings-category-target][aria-current="page"]')?.dataset.settingsCategoryTarget ?? null,
+      title: document.querySelector('#music-settings [data-settings-category="interface"] > h2')?.textContent?.trim() ?? '',
+      visible: document.querySelector('#music-settings [data-settings-category="interface"]')?.hidden === false,
+    }))()`);
+    assert(defaultCategory.active === 'interface' && defaultCategory.visible && /界面与交互|interface.{0,24}interaction/i.test(defaultCategory.title),
+      `Settings should open on Interface & Interaction by default: ${JSON.stringify(defaultCategory)}.`);
+    report.checks.interfaceCategoryIsDefault = true;
 
     if (audioCore) {
       const audioCoreReport = await runAudioControlsCheck({ browserWindow, waitFor, click, capture, setViewport, presetStoreFile: path.join(home, 'audio-processing-presets.json') });
@@ -403,6 +411,9 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
       report.checks.audioCore = audioCoreReport.checks;
       assert(audioCoreReport.ok, audioCoreReport.error || 'Audio controls acceptance failed.');
     }
+    await click('#music-settings [data-settings-category-target="appearance"]');
+    await waitFor(`document.querySelector('#music-settings [data-settings-category-target="appearance"]')?.getAttribute('aria-current') === 'page' && document.querySelector('#graphics-display-settings .quality-detection')`,
+      'display and performance controls mounted in the appearance category');
 
     const pageAudit = await evaluate(`(() => {
       const settings = document.querySelector('#music-settings');
@@ -431,7 +442,8 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
       'sony-component-status', 'sony-dsee', 'sony-dc', 'sony-vinyl', 'sony-parallel',
       'sony-streaming', 'sony-progress', 'sony-playback-status', 'ftp-settings',
       'ftp-host', 'ftp-port', 'ftp-security', 'ftp-user', 'ftp-password', 'ftp-root',
-      'ftp-status', 'quality-preset', 'quality-summary', 'reduced-motion', 'volume',
+      'ftp-status', 'interface-settings', 'ui-language', 'motion-settings', 'entry-settings',
+      'interface-sound-settings', 'graphics-display-settings', 'quality-preset', 'quality-summary', 'reduced-motion', 'volume',
       'song-fade-setting', 'sound-setting', 'sound-volume', 'bgm-setting', 'bgm-volume',
     ];
     const controlAudit = await evaluate(`(() => {
@@ -441,13 +453,59 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
         qualityControls: document.querySelectorAll('#music-settings [data-quality]').length,
         categories: [...document.querySelectorAll('#music-settings [data-settings-category]')].map((node) => node.dataset.settingsCategory),
         categoryButtons: [...document.querySelectorAll('#music-settings [data-settings-category-target]')].map((node) => node.dataset.settingsCategoryTarget),
+        categoryTitles: [...document.querySelectorAll('#music-settings [data-settings-category]')].map((node) => ({
+          id: node.dataset.settingsCategory,
+          title: node.querySelector(':scope > h2')?.textContent?.trim() ?? '',
+          titleId: node.querySelector(':scope > h2')?.id ?? '',
+          labelledBy: node.getAttribute('aria-labelledby') ?? '',
+        })),
+        ownership: {
+          interface: (() => { const section=document.querySelector('#music-settings [data-settings-category="interface"]'); const motion=section?.querySelector('#motion-settings'); const motionGroup=motion?.matches('.graphics-motion-settings')?motion:motion?.querySelector('.graphics-motion-settings'); return {
+            language: !!section?.querySelector('#interface-settings #ui-language'),
+            languageApply: !!section?.querySelector('#interface-settings [data-action=apply-language]'),
+            styleLink: !!section?.querySelector('#interface-settings [data-action=theme]'),
+            motion: !!motionGroup?.querySelector('#reduced-motion') && !!motionGroup?.querySelector('[data-quality=wave]'),
+            entry: !!section?.querySelector('#entry-settings'),
+            interfaceSound: !!section?.querySelector('#interface-sound-settings'),
+          }; })(),
+          appearance: (() => { const section=document.querySelector('#music-settings [data-settings-category="appearance"]'); return {
+            display: !!section?.querySelector('#graphics-display-settings'),
+            fullscreen: !!section?.querySelector('#graphics-display-settings [data-action=fullscreen]'),
+            gpu: !!section?.querySelector('#graphics-display-settings [data-gpu-preference]'),
+            quality: !!section?.querySelector('#graphics-display-settings .quality-settings [data-quality]'),
+            detection: !!section?.querySelector('#graphics-display-settings .quality-detection'),
+            language: !!section?.querySelector('#ui-language'),
+            motion: !!section?.querySelector('#motion-settings, #reduced-motion, .graphics-motion-settings, [data-quality=wave]'),
+          }; })(),
+        },
       };
     })()`);
     assert(controlAudit.missing.length === 0, `Missing or duplicated settings control IDs: ${controlAudit.missing.join(', ')}`);
     assert(controlAudit.qualityControls > 0, 'Granular render-quality controls were not retained.');
-    const categories = ['appearance', 'interface', 'audio', 'library', 'sources', 'about'];
-    assert(categories.every((name) => controlAudit.categories.includes(name) && controlAudit.categoryButtons.includes(name)),
-      `Expected all six settings categories; got ${controlAudit.categories.join(', ')}.`);
+    const categories = ['interface', 'appearance', 'audio', 'lyrics', 'library', 'sources', 'about'];
+    assert.equal(controlAudit.categories.length, categories.length,
+      `Expected seven settings categories; got ${controlAudit.categories.join(', ')}.`);
+    assert.deepEqual([...controlAudit.categories].sort(), [...categories].sort(),
+      `Expected interface, appearance, audio, lyrics, library, sources and about; got ${controlAudit.categories.join(', ')}.`);
+    assert.equal(controlAudit.categoryButtons.length, categories.length,
+      `Expected seven settings category buttons; got ${controlAudit.categoryButtons.join(', ')}.`);
+    assert.deepEqual([...controlAudit.categoryButtons].sort(), [...categories].sort(),
+      `Expected one navigation button for each category; got ${controlAudit.categoryButtons.join(', ')}.`);
+    const titlePatterns = {
+      interface: /界面与交互|interface.{0,24}interaction/i,
+      appearance: /显示与性能|display.{0,24}performance/i,
+      audio: /音频|audio/i,
+      lyrics: /歌词|lyrics/i,
+      library: /音乐库|library/i,
+      sources: /音乐来源|来源|music sources/i,
+      about: /关于|about/i,
+    };
+    assert(controlAudit.categoryTitles.every(item => item.titleId === item.labelledBy && titlePatterns[item.id]?.test(item.title)),
+      `Settings categories must have matching accessible titles: ${JSON.stringify(controlAudit.categoryTitles)}.`);
+    assert(controlAudit.ownership.interface.language && controlAudit.ownership.interface.languageApply && controlAudit.ownership.interface.styleLink && controlAudit.ownership.interface.motion && controlAudit.ownership.interface.entry && controlAudit.ownership.interface.interfaceSound,
+      `Interface settings are not owned by the interface category: ${JSON.stringify(controlAudit.ownership.interface)}.`);
+    assert(controlAudit.ownership.appearance.display && controlAudit.ownership.appearance.fullscreen && controlAudit.ownership.appearance.gpu && controlAudit.ownership.appearance.quality && controlAudit.ownership.appearance.detection && !controlAudit.ownership.appearance.language && !controlAudit.ownership.appearance.motion,
+      `Display and performance settings are not uniquely owned by appearance: ${JSON.stringify(controlAudit.ownership.appearance)}.`);
     report.checks.legacyControlsRetained = true;
     report.settingsCategories = categories;
 
@@ -508,6 +566,9 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
     const nightScreenshot = await capture('settings-1280x840-night.png');
     report.checks.themePreferenceSaved = true;
 
+    await click('#music-settings [data-settings-category-target="interface"]');
+    await waitFor(`document.querySelector('#music-settings [data-settings-category-target="interface"]')?.getAttribute('aria-current') === 'page' && document.querySelector('#music-settings [data-settings-category="interface"] #motion-settings #reduced-motion')`,
+      'reduced-motion control in the interface category');
     const reducedBefore = await evaluate(`document.querySelector('#reduced-motion')?.checked`);
     assert(reducedBefore === true, 'Reduced-motion preference was not seeded as enabled.');
     await click('#reduced-motion');
@@ -516,7 +577,7 @@ export async function runSettingsPageCheck({ root, dataDir, home, BrowserWindow,
     await click('#reduced-motion');
     await waitFor(`document.querySelector('#reduced-motion')?.checked === true && JSON.parse(localStorage.getItem('rhine-music-preferences') || '{}').reduced === true`,
       'reduced-motion enabled preference save');
-    report.checks.reducedMotionPreferenceSaved = true;
+    report.checks.reducedMotionPreferenceSavedInInterface = true;
 
     await pause(300);
     await evaluate('location.reload()').catch(() => {});

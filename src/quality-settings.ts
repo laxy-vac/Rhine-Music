@@ -64,11 +64,12 @@ export function qualityMarkup(
   layout?: MusicLayout,
   separateMotion = false,
 ) {
-  const preset = matchingPreset(quality);
+  const preset = matchingPreset(quality, separateMotion);
   return ui`<section class="quality-settings" aria-label="画质设置">
     <div class="quality-heading"><h3>RENDER QUALITY <span>渲染画质</span></h3><select id="quality-preset" aria-label="画质预设">${(Object.keys(presetLabels) as QualityPreset[]).map((key) => `<option value="${key}" ${preset === key ? "selected" : ""}>${presetLabels[key]}</option>`).join("")}<option value="custom" disabled ${preset === "custom" ? "selected" : ""}>自定义</option></select></div>
     <p class="quality-summary" id="quality-summary" aria-live="polite"></p>
     ${design ? `<p class="quality-note">${trUi("两种主题共用这组画质设置，切换主题后继续沿用。")}</p>` : ""}
+    ${separateMotion ? `<p class="quality-note">${trUi("画质预设不会更改动态效果。")}</p>` : ""}
     ${design ? `<div class="quality-grid quality-core-grid">
     ${separateMotion ? "" : waveQualityMarkup(quality, design, layout)}
     ${select(
@@ -168,10 +169,10 @@ export function qualityMarkup(
   </section>`;
 }
 
-export function syncQualityUI(quality: RenderQuality) {
+export function syncQualityUI(quality: RenderQuality, independentMotion = false) {
   const preset = document.querySelector<HTMLSelectElement>("#quality-preset");
   if (!preset) return;
-  preset.value = matchingPreset(quality);
+  preset.value = matchingPreset(quality, independentMotion);
   document
     .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-quality]")
     .forEach((control) => {

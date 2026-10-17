@@ -10,6 +10,7 @@ const ADAPTER_FIELDS = [
   'vendorId', 'deviceId', 'subSysId', 'revision', 'name', 'luidHigh', 'luidLow',
 ];
 const PREFERENCE_FIELDS = ['id', ...ADAPTER_FIELDS];
+const METADATA_FIELDS = ['physicalKeys', 'physicalLocations', 'dedicatedMemoryBytes', 'pciAddress', 'identityError', 'identityConfirmed', 'aliases'];
 const ENUMERATION_SCRIPT = path.join(__dirname, 'gpu-adapters.ps1');
 const ENUMERATION_TIMEOUT_MS = 15000;
 const ENUMERATION_MAX_BUFFER = 1024 * 1024;
@@ -69,12 +70,24 @@ function hardwareIdentityKey(adapter) {
 }
 
 function createAdapterId(adapter) {
+  if (adapter.physicalKeys?.length) return `gpu-physical:${createHash('sha256').update(JSON.stringify(adapter.physicalKeys), 'utf8').digest('hex')}`;
   return `gpu:${hardwareIdentityKey(adapter)}@${adapter.luidHigh},${adapter.luidLow}`;
 }
 
+function normalizePhysicalKeys(value, required = false) {
+  if (!Array.isArray(value) || value.length > 16) throw new TypeError('Physical GPU keys must be an array of at most 16 entries');
+  const keys = [...new Set(value.map(key => {
+    if (typeof key !== 'string' || !key.trim() || key.length > 4096 || /[\x00-\x1f]/.test(key)) throw new TypeError('Invalid physical GPU key');
+    return key.trim().toUpperCase().replace(/\\SYSTEM\\CONTROLSET[0-9]{3}\\ENUM\\/, '\\SYSTEM\\CURRENTCONTROLSET\\ENUM\\');
+  }))].sort();
+  if (required && !keys.length) throw new TypeError('A physical GPU identity is required');
+  return keys;
+}
+
 function normalizeAdapter(value, label = 'adapter') {
-  assertExactFields(value, PREFERENCE_FIELDS, label);
+  assertExactFields(value, Object.hasOwn(value ?? {}, 'physicalKeys') ? [...PREFERENCE_FIELDS, 'physicalKeys'] : PREFERENCE_FIELDS, label);
   const fields = normalizeAdapterFields(value, label);
+  if (Object.hasOwn(value, 'physicalKeys')) fields.physicalKeys = normalizePhysicalKeys(value.physicalKeys, true);
   const id = createAdapterId(fields);
   if (value.id !== id) throw new TypeError(`${label}.id does not match its hardware identity and session LUID`);
   return { id, ...fields };
@@ -82,9 +95,24 @@ function normalizeAdapter(value, label = 'adapter') {
 
 function normalizeEnumeratedAdapter(value, index) {
   const label = `adapters[${index}]`;
-  assertExactFields(value, ADAPTER_FIELDS, label);
+  if (!isRecord(value) || Object.keys(value).some(key => ![...ADAPTER_FIELDS, 'id', ...METADATA_FIELDS].includes(key))) throw new TypeError(`${label} has unknown fields`);
+  for (const field of ADAPTER_FIELDS) if (!Object.hasOwn(value, field)) throw new TypeError(`${label} has missing fields`);
   const fields = normalizeAdapterFields(value, label);
-  return { id: createAdapterId(fields), ...fields };
+  const metadata = {};
+  if (Object.hasOwn(value, 'physicalKeys')) {
+    fields.physicalKeys = normalizePhysicalKeys(value.physicalKeys);
+    metadata.identityConfirmed = fields.physicalKeys.length > 0;
+    metadata.physicalLocations = Array.isArray(value.physicalLocations) ? value.physicalLocations.filter(item => typeof item === 'string' && item.length <= 4096).map(item => item.trim()).filter(Boolean) : [];
+    metadata.dedicatedMemoryBytes = Number.isSafeInteger(value.dedicatedMemoryBytes) && value.dedicatedMemoryBytes >= 0 ? value.dedicatedMemoryBytes : 0;
+    metadata.pciAddress = typeof value.pciAddress === 'string' ? value.pciAddress.slice(0, 100) : '';
+    metadata.identityError = typeof value.identityError === 'string' ? value.identityError.slice(0, 1000) : '';
+  }
+  const id = createAdapterId(fields);
+  if (value.id && value.id !== id) throw new TypeError(`${label}.id does not match its identity`);
+  const aliases = Array.isArray(value.aliases) ? value.aliases : [{ luidHigh: fields.luidHigh, luidLow: fields.luidLow }];
+  if (aliases.length > 32) throw new TypeError('Too many logical GPU adapters');
+  metadata.aliases = aliases.map(alias => ({ luidHigh: assertInt32(alias.luidHigh, 'alias.luidHigh'), luidLow: assertUint32(alias.luidLow, 'alias.luidLow') }));
+  return { id, ...fields, ...metadata };
 }
 
 function normalizeGpuPreference(value) {
@@ -93,7 +121,25 @@ function normalizeGpuPreference(value) {
 }
 
 function adapterToPreference(adapter) {
-  return normalizeAdapter(adapter, 'selected adapter');
+  if (!isRecord(adapter) || Object.keys(adapter).some(key => ![...PREFERENCE_FIELDS, ...METADATA_FIELDS].includes(key))) throw new TypeError('Invalid selected adapter');
+  if (adapter.identityConfirmed === false) throw new TypeError('The physical GPU identity is unavailable');
+  const fields = Object.fromEntries(PREFERENCE_FIELDS.map(key => [key, adapter[key]]));
+  if (adapter.physicalKeys?.length) fields.physicalKeys = adapter.physicalKeys;
+  return normalizeAdapter(fields, 'selected adapter');
+}
+
+function groupPhysicalAdapters(adapters) {
+  if (!Array.isArray(adapters) || adapters.length > 32) throw new TypeError('At most 32 adapters are allowed');
+  const groups = new Map();
+  for (const [index, value] of adapters.entries()) {
+    const adapter = normalizeEnumeratedAdapter(value, index);
+    const previous = groups.get(adapter.id);
+    if (!previous) { groups.set(adapter.id, adapter); continue; }
+    if (!sameHardware(previous, adapter)) throw new Error('Conflicting hardware reported for one physical GPU');
+    for (const alias of adapter.aliases) if (!previous.aliases.some(item => item.luidHigh === alias.luidHigh && item.luidLow === alias.luidLow)) previous.aliases.push(alias);
+    previous.physicalLocations = [...new Set([...(previous.physicalLocations ?? []), ...(adapter.physicalLocations ?? [])])];
+  }
+  return [...groups.values()];
 }
 
 function parseEnumerationOutput(stdout) {
@@ -108,7 +154,7 @@ function parseEnumerationOutput(stdout) {
   if (!Array.isArray(parsed) || parsed.length > 32) {
     throw new Error('GPU adapter enumeration must return an array containing at most 32 adapters.');
   }
-  return parsed.map(normalizeEnumeratedAdapter);
+  return groupPhysicalAdapters(parsed);
 }
 
 function enumerationError(detail, cause) {
@@ -262,19 +308,23 @@ function resolveGpuPreference(preference, adapters) {
   if (!Array.isArray(adapters) || adapters.length > 32) {
     throw new TypeError('adapters must be an array containing at most 32 entries');
   }
-  const available = adapters.map((adapter, index) => {
-    if (isRecord(adapter) && Object.hasOwn(adapter, 'id')) {
-      return normalizeAdapter(adapter, `adapters[${index}]`);
+  const available = groupPhysicalAdapters(adapters).filter(adapter => adapter.identityConfirmed !== false);
+  const appliedPreference = adapter => adapterToPreference(adapter);
+  if (requested.physicalKeys) {
+    const matches = available.filter(adapter => adapter.id === requested.id && sameHardware(adapter, requested));
+    if (matches.length === 1) {
+      const match = matches[0], alias = match.aliases.find(item => item.luidHigh === requested.luidHigh && item.luidLow === requested.luidLow);
+      return { requested, applied: appliedPreference(alias ? { ...match, ...alias } : match), reason: null };
     }
-    return normalizeEnumeratedAdapter(adapter, index);
-  });
+    return { requested, applied: 'auto', reason: '上次选择的 GPU 已不可用；已回退自动选择。' };
+  }
 
   const exact = available.filter(adapter =>
     sameHardware(adapter, requested) &&
-    adapter.luidHigh === requested.luidHigh &&
-    adapter.luidLow === requested.luidLow);
+    adapter.aliases.some(alias => alias.luidHigh === requested.luidHigh && alias.luidLow === requested.luidLow));
   if (exact.length === 1) {
-    return { requested, applied: exact[0], reason: null };
+    const alias = exact[0].aliases.find(item => item.luidHigh === requested.luidHigh && item.luidLow === requested.luidLow);
+    return { requested, applied: appliedPreference({ ...exact[0], ...alias }), reason: null };
   }
   if (exact.length > 1) {
     return {
@@ -284,11 +334,15 @@ function resolveGpuPreference(preference, adapters) {
     };
   }
 
+  if (available.some(adapter => adapter.identityConfirmed === true)) {
+    return { requested, applied: 'auto', reason: '旧显卡偏好缺少物理身份，请重新选择；本次使用自动选择。' };
+  }
+
   const hardwareMatches = available.filter(adapter => sameHardware(adapter, requested));
   if (hardwareMatches.length === 1) {
     return {
       requested,
-      applied: hardwareMatches[0],
+      applied: appliedPreference(hardwareMatches[0]),
       reason: 'GPU 的会话 LUID 已变化，已按唯一硬件身份重新匹配。',
     };
   }
@@ -327,6 +381,7 @@ function applyGpuPreference(app, selection) {
   if (requested !== 'auto' && applied !== 'auto' && !sameHardware(requested, applied)) {
     throw new TypeError('applied GPU does not match the requested hardware identity');
   }
+  if (requested !== 'auto' && requested.physicalKeys && applied !== 'auto' && requested.id !== applied.id) throw new TypeError('Applied GPU does not match the requested physical device');
   const reason = selection.reason === undefined || selection.reason === null
     ? null
     : typeof selection.reason === 'string'
@@ -348,6 +403,7 @@ function applyGpuPreference(app, selection) {
 }
 
 module.exports = {
+  groupPhysicalAdapters,
   adapterToPreference,
   enumerateAdapters,
   enumerateAdaptersSync,

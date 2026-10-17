@@ -4,7 +4,7 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 ## 全局偏好
 
-- 当前主题值为 <code>rhine</code> 或 <code>archive</code>。日夜、窗口比例、画质和浏览视图由全局偏好管理，不由主题配置覆盖。
+- 当前主题值为 <code>rhine</code> 或 <code>archive</code>。日夜、窗口比例、画质、动效和浏览视图由全局偏好管理，不由主题配置覆盖。
 - 日夜跟随使用独立偏好 <code>followSystemTheme</code>，默认关闭。开启时读取系统当前明暗，不同时对齐一次；后续只在系统真实变化时比较当前状态，相同或重复通知不保存/重绘。手动切日夜不关闭跟随，也不被主动纠正；重启保留手动选择，直到系统下次变化。Future 的主题卡使用圆角控件，Punk 使用方角控件。
 - 窗口比例由全局 <code>windowAspect</code> 管理，默认 16:9；固定比例包含 16:10、4:3、3:2 和 21:9，也可选择自由比例。最大化与全屏保留内容比例。
 - 主题的陈列外观与盒体外观分别保存。两主题的个人 Punk 预设使用独立的 <code>futurePunkPresets</code> 与 <code>archivePunkPresets</code>，互不覆盖。
@@ -12,17 +12,23 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 ## 共享唱片页
 
-### Graphics 与普通设置
+### STYLE 与 Settings
 
-两主题的顶部 `GRAPHICS` 沿用原 Style 页的主题卡、Punk 配色和预览、盒体编辑与画质界面，集中管理主题、日夜与系统跟随、窗口比例、减少动态、全屏和渲染选项。旧 Settings 内的主题卡与显示动效控件不再重复，顶部日夜切换也合并到 Graphics 的模式区；这些选项继续使用原有共享偏好。
+两主题的 `STYLE` 页面沿用原 Style 界面与预览，管理主题、日夜配色、主题色板、文字字号、唱片盒和场景外观。渲染画质、性能检测、窗口和显卡设置不放在 STYLE。内部页面值与导航 action 仍为 <code>theme</code>；<code>#music-theme-page</code>、<code>#theme-page-content</code> 和 <code>#music-style-title</code> 等兼容 DOM ID 保留，<code>#theme-quality-slot</code> 作为唱片盒编辑内容的插入位置。
 
-“显示与渲染”使用一个共享容器，内部按窗口显示（比例、全屏）、动态效果（减少动态、唱片波动）、优先显卡（实验性）及渲染画质（预设、精细设置、性能检测）分组；不在主题卡附近另放孤立的显示动效区。Punk 自有的文字、场景尺寸和颗粒等仍归当前主题外观。桌面全屏通过拥有窗口的主 frame IPC 控制原生 BrowserWindow；按钮同步实际全屏状态，重复请求受忙碌保护，退出按钮与 Esc 均恢复当前页面和窗口，保持既有浏览器权限拒绝策略。Windows 原生全屏事件须在下一轮事件循环读取更新后的状态。
+Settings 固定为七类，每个控件只在所属类别出现一次：
 
-Windows 的“优先显卡”默认自动，由播放器请求高性能偏好；也可从 DXGI 可见、非软件且 D3D11 可初始化的当前适配器中选择。它不是 PnP 全设备清单，也不将虚拟/远程适配器一律判断为物理显卡。手动选择仅为播放器下一次完整启动设置 ANGLE D3D11 与适配器 LUID，不修改系统显卡、驱动或应用图形配置；偏好与其它设置保存在同一个 preferences.json，普通前端保存不会覆盖桌面选卡偏好。列表异步读取、可刷新；显示驱动报告的当前用卡与待重启状态。缺失设备或同硬件多卡跨会话身份不明时回退自动并解释；同型号多卡的实际选中卡无法从 Electron GPUInfo 精确确认时明确提示。
+- “界面与交互”（内部 ID <code>interface</code>，默认打开）管理界面语言、减少动态、唱片波动、终端入场、欢迎文案与 ID、界面音效和氛围 BGM。终端入场仅 Future 生效；Punk 保留明确禁用的适配入口，不修改 Future 入场偏好。
+- “显示与性能”（内部兼容 ID <code>appearance</code>）管理窗口比例、全屏、渲染画质、优先显卡和性能检测。
+- 其余类别为“歌词”“音频”“音乐库”“音乐来源”和“关于”，分别承担原有职责。
 
-LUID 仅在当前会话有效；保存硬件身份及会话 LUID，后续启动只在同硬件唯一时重新匹配。相关边界依据当前 Electron 44.6.0 / Chromium 152 的 [LUID 选择实现](https://raw.githubusercontent.com/chromium/chromium/152.0.7977.130/ui/gl/gl_display.cc)、[GPU 信息接口](https://www.electronjs.org/docs/latest/api/app#appgetgpuinfoinfotype)和 [DXGI 描述](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1)。实验选卡不是已完成的硬件性能优化。
+画质预设和性能检测应用结果时保留唱片波动设置。仅唱片波动开关不同，不会使画质预设显示为“自定义”。全屏由拥有窗口的主 frame IPC 控制原生 BrowserWindow；按钮同步实际全屏状态，重复请求受忙碌保护，退出按钮与 Esc 均恢复当前 Settings 类别和窗口状态。Windows 原生全屏事件须在下一轮事件循环读取更新后的状态。
 
-普通 Settings 的“常规”保留语言和 Graphics 跳转，“交互与入场”保留终端入场与界面声音；音频、歌词、音乐库、来源和关于各自保持原职责。入场仅 Future 生效，Punk 保留设置入口并标明后续适配，当前入场控件禁用且不更改 Future 的入场偏好。
+Windows 的“优先显卡”默认自动。DXGI 的逻辑适配器会按稳定的物理 PnP 身份归并；SetupAPI 从对应物理设备节点只读读取 PCI bus 与 address。Microsoft SDK 将 <code>SPDRP_BUSNUMBER</code> 定义为 21、<code>SPDRP_ADDRESS</code> 定义为 28；对于 PCI，address 高 16 位是 device number，低 16 位是 function number（[SetupAPI.h](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/SetupAPI.h#L6077-L6084)、[SetupDiGetDeviceRegistryPropertyW](https://learn.microsoft.com/en-us/windows/win32/api/setupapi/nf-setupapi-setupdigetdeviceregistrypropertyw)、[PCI 地址字段说明](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/obtaining-device-configuration-information-at-irql---dispatch-level)）。PCI bus number 可能动态变化；PCI BDF 是设备位置标识，不表示主板上的用户可见插槽。
+
+本机 RTX 5080 的隔离调查中，四个 DXGI/KMT 逻辑 LUID 均对应同一个 PnP 物理设备；SetupAPI 读取到 PCI 1:0.0，DXGI 报告显存 16,753,098,752 字节（15.6 GiB）。此前逻辑地址中的 <code>0:0.1</code> 和越界值不是物理 PCI 位置。偏好保存稳定物理 PnP 身份集合及当前会话 LUID；旧偏好只按精确别名迁移，不能按同型号猜测另一张卡。缺少物理身份或身份未确认的适配器不作为可选物理卡；LDA 多设备按 linked group 明示。相同型号但物理 PnP 身份不同的卡仍分别显示，标签包含型号、显存和物理位置，完整设备标识可展开。
+
+LUID 只在当前会话有效；重新启动时按稳定物理身份匹配。选择仅为播放器后续启动设置 ANGLE D3D11 与适配器，不修改系统显卡配置、驱动或系统权限。物理身份映射解决的是设备识别问题，不代表 RTX 5080 掉帧原因已定位或性能已修复。
 
 ### 浏览与选择
 
@@ -50,7 +56,7 @@ Archive 从 EQ、歌词、信号、主题等同窗口页面返回原唱片上下
 
 Future 的 ALBUMS / MATRIX 入场复用 RhineLabUI 的文字、Logo、权限圆环和欢迎轨迹，随后在现有 ArchiveScene 中展开阵列并平滑落到总览；全程约 25.36 秒，不自动打开专辑详情。跳过按钮固定显示 `SKIP INTRO ↗`。默认欢迎文案为 `Internal DataBase`，欢迎 ID 为 `Kristen Wright`，均保留原文、不随语言翻译。前端资源与首帧准备好后释放桌面显示门，再开始计时；窗口隐藏期间暂停。按钮、Enter 或 Esc 可直接跳过到总览。
 
-默认每次新打开窗口都播放，不记录“已看过”状态；跳过不会关闭后续自动播放。设置 → 交互与入场 → 终端入场提供自动播放开关（`entryOnOpen`，默认 true）、欢迎文案（`entryWelcome`）、欢迎 ID（`entryIdentity`）、恢复默认和重播。两个文本字段仅接受 ASCII 英文字母与单词间普通空格，各最多 24 字符（含空格）；键入、粘贴、输入事件和保存均有边界，首尾空格去除、连续空格合并，空值恢复默认。非法偏好值在载入/写入时回退到默认，欢迎文字转义后插入；较宽文案按实测宽度缩小字号，保持单行且不改打字时间轴。
+默认每次新打开窗口都播放，不记录“已看过”状态；跳过不会关闭后续自动播放。Settings → 界面与交互 → 终端入场提供自动播放开关（`entryOnOpen`，默认 true）、欢迎文案（`entryWelcome`）、欢迎 ID（`entryIdentity`）、恢复默认和重播。两个文本字段仅接受 ASCII 英文字母与单词间普通空格，各最多 24 字符（含空格）；键入、粘贴、输入事件和保存均有边界，首尾空格去除、连续空格合并，空值恢复默认。非法偏好值在载入/写入时回退到默认，欢迎文字转义后插入；较宽文案按实测宽度缩小字号，保持单行且不改打字时间轴。
 
 关闭自动播放后仍可手动重播；重播退出设置并返回现有专辑总览，保留当前选择与播放，不改变开关。昼夜跟随当前全局模式，减少动态、空曲库、设置语言返回，以及其他主题/排列仍直接显示现有界面；不支持当前入场时，重播按钮禁用并解释原因，不切换 view 或主题。实现见 [future-entry.ts](../src/future-entry.ts)、[entry-text-controls.ts](../src/entry-text-controls.ts) 与 [entry-preferences.mjs](../src/entry-preferences.mjs)。
 

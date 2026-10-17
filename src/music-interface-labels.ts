@@ -5,7 +5,7 @@ export const musicInterfaceLabels = {
     equalizer: "EQ",
     lyrics: "LYRICS",
     signal: "SIGNAL",
-    style: "GRAPHICS",
+    style: "STYLE",
     search: "SEARCH",
     online: "ONLINE",
     settings: "SETTINGS",
