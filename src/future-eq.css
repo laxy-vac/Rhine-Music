@@ -386,34 +386,57 @@ html .music-app[data-design="rhine"] #music-eq-page .eq-head-controls :is(select
   outline-offset: 1px;
 }
 
-/* Vertical gain rails have a fine track, a center reference and a short handle. */
-html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) :is(
-  .eq-parametric-gain input[type="range"],
-  .eq-graphic-gain input[type="range"]
-) {
+/* All native EQ rails share one material. Gain rails use a zero reference;
+   orientation and range remain the responsibility of each existing control. */
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
   box-sizing: border-box;
+  padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  translate: none;
+  transform: none;
+  accent-color: var(--future-eq-accent);
+}
+html .music-app[data-design="rhine"] #music-eq-page [role="slider"] { translate: none; }
+
+html .music-app[data-design="rhine"] #music-eq-page :is(.processing-range-row, .eq-number-pair, .eq-strip-navigation) input[type="range"] {
+  height: 28px;
+  min-height: 28px;
+  cursor: ew-resize;
+}
+html .music-app[data-design="rhine"] #music-eq-page :is(.eq-parametric-gain, .eq-graphic-gain) input[type="range"] {
   background: linear-gradient(
     to right,
     transparent 0 34%,
     color-mix(in srgb, var(--future-eq-edge-hi) 54%, transparent) 34% 66%,
     transparent 66% 100%
   ) center / 12px 1px no-repeat;
-  accent-color: transparent;
   writing-mode: vertical-lr;
   direction: rtl;
+  cursor: ns-resize;
+}
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .processing-range-row input[type="range"] {
+  background: linear-gradient(
+    to bottom,
+    transparent 0 34%,
+    color-mix(in srgb, var(--future-eq-edge-hi) 54%, transparent) 34% 66%,
+    transparent 66% 100%
+  ) center / 1px 12px no-repeat;
 }
 
-html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) :is(
-  .eq-parametric-gain input[type="range"],
-  .eq-graphic-gain input[type="range"]
-)::-webkit-slider-runnable-track {
-  width: 3px;
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
   border: 0;
   border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-edge) 76%, transparent);
+}
+html .music-app[data-design="rhine"] #music-eq-page :is(.eq-parametric-gain, .eq-graphic-gain) input[type="range"]::-webkit-slider-runnable-track {
+  width: 3px;
+  height: 100%;
   background: linear-gradient(
     to bottom,
     color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) 0 2px,
@@ -424,30 +447,46 @@ html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-en
   );
 }
 
-html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) :is(
-  .eq-parametric-gain input[type="range"],
-  .eq-graphic-gain input[type="range"]
-)::-webkit-slider-thumb {
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) 0 2px,
+    color-mix(in srgb, var(--future-eq-edge) 76%, transparent) 2px calc(50% - 2px),
+    color-mix(in srgb, var(--future-eq-accent) 72%, var(--future-eq-panel)) calc(50% - 2px) calc(50% + 2px),
+    color-mix(in srgb, var(--future-eq-edge) 76%, transparent) calc(50% + 2px) calc(100% - 2px),
+    color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) calc(100% - 2px) 100%
+  );
+}
+
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]::-webkit-slider-thumb {
   appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   width: 13px;
   height: 13px;
+  margin-left: 0;
+  margin-top: -5px;
+  border: 1px solid color-mix(in srgb, var(--future-eq-edge) 76%, var(--future-eq-instrument));
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--future-eq-accent) 55%,var(--future-highlight)),var(--future-eq-accent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 82%, transparent),
+    0 1px 3px color-mix(in srgb, var(--future-eq-shadow) 16%, transparent);
+}
+html .music-app[data-design="rhine"] #music-eq-page :is(.eq-parametric-gain, .eq-graphic-gain) input[type="range"]::-webkit-slider-thumb {
   margin-left: -5px;
   margin-top: 0;
-  border: 1px solid color-mix(in srgb, var(--future-eq-edge) 76%, var(--future-eq-instrument));
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--future-eq-accent) 55%,var(--future-highlight)),var(--future-eq-accent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 82%, transparent),
-    0 2px 6px color-mix(in srgb, var(--future-eq-shadow) 16%, transparent);
 }
 
-html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) :is(
-  .eq-parametric-gain input[type="range"],
-  .eq-graphic-gain input[type="range"]
-)::-moz-range-track {
-  width: 3px;
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]::-moz-range-track {
+  height: 3px;
   border: 0;
   border-radius: 999px;
+  background: color-mix(in srgb, var(--future-eq-edge) 76%, transparent);
+}
+html .music-app[data-design="rhine"] #music-eq-page :is(.eq-parametric-gain, .eq-graphic-gain) input[type="range"]::-moz-range-track {
+  width: 3px;
+  height: 100%;
   background: linear-gradient(
     to bottom,
     color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) 0 2px,
@@ -458,10 +497,18 @@ html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-en
   );
 }
 
-html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-engine="lsp"]) :is(
-  .eq-parametric-gain input[type="range"],
-  .eq-graphic-gain input[type="range"]
-)::-moz-range-thumb {
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings input[type="range"]::-moz-range-track {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) 0 2px,
+    color-mix(in srgb, var(--future-eq-edge) 76%, transparent) 2px calc(50% - 2px),
+    color-mix(in srgb, var(--future-eq-accent) 72%, var(--future-eq-panel)) calc(50% - 2px) calc(50% + 2px),
+    color-mix(in srgb, var(--future-eq-edge) 76%, transparent) calc(50% + 2px) calc(100% - 2px),
+    color-mix(in srgb, var(--future-eq-accent) 52%, var(--future-eq-panel)) calc(100% - 2px) 100%
+  );
+}
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
   width: 13px;
   height: 13px;
   border: 1px solid color-mix(in srgb, var(--future-eq-edge) 76%, var(--future-eq-instrument));
@@ -469,7 +516,49 @@ html .music-app[data-design="rhine"] #music-eq-page .eq-controls:not([data-eq-en
   background: radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--future-eq-accent) 55%,var(--future-highlight)),var(--future-eq-accent));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 82%, transparent),
-    0 2px 6px color-mix(in srgb, var(--future-eq-shadow) 16%, transparent);
+    0 1px 3px color-mix(in srgb, var(--future-eq-shadow) 16%, transparent);
+}
+
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb {
+  border-color: var(--future-eq-accent);
+}
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]:hover:not(:disabled)::-moz-range-thumb {
+  border-color: var(--future-eq-accent);
+}
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--future-eq-accent) 62%, transparent);
+  outline-offset: 3px;
+}
+html .music-app[data-design="rhine"] #music-eq-page input[type="range"]:disabled { opacity: .45; cursor: default; }
+
+/* Tone uses the same compact numeric window as the gain faders. */
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .processing-range-row {
+  grid-template-columns: minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 6px 12px;
+}
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .processing-range-row > span { grid-column: 1 / -1; }
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .processing-range-row :is(.editable-range-value, .editable-range-number) {
+  width: 72px;
+  min-width: 0;
+  max-width: 72px;
+  min-height: 26px;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--future-eq-instrument);
+  background: var(--future-eq-glass);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-eq-edge-hi) 62%, transparent);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  translate: none;
+}
+html .music-app[data-design="rhine"] #music-eq-page #tone-settings .processing-range-row .editable-range-number[aria-invalid="true"] {
+  border-color: #a05f59;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #a05f59 20%, transparent);
 }
 
 /* Compact rounded switches preserve the existing checkbox inputs and states. */

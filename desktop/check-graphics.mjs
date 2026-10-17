@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { checkDayPalette } from './check-day-palette.mjs';
 import { checkFutureSettings } from './check-future-settings.mjs';
+import { checkEqSliders } from './check-eq-sliders.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const settingsCategories = ['interface', 'appearance', 'audio', 'lyrics', 'library', 'sources', 'about'];
@@ -731,7 +732,8 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     await openStyle();
     await click(`aside.theme-mode-controls button[data-theme=${savedTheme}]`);
     const dayPalette = await checkDayPalette({ browserWindow, outputDirectory });
-    return { ok: futureSettings.ok, cases, screenshots: [...screenshots, ...dayPalette.screenshots, ...futureSettings.screenshots], switchChecks, rangeChecks, dayPalette, futureSettings };
+    const eqSliders = await checkEqSliders({ browserWindow, outputDirectory });
+    return { ok: futureSettings.ok && eqSliders.ok, cases, screenshots: [...screenshots, ...dayPalette.screenshots, ...futureSettings.screenshots, ...eqSliders.screenshots], switchChecks, rangeChecks, dayPalette, futureSettings, eqSliders };
   } finally {
     if (!browserWindow.isDestroyed()) { if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false); wc.setBackgroundThrottling(true); }
   }

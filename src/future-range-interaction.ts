@@ -49,6 +49,7 @@ export function setupFutureRangeInteraction(
     || view.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const eligible = (range: HTMLInputElement) => range.isConnected && !range.disabled && !!range.closest('.music-app[data-design="rhine"]')
     && !!range.closest("#music-settings, #music-theme-page, .music-panel")
+    && !range.closest("#music-eq-page, .eq-controls, .tone-controls")
     && !range.closest("[hidden], [inert], details:not([open])") && range.getClientRects().length > 0;
   const clearTimers = () => {
     view.clearTimeout(leaveTimer);
