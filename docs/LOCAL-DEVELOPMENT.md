@@ -65,6 +65,8 @@ node scripts/build-source-preview.mjs --interface-only
 
 隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实音频设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
 
+Future 界面音效可用 `node scripts/check-interface-audio.mjs` 验证模拟设备路由、主题/播放互斥、迟到请求取消、WAV 校验及缓存上限。`node desktop/check-interface-audio.cjs` 使用既有 Electron 的隔离隐藏页验证真实离线合成及外部 sink 生命周期，不调用真实音频设备。原生会话检查须在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only` 再执行 `node --test scripts/check-native-output.mjs`；不加此设置的既有套件包含真实设备检查，不能作为默认离线命令。
+
 Settings 分类、两主题 STYLE 页面、原生全屏往返及本机显卡枚举使用 `node desktop/check-startup-entry.cjs --graphics`。`--graphics` 是兼容保留的 probe 参数名；显卡设置位于 Settings → 显示与性能。加 `--gpu-manual` 可在隔离配置中以可用物理卡启动，验证真实前端的手动选卡路径。纯偏好及身份/LUID 边界检查为 `node scripts/check-gpu-selection.cjs`。这些检查不接入个人曲库、播放设备或系统显卡设置。
 
 看不到修改时，依次核对当前源码入口与主题、构建来源清单、是否完整退出旧窗口、模型内容版本与地址。模型变更须同步对应资源版本并重建；不要清个人缓存或重置偏好制造新版效果。

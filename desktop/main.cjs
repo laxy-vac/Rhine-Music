@@ -308,7 +308,7 @@ else {
  app.on('window-all-closed',()=>{if(!previewUICheck)app.quit()});
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;
-  const shut=async()=>{if(service){await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),gpuSaveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};
+  const shut=async()=>{if(service){await service.interfaceAudio?.close().catch(()=>{});await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),gpuSaveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};
   void shut().finally(()=>app.quit());
  });
 }

@@ -3,6 +3,12 @@ import assert from 'node:assert/strict'
 import { MusicPlayer } from '../src/music-player.ts'
 
 const settle = async () => { for (let i = 0; i < 12; i += 1) await Promise.resolve() }
+const deferred = () => {
+  let resolve
+  let reject
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
 
 /** No browser, network, real timers, or actual sound is used by these tests. */
 function environment(t) {
@@ -395,6 +401,95 @@ test('native pause reports its acknowledged position before preparing changed So
  near(calls.find(x=>x.url==='/api/sony/prepare').value.startPosition,7.125);near(player.state.currentTime,7.125);assert.equal(player.state.transport,'paused');
  player.dispose();await settle();assert.equal(env.pendingTimers(),0);
 });
+
+test('native pause releases the device, then a fast resume waits for the acknowledged cursor on the same session',async t=>{
+ const env=environment(t),calls=[],pauseStarted=deferred(),pauseAck=deferred();let position=4.5,playing=false,deviceReleased=true;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  const value=JSON.parse(options.body);calls.push({url,value});
+  if(url==='/api/native/start'){
+   position=value.position??position;playing=false;deviceReleased=true;
+   return reply({session:value.session,duration:120,position,playing,paused:true,deviceReleased,backend:'wasapi',mode:'pcm'});
+  }
+  if(value.action==='pause'){
+   pauseStarted.resolve();await pauseAck.promise;position=37.25;playing=false;deviceReleased=true;
+  }else if(value.action==='play'){playing=true;deviceReleased=false}
+  else if(value.action==='seek')position=value.position;
+  else if(value.action==='stop'){playing=false;deviceReleased=true}
+  return reply({session:value.session,duration:120,position,playing,paused:!playing,deviceReleased,backend:'wasapi',mode:'pcm'});
+ });
+ const first=track('first'),second=track('second');
+ const player=new MusicPlayer({bgmEnabled:false,songFadeEnabled:false,outputSettings:{backend:'wasapi',device:-1,channel:0,dsdMode:'pcm'}});
+ player.setQueue([first,second]);player.setPlaybackOrder('repeat-queue');await player.play(first.id);
+ const session=player.state.nativeSessionId,playsBefore=calls.filter(call=>call.value.action==='play').length;
+ const pausing=player.toggle();await pauseStarted.promise;
+ assert.equal(player.state.transport,'paused');assert.equal(player.state.nativeOutputStatus?.deviceReleased,false);
+ const resuming=player.toggle();await settle();
+ assert.equal(calls.filter(call=>call.value.action==='play').length,playsBefore,'resume must wait for the pause acknowledgement');
+ pauseAck.resolve();await Promise.all([pausing,resuming]);
+ assert.equal(player.state.transport,'playing');near(player.state.currentTime,37.25);
+ assert.equal(player.state.nativeSessionId,session,'resume must reuse the released cached session');
+ assert.equal(player.state.nativeOutputStatus?.deviceReleased,false);
+ assert.deepEqual(player.state.queue.map(item=>item.id),['first','second']);assert.equal(player.state.currentIndex,0);assert.equal(player.state.playbackOrder,'repeat-queue');
+ const actions=calls.map(call=>call.value.action).filter(Boolean),pauseIndex=actions.indexOf('pause');
+ assert.ok(pauseIndex>=0&&actions.indexOf('play',pauseIndex+1)>pauseIndex);
+ assert.equal(calls.filter(call=>call.url==='/api/native/start').length,1,'cached resume must not open a second session');
+ player.dispose();await settle();assert.equal(env.pendingTimers(),0);
+});
+
+test('released native playback supports paused seek and stop invalidates a pending pause acknowledgement',async t=>{
+ const env=environment(t),calls=[],secondPauseStarted=deferred(),secondPauseAck=deferred();let position=8,playing=false,deviceReleased=true,pauseCount=0;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  const value=JSON.parse(options.body);calls.push({url,value});
+  if(url==='/api/native/start'){
+   position=value.position??position;playing=false;deviceReleased=true;
+   return reply({session:value.session,duration:120,position,playing,paused:true,deviceReleased,backend:'wasapi',mode:'pcm'});
+  }
+  if(value.action==='pause'){
+   pauseCount++;
+   if(pauseCount===1){position=12.5;playing=false;deviceReleased=true}
+   else{secondPauseStarted.resolve();await secondPauseAck.promise;playing=false;deviceReleased=true}
+  }else if(value.action==='play'){playing=true;deviceReleased=false}
+  else if(value.action==='seek')position=value.position;
+  else if(value.action==='stop'){playing=false;deviceReleased=true}
+  return reply({session:value.session,duration:120,position,playing,paused:!playing,deviceReleased,backend:'wasapi',mode:'pcm'});
+ });
+ const first=track('first'),second=track('second');
+ const player=new MusicPlayer({bgmEnabled:false,songFadeEnabled:false,outputSettings:{backend:'wasapi',device:-1,channel:0,dsdMode:'pcm'}});
+ player.setQueue([first,second]);await player.play(first.id);const session=player.state.nativeSessionId;
+ await player.toggle();await settle();assert.equal(player.state.transport,'paused');assert.equal(player.state.nativeOutputStatus?.deviceReleased,true);near(player.state.currentTime,12.5);
+ player.seek(55);await settle();near(player.state.currentTime,55);assert.equal(calls.filter(call=>call.value.action==='seek').at(-1).value.position,55);
+ await player.toggle();assert.equal(player.state.transport,'playing');near(player.state.currentTime,55);assert.equal(player.state.nativeSessionId,session);
+ assert.equal(calls.filter(call=>call.url==='/api/native/start').length,1);
+ const pendingPause=player.toggle();await secondPauseStarted.promise;player.stop();
+ assert.equal(player.state.transport,'idle');assert.equal(player.state.currentTime,0);
+ secondPauseAck.resolve();await pendingPause;await settle();
+ assert.equal(player.state.transport,'idle','late pause completion must not undo stop');assert.equal(player.state.currentTime,0);
+ assert.ok(calls.some(call=>call.value.action==='stop'));
+ player.dispose();assert.equal(env.pendingTimers(),0);
+});
+
+test('natural end of the final native track releases the output session',async t=>{
+ const env=environment(t),calls=[];let playing=false,position=0,ended=false,deviceReleased=true;
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  const value=JSON.parse(options.body);calls.push({url,value});
+  if(url==='/api/native/start'){
+   position=value.position??0;playing=false;ended=false;deviceReleased=true;
+   return reply({session:value.session,duration:120,position,playing,paused:true,deviceReleased,backend:'wasapi',mode:'pcm'});
+  }
+  if(value.action==='play'){playing=true;ended=false;deviceReleased=false}
+  else if(value.action==='status'&&ended){playing=false;position=120;deviceReleased=false}
+  else if(value.action==='stop'){playing=false;deviceReleased=true}
+  return reply({session:value.session,duration:120,position,playing,paused:!playing,ended,deviceReleased,backend:'wasapi',mode:'pcm'});
+ });
+ const envTrack=track('final');
+ const player=new MusicPlayer({bgmEnabled:false,songFadeEnabled:false,outputSettings:{backend:'wasapi',device:-1,channel:0,dsdMode:'pcm'}});
+ player.setQueue([envTrack]);await player.play(envTrack.id);
+ ended=true;await env.advance(300);await settle();
+ assert.equal(player.state.transport,'idle');near(player.state.currentTime,120);assert.equal(player.state.nativeSessionId,undefined);
+ assert.ok(calls.some(call=>call.value.action==='stop'),'final ended track must stop/release the native session');
+ player.dispose();assert.equal(env.pendingTimers(),0);
+});
+
 test('a late native play reply cannot override a newer pause',async t=>{
  const env=environment(t);let release,playing=false;const calls=[];
  t.mock.method(globalThis,'fetch',async(url,options)=>{const value=JSON.parse(options.body);calls.push(value.action||'open');if(value.action==='play')await new Promise(resolve=>release=()=>{playing=true;resolve()});if(value.action==='pause'||value.action==='stop')playing=false;return reply({session:value.session,duration:120,position:0,paused:!playing,playing})});

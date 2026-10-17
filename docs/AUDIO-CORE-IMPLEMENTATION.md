@@ -17,7 +17,7 @@ SPSC单生产/单消费，release/acquire发布，双方停止后才reset；文�
 | 配置/Poweramp/Rhine备份 | src/audio-processing-model.mjs及声明 |
 | 设置/EQ/预设 | src/music-app.ts、eq-controls.ts、lsp-eq-controls.ts |
 | 播放适配 | src/native-audio.ts、music-player.ts |
-| 服务/会话 | scripts/music-server.mjs、native-output.mjs |
+| 服务/会话 | scripts/music-server.mjs、native-output.mjs、interface-audio.mjs |
 | 主机/PCM队列 | native/audio-host.cpp、pcm-engine.h |
 | 标准DSP/SRC | native/pcm-processing.h、pcm-resampler.h |
 | Windows/DSD | native/wasapi-output.h、ASIO实现、dop-packing.h |
@@ -52,9 +52,17 @@ WASAPI兼容PCM可预载/连续交接/自动手动交叉渐变/曲间停顿，�
 
 ASIO共用DSP/SRC/量化，但当前不宣告其队列/交叉渐变。LSP编辑期间等条件会临时停预载；Sony/DSD不预载未经支持的原始PCM。稳定格式热更新保留时间轴，结构/延迟变更可重开，失败保留/恢复旧状态。
 
-WASAPI原生Core Audio共享/独占，ASIO使用现有BASSASIO；设备ID与ASIO编号独立。设备/率/格式拒绝时明确报错，不静默换设备/模式。暂停保留设备，停止/结束/错误/退出释放。
+WASAPI原生Core Audio共享/独占，ASIO使用现有BASSASIO；设备ID与ASIO编号独立。设备/率/格式拒绝时明确报错，不静默换设备/模式。暂停完成后立即关闭音乐输出会话，停止/结束/错误/退出同样释放。暂停缓存保留准确进度、曲目、音量、处理设置及 Sony 片段偏移；继续播放重新打开所选设备，不保留已关闭主机队列。暂停期间查询、定位和设置更新使用缓存，不能把临时界面音效会话当成音乐状态。界面明确标注“设备已释放”，上次播放格式不代表设备仍被独占。
 
 ASIO有效整数位右对齐，WASAPI整数容器按Windows有效位规则左对齐。浮点可保留>0dBFS余量，整数在最终编码饱和，状态区分overRange/clipping/peak。共享系统混音格式不等于DAC内部格式。
+
+## Future 界面音效
+
+音效合成沿用 [RhineLabUI 的 audio.ts](https://github.com/LBEILC/RhineLabUI/blob/main/src/audio.ts)，仅 Future 启用，Punk 入口禁用并提示另行设计。音乐准备及播放期间静音界面反馈；暂停/停止后可恢复。切主题、隐藏窗口、关闭音效、切场景和开始播放音乐会停止已有提示音，并使迟到请求失效。
+
+浏览器兼容输出沿用 Web Audio。原生输出先以 OfflineAudioContext 生成同一套短提示音，编码为最长 2.5 秒的 48 kHz 双声道 PCM16 WAV，再经现有音频主机播放；不创建默认设备 AudioContext，不回退到其它设备。WASAPI 跟随播放器所选 endpoint 并使用共享模式；ASIO 跟随所选驱动和输出通道，提示音结束即 stop/free。音效使用独立音量及未启用音乐 DSP 的 PCM 设置，不参与歌曲队列、Sony、DSD/DoP 或纯输出链路；原生提示音为单声部，新提示可替换旧提示。音乐打开设备前等待提示音停止确认，播放操作进行中拒绝新提示。
+
+前后端均校验主题/音乐忙碌状态，使用前端身份、设置 revision、递增序号及取消代次防止旧请求复活。后端仅接受规范 PCM WAV，不接受文件路径；生成文件位于 dataDir/interface-audio-v1，按 SHA-256 命名并以受控索引保留最多 32 项，外部更改拒绝覆盖。氛围 BGM 是独立既有功能，目前仍仅支持浏览器兼容输出。
 
 ## 受控PCM纯输出
 

@@ -257,6 +257,15 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         await until(state=>state.page==='settings','Settings switch check');
         await click('#music-settings [data-settings-category-target=interface]');
         await until(state=>state.category==='interface','interface switch controls');
+        const interfaceSound = await evaluate(`(() => ({
+          disabled:document.querySelector('#sound-setting').disabled,
+          volumeDisabled:document.querySelector('#sound-volume').disabled,
+          status:document.querySelector('#interface-sound-status').textContent,
+        }))()`);
+        assert.equal(interfaceSound.disabled,design==='archive','Only Future may enable the reference interface sounds');
+        assert.equal(interfaceSound.volumeDisabled,design==='archive','Punk sound volume must remain reserved');
+        assert.match(interfaceSound.status,design==='archive'?/Punk/:/Future/);
+        if(theme==='day')await capture(`${design}-interface-sound`,'#interface-sound-settings');
         await evaluate(`(() => {window.__settingsSwitchProbe=[...document.querySelectorAll('#music-settings input[type=checkbox][role=switch]')].filter(node=>node.getClientRects().length).map(node=>({node,checked:node.checked,indeterminate:node.indeterminate}));})()`);
         try {
           for (const checked of [false, true]) {

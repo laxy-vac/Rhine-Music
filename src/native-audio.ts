@@ -63,6 +63,7 @@ function normalizeSpectrum(value: unknown): SpectrumSnapshot | undefined {
  };
 }
 export interface NativeOutputSnapshot {
+ deviceReleased?: boolean;
  decoderName?: string; decodedSampleFormat?: string; decoderOutputPrecision?: string;
  backend?: 'wasapi'|'asio'; mode?: 'pcm'|'native'|'dop'; sampleRate?: number; sourceSampleRate?: number; dspSampleRate?: number; channels?: number; volumeLocked?: boolean;
  deviceId?: string; deviceName?: string; wasapiMode?: 'shared'|'exclusive'; bitsPerSample?: number; validBitsPerSample?: number; mixSampleRate?: number; mixBitsPerSample?: number;
@@ -79,7 +80,7 @@ export interface NativeOutputSnapshot {
  trackId?: string; transitionSerial?: number; queueTrackId?: string; queueError?: string;
  capabilities?: { processing?: boolean; gapless?: boolean; crossfade?: boolean; queue?: boolean; manualAdvance?: boolean; bitPerfect?: boolean; bitPerfectActive?: boolean };
 }
-interface NativeState extends NativeOutputSnapshot { playing?: boolean; paused?: boolean; ended?: boolean; buffering?: boolean; position?: number; duration?: number; sourceStart?: number; error?: string; stale?: boolean; sonyProcessing?: SonyProcessing }
+interface NativeState extends NativeOutputSnapshot { deviceReleased?: boolean; playing?: boolean; paused?: boolean; ended?: boolean; buffering?: boolean; position?: number; duration?: number; sourceStart?: number; error?: string; stale?: boolean; sonyProcessing?: SonyProcessing }
 export interface NativePlaybackSession {
  session: string; trackId: string; settings: OutputSettings; sonySettings: SonySettings;
  sonyJobId?: string; volume: number; state: NativeState; sonyProcessing: SonyProcessing;
@@ -96,6 +97,9 @@ async function post(route: string,value: unknown,signal?: AbortSignal): Promise<
  const response=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...value as object,clientId:frontendId}),signal});
  const result=await response.json();if(!response.ok)throw new Error(result.error||trUi('原生音频输出失败。'));return result;
 }
+export function nativeFrontendIdentity(): { clientId: string; clientStartedAt: number } {
+ return { clientId: frontendId, clientStartedAt: performance.timeOrigin };
+}
 const spectrumDemandOwners=new Set<string>();
 const nativeAudioInstances=new Set<NativeAudio>();
 export function setSpectrumDemand(owner:string,active:boolean): void {
@@ -109,7 +113,7 @@ export class NativeAudio extends EventTarget implements SongAudio {
  src='';preload='metadata';paused=true;ended=false;duration=0;readyState=0;error: {code:number;message:string}|null=null;
  private position=0;private gain=1;private readonly session: string;private readonly abort=new AbortController();
  private opened=false;private disposed=false;private desiredPlaying=false;private opening?: Promise<void>;private playingTask?: Promise<void>;
- private tail: Promise<unknown>=Promise.resolve();private pollTimer?: ReturnType<typeof setTimeout>;private gainTimer?: ReturnType<typeof setTimeout>;private pollInFlight=false;
+ private tail: Promise<unknown>=Promise.resolve();private pauseTask?:Promise<void>;private pollTimer?: ReturnType<typeof setTimeout>;private gainTimer?: ReturnType<typeof setTimeout>;private pollInFlight=false;
  private readonly direct: boolean;
  private track: MusicTrack;
  private queuedTracks=new Map<string,MusicTrack>();
@@ -167,6 +171,7 @@ export class NativeAudio extends EventTarget implements SongAudio {
     typeof value.callbackFormat==='string'||Number.isFinite(value.callbackContainerBits)||Number.isFinite(value.callbackValidBits)||typeof value.callbackAlignment==='string'||
     typeof value.driverNativeFormat==='string'||Number.isFinite(value.driverNativeContainerBits)||Number.isFinite(value.driverNativeValidBits)||typeof value.driverNativeAlignment==='string'||
     typeof value.backendConversion==='boolean'||Number.isFinite(value.bufferFrames)||Number.isFinite(value.requestedBufferMs)||typeof value.bufferControl==='string'||typeof value.durationExact==='boolean'||!!value.realtime)this.reportedOutput={
+   deviceReleased:typeof value.deviceReleased==='boolean'?value.deviceReleased:this.reportedOutput?.deviceReleased,
    backend:value.backend==='asio'||value.backend==='wasapi'?value.backend:undefined,
    mode:['pcm','native','dop'].includes(value.mode??'')?value.mode:undefined,
    sampleRate:Number.isFinite(value.sampleRate)&&value.sampleRate!>0?value.sampleRate:undefined,
@@ -222,6 +227,7 @@ export class NativeAudio extends EventTarget implements SongAudio {
    bitPerfectCheckedSamples:Number.isSafeInteger(value.bitPerfectCheckedSamples)&&value.bitPerfectCheckedSamples!>=0?value.bitPerfectCheckedSamples:undefined,
    bitPerfectMismatchSamples:Number.isSafeInteger(value.bitPerfectMismatchSamples)&&value.bitPerfectMismatchSamples!>=0?value.bitPerfectMismatchSamples:undefined,
   };
+  if(typeof value.deviceReleased==='boolean') this.reportedOutput={...(this.reportedOutput??{}),deviceReleased:value.deviceReleased};
   if(value.trackId&&value.trackId!==this.track.id){const next=this.queuedTracks.get(value.trackId)??this.knownTracks.get(value.trackId);if(next){this.track=next;this.queuedTracks.delete(next.id);this.sourceStartTime=0;this.dispatchEvent(new CustomEvent('trackchange',{detail:next}))}}
  }
  private async initialize(){
@@ -233,14 +239,28 @@ export class NativeAudio extends EventTarget implements SongAudio {
    })();return this.opening;
  }
  async play(): Promise<void>{
-   if(this.disposed)throw new Error(trUi('歌曲已经停止。'));this.desiredPlaying=true;if(this.playingTask)return this.playingTask;
+   if(this.disposed)throw new Error(trUi('歌曲已经停止。'));this.desiredPlaying=true;this.pauseTask=undefined;if(this.playingTask)return this.playingTask;
    this.playingTask=(async()=>{
     await this.initialize();
     while(!this.disposed){const desired=this.desiredPlaying,state=await this.control(desired?'play':'pause');if(this.disposed)return;this.accept(state);if(desired!==this.desiredPlaying)continue;this.paused=!desired;if(desired){this.ended=false;this.event('playing');this.poll()}return}
    })().finally(()=>{this.playingTask=undefined});
    return this.playingTask;
  }
- pause(): void {this.desiredPlaying=false;this.paused=true;clearTimeout(this.pollTimer);this.pollTimer=undefined;if(this.opened&&!this.disposed)void this.control('pause').then(state=>{if(!this.disposed&&!this.desiredPlaying){this.accept(state);this.event('timeupdate');this.monitor()}}).catch(error=>this.failure(error));this.event('pause')}
+ pause(): void {
+   if(this.disposed)return;
+   if(this.error){this.desiredPlaying=false;this.paused=true;return}
+   if(!this.desiredPlaying&&this.paused&&this.pauseTask){this.event('pause');return}
+   this.desiredPlaying=false;this.paused=true;clearTimeout(this.pollTimer);this.pollTimer=undefined;
+   this.pauseTask=this.opened&&!this.disposed
+     ? this.control('pause').then(state=>{if(!this.disposed&&!this.desiredPlaying){this.accept(state);this.event('timeupdate');this.monitor()}}).catch(error=>{this.failure(error)})
+     : Promise.resolve();
+   this.event('pause');
+ }
+ async whenPaused(): Promise<void> {
+   const pending=[this.opening,this.playingTask,this.pauseTask].filter((task):task is Promise<void>=>!!task);
+   await Promise.all(pending);
+   if(this.error)throw new Error(this.error.message||trUi('原生输出失败。'));
+ }
  removeAttribute(name: string): void {if(name==='src')this.src=''}
  load(): void {if(this.disposed)return;this.disposed=true;this.desiredPlaying=false;this.abort.abort();clearTimeout(this.pollTimer);clearTimeout(this.gainTimer);this.paused=true;this.readyState=0;
    nativeAudioInstances.delete(this);

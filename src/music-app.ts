@@ -97,6 +97,7 @@ import {
 import { MusicPlayer, type MusicPlayerState } from "./music-player";
 import { ModelViewer } from "./model-viewer";
 import { TerminalAudio } from "./audio";
+import { InterfaceAudioClient } from "./interface-audio";
 import type {
   MusicAlbum,
   MusicGenre,
@@ -522,11 +523,10 @@ let introductionsStarting = false,
   introductionRequestError = "";
 let viewer: ModelViewer | undefined;
 const effects = new TerminalAudio();
-effects.configure({
-  sound: preferences.sound && preferences.output.backend==='browser',
-  music: false,
-  soundVolume: preferences.soundVolume,
-  musicVolume: 0,
+let interfaceAudioError = '', interfaceErrorKey = '', interfaceEffectsKey = '', interfaceNative: boolean | undefined;
+const interfaceAudio = new InterfaceAudioClient(error => {
+  if (interfaceAudioError !== error.message) { interfaceAudioError = error.message; notify(error.message) }
+  updateInterfaceSoundControls();
 });
 document.addEventListener("pointerdown", () => void effects.unlock(), {
   once: true,
@@ -546,6 +546,42 @@ const player = new MusicPlayer({
   sonyExecution: { parallel: preferences.sonyParallel, streaming: preferences.sonyStreaming },
   outputSettings: preferences.output,
 });
+syncInterfaceAudio();
+function syncInterfaceAudio() {
+  const output = preferences.output, native = output.backend !== 'browser';
+  const musicBusy = playerState?.transport === 'loading' || playerState?.transport === 'playing' || playerState?.playing === true;
+  const future = preferences.style.design === 'rhine';
+  const errorKey = JSON.stringify([future,preferences.sound,output.backend,output.device,output.channel,output.wasapiDevice]);
+  if (errorKey !== interfaceErrorKey) { interfaceErrorKey = errorKey; interfaceAudioError = '' }
+  if (interfaceNative !== native) {
+    interfaceAudioError = '';
+    effects.setEffectSink(native ? interfaceAudio : undefined);
+    interfaceNative = native;
+  }
+  interfaceAudio.configure({
+    design: preferences.style.design, enabled: preferences.sound && future, musicBusy,
+    output: { backend: output.backend, device: output.device, channel: output.channel, wasapiDevice: output.wasapiDevice },
+  });
+  const effectSettings = { sound: preferences.sound && future && !musicBusy, music: false, soundVolume: preferences.soundVolume, musicVolume: 0 };
+  const effectKey = JSON.stringify(effectSettings);
+  if (effectKey !== interfaceEffectsKey) { interfaceEffectsKey = effectKey; effects.configure(effectSettings) }
+  updateInterfaceSoundControls();
+}
+function updateInterfaceSoundControls() {
+  const future = preferences.style.design === 'rhine';
+  const busy = playerState?.transport === 'loading' || playerState?.transport === 'playing' || playerState?.playing === true;
+  const native = preferences.output.backend !== 'browser';
+  const status = document.querySelector<HTMLElement>('#interface-sound-status');
+  if (status) status.textContent = !future ? trUi('Punk 界面音效尚待设计。') : interfaceAudioError ? `${trUi('界面音效输出失败：')}${interfaceAudioError}` : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : trUi('Future 界面音效跟随播放器输出设备；WASAPI 使用共享模式。');
+  for (const id of ['sound-setting','sound-volume']) {
+    const control = document.querySelector<HTMLInputElement>(`#${id}`);
+    if (control) control.disabled = !future;
+  }
+  const preview = document.querySelector<HTMLButtonElement>('[data-action="sound-preview"]');
+  if (preview) { preview.disabled = !future || busy || !preferences.sound; preview.title = !future ? trUi('Punk 界面音效尚待设计。') : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : !preferences.sound ? trUi('请先开启界面音效。') : '' }
+  const bgmStatus = document.querySelector<HTMLElement>('#interface-bgm-status');
+  if (bgmStatus) { bgmStatus.hidden = !native; bgmStatus.textContent = native ? trUi('氛围 BGM 目前仅支持浏览器兼容输出。') : '' }
+}
 const themeNames: Record<Theme, string> = {
   day: trUi("暖昼"),
   night: trUi("深夜"),
@@ -1022,6 +1058,7 @@ async function switchDesign(design: MusicStyle["design"]) {
   designProfiles[preferences.style.design] = { style: { ...preferences.style }, mode: preferences.theme };
   const next = designProfiles[design];
   preferences.style = normalizeMusicStyle({ ...next.style, design });
+  syncInterfaceAudio();
   if (design === "archive") {
     await Promise.all([400, 500, 600, 700].map(weight => document.fonts.load(`${weight} 17px "Archive Mono"`)));
     if (preferences.style.design !== design) return;
@@ -1666,6 +1703,7 @@ const albumQueue = setupAlbumQueue(stage, {
 });
 player.subscribe((state) => {
   playerState = state;
+  syncInterfaceAudio();
   albumQueue.update(state);
   lyricsPage.update(state, currentLyricsAlbum(state));
   signalPage.update(state, currentLyricsAlbum(state));
@@ -3295,7 +3333,15 @@ function renderSettingsPage() {
     ${precisionMarkup()}
     ${bufferMarkup()}
     ${entrySettingsMarkup()}
-    <section class="panel-section" id="interface-sound-settings"><h3>界面声音与氛围</h3><p id="interface-sound-status" class="interface-audio-note" role="status"></p><label class="settings-row"><span>界面音效<small>按钮、卡片和页面切换的提示音</small></span><input type="checkbox" id="sound-setting" ${preferences.sound ? "checked" : ""}></label><label class="settings-row"><span>音效音量</span><input type="range" id="sound-volume" aria-label="音效音量" min="0" max="100" value="${Math.round(preferences.soundVolume * 100)}"></label><button class="text-button" data-action="sound-preview">试听界面音效 ↗</button><label class="settings-row"><span>氛围 BGM<small>音乐停止时播放，开始播放歌曲后淡出</small></span><input type="checkbox" id="bgm-setting" ${preferences.bgm ? "checked" : ""}></label><label class="settings-row"><span>BGM 音量</span><input type="range" id="bgm-volume" aria-label="BGM 音量" min="0" max="100" value="${Math.round(preferences.bgmVolume * 100)}"></label></section>
+    <section class="panel-section" id="interface-sound-settings"><h3>界面声音与氛围</h3>
+      <p id="interface-sound-status" class="interface-audio-note" role="status"></p>
+      <label class="settings-row"><span>界面音效<small>按钮、卡片和页面切换的提示音</small></span><input type="checkbox" id="sound-setting" ${preferences.sound ? "checked" : ""}></label>
+      <label class="settings-row"><span>音效音量</span><input type="range" id="sound-volume" aria-label="音效音量" min="0" max="100" value="${Math.round(preferences.soundVolume * 100)}"></label>
+      <button class="text-button" data-action="sound-preview">试听界面音效 ↗</button>
+      <p id="interface-bgm-status" class="interface-audio-note" hidden></p>
+      <label class="settings-row"><span>氛围 BGM<small>音乐停止时播放，开始播放歌曲后淡出</small></span><input type="checkbox" id="bgm-setting" ${preferences.bgm ? "checked" : ""}></label>
+      <label class="settings-row"><span>BGM 音量</span><input type="range" id="bgm-volume" aria-label="BGM 音量" min="0" max="100" value="${Math.round(preferences.bgmVolume * 100)}"></label>
+    </section>
     <section class="panel-section" id="lyrics-global-settings"></section>
     <section class="panel-section" id="about-settings"><h3>项目与许可</h3><p>音乐适配与维护：<a href="https://github.com/RonaldDeng/Rhine-Music-Demo" target="_blank" rel="noopener">RonaldDeng ↗</a><br>原版界面：<a href="https://github.com/LBEILC/RhineLabUI" target="_blank" rel="noopener">LBEILC / RhineLabUI ↗</a></p><p><a href="/licenses/project-mit.txt" target="_blank" rel="noopener">代码 MIT 许可 ↗</a> · <a href="https://github.com/RonaldDeng/Rhine-Music-Demo/blob/v0.2.0/NOTICE.md" target="_blank" rel="noopener">版权与资源说明 ↗</a></p><a href="/?original=1&scene=archive" target="_blank" rel="noopener">打开原版档案界面 ↗</a><p><a href="/fonts/MiSans-license.pdf" target="_blank" rel="noopener">MiSans 字体许可 ↗</a></p></section>`;
   content.querySelector('#about-settings')?.insertAdjacentHTML('beforeend',trUi('<button type="button" class="text-button known-issues-button" data-action="known-issues">已知问题</button>'));
@@ -3503,7 +3549,7 @@ function outputSettingsMarkup() {
  <div class="output-format-shortcuts"><button class="text-button" data-action="audio-settings-jump" data-audio-settings-target="resampling">设置输出采样率 ↗</button><button class="text-button" data-action="audio-settings-jump" data-audio-settings-target="precision">设置输出位深 ↗</button></div>
  <button class="text-button" data-action="native-refresh">停止播放并刷新设备</button><p id="native-playback-status" role="status"></p>
  <p data-output-backend="browser">浏览器兼容播放的输出设备由浏览器和系统管理。</p>
- <p>共享模式可与其他应用一起播放；独占模式只允许本播放器使用所选设备。暂停时仍占用设备，停止播放或退出后释放。</p></section>`;
+ <p>共享模式可与其他应用一起播放；独占模式仅在音乐播放期间占用设备，暂停、停止、播放结束或出错后释放。继续播放时重新打开所选设备。</p></section>`;
 }
 function updateOutputUI() {
  const output=preferences.output,native=output.backend!=='browser',asio=output.backend==='asio',wasapi=output.backend==='wasapi';
@@ -3552,11 +3598,7 @@ function updateOutputUI() {
  const backend=document.querySelector<HTMLSelectElement>('#output-backend');if(backend)for(const option of backend.options)option.disabled=option.value==='wasapi'?!nativeStatus?.wasapiAvailable:option.value==='asio'?!nativeStatus?.available:false;
  const locked=playerState?.volumeLocked===true,volume=document.querySelector<HTMLInputElement>('#volume');if(volume){volume.disabled=locked;volume.value=String(locked?100:Math.round(preferences.volume*100));volume.title=locked?trUi('数字音量已锁定，请使用设备调节'):'';}
  const fade=document.querySelector<HTMLInputElement>('#song-fade-setting');if(fade){if(fade.disabled!==locked)fade.disabled=locked;fade.closest<HTMLElement>('[data-compat-transition]')!.hidden=native;}
- const interfaceSoundStatus=document.querySelector<HTMLElement>('#interface-sound-status');
- if(interfaceSoundStatus)interfaceSoundStatus.textContent=native?trUi('使用原生音频输出时，界面音效和氛围配乐暂停播放。设置会保留。'):trUi('界面音效用于按钮与页面操作；氛围配乐在音乐停止时播放。');
- const soundPreview=document.querySelector<HTMLButtonElement>('[data-action="sound-preview"]');
- if(soundPreview){soundPreview.disabled=native;soundPreview.title=native?trUi('使用原生音频输出时无法试听界面音效'):'';}
- effects.configure({sound:preferences.sound&&!native,music:false,soundVolume:preferences.soundVolume,musicVolume:0});
+ syncInterfaceAudio();
  const status=document.querySelector('#native-playback-status');if(status)status.textContent=locked?trUi('数字音量已锁定 · 请使用设备调节。'):native?trUi('已选择原生音频输出。'):trUi('浏览器兼容播放。');
  updateCurrentAudioSummary();
   updateProcessingSupportStatus();
@@ -4124,7 +4166,7 @@ document.addEventListener("click", (e) => {
       // Temporarily unavailable for the simplified CD shell (no inner assembly).
       break;
     case "sound-preview":
-      if (preferences.output.backend === "browser") effects.play("page-open");
+      effects.play("page-open");
       break;
     case "fullscreen":
       void changeFullscreen();
@@ -4234,12 +4276,7 @@ document.addEventListener("input", (e) => {
   }
   if (el.id === "sound-volume") {
     preferences.soundVolume = Number(el.value) / 100;
-    effects.configure({
-      sound: preferences.sound && preferences.output.backend === "browser",
-      music: false,
-      soundVolume: preferences.soundVolume,
-      musicVolume: 0,
-    });
+    syncInterfaceAudio();
     savePrefs();
   }
   if (el.id === "album-search") renderSearchResults();
@@ -4361,12 +4398,7 @@ document.addEventListener("change", (e) => {
   }
   if (el.id === "sound-setting") {
     preferences.sound = el.checked;
-    effects.configure({
-      sound: el.checked && preferences.output.backend === "browser",
-      music: false,
-      soundVolume: preferences.soundVolume,
-      musicVolume: 0,
-    });
+    syncInterfaceAudio();
     savePrefs();
   }
   if (el.id === "song-fade-setting") {

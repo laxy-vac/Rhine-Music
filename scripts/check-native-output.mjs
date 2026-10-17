@@ -133,7 +133,7 @@ test('effects update preserves an already prepared queue and forwards indexed Re
 test('Sony effects reconfiguration reuses the cache lease and full-track position',async t=>{
  const {directory,file}=await fixture(t),session=randomUUID(),id='e'.repeat(64),calls=[];
  const job={id,trackId:'first',output:file,state:'ready',readers:0,settings:{dsee:true,dc:0,vinyl:0},result:{duration:60,positionOffset:30}};
- const sony={cacheDir:directory,jobs:new Map([[id,job]]),audio:async()=>({path:file,allowedRoot:directory})};
+ const sony={cacheDir:directory,jobs:new Map([[id,job]]),audio:async()=>({path:file,allowedRoot:directory}),view:()=>({state:'ready',progress:1})};
  const host=new NativeOutput({sony,store:{trackFile:()=>({path:file,allowedRoot:directory})}});
  let position=5;
  host.command=async value=>{calls.push(value);if(value.cmd==='open')position=value.position;return {session,trackId:'first',position,duration:60,playing:value.cmd==='play'}};
@@ -302,7 +302,7 @@ test('a refreshed frontend adopts playing and paused Sony output without reopeni
  const {directory,file}=await fixture(t),id='d'.repeat(64),fx={dsee:true,dc:2,vinyl:1},commands=[];
  const job={id,trackId:'first',output:file,state:'ready',readers:0,settings:fx,result:{duration:90,positionOffset:30}};
  const sony={cacheDir:directory,jobs:new Map([[id,job]]),audio:async()=>({path:file,allowedRoot:directory}),view:()=>({state:'ready',progress:1,sampleRate:176400,positionOffset:30,duration:90,workers:3})};
- const host=new NativeOutput({sony});let playing=false;
+ const host=new NativeOutput({sony});host.child={};let playing=false;
  host.command=async value=>{commands.push(value);if(value.cmd==='play')playing=true;if(value.cmd==='pause')playing=false;return {position:12.5,duration:90,playing,paused:!playing,sampleRate:176400}};
  const first=randomUUID(),second=randomUUID(),third=randomUUID(),session=randomUUID();
  assert.deepEqual(await host.current({clientId:first,clientStartedAt:100}),{session:null});
@@ -317,8 +317,8 @@ test('a refreshed frontend adopts playing and paused Sony output without reopeni
  assert.deepEqual(await host.current({clientId:first,clientStartedAt:100}),{session:null,stale:true});assert.equal(host.frontendOwner,second);
  await host.control({session,clientId:second,action:'pause'});
  const paused=await host.current({clientId:third,clientStartedAt:102});assert.equal(paused.state.playing,false);assert.equal(paused.state.paused,true);assert.equal(paused.state.position,42.5);
- assert.equal(commands.filter(c=>c.cmd==='open').length,1);assert.equal(commands.filter(c=>c.cmd==='stop').length,0);
- await host.control({session,clientId:third,action:'stop'});assert.equal(host.active,undefined);assert.equal(job.readers,0);
+ assert.equal(commands.filter(c=>c.cmd==='open').length,1);assert.equal(commands.filter(c=>c.cmd==='stop').length,1,'pause releases the native device');
+ await host.control({session,clientId:third,action:'stop'});assert.equal(host.active,undefined);assert.equal(job.readers,0);assert.equal(commands.filter(c=>c.cmd==='stop').length,1,'stopping a released music session must not stop another native session');
 });
 
 test('frontend adoption cancels an old pending open and stops an invalid driver session',async t=>{
@@ -372,14 +372,148 @@ test('actual native decoder preserves DSF/DFF raw DSD and DoP payloads', {skip:p
 });
 test('seeking into unfinished Sony output buffers and a newer pause prevents automatic resume',async t=>{
  const {directory,file}=await fixture(t);const output=file.slice(0,-4);await fs.rename(file,output+'.partial');
- const job={trackId:'first',output,state:'processing',readers:0,producedBytes:44100*8+56,stream:{duration:10,sampleRate:44100,totalBytes:44100*80+56}},id='b'.repeat(64);
- const host=new NativeOutput({store:{trackFile:()=>null},ftp:{trackFile:()=>null},sony:{cacheDir:directory,jobs:new Map([[id,job]]),growingAudio:async()=>job}});
+ const job={trackId:'first',output,state:'processing',readers:0,settings:{dsee:true,dc:0,vinyl:0},producedBytes:44100*8+56,stream:{duration:10,sampleRate:44100,totalBytes:44100*80+56}},id='b'.repeat(64);
+ const host=new NativeOutput({store:{trackFile:()=>null},ftp:{trackFile:()=>null},sony:{cacheDir:directory,jobs:new Map([[id,job]]),growingAudio:async()=>job,view:()=>({state:job.state,progress:job.producedBytes/job.stream.totalBytes})}});host.child={};
  let playing=false;const commands=[];host.command=async value=>{commands.push(value.cmd);if(value.cmd==='play')playing=true;if(value.cmd==='pause')playing=false;return {paused:!playing,playing,duration:10,position:value.position??0}};
  const session=randomUUID();await host.start({...request(session),sonyJobId:id});await host.control({session,action:'play'});
- const seek=host.control({session,action:'seek',position:7});await sleep(10);assert.equal(host.active.seeking,true);assert.equal(playing,false);
+ const seek=host.control({session,action:'seek',position:7});await sleep(10);const bufferedWhileSeeking=host.active.seeking,pausedBeforeResume=playing;
  await host.control({session,action:'pause'});job.producedBytes=job.stream.totalBytes;
- const result=await seek;assert.equal(result.paused,true);assert.equal(playing,false);assert.equal(commands.filter(cmd=>cmd==='play').length,1);
+ const result=await seek;assert.ok(result.stale===true||result.deviceReleased===true,'a pending seek is cancelled or served from released state');assert.equal(playing,false);assert.equal(commands.filter(cmd=>cmd==='play').length,1);
+ assert.equal(bufferedWhileSeeking,true);assert.equal(pausedBeforeResume,false);
  await host.stopCurrent();assert.equal(job.readers,0);
+});
+
+test('pause releases native music output and resume restores cached position in the same session',async t=>{
+ const {directory,file}=await fixture(t),session=randomUUID(),calls=[];let nativeState,preparations=0;
+ const host=new NativeOutput({store:{trackFile:()=>({path:file,allowedRoot:directory})}});host.child={};host.beforeMusicOutput=async()=>{preparations++};
+ host.command=async value=>{
+  calls.push(value);
+  if(value.cmd==='open')return nativeState={session,trackId:'first',position:value.position,duration:20,playing:false,paused:true};
+  if(value.cmd==='play')return nativeState={...nativeState,playing:true,paused:false};
+  if(value.cmd==='pause')return nativeState={...nativeState,position:7.25,playing:false,paused:true};
+  if(value.cmd==='stop'){nativeState=undefined;return {session,stopped:true};}
+  if(value.cmd==='status')return nativeState;
+  if(value.cmd==='seek')return nativeState={...nativeState,position:value.position,playing:false,paused:true};
+  if(value.cmd==='queue')return {...nativeState,queueTrackId:value.trackId};
+  return nativeState;
+ };
+ await host.start({...request(session),clientId:'music-client'});assert.equal(host.interfaceIdle(),false);
+ await host.control({session,clientId:'music-client',action:'play'});
+ const paused=await host.control({session,clientId:'music-client',action:'pause'});
+ assert.equal(paused.position,7.25);assert.equal(paused.deviceReleased,true);assert.equal(host.active.released,true);assert.equal(host.interfaceIdle(),true);
+ const callCount=calls.length;const cached=await host.control({session,clientId:'music-client',action:'status'});
+ assert.equal(cached.position,7.25);assert.equal(calls.length,callCount,'released status comes from cache without querying the shared host');
+ const sought=await host.control({session,clientId:'music-client',action:'seek',position:11});
+ assert.equal(sought.position,11);assert.equal(host.active.position,11);assert.equal(calls.some(value=>value.cmd==='seek'),false,'released seek only updates the cached timeline');
+ const queue=await host.queue({session,clientId:'music-client',trackId:'second'});
+ assert.equal(queue.queueCleared,true);assert.equal(queue.queueReady,false);assert.equal(host.queued,undefined);
+ await host.control({session,clientId:'music-client',action:'play'});
+ const reopen=calls.filter(value=>value.cmd==='open').at(-1);
+ assert.equal(reopen.session,session);assert.equal(reopen.position,11);assert.equal(host.active.session,session);assert.equal(host.active.released,false);
+ assert.equal(preparations,2,'every music open drains/cancels a short interface session first');assert.equal(host.interfaceIdle(),false);
+ await host.control({session,clientId:'music-client',action:'stop'});
+ assert.equal(calls.filter(value=>value.cmd==='stop').length,2);assert.equal(host.active,undefined);assert.equal(host.interfaceIdle(),true);
+});
+
+test('play arriving during pause waits for native release before reopening',async t=>{
+ const {directory,file}=await fixture(t),session=randomUUID(),calls=[];let nativeState,unblockStop,signalStop,stopTimer,pausing,resuming;
+ const stopGate=new Promise(resolve=>unblockStop=resolve),stopStarted=new Promise(resolve=>signalStop=resolve);
+ const host=new NativeOutput({store:{trackFile:()=>({path:file,allowedRoot:directory})}});host.child={};
+ host.command=async value=>{
+  calls.push(value.cmd);
+  if(value.cmd==='open')return nativeState={session,trackId:'first',position:value.position,duration:20,playing:false,paused:true};
+  if(value.cmd==='play')return nativeState={...nativeState,playing:true,paused:false};
+  if(value.cmd==='pause')return nativeState={...nativeState,position:6.5,playing:false,paused:true};
+  if(value.cmd==='stop'){signalStop();await stopGate;nativeState=undefined;return {session,stopped:true};}
+  return nativeState;
+ };
+ try {
+  await host.start({...request(session),clientId:'race-client'});await host.control({session,clientId:'race-client',action:'play'});
+  pausing=host.control({session,clientId:'race-client',action:'pause'});
+  await Promise.race([stopStarted,new Promise((_,reject)=>{stopTimer=setTimeout(()=>reject(new Error('pause did not reach native stop')),1000)})]);
+  resuming=host.control({session,clientId:'race-client',action:'play'});await sleep(5);
+  assert.equal(calls.filter(cmd=>cmd==='open').length,1,'resume cannot open while native stop is pending');
+  unblockStop();await pausing;await resuming;
+  assert.deepEqual(calls.filter(cmd=>['pause','stop','open','play'].includes(cmd)),['open','play','pause','stop','open','play']);
+  assert.equal(host.active.session,session);assert.equal(host.active.released,false);
+ } finally {
+  clearTimeout(stopTimer);unblockStop();
+  await Promise.allSettled([pausing,resuming].filter(Boolean));
+ }
+ await host.control({session,clientId:'race-client',action:'stop'});
+});
+
+test('a newer track waits for pause release and prevents the old session from reopening',async t=>{
+ const {directory,file}=await fixture(t),first=randomUUID(),next=randomUUID(),calls=[];let unblockStop,signalStop,timer;
+ const stopGate=new Promise(resolve=>unblockStop=resolve),stopStarted=new Promise(resolve=>signalStop=resolve);
+ const host=new NativeOutput({store:{trackFile:()=>({path:file,allowedRoot:directory})}});host.child={};
+ host.command=async value=>{
+  calls.push(value);
+  if(value.cmd==='open')return {session:value.session,trackId:value.trackId,position:value.position,duration:20,playing:false,paused:true};
+  if(value.cmd==='pause')return {session:value.session,trackId:'first',position:5,duration:20,playing:false,paused:true};
+  if(value.cmd==='stop'&&value.session===first){signalStop();await stopGate;return {session:first,stopped:true};}
+  if(value.cmd==='play')return {session:value.session,trackId:value.session===first?'first':'second',position:5,duration:20,playing:true,paused:false};
+  return {session:value.session,position:0,duration:20,playing:false,paused:true};
+ };
+ const pausing=host.start({...request(first,'first'),clientId:'switch-client'}).then(()=>host.control({session:first,clientId:'switch-client',action:'play'})).then(()=>host.control({session:first,clientId:'switch-client',action:'pause'}));
+ let switched;
+ try {
+  await Promise.race([stopStarted,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('pause did not reach native stop')),1000)})]);
+  switched=host.start({...request(next,'second'),clientId:'switch-client'});unblockStop();
+  await pausing;await switched;
+  assert.equal(host.active.session,next);assert.equal(host.active.trackId,'second');
+  assert.equal(calls.filter(value=>value.cmd==='open'&&value.session===first).length,1,'the old session is never reopened');
+  assert.equal(calls.at(-1).cmd,'open');assert.equal(calls.at(-1).session,next);
+ } finally {clearTimeout(timer);unblockStop();await Promise.allSettled([pausing,switched].filter(Boolean));}
+ await host.control({session:next,clientId:'switch-client',action:'stop'});
+});
+
+test('natural end releases output and preserves the exact Sony full-track offset for replay',async t=>{
+ const {directory,file}=await fixture(t),id='f'.repeat(64),session=randomUUID(),clientId=randomUUID(),calls=[];
+ const job={id,trackId:'first',output:file,state:'ready',readers:0,settings:{dsee:true,dc:0,vinyl:0},result:{duration:60,positionOffset:30}};
+ const sony={cacheDir:directory,jobs:new Map([[id,job]]),audio:async()=>({path:file,allowedRoot:directory}),view:()=>({state:'ready',progress:1,positionOffset:30,duration:60})};
+ const host=new NativeOutput({sony});host.child={};let ended=false;
+ host.command=async value=>{
+  calls.push(value);
+  if(value.cmd==='open')return {session,trackId:'first',position:value.position,duration:60,playing:false,paused:true};
+  if(value.cmd==='play')return {session,trackId:'first',position:ended?0:12.5,duration:60,playing:true,paused:false};
+  if(value.cmd==='status')return {session,trackId:'first',position:60,duration:60,playing:false,paused:true,ended:true};
+  if(value.cmd==='stop')return {session,stopped:true};
+  return {session,trackId:'first',position:0,duration:60,paused:true};
+ };
+ await host.current({clientId,clientStartedAt:100});
+ await host.start({...request(session),clientId,sonyJobId:id,sonySettings:job.settings,position:30});
+ await host.control({session,clientId,action:'play'});ended=true;
+ const terminal=await host.current({clientId,clientStartedAt:100});
+ assert.equal(terminal.state.ended,true);assert.equal(terminal.state.position,90,'the 30-second Sony source offset is applied exactly once');
+ assert.equal(terminal.state.deviceReleased,true);assert.equal(host.active.released,true);assert.equal(calls.filter(value=>value.cmd==='stop').length,1);
+ const beforeStatus=calls.length;const cached=await host.control({session,clientId,action:'status'});
+ assert.equal(cached.position,90);assert.equal(calls.length,beforeStatus,'terminal polling never queries the UI session');
+ await host.control({session,clientId,action:'play'});
+ const reopened=calls.filter(value=>value.cmd==='open').at(-1);
+ assert.equal(reopened.position,0,'replay reopens at the Sony segment start, not before its source offset');
+ assert.equal(host.active.released,false);assert.equal(host.active.session,session);
+ await host.control({session,clientId,action:'stop'});
+});
+
+test('device refresh drains UI output and blocks new cues until enumeration finishes',async()=>{
+ const host=new NativeOutput(),calls=[];let release;
+ const draining=new Promise(resolve=>{release=resolve});
+ host.beforeMusicOutput=async()=>{calls.push('cancel');assert.equal(host.interfaceIdle(),false);await draining;calls.push('drained')};
+ host.stopCurrent=async()=>{calls.push('music-stop')};
+ host.status=async()=>{calls.push('devices');assert.equal(host.interfaceIdle(),false);return {available:true}};
+ const refreshing=host.refresh();
+ assert.deepEqual(calls,['cancel']);assert.equal(host.interfaceIdle(),false);
+ release();assert.deepEqual(await refreshing,{available:true});
+ assert.deepEqual(calls,['cancel','drained','music-stop','devices']);assert.equal(host.interfaceIdle(),true);
+});
+
+test('failed native stop does not claim the output is released',async t=>{
+ const {directory,file}=await fixture(t),session=randomUUID(),host=new NativeOutput({store:{trackFile:()=>({path:file,allowedRoot:directory})}});
+ host.child={};host.command=async value=>{if(value.cmd==='stop')throw new Error('synthetic native stop failure');return {session,position:3,duration:20,playing:false,paused:true};};
+ await host.start(request(session));await host.control({session,action:'play'});
+ await assert.rejects(host.control({session,action:'pause'}),/synthetic native stop failure/);
+ assert.equal(host.active.released,false);assert.equal(host.active.releasing,false);assert.equal(host.interfaceIdle(),false);
 });
 
 test('trailing DSF ID3v2.3/v2.4 do not change native DSD or DoP payloads', {skip:process.platform!=='win32'||process.env.RHINE_NATIVE_TEST_MODE==='mock-only'},async t=>{

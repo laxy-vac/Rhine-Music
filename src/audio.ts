@@ -31,9 +31,10 @@ const LOOP_SECONDS = 160 / 3;
 const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
 const typingBuffers = new WeakMap<
   BaseAudioContext,
-  { buffers: AudioBuffer[]; next: number }
+  { buffers: AudioBuffer[] }
 >();
-function typingSample(c: BaseAudioContext) {
+let nextTypingSample = 0;
+function typingSample(c: BaseAudioContext, sampleIndex?: number) {
   let bank = typingBuffers.get(c);
   if (!bank) {
     bank = {
@@ -48,11 +49,11 @@ function typingSample(c: BaseAudioContext) {
         }
         return buffer;
       }),
-      next: 0,
     };
     typingBuffers.set(c, bank);
   }
-  return bank.buffers[bank.next++ % bank.buffers.length];
+  const index = (sampleIndex === undefined ? nextTypingSample++ : sampleIndex) % bank.buffers.length;
+  return bank.buffers[index];
 }
 const clamp = (x: number) =>
   Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
@@ -85,6 +86,7 @@ export function synthesizeSound(
   type: Sound,
   at: number,
   pan = 0,
+  typingSampleIndex?: number,
 ) {
   const output = c.createGain(),
     stereo = c.createStereoPanner();
@@ -231,7 +233,7 @@ export function synthesizeSound(
       break;
     case "key": {
       const source = c.createBufferSource();
-      source.buffer = typingSample(c);
+      source.buffer = typingSample(c, typingSampleIndex);
       connect(source, source, 0.2, 0, source.buffer.duration, 0, true);
       break;
     }
@@ -301,6 +303,108 @@ export function synthesizeSound(
   };
 }
 
+type RenderedInterfaceSound = { wav: Uint8Array; duration: number };
+const renderedInterfaceSounds = new Map<string, Promise<RenderedInterfaceSound>>();
+const INTERFACE_SAMPLE_RATE = 48_000;
+const INTERFACE_MAX_SECONDS = 2.5;
+const INTERFACE_TAIL_SECONDS = 0.18;
+const INTERFACE_CACHE_LIMIT = 32;
+let nextRenderedTypingSample = 0;
+
+function writeFourCc(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index++)
+    view.setUint8(offset + index, value.charCodeAt(index));
+}
+
+function makePcm16Wav(left: Float32Array, right: Float32Array, frames: number) {
+  const channels = 2;
+  const bytesPerSample = 2;
+  const dataBytes = frames * channels * bytesPerSample;
+  const wav = new Uint8Array(44 + dataBytes);
+  const view = new DataView(wav.buffer);
+  writeFourCc(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  writeFourCc(view, 8, "WAVE");
+  writeFourCc(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, INTERFACE_SAMPLE_RATE, true);
+  view.setUint32(28, INTERFACE_SAMPLE_RATE * channels * bytesPerSample, true);
+  view.setUint16(32, channels * bytesPerSample, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeFourCc(view, 36, "data");
+  view.setUint32(40, dataBytes, true);
+  let offset = 44;
+  for (let index = 0; index < frames; index++) {
+    const l = Math.max(-1, Math.min(1, left[index] ?? 0));
+    const r = Math.max(-1, Math.min(1, right[index] ?? l));
+    view.setInt16(offset, l < 0 ? Math.round(l * 0x8000) : Math.round(l * 0x7fff), true);
+    view.setInt16(offset + 2, r < 0 ? Math.round(r * 0x8000) : Math.round(r * 0x7fff), true);
+    offset += channels * bytesPerSample;
+  }
+  return wav;
+}
+
+/** Render a reference UI cue to stereo PCM16 WAV without applying user volume. */
+export function renderInterfaceSound(type: Sound, pan = 0): Promise<RenderedInterfaceSound> {
+  const normalizedPan = Math.max(-0.65, Math.min(0.65, Number.isFinite(pan) ? pan : 0));
+  const typingVariant = type === "key" ? nextRenderedTypingSample++ % TYPING_PCM.length : undefined;
+  const key = `${type}:${normalizedPan.toFixed(3)}:${typingVariant ?? ""}`;
+  const cached = renderedInterfaceSounds.get(key);
+  if (cached) {
+    renderedInterfaceSounds.delete(key);
+    renderedInterfaceSounds.set(key, cached);
+    return cached;
+  }
+
+  const render = (async () => {
+    if (typeof OfflineAudioContext === "undefined")
+      throw new Error("OfflineAudioContext is unavailable.");
+    const maxFrames = Math.ceil(INTERFACE_SAMPLE_RATE * INTERFACE_MAX_SECONDS);
+    const context = new OfflineAudioContext(2, maxFrames, INTERFACE_SAMPLE_RATE);
+    const master = context.createGain();
+    const limiter = context.createDynamicsCompressor();
+    const effects = context.createGain();
+    master.gain.value = 0.8;
+    limiter.threshold.value = -8;
+    limiter.knee.value = 8;
+    limiter.ratio.value = 6;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.18;
+    effects.gain.value = 1;
+    effects.connect(master);
+    master.connect(limiter);
+    limiter.connect(context.destination);
+    const cue = synthesizeSound(context, effects, type, 0.004, normalizedPan, typingVariant);
+    const rendered = await context.startRendering();
+    const frames = Math.max(1, Math.min(
+      rendered.length,
+      Math.ceil((cue.end + INTERFACE_TAIL_SECONDS) * INTERFACE_SAMPLE_RATE),
+    ));
+    return {
+      wav: makePcm16Wav(rendered.getChannelData(0), rendered.getChannelData(1), frames),
+      duration: frames / INTERFACE_SAMPLE_RATE,
+    };
+  })();
+
+  renderedInterfaceSounds.set(key, render);
+  while (renderedInterfaceSounds.size > INTERFACE_CACHE_LIMIT) {
+    const oldest = renderedInterfaceSounds.keys().next().value;
+    if (oldest === undefined) break;
+    renderedInterfaceSounds.delete(oldest);
+  }
+  void render.catch(() => {
+    if (renderedInterfaceSounds.get(key) === render) renderedInterfaceSounds.delete(key);
+  });
+  return render;
+}
+
+export interface EffectSink {
+  play(type: Sound, pan: number, volume: number): Promise<void> | void;
+  stop(): void;
+}
+
 export class TerminalAudio {
   private prefs: AudioPreferences = {
     sound: false,
@@ -310,6 +414,7 @@ export class TerminalAudio {
   };
   private context?: AudioContext;
   private effects?: GainNode;
+  private effectSink?: EffectSink;
   private musicBus?: GainNode;
   private duck?: GainNode;
   private stemGains: GainNode[] = [];
@@ -343,12 +448,23 @@ export class TerminalAudio {
   async unlock() {
     this.unlocked = true;
     await this.activate();
-    return this.context?.state === "running";
+    return this.effectSink
+      ? !this.disposed && !document.hidden && this.prefs.sound
+      : this.context?.state === "running";
   }
   restartBoot() {
     this.stopEffects();
     this.bootTime = 6.76;
     this.bootMix = -1;
+  }
+  setEffectSink(sink?: EffectSink) {
+    if (sink === this.effectSink) return;
+    this.effectSink?.stop();
+    this.effectSink = sink;
+    this.stopEffects(false);
+    if (sink) {
+      if (this.context && !this.prefs.music) this.hide();
+    } else if (this.unlocked) void this.activate();
   }
   private hide = () => {
     this.requestId++;
@@ -419,6 +535,7 @@ export class TerminalAudio {
   private async activate() {
     if (
       this.disposed ||
+      this.effectSink ||
       document.hidden ||
       !this.unlocked ||
       (!this.prefs.sound && !this.prefs.music)
@@ -508,7 +625,10 @@ export class TerminalAudio {
     });
     this.tracks = [];
   }
-  private stopEffects() {
+  private stopEffects(stopExternal = true) {
+    if (stopExternal) {
+      try { this.effectSink?.stop(); } catch { /* sink shutdown is best effort */ }
+    }
     if (this.context)
       this.voices.forEach((v) => v.stop(this.context!.currentTime));
     this.voices = [];
@@ -535,13 +655,34 @@ export class TerminalAudio {
     );
   }
   play(type: Sound = "tick", pan = 0) {
-    const c = this.context;
+    const sink = this.effectSink;
     if (
       !this.prefs.sound ||
+      document.hidden ||
+      this.disposed ||
+      !this.unlocked
+    )
+      return;
+    if (sink) {
+      const now = performance.now() / 1000;
+      const interval = type === "key" ? 0.024 : type === "tick" || type === "column" ? 0.055 : 0.12;
+      if (now - (this.lastSound.get(type) ?? -Infinity) < interval) return;
+      this.lastSound.set(type, now);
+      if (type === "key") this.playedKeys++;
+      try {
+        void Promise.resolve(sink.play(type, pan, this.prefs.soundVolume)).catch((error) => {
+          this.error = error instanceof Error ? error.message : "Audio unavailable";
+        });
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : "Audio unavailable";
+      }
+      return;
+    }
+    const c = this.context;
+    if (
       !c ||
       c.state !== "running" ||
-      document.hidden ||
-      this.disposed
+      document.hidden
     )
       return;
     const now = c.currentTime,
@@ -615,6 +756,7 @@ export class TerminalAudio {
     this.requestId++;
     this.stopMusic();
     this.stopEffects();
+    this.effectSink = undefined;
     document.removeEventListener("pointerdown", this.gesture, true);
     document.removeEventListener("keydown", this.gesture, true);
     document.removeEventListener("visibilitychange", this.visibility);

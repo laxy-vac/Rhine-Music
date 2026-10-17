@@ -8,6 +8,7 @@ import { OnlineLibrary, streamRemote } from './online-sources.mjs'
 import { SonyWalkman, sonySettings } from './sony-walkman.mjs'
 import { FtpLibrary } from './ftp-library.mjs'
 import { NativeOutput } from './native-output.mjs'
+import { InterfaceAudio } from './interface-audio.mjs'
 import { LyricsLibrary } from './lyrics-library.mjs'
 
 // Canonical form so the launcher's health probe matches regardless of drive-letter case or junctions.
@@ -190,6 +191,9 @@ export async function createMusicServer({
   const sonyStore = { trackFile: (id) => store.trackFile(id) ?? ftp.trackFile(id) }
   const sony = providedSony ?? new SonyWalkman({ dataDir: store.dataDir ?? dataDir, store: sonyStore })
   const native = providedNative ?? new NativeOutput({ store,ftp,sony,lspUserDataDir,lspStorageRoot })
+  const interfaceAudio = new InterfaceAudio({ native, dataDir: store.dataDir ?? dataDir })
+  const beforeMusicOutput = native.beforeMusicOutput
+  native.beforeMusicOutput = async () => { await interfaceAudio.cancel(); await beforeMusicOutput?.call(native) }
   const snapshot = () => {
     const local = store.snapshot(), remote = ftp.snapshot()
     return { ...local, albums: [...local.albums, ...remote], genres: [...local.genres, ...(remote.length ? [{ id: 'ftp-library', name: 'FTP 音乐', albumCount: remote.length }] : [])], ftp: ftp.status() }
@@ -218,6 +222,9 @@ export async function createMusicServer({
       // On Windows ':' would address NTFS alternate data streams (/index.html::$DATA) or other drives.
       if (route.includes('\0') || route.includes('\\') || (isWindows && route.includes(':'))) return json(response, 400, { error: '无效路径' })
       const get = request.method === 'GET' || request.method === 'HEAD'
+      if (route === '/api/interface-audio/configure' && request.method === 'POST') return json(response,200,interfaceAudio.configure(await bodyJson(request)))
+      if (route === '/api/interface-audio/play' && request.method === 'POST') return json(response,200,await interfaceAudio.play(await bodyJson(request,NATIVE_SETTINGS_BODY_MAX)))
+      if (route === '/api/interface-audio/stop' && request.method === 'POST') return json(response,200,await interfaceAudio.stop(await bodyJson(request)))
       if (route === '/api/native/status' && get) return json(response,200,await native.status())
       if (route === '/api/native/eq-preview' && request.method === 'POST') return json(response,200,await native.previewEq(await bodyJson(request)))
       if (route === '/api/native/eq-editor' && request.method === 'GET') {
@@ -349,9 +356,9 @@ export async function createMusicServer({
     }
   })
   server.requestTimeout = 30_000
-  server.once('close', () => { sony.close(); ftp.close(); native.close() })
+  server.once('close', () => { sony.close(); ftp.close(); void interfaceAudio.close().finally(() => native.close()).catch(() => {}) })
   if (autoScan) server.once('listening', () => { void store.scan().catch(() => {}) })
-  return { server, store, online, sony, ftp, native, lyrics }
+  return { server, store, online, sony, ftp, native, interfaceAudio, lyrics }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

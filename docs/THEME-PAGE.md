@@ -18,7 +18,7 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 Settings 固定为七类，每个控件只在所属类别出现一次：
 
-- “界面与交互”（内部 ID <code>interface</code>，默认打开）管理界面语言、减少动态、唱片波动、终端入场、欢迎文案与 ID、界面音效和氛围 BGM。终端入场仅 Future 生效；Punk 保留明确禁用的适配入口，不修改 Future 入场偏好。
+- “界面与交互”（内部 ID <code>interface</code>，默认打开）管理界面语言、减少动态、唱片波动、终端入场、欢迎文案与 ID、界面音效和氛围 BGM。终端入场及当前音效仅 Future 生效；Punk 保留明确禁用的适配入口，不修改 Future 偏好。Future 音效跟随播放器输出设备，音乐准备/播放期间静音，暂停或停止后恢复；具体路由及释放规则见[音频实现](AUDIO-CORE-IMPLEMENTATION.md)。
 - “显示与性能”（内部兼容 ID <code>appearance</code>）管理窗口比例、全屏、渲染画质、优先显卡和性能检测。
 - 其余类别为“歌词”“音频”“音乐库”“音乐来源”和“关于”，分别承担原有职责。
 

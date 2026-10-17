@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { NativeAudio, outputDefault } from '../src/native-audio.ts'
+import { NativeAudio, nativeFrontendIdentity, outputDefault } from '../src/native-audio.ts'
 import { normalizeProcessing } from '../src/audio-processing-model.mjs'
 
 const track = { id: 'native-audio-test', format: 'FLAC', relativePath: 'test.flac' }
@@ -19,7 +19,7 @@ class FakeNativeApi {
     this.playDelay = playDelay
     this.startGate = startGate
     this.holdStatus = holdStatus
-    this.state = { playing: false, paused: true, ended: false, position: 0, duration: 60,
+    this.state = { playing: false, paused: true, ended: false, deviceReleased: false, position: 0, duration: 60,
       backend: 'wasapi', mode: 'pcm', sampleRate: 48000, channels: 2, volumeLocked: false }
     this.applied = []
     this.waiters = []
@@ -41,7 +41,7 @@ class FakeNativeApi {
     if (url === '/api/native/start') {
       this.startRequested.resolve()
       if (this.startGate) await this.startGate.promise
-      this.state = { ...this.state, playing: false, paused: true, ended: false, position: request.position ?? 0 }
+      this.state = { ...this.state, playing: false, paused: true, ended: false, deviceReleased: false, position: request.position ?? 0 }
       return this.response(this.state)
     }
     assert.equal(url, '/api/native/control', `unexpected route: ${url}`)
@@ -62,11 +62,11 @@ class FakeNativeApi {
   apply(action, request) {
     this.applied.push(action)
     if(action==='processing')this.processing=request.processing
-    if (action === 'play') { this.state.playing = true; this.state.paused = false; this.state.ended = false }
-    else if (action === 'pause') { this.state.playing = false; this.state.paused = true }
+    if (action === 'play') { this.state.playing = true; this.state.paused = false; this.state.ended = false; this.state.deviceReleased = false }
+    else if (action === 'pause') { this.state.playing = false; this.state.paused = true; this.state.deviceReleased = true }
     else if (action === 'seek') this.state.position = request.position
     else if (action === 'stop') {
-      this.state.playing = false; this.state.paused = true
+      this.state.playing = false; this.state.paused = true; this.state.deviceReleased = true
       this.stopApplied.resolve()
     }
     for (const waiter of this.waiters) {
@@ -96,6 +96,15 @@ async function withAudio(api, run) {
     globalThis.fetch = previousFetch
   }
 }
+
+test('native frontend identity is stable for the renderer lifetime', () => {
+  const first = nativeFrontendIdentity()
+  const second = nativeFrontendIdentity()
+  assert.equal(first.clientId, second.clientId)
+  assert.equal(first.clientStartedAt, second.clientStartedAt)
+  assert.equal(first.clientStartedAt, performance.timeOrigin)
+  assert.match(first.clientId, /^[a-f0-9-]{36}$/)
+})
 
 test('processing edited during a pending open is applied after initialization',async()=>{
  const gate=deferred(),api=new FakeNativeApi({startGate:gate});
@@ -159,10 +168,26 @@ test('pausing while start is pending does not auto-start after metadata arrives'
     audio.pause()
     startGate.resolve()
     await playing
+    await audio.whenPaused()
 
     assert.deepEqual(api.applied, ['pause'])
     assert.equal(api.state.playing, false)
     assert.equal(audio.paused, true)
+    assert.equal(audio.outputStatus?.deviceReleased, true)
+  })
+})
+
+test('whenPaused waits for the device-release acknowledgement and authoritative cursor', async () => {
+  const api = new FakeNativeApi({ pauseDelay: 30 })
+  await withAudio(api, async audio => {
+    await audio.play()
+    api.state.position = 37.25
+    audio.pause()
+    assert.equal(audio.outputStatus?.deviceReleased, false)
+    await audio.whenPaused()
+    assert.equal(audio.paused, true)
+    assert.equal(audio.currentTime, 37.25)
+    assert.equal(audio.outputStatus?.deviceReleased, true)
   })
 })
 

@@ -51,12 +51,13 @@ export function outputSettings(value) {
 }
 export class NativeOutput {
  constructor({store,ftp,sony,lspUserDataDir=path.join(project,'.tools/lsp-plugin/user-data'),lspStorageRoot=project,executable=process.env.RHINE_NATIVE_AUDIO??path.join(project,'vendor/audio/windows-x64/rhine-audio-host.exe')}={}) {
-   this.store=store;this.ftp=ftp;this.sony=sony;this.executable=path.resolve(executable);this.pending=new Map();this.counter=0;this.generation=0;this.tail=Promise.resolve();this.startTail=Promise.resolve();this.closed=false
+   this.store=store;this.ftp=ftp;this.sony=sony;this.executable=path.resolve(executable);this.pending=new Map();this.counter=0;this.generation=0;this.tail=Promise.resolve();this.startTail=Promise.resolve();this.closed=false;this.musicOperations=0;this.beforeMusicOutput=undefined
    this.cancelledSessions=new Set()
    this.queueTracks=new Map()
     this.eqEditorSettings=undefined;this.eqEditorBinding=undefined
     this.lspUserDataDir=path.resolve(lspUserDataDir);this.lspStorageRoot=path.resolve(lspStorageRoot)
  }
+ interfaceIdle(){return !this.closed&&this.musicOperations===0&&(!this.active||this.active.released===true)}
  async verify() {
    if(process.platform!=='win32')throw fail('ASIO / Windows 原生输出仅用于 Windows 桌面版',503)
    const manifest=JSON.parse(await fs.readFile(path.join(path.dirname(this.executable),'assets.json'),'utf8'))
@@ -109,22 +110,29 @@ export class NativeOutput {
    catch(error){return {available:false,devices:[],devicesASIO:[],wasapiAvailable:false,wasapiDevices:[],backends:[],dsdModes:['pcm','native','dop'],error:error.message}}
  }
  async refresh() {
-   await this.stopCurrent();const child=this.child;
-   if(child)await new Promise(resolve=>{const timer=setTimeout(()=>child.kill(),2000);child.once('close',()=>{clearTimeout(timer);resolve()});child.stdin.end()});
-   return this.status()
+   this.musicOperations++
+   try {
+     await this.beforeMusicOutput?.()
+     await this.stopCurrent();const child=this.child;
+     if(child)await new Promise(resolve=>{const timer=setTimeout(()=>child.kill(),2000);child.once('close',()=>{clearTimeout(timer);resolve()});child.stdin.end()});
+     return await this.status()
+   }finally{this.musicOperations=Math.max(0,this.musicOperations-1)}
  }
  async previewEq(value) {
    throw fail('LSP 频响预览请使用原生面板',409);
  }
-  async eqEditor(value={}) {
+  async eqEditor(value={},internalRelease=false) {
+    const pendingRelease=this.active?.releasePromise
+    if(pendingRelease&&!internalRelease)await pendingRelease.catch(()=>{})
+    const active=this.active
     if(!value||typeof value!=='object'||Array.isArray(value))throw fail('LSP 面板请求无效')
     const action=value.action??'state'
     if(!['open','close','state'].includes(action))throw fail('无效的 LSP 面板操作')
-    const active=this.active
     const previousEditorState=this.eqEditorSettings?.lsp?.pluginState
-    const activeLsp=!!active&&active.lspEditorEligible===true&&!active.settings?.processing?.bitPerfect&&active.settings?.processing?.eq?.engine==='lsp'
+    const activeLsp=!!active&&!active.released&&active.lspEditorEligible===true&&!active.settings?.processing?.bitPerfect&&active.settings?.processing?.eq?.engine==='lsp'
+    const releasedLsp=!!active&&active.released===true&&active.lspEditorEligible===true&&!active.settings?.processing?.bitPerfect&&active.settings?.processing?.eq?.engine==='lsp'
     let eq
-    try{eq=lspEq(value.eq??(activeLsp?active.settings.processing.eq:this.eqEditorSettings))}catch(error){throw fail(error.message)}
+    try{eq=lspEq(value.eq??(activeLsp||releasedLsp?active.settings.processing.eq:this.eqEditorSettings))}catch(error){throw fail(error.message)}
     if(value.ifRevision!==undefined&&(!Number.isSafeInteger(value.ifRevision)||value.ifRevision<0))throw fail('LSP 面板版本号无效')
 
     let session
@@ -147,15 +155,20 @@ export class NativeOutput {
     if(session&&this.active?.session===session) {
       const processing=this.active.settings.processing
       this.active.settings={...this.active.settings,processing:{...processing,eq:{...processing.eq,lsp:{...processing.eq.lsp,pluginState:updatedEq.lsp.pluginState}}}}
+      this.active.lspEditorWasOpen=result.editorOpen
+    }else if(releasedLsp&&this.active===active) {
+      const processing=active.settings.processing
+      active.settings={...active.settings,processing:{...processing,eq:{...processing.eq,lsp:{...processing.eq.lsp,pluginState:updatedEq.lsp.pluginState}}}}
+      active.lspEditorWasOpen=result.editorOpen
     }
     if(result.editorOpen)this.eqEditorBinding=session??null
     else this.eqEditorBinding=undefined
     if(value.ifRevision!==undefined&&value.ifRevision===result.revision&&previousEditorState===updatedEq.lsp.pluginState)return {editorOpen:result.editorOpen,latencyFrames:result.latencyFrames,active:result.active,revision:result.revision,unchanged:true}
     return {editorOpen:result.editorOpen,pluginState:updatedEq.lsp.pluginState,latencyFrames:result.latencyFrames,active:result.active,revision:result.revision}
   }
-  async closeEqEditorForSession(active) {
+  async closeEqEditorForSession(active,internalRelease=false,strict=false) {
     if(!active||this.eqEditorBinding!==active.session)return
-    try{await this.eqEditor({action:'close',eq:active.settings.processing.eq})}catch{}
+    try{await this.eqEditor({action:'close',eq:active.settings.processing.eq},internalRelease)}catch(error){if(strict)throw error}
   }
  processing() {
    const job=this.lease;if(!job)return {state:'off',progress:0};
@@ -182,17 +195,54 @@ export class NativeOutput {
    // reopen a track or stop the stream that has just been adopted.
    this.frontendOwner=value.clientId;this.frontendEpoch=epoch;
    if(this.reserved&&this.reserved!==this.active?.session){++this.generation;this.reserved=this.active?.session;await this.startTail.catch(()=>{})}
-   const active=this.active;
+   let active=this.active;
    if(!active){for(const job of this.sony?.jobs?.values()??[])if(!job.readers&&['queued','processing'].includes(job.state))this.sony.cancel(job.id);return {session:null}}
-   if(this.lease?.state==='error'){await this.stopCurrent();return {session:null,error:'Sony 处理已失败，原生播放已停止。'}}
+   if(active.releasePromise)await active.releasePromise
+   if(this.active!==active)return {session:null}
+   if(active.released)return this.currentFromReleased(active)
+   if(this.lease?.state==='error') {
+     const state={...(active.lastState??{}),session:active.session,trackId:active.trackId,playing:false,paused:true,error:'Sony 处理已失败，原生播放已停止。'}
+     const released=await this.releaseActiveOutput(active,state)
+     this.releaseLease()
+     return this.currentFromReleased(active,released)
+   }
    try {
      const state=this.timeline(await this.command({cmd:'status',session:active.session}));
-     if(this.active!==active||this.frontendOwner!==value.clientId)return {session:null};
+     if(active.releasePromise) {
+       await active.releasePromise
+       return this.active===active?this.currentFromReleased(active):{session:null}
+     }
+     if(this.active!==active||active.generation!==this.generation||this.frontendOwner!==value.clientId)return {session:null};
      if(state.stale){this.active=undefined;this.releaseLease();return {session:null}}
+     active.lastState=state;active.position=state.position??active.position
+     if(state.ended||state.error) {
+       const released=await this.releaseActiveOutput(active,state)
+       return this.currentFromReleased(active,released)
+     }
      return {session:active.session,trackId:active.trackId,settings:{...active.settings},sonySettings:{...active.sonySettings},
        sonyJobId:active.sonyJobId,volume:active.targetVolume,sonyProcessing:this.processing(),
        state:{...state,playing:active.desiredPlaying&&!state.ended,paused:!active.desiredPlaying||!!state.ended,...(active.seeking?{buffering:true}:{})}};
    }catch(error){if(this.active===active&&this.frontendOwner===value.clientId)await this.stopCurrent().catch(()=>{});throw error}
+ }
+ currentFromReleased(active,releasedState=active?.releasedState) {
+   if(!active||this.active!==active||!releasedState)return {session:null}
+   releasedState=this.refreshReleasedState(active,releasedState)
+   return {session:active.session,trackId:active.trackId,settings:{...active.settings},sonySettings:{...active.sonySettings},
+     sonyJobId:active.sonyJobId,volume:active.targetVolume,sonyProcessing:releasedState.sonyProcessing??this.processing(),
+     state:{...releasedState,playing:false,paused:true,deviceReleased:true}}
+ }
+ refreshReleasedState(active,releasedState=active?.releasedState) {
+   if(!active||!releasedState)return releasedState
+   const state={...releasedState,playing:false,paused:true,deviceReleased:true}
+   if(this.lease&&active.sonyJobId===this.lease.id) {
+     const sonyProcessing=this.processing();state.sonyProcessing=sonyProcessing
+     if(sonyProcessing.state==='error'&&!state.error) {
+       state.error=sonyProcessing.message||'Sony 实时处理失败，原生播放已停止。'
+       this.releaseLease()
+     }
+   }
+   active.releasedState=state;active.lastState=state
+   return state
  }
  releaseLease(keep) {if(this.lease){const old=this.lease;old.readers=Math.max(0,(old.readers??1)-1);this.lease=undefined;if(old!==keep&&!old.readers&&old.state==='processing')this.sony?.cancel?.(old.id)}}
  timeline(value,lease=this.lease) {
@@ -202,16 +252,96 @@ export class NativeOutput {
    const offset=metadata.positionOffset??0,duration=metadata.duration+offset;
    return {...value,duration,sourceStart:offset,...(Number.isFinite(value.position)?{position:Math.min(duration,value.position+offset)}:{})};
  }
+ async releaseActiveOutput(active,state,{pause=false}={}) {
+   if(!active||this.active!==active)return {stale:true}
+   if(active.released)return active.releasedState
+   if(active.releasePromise)return active.releasePromise
+   this.musicOperations++
+   const release=(async()=>{
+     active.releasing=true
+     const editorWasOpen=active.lspEditorEligible&&active.settings?.processing?.eq?.engine==='lsp'&&
+       (active.lspEditorWasOpen===true||this.eqEditorBinding===active.session)
+     // Callers pass timeline-normalized states; only the raw pause ACK needs
+     // conversion below. Reapplying timeline() here would double Sony offsets.
+     let finalState=state??active.lastState??{
+       session:active.session,trackId:active.trackId,position:active.position??0,playing:active.desiredPlaying,
+       paused:!active.desiredPlaying,ended:false,
+     }
+     let pauseError
+     if(pause) {
+       try{finalState=this.timeline(await this.command({cmd:'pause',session:active.session}))}
+       catch(error){pauseError=error;finalState={...finalState,error:error.message}}
+     }
+     let lspEditorError
+     if(editorWasOpen) {
+       try{await this.closeEqEditorForSession(active,true,true)}catch(error){lspEditorError=`LSP editor state could not be saved before releasing audio: ${error.message}`}
+     }
+     if(this.child)await this.command({cmd:'stop',session:active.session})
+     if(this.active!==active)return {stale:true}
+     active.desiredPlaying=false
+     active.position=Number.isFinite(finalState.position)?finalState.position:(active.position??0)
+     active.released=true
+     active.releasedState={...finalState,session:active.session,trackId:active.trackId,playing:false,paused:true,
+       ended:finalState.ended===true,deviceReleased:true,sonyProcessing:finalState.sonyProcessing??this.processing(),
+       ...(pauseError?{error:pauseError.message}:{})}
+     active.lastState=active.releasedState
+     this.queued=undefined;this.queueTracks.clear()
+     if(editorWasOpen) {
+       try{await this.eqEditor({action:'open',eq:active.settings.processing.eq},true)}
+       catch(error){active.lspEditorRestoreError=error.message;active.releasedState.lspEditorError=error.message}
+     }
+     if(lspEditorError)active.releasedState.lspEditorError=lspEditorError
+     if(pauseError)throw pauseError
+     return active.releasedState
+   })()
+   active.releasePromise=release
+   try{return await release}
+   finally{if(active.releasePromise===release)active.releasePromise=undefined;active.releasing=false;this.musicOperations=Math.max(0,this.musicOperations-1)}
+ }
  async stopCurrent() {
    ++this.generation;this.reserved=undefined;this.queued=undefined;this.queueTracks.clear()
    await this.startTail.catch(()=>{})
-    const current=this.active
+    let current=this.active
+    if(current?.releasePromise)await current.releasePromise.catch(()=>{})
+    current=this.active
     await this.closeEqEditorForSession(current)
-    this.active=undefined
-   try{if(current&&this.child)await this.command({cmd:'stop',session:current.session})}finally{this.releaseLease()}
+   let released=!current||current.released||!this.child
+   try{
+     if(current&&!current.released&&this.child){await this.command({cmd:'stop',session:current.session});released=true}
+   }finally{
+     if(released&&this.active===current)this.active=undefined
+     this.releaseLease()
+   }
    return {stopped:true}
  }
+ async resumeReleased(active,value) {
+   this.musicOperations++
+   try {
+     if(active.releasePromise)await active.releasePromise
+     if(this.active!==active||this.cancelledSessions.has(active.session)||this.closed)return {stale:true}
+     const state=this.refreshReleasedState(active,active.releasedState??active.lastState??{})
+     if(state.error)throw fail(state.error,503)
+     const position=state.ended?(Number.isFinite(state.sourceStart)?state.sourceStart:0):(Number.isFinite(active.position)?active.position:(Number.isFinite(state.position)?state.position:0))
+     await this.start({
+       session:active.session,
+       clientId:value.clientId,
+       trackId:active.trackId,
+       settings:active.settings,
+       sonySettings:active.sonySettings,
+       sonyJobId:active.sonyJobId,
+       volume:active.volume,
+       targetVolume:active.targetVolume,
+       position,
+     })
+     if(this.active?.session!==active.session||this.cancelledSessions.has(active.session)||this.closed)return {stale:true}
+     return await this.control({...value,action:'play'})
+   }finally{this.musicOperations=Math.max(0,this.musicOperations-1)}
+ }
  async start(value) {
+   this.musicOperations++
+   try{return await this.startInternal(value)}finally{this.musicOperations=Math.max(0,this.musicOperations-1)}
+ }
+ async startInternal(value) {
    if(this.frontendOwner&&value.clientId!==this.frontendOwner)throw fail('前端已经刷新，此播放请求已取消',409)
    const settings=outputSettings(value.settings)
     let effectiveProcessing=effectivePcmProcessing(settings.processing)
@@ -256,7 +386,12 @@ export class NativeOutput {
     if(value.position+1e-6<offset)throw fail('此位置早于当前音效片段，请重新准备所选位置',409);
     const position=Math.max(0,value.position-offset);
     if(lease?.state==='processing'&&position>0){const target=Math.min(lease.stream.duration,position+.5)*lease.stream.sampleRate*8+56;while(lease.state==='processing'&&lease.producedBytes<target){if(generation!==this.generation||this.closed)throw fail('此播放请求已取消',409);await new Promise(resolve=>setTimeout(resolve,100))}if(lease.state==='error')throw fail(lease.error||'Sony 处理失败',503)}
-     const previousActive=this.active
+     let previousActive=this.active
+     if(previousActive?.releasePromise)await previousActive.releasePromise
+     if(generation!==this.generation||this.closed)throw fail('此播放请求已取消',409)
+     previousActive=this.active
+     const restoreLspWindow=previousActive?.released===true&&previousActive.lspEditorWasOpen===true
+     const idleLspEditorOpen=restoreLspWindow&&this.eqEditorBinding===null
      const previousEq=previousActive?.settings?.processing?.eq
      const previousPluginState=previousEq?.engine==='lsp'?previousEq.lsp.pluginState:undefined
      const previousDesign=previousEq?.engine==='lsp'?lspDesignKey(previousEq):undefined
@@ -271,6 +406,8 @@ export class NativeOutput {
     this.releaseLease(lease);this.active=undefined
     if(lease){lease.readers=(lease.readers??0)+1;this.lease=lease}
     try {
+     await this.beforeMusicOutput?.()
+     if(generation!==this.generation||this.closed)throw fail('此播放请求已取消',409)
      const metadata=this.trackMetadata(value.trackId);
      const open={cmd:'open',file:source,dsd,mode,session:value.session,trackId:value.trackId,processing:effectiveProcessing,replayGain:metadata.replayGain??{},sourceFormat:{sampleRate:metadata.sampleRate,bitsPerSample:metadata.bitsPerSample,codec:metadata.codec,lossless:metadata.lossless},backend:settings.backend,device:settings.device,channel:settings.channel,...(settings.backend==='wasapi'?{wasapiDevice:settings.wasapiDevice,wasapiMode:settings.processing.bitPerfect?'exclusive':settings.wasapiMode}:{}),volume:mode==='pcm'?(settings.processing.bitPerfect?1:value.volume):1,position,...(growingBytes?{growingBytes}:{})};
      let result;
@@ -285,14 +422,38 @@ export class NativeOutput {
      if(this.frontendOwner&&value.clientId!==this.frontendOwner){await this.command({cmd:'stop',session:value.session});throw fail('前端已经刷新，此播放请求已取消',409)}
      this.queued=undefined;
      this.queueTracks.clear();
-      this.active={session:value.session,generation,desiredPlaying:false,trackId:value.trackId,settings,sonySettings:requestedSony,sonyJobId:value.sonyJobId,volume:value.volume,targetVolume:value.targetVolume??value.volume,lspEditorEligible:mode==='pcm'};return this.timeline(result)
-    }catch(error){this.releaseLease();throw error}
+      this.active={session:value.session,generation,desiredPlaying:false,trackId:value.trackId,settings,sonySettings:requestedSony,sonyJobId:value.sonyJobId,volume:value.volume,targetVolume:value.targetVolume??value.volume,lspEditorEligible:mode==='pcm',position:result.position??value.position,released:false,lastState:this.timeline(result),...(restoreLspWindow?{lspEditorWasOpen:true}:{})};
+      if(restoreLspWindow&&this.active.lspEditorEligible&&settings.processing.eq.engine==='lsp') {
+       if(idleLspEditorOpen)this.eqEditorBinding=value.session
+       else {
+        this.eqEditorBinding=value.session
+        try{await this.eqEditor({action:'open',eq:settings.processing.eq},true)}catch(error){this.active.lspEditorRestoreError=error.message}
+       }
+      }
+      return this.timeline(result)
+    }catch(error){
+      this.releaseLease(lease)
+      if(previousActive?.released&&generation===this.generation&&!this.closed&&!this.active) {
+        this.active=previousActive
+        if(lease&&previousActive.sonyJobId===value.sonyJobId) {
+          lease.readers=(lease.readers??0)+1;this.lease=lease
+        }
+        if(this.reserved===value.session)this.reserved=previousActive.session
+      }
+      throw error
+    }
    });this.startTail=commit;return commit
  }
  async queue(value){
    if(!token(value.session)||typeof value.trackId!=='string'||!/^[-a-zA-Z0-9]+$/.test(value.trackId))throw fail('无效的预加载请求');
-   const active=this.active;
+   let active=this.active;
+   if(active?.releasePromise)await active.releasePromise
+   active=this.active;
    if(!active||active.session!==value.session||this.frontendOwner&&value.clientId!==this.frontendOwner)return {stale:true};
+   if(active.released) {
+     this.queued=undefined;this.queueTracks.clear()
+     return {...this.refreshReleasedState(active),session:active.session,trackId:active.trackId,queueCleared:true,queueReady:false,deviceReleased:true}
+   }
    if(active.settings.processing.bitPerfect)throw fail('PCM 比特一致性模式不支持预载队列',409);
    if(this.lease||active.sonyJobId)throw fail('当前音效播放路线使用串行切歌，不预加载原始歌曲。',409);
    if(value.trackId.startsWith('ftp-'))await this.ftp.ensure(value.trackId);
@@ -300,7 +461,11 @@ export class NativeOutput {
    if(!descriptor)throw fail('待播放歌曲已不在音乐库中',404);
    const {source}=await boundedSource(descriptor);
    if(/\.(dsf|dff)$/i.test(source))throw fail('DSD 歌曲使用独立切换路线',409);
-   if(this.active!==active||this.cancelledSessions.has(value.session)||this.closed)return {stale:true};
+   if(this.active===active&&active.released) {
+     this.queued=undefined;this.queueTracks.clear()
+     return {...active.releasedState,session:active.session,trackId:active.trackId,queueCleared:true,queueReady:false,deviceReleased:true}
+   }
+   if(this.active!==active||active.releasing||active.generation!==this.generation||this.cancelledSessions.has(value.session)||this.closed)return {stale:true};
    const metadata=this.trackMetadata(value.trackId),queued={trackId:value.trackId};
    this.queued=queued;
    this.queueTracks.set(value.trackId,queued);
@@ -312,24 +477,43 @@ export class NativeOutput {
    if(this.frontendOwner&&value.clientId!==this.frontendOwner)return {stale:true}
    if(value.action==='stop'){this.cancelledSessions.add(value.session);if(this.cancelledSessions.size>512)this.cancelledSessions.delete(this.cancelledSessions.values().next().value)}
    if(value.action==='stop'&&this.reserved===value.session) {++this.generation;this.reserved=undefined}
-   if(this.active?.session!==value.session)return {stopped:true,session:value.session,stale:true}
+   let active=this.active
+   if(active?.session!==value.session)return {stopped:true,session:value.session,stale:true}
+   if(active.releasePromise) {
+     if(value.action==='stop')await active.releasePromise.catch(()=>{})
+     else await active.releasePromise
+   }
+   active=this.active
+   if(active?.session!==value.session)return {stopped:true,session:value.session,stale:true}
    if(value.action==='stop') {
      this.queued=undefined;
      this.queueTracks.clear();
-      await this.closeEqEditorForSession(this.active)
-     try{await this.command({cmd:'stop',session:value.session})}catch(error){if(this.active?.session===value.session)throw error}
-     if(this.active?.session===value.session){this.active=undefined;this.releaseLease()}
+     if(!active.released) {
+       await this.closeEqEditorForSession(active)
+       try{if(this.child)await this.command({cmd:'stop',session:value.session})}catch(error){if(this.active?.session===value.session)throw error}
+     }
+     if(this.active===active){this.active=undefined;this.releaseLease()}
      return {stopped:true,session:value.session}
    }
    if(value.action==='seek'&&(!Number.isFinite(value.position)||value.position<0))throw fail('无效的播放位置')
    if(value.action==='volume'&&(!Number.isFinite(value.volume)||value.volume<0||value.volume>1))throw fail('无效的歌曲音量')
    if(value.action==='volume'&&value.targetVolume!==undefined&&(!Number.isFinite(value.targetVolume)||value.targetVolume<0||value.targetVolume>1))throw fail('无效的歌曲音量')
-   if(value.action==='volume'&&this.active.settings.processing.bitPerfect)throw fail('PCM 比特一致性模式下数字音量固定为 100%；请先关闭此模式后再调节音量',409)
-   if(this.lease?.state==='error')throw fail(this.lease.error||'Sony 实时处理失败',503);
+   if(value.action==='volume'&&active.settings.processing.bitPerfect)throw fail('PCM 比特一致性模式下数字音量固定为 100%；请先关闭此模式后再调节音量',409)
+   if(active.released) {
+     if(value.action==='play')return this.resumeReleased(active,value)
+     if(value.action==='status'||value.action==='pause')return this.refreshReleasedState(active)
+     if(active.releasedState?.error)throw fail(active.releasedState.error,503)
+   }
+   if(this.lease?.state==='error') {
+     const errorState={...(active.lastState??{}),session:active.session,trackId:active.trackId,playing:false,paused:true,error:this.lease.error||'Sony 实时处理失败'}
+     const released=await this.releaseActiveOutput(active,errorState)
+     this.releaseLease()
+     if(value.action==='status')return released
+     throw fail(errorState.error,503)
+   }
    const offset=this.lease?.result?.positionOffset??this.lease?.stream?.positionOffset??0;
    if(value.action==='seek'&&value.position+1e-6<offset)throw fail('此位置早于当前音效片段，请重新准备所选位置',409);
    const position=value.action==='seek'?Math.max(0,value.position-offset):undefined;
-   const active=this.active;
    let processing;
    if(value.action==='processing'){
      try{processing=normalizeProcessing(value.processing,{clamp:false})}catch(error){throw fail(error.message)}
@@ -341,44 +525,93 @@ export class NativeOutput {
      }
    }
    const effectiveProcessing=processing?effectivePcmProcessing(processing):undefined
-   if(processing&&JSON.stringify(processing)===JSON.stringify(active.settings.processing))
-     return this.timeline(await this.command({cmd:'status',session:value.session}));
+   if(active.released) {
+     if(value.action==='seek') {
+       this.queued=undefined;this.queueTracks.clear()
+       active.position=Number.isFinite(active.releasedState?.duration)?Math.min(value.position,active.releasedState.duration):value.position
+       active.releasedState={...active.releasedState,position:active.position,ended:false,playing:false,paused:true,queueCleared:true,queueReady:false}
+       active.lastState=active.releasedState
+     }
+     if(value.action==='volume') {
+       active.volume=value.volume;active.targetVolume=value.targetVolume??value.volume
+       active.releasedState={...active.releasedState,volume:value.volume,targetVolume:active.targetVolume}
+       active.lastState=active.releasedState
+     }
+     if(processing)active.settings={...active.settings,processing}
+     if(value.action==='clearQueue'||value.action==='advance') {
+       this.queued=undefined;this.queueTracks.clear()
+       active.releasedState={...active.releasedState,queueCleared:true,queueReady:false,queuedTrackId:''}
+       active.lastState=active.releasedState
+     }
+     return active.releasedState
+   }
+   const readStatus=async()=>{
+     if(active.releasePromise)await active.releasePromise
+     if(this.active!==active||active.generation!==this.generation||this.cancelledSessions.has(value.session))return {stale:true}
+     if(active.released)return active.releasedState
+     const state=this.timeline(await this.command({cmd:'status',session:value.session}))
+     if(active.releasePromise) {
+       await active.releasePromise
+       return this.active===active?active.releasedState:{stale:true}
+     }
+     if(this.active!==active||active.generation!==this.generation||this.cancelledSessions.has(value.session))return {stale:true}
+     active.lastState=state;active.position=state.position??active.position
+     if(state.ended||state.error)return this.releaseActiveOutput(active,state)
+     return {...state,sonyProcessing:this.processing()}
+   }
+   if(value.action==='status')return readStatus()
+   if(processing&&JSON.stringify(processing)===JSON.stringify(active.settings.processing))return readStatus()
    if(processing?.bitPerfect) {
      // Saved DSP edits must not crossfade or reconfigure the active identity path.
-     const state=this.timeline(await this.command({cmd:'status',session:value.session}));
-     if(this.active!==active||this.cancelledSessions.has(value.session))return {stale:true};
+     const state=await readStatus();
+     if(state.stale||active.released)return state
      active.settings={...active.settings,processing};
      return state;
    }
    if(processing&&this.lease){
-     const state=this.timeline(await this.command({cmd:'status',session:value.session}));
-     if(this.active!==active||this.cancelledSessions.has(value.session))return {stale:true};
+     const state=await readStatus();
+     if(state.stale||active.released)return state
      const resume=active.desiredPlaying;
      const opened=await this.start({session:active.session,clientId:value.clientId,trackId:active.trackId,settings:{...active.settings,processing},sonySettings:active.sonySettings,sonyJobId:active.sonyJobId,volume:active.volume,targetVolume:active.targetVolume,position:state.position??0});
      return resume?this.control({session:active.session,clientId:value.clientId,action:'play'}):opened;
    }
-   if(value.action==='play'||value.action==='pause'){active.desiredPlaying=value.action==='play';if(active.seeking&&value.action==='play')return {...this.timeline(await this.command({cmd:'status',session:value.session})),buffering:true}}
+   if(value.action==='pause') {
+     active.desiredPlaying=false
+     return this.releaseActiveOutput(active,undefined,{pause:true})
+   }
+   if(value.action==='play')active.desiredPlaying=true
+   if(value.action==='play'&&active.seeking)return {...await readStatus(),buffering:true}
    if(value.action==='seek'&&this.lease?.state==='processing') {
      const job=this.lease,target=Math.min(job.stream.duration,position+.5)*job.stream.sampleRate*8+56;
      if(job.producedBytes<target) {
       active.seeking=true;
       try {
        await this.command({cmd:'pause',session:value.session});
-       while(job.state==='processing'&&job.producedBytes<target){if(this.active!==active||this.cancelledSessions.has(value.session)||this.closed)return {stale:true};await new Promise(resolve=>setTimeout(resolve,100))}
+       while(job.state==='processing'&&job.producedBytes<target){if(this.active!==active||active.releasing||active.generation!==this.generation||this.cancelledSessions.has(value.session)||this.closed)return {stale:true};await new Promise(resolve=>setTimeout(resolve,100))}
        if(job.state==='error')throw fail(job.error||'Sony 处理失败',503);
-       if(this.active!==active||this.cancelledSessions.has(value.session)||this.closed)return {stale:true};
+       if(active.releasePromise)await active.releasePromise
+       if(this.active!==active||active.released||active.generation!==this.generation||this.cancelledSessions.has(value.session)||this.closed)return active.released?active.releasedState:{stale:true};
        const seeked=await this.command({cmd:'seek',session:value.session,position});
-       return this.timeline(active.desiredPlaying?await this.command({cmd:'play',session:value.session}):seeked);
+       const state=this.timeline(active.desiredPlaying?await this.command({cmd:'play',session:value.session}):seeked)
+       active.lastState=state;active.position=state.position??active.position
+       if(state.ended||state.error)return this.releaseActiveOutput(active,state)
+       return state;
       }finally{active.seeking=false}
      }
    }
    if(this.active?.session!==value.session||this.cancelledSessions.has(value.session))return {stale:true};
    const result=this.timeline(await this.command({cmd:value.action,session:value.session,...(value.action==='seek'?{position}:{}),...(value.action==='volume'?{volume:value.volume}:{}),...(processing?{processing:effectiveProcessing,replayGain:this.trackMetadata(active.trackId).replayGain??{}}:{})}));
+   if(active.releasePromise) {
+     await active.releasePromise
+     return this.active===active?active.releasedState:{stale:true}
+   }
+   if(this.active!==active||active.generation!==this.generation||this.cancelledSessions.has(value.session))return {stale:true}
    if(processing&&this.active===active)active.settings={...active.settings,processing};
+   active.lastState=result;active.position=result.position??active.position
    if(['clearQueue','seek'].includes(value.action)||value.action==='processing'&&!result.queueTrackId){this.queued=undefined;this.queueTracks.clear()}
    if(value.action==='volume'&&this.active===active){active.volume=value.volume;active.targetVolume=value.targetVolume??value.volume}
-   const reported=value.action==='status'?{...result,sonyProcessing:this.processing()}:result;
-   return active.seeking?{...reported,buffering:true}:reported;
+   if(result.ended||result.error)return this.releaseActiveOutput(active,result)
+   return active.seeking?{...result,buffering:true}:result;
  }
  close(){this.closed=true;++this.generation;this.child?.stdin.end();this.releaseLease();const child=this.child;if(child){const timer=setTimeout(()=>child.kill(),2000);timer.unref();child.once('close',()=>clearTimeout(timer))}}
 }

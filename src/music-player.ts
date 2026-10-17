@@ -124,6 +124,7 @@ export class MusicPlayer {
   private readonly bgm: HTMLAudioElement;
   private transport: Transport = "idle";
   private operation = 0;
+  private nativePauseWait?: { audio: NativeAudio; operation: number; task: Promise<void> };
   private bgmOperation = 0;
   private bgmTarget = 0;
   private bgmTask: Promise<void> = Promise.resolve();
@@ -358,6 +359,7 @@ export class MusicPlayer {
     // Updating the queue in a play request keeps cross-album switches in the same fade.
     this.value.queue = queue;
     const request = ++this.operation;
+    this.nativePauseWait = undefined;
     this.preparationPaused = restore?.paused === true;
     this.sonyAbort?.abort();
     this.cancelSongFade();
@@ -474,22 +476,60 @@ export class MusicPlayer {
   async toggle(): Promise<void> {
     if (this.disposed) return;
     if (this.transport === "loading" || this.transport === "playing") {
-      ++this.operation;
+      const operation = ++this.operation;
       this.sonyAbort?.abort();
       this.cancelSongFade();
+      const audio = this.song;
       this.transport = "paused";
-      this.song?.pause();
+      audio?.pause();
       if (this.songTrackId !== this.value.currentTrack?.id || this.songSettingsKey !== JSON.stringify(this.value.sonySettings)) this.releaseSong();
       else this.setSongGain(1);
       if (this.value.sonyProcessing.state === "preparing") this.value.sonyProcessing = { state: "off", progress: 0 };
       this.value.playing = false;
       this.value.loading = false;
       this.emit();
+      if (audio instanceof NativeAudio && this.song === audio) {
+        const task = audio.whenPaused().then(() => {
+          if (this.disposed || operation !== this.operation || this.transport !== "paused" || this.song !== audio) return;
+          const position = this.pendingSeek ?? audio.currentTime;
+          this.value.currentTime = seconds(position);
+          this.queuedSignature = "";
+          this.emit();
+        }).catch((error) => {
+          if (operation === this.operation && this.song === audio)
+            this.fail((error as Error).message || trUi("原生输出失败。"));
+        });
+        this.nativePauseWait = { audio, operation, task };
+        void task.finally(() => { if (this.nativePauseWait?.task === task) this.nativePauseWait = undefined; });
+      }
       await this.reconcileBgm();
       return;
     }
+    if (this.transport === "paused") {
+      const operation = ++this.operation;
+      const pending = this.nativePauseWait;
+      if (pending) {
+        await pending.task;
+        if (this.disposed || operation !== this.operation || this.transport !== "paused") return;
+        if (this.song === pending.audio) {
+          const position = this.pendingSeek ?? pending.audio.currentTime;
+          this.value.currentTime = seconds(position);
+          this.queuedSignature = "";
+          this.emit();
+        }
+        if (this.nativePauseWait?.task === pending.task) this.nativePauseWait = undefined;
+      }
+      if (this.disposed || operation !== this.operation || this.transport !== "paused") return;
+      const track = this.value.currentTrack ?? this.value.queue[0];
+      if (track) {
+        const audio = this.song;
+        if (audio && this.songTrackId === track.id && !audio.ended) await this.play(track.id);
+        else await this.play(track.id, undefined, { position: this.pendingSeek ?? this.value.currentTime, paused: false });
+      }
+      return;
+    }
     const track = this.value.currentTrack ?? this.value.queue[0];
-    if (track) await this.play(track.id,undefined,this.transport==='paused'?{position:this.pendingSeek??this.value.currentTime,paused:false}:undefined);
+    if (track) await this.play(track.id);
   }
 
   async next(): Promise<void> {
@@ -520,25 +560,27 @@ export class MusicPlayer {
   }
 
   seek(position: number): void {
+    const audio = this.song;
+    const currentTrack = this.value.currentTrack;
+    const releasedPaused = !audio && this.transport === "paused" && !!currentTrack;
     if (
       this.disposed ||
-      !this.song ||
-      this.songTrackId !== this.value.currentTrack?.id ||
+      (!releasedPaused && (!audio || this.songTrackId !== currentTrack?.id)) ||
       !Number.isFinite(position)
     )
       return;
-    const duration = seconds(this.song.duration) || this.value.duration;
+    const duration = (audio ? seconds(audio.duration) : 0) || this.value.duration;
     const target = Math.max(
       0,
       duration > 0 ? Math.min(duration, position) : position,
     );
-    if(this.song instanceof NativeAudio&&target+1e-6<this.song.sourceStartTime){
-      const track=this.value.currentTrack;
+    if(audio instanceof NativeAudio&&target+1e-6<audio.sourceStartTime){
+      const track=currentTrack;
       if(track)void this.play(track.id,undefined,{position:target,paused:this.pausedForRestore()});
       return;
     }
     this.pendingSeek = target;
-    if (this.song instanceof NativeAudio || this.song.readyState >= 1) this.applySeek(this.song);
+    if (audio && (audio instanceof NativeAudio || audio.readyState >= 1)) this.applySeek(audio);
     this.value.currentTime = target;
     this.emit();
   }
@@ -546,6 +588,7 @@ export class MusicPlayer {
   stop(): void {
     if (this.disposed) return;
     ++this.operation;
+    this.nativePauseWait = undefined;
     this.sonyAbort?.abort();
     this.transport = "idle";
     this.releaseSong();
@@ -826,6 +869,7 @@ export class MusicPlayer {
       } else {
         ++this.operation;
         this.transport = "idle";
+        this.releaseSong(true);
         this.emit();
         void this.reconcileBgm();
       }
@@ -856,7 +900,7 @@ export class MusicPlayer {
     }
   }
 
-  private releaseSong(): void {
+  private releaseSong(alreadyPaused = false): void {
     this.queuedSignature="";
     this.processingRetryable=false;this.value.processingPending=false;
     this.cancelSongFade();
@@ -867,7 +911,7 @@ export class MusicPlayer {
     this.songGain = 1;
     this.pendingSeek = null;
     if (!old) return;
-    old.pause();
+    if (!alreadyPaused) old.pause();
     if (this.browserSpectrum?.audio === old) {
       this.browserSpectrum.source.disconnect();
       void this.browserSpectrum.context.close().catch(() => {});
@@ -966,6 +1010,7 @@ export class MusicPlayer {
 
   private fail(message: string): void {
     ++this.operation;
+    this.nativePauseWait = undefined;
     this.sonyAbort?.abort();
     this.transport = "error";
     this.releaseSong();

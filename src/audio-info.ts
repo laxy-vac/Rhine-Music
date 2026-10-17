@@ -429,12 +429,11 @@ function backendCard(
     detail = details.join(" ");
   }
 
-  return {
-    category: "audio",
-    target: "#output-backend",
-    value,
-    detail,
-  };
+  if (output.deviceReleased) {
+    value = `${routeLabel(output.backend)} · ${trUi('设备已释放')}`;
+    detail = trUi('音乐输出设备已释放；显示的是上次播放格式，继续播放时重新打开设备。');
+  }
+  return { category: "audio", target: "#output-backend", value, detail };
 }
 
 function deviceCard(
@@ -689,6 +688,7 @@ export function audioChainNodes(state:MusicPlayerState,status?:NativeStatus):Aud
 
   const outputRows=rows();
   const backend=output?.backend?`${routeLabel(output.backend)}${output.backend==='wasapi'&&output.wasapiMode?` · ${output.wasapiMode==='exclusive'?trUi('独占'):trUi('共享')}`:''}`:state.backend==='browser'?trUi('浏览器输出'):trUi('等待播放');
+  if(output?.deviceReleased)addRow(outputRows,trUi('设备状态'),trUi('设备已释放'));
   addRow(outputRows,output?.mode==='dop'?trUi('DoP 帧率'):trUi('采样率'),rateLabel(output?.sampleRate,output?.mode==='native'));
   addRow(outputRows,output?.mode==='dop'?trUi('传输格式'):trUi('输出位深'),output?.mode==='native'?trUi('DSD · 1 位'):sampleFormat(output?.bitsPerSample,output?.validBitsPerSample,output?.sampleFormat==='float'||output?.outputFormat==='f32'));
   if(hasValue(output?.bitsPerSample)&&hasValue(output?.validBitsPerSample)&&output.bitsPerSample!==output.validBitsPerSample)addRow(outputRows,trUi('容器'),ui`${output.bitsPerSample} 位`);
@@ -699,7 +699,7 @@ export function audioChainNodes(state:MusicPlayerState,status?:NativeStatus):Aud
   if(pure||state.outputSettings.processing.bitPerfect)addRow(outputRows,trUi('比特一致性'),pcmConsistencyStatus(output));
   if(output?.overRangeSamples)addRow(outputRows,trUi('电平'),trUi('超过 0 dBFS'));
   if(output?.clippingSamples)addRow(outputRows,trUi('削波'),trUi('已发生'));
-  add('output',trUi('输出'),backend,outputRows,'#output-backend');
+  add('output',trUi('输出'),output?.deviceReleased?`${routeLabel(output.backend)} · ${trUi('设备已释放')}`:backend,outputRows,'#output-backend');
 
   const deviceRows=rows();
   const deviceName=output?.deviceName||(output?.backend==='asio'?status?.devices.find(device=>device.id===state.outputSettings.device)?.name:undefined);
