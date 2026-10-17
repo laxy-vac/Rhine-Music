@@ -24,7 +24,8 @@ async function runLauncher() {
   const { spawn } = require('node:child_process');
   const { pathToFileURL } = require('node:url');
   const projectRoot = path.resolve(__dirname, '..');
-  const toolRoot = path.join(projectRoot, '.tools', 'startup-recovery-2026-10-17');
+  const themeFollowMode = process.argv.includes('--theme-follow');
+  const toolRoot = path.join(projectRoot, '.tools', themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -52,7 +53,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: 'production-hidden-gate-full-electron-entry',
+    mode: themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -170,6 +171,7 @@ async function runLauncher() {
       preferences: {
         language: 'en',
         theme: 'day',
+        followSystemTheme: false,
         themeLayoutVersion: 2,
         sound: false,
         bgm: false,
@@ -178,10 +180,15 @@ async function runLauncher() {
         reduced: false,
         output: { backend: 'browser' },
       },
-      reloadOnce: true,
+      reloadOnce: !themeFollowMode,
+      themeFollow: themeFollowMode,
+      runDirectory,
     };
     await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
     await fs.copyFile(__filename, path.join(appDirectory, 'main.cjs'));
+    if (themeFollowMode) {
+      await fs.copyFile(path.join(projectRoot, 'desktop', 'check-theme-follow.mjs'), path.join(appDirectory, 'check-theme-follow.mjs'));
+    }
     await fs.writeFile(path.join(appDirectory, 'package.json'), `${JSON.stringify({
       name: 'rhine-isolated-startup-entry-probe',
       version: '1.0.0',
@@ -268,6 +275,7 @@ async function runLauncher() {
       startupOutcome: report.electron?.startupOutcome ?? 'probe-error',
       frontendReadyCount: report.electron?.frontendReadyCount ?? null,
       readyAtMs: report.electron?.firstFrontendReadyAtMs ?? null,
+      themeFollow: report.electron?.themeFollow?.summary ?? null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
       revealedBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'frontend-ready')?.effective ?? null,
       runDirectory,
@@ -279,6 +287,7 @@ async function runLauncher() {
 
 async function runElectronProbe() {
   const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+  const { pathToFileURL } = require('node:url');
   app.commandLine.appendSwitch('force_high_performance_gpu');
   const runDirectory = path.resolve(__dirname, '..');
   const configPath = process.env.RHINE_STARTUP_PROBE_CONFIG;
@@ -299,6 +308,8 @@ async function runElectronProbe() {
     rendererErrors: [],
     mainErrors: [],
     externalRequests: [],
+    preferenceReads: [],
+    preferenceSaves: [],
     windowOpenAttempts: [],
     dialogCalls: [],
     showEvents: [],
@@ -313,6 +324,10 @@ async function runElectronProbe() {
   let config;
   let browserWindow;
   let gate;
+  let themeFollowHarness;
+  let themeFollowModule;
+  let mockPreferences;
+  let selectPreferencesForMock;
   let currentStartedAt = 0;
   let generation = 0;
   let failureSeen = false;
@@ -493,12 +508,39 @@ async function runElectronProbe() {
     await app.whenReady();
     app.setName('Rhine Isolated Startup Entry Probe');
 
+    mockPreferences = { ...config.preferences };
+    const source = await fs.readFile(path.join(config.projectRoot, 'desktop', 'main.cjs'), 'utf8');
+    selectPreferencesForMock = value => value;
+    if (config.themeFollow) {
+      const keysMatch = source.match(/const preferenceKeys=new Set\((\[[\s\S]*?\])\);/);
+      const selectMatch = source.match(/const selectPreferences=value=>\{[\s\S]*?\n\};/);
+      if (!keysMatch || !selectMatch) throw new Error('Could not extract production preference whitelist and selectPreferences function.');
+      const keys = new Set(new Function(`return ${keysMatch[1]};`)());
+      selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null);
+      report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
+    }
+
     instrumentIpcMain();
-    ipcMain.on('rhine:preferences:get', event => { event.returnValue = config.preferences; });
+    ipcMain.on('rhine:preferences:get', event => {
+      const value = config.themeFollow ? mockPreferences : config.preferences;
+      if (config.themeFollow) report.preferenceReads.push({ theme: value.theme, followSystemTheme: value.followSystemTheme, keys: Object.keys(value).length });
+      event.returnValue = value;
+    });
     ipcMain.on('rhine:audio-presets:get', event => {
       event.returnValue = { ok: true, exists: false, value: { schemaVersion: 1, activeId: null, presets: [], eqBanks: {} } };
     });
-    ipcMain.handle('rhine:preferences:save', async () => ({ ok: true }));
+    ipcMain.handle('rhine:preferences:save', async (_event, value) => {
+      if (!config.themeFollow) return { ok: true };
+      try {
+        mockPreferences = selectPreferencesForMock(value);
+        report.preferenceSaves.push({ index: report.preferenceSaves.length + 1, theme: mockPreferences.theme, followSystemTheme: mockPreferences.followSystemTheme, allowedFollowField: Object.hasOwn(mockPreferences, 'followSystemTheme') });
+        return { ok: true };
+      } catch (error) {
+        report.mockPreferenceSaveErrors ??= [];
+        report.mockPreferenceSaveErrors.push(String(error?.message ?? error));
+        return { ok: false, error: String(error?.message ?? error) };
+      }
+    });
     ipcMain.handle('rhine:audio-presets:save', async () => ({ ok: true }));
     ipcMain.handle('rhine:standard-eq-presets', async () => ({ ok: false, error: 'Synthetic startup probe does not load preset files.' }));
     ipcMain.on('rhine:preferences:error', (_event, message) => {
@@ -506,7 +548,6 @@ async function runElectronProbe() {
       report.preferenceErrorMessages.push(String(message).slice(0, 400));
     });
 
-    const source = await fs.readFile(path.join(config.projectRoot, 'desktop', 'main.cjs'), 'utf8');
     const match = source.match(/\/\/ HIDDEN_STARTUP_GATE_FACTORY_BEGIN\s*([\s\S]*?)\s*\/\/ HIDDEN_STARTUP_GATE_FACTORY_END/);
     if (!match) throw new Error('Could not extract marked production createHiddenStartupGate factory.');
     report.gateFactoryVariant = 'production source';
@@ -645,6 +686,14 @@ async function runElectronProbe() {
     process.on('uncaughtException', error => report.mainErrors.push({ type: 'uncaughtException', message: String(error?.stack ?? error).slice(0, 1800) }));
     process.on('unhandledRejection', error => report.mainErrors.push({ type: 'unhandledRejection', message: String(error?.stack ?? error).slice(0, 1800) }));
 
+    if (config.themeFollow) {
+      themeFollowModule = await import(pathToFileURL(path.join(__dirname, 'check-theme-follow.mjs')).href);
+      themeFollowHarness = await themeFollowModule.installThemeFollowProbe(browserWindow, phase => {
+        report.themeFollowProbePhase = phase;
+        process.stdout.write(`theme-follow-probe:${phase}\n`);
+      });
+    }
+
     currentStartedAt = Date.now();
     report.startupTimeoutMs = 45000;
     report.startupOutcome = 'pending';
@@ -686,6 +735,16 @@ async function runElectronProbe() {
       else report.startupOutcome = secondResult.failed ? 'frontend-failed-on-reload' : 'timeout-on-reload';
     }
 
+    if (firstResult.ready && config.themeFollow) {
+      report.themeFollow = await themeFollowModule.checkThemeFollow({
+        browserWindow,
+        outputDirectory: runDirectory,
+        probeReport: report,
+        getPreferences: () => mockPreferences,
+        themeProbe: themeFollowHarness,
+      });
+    }
+
     report.finishedAtMs = Date.now() - currentStartedAt;
     report.finalRendererState = await captureState();
     report.finalActualWindowVisible = browserWindow.isVisible();
@@ -720,11 +779,14 @@ async function runElectronProbe() {
       noExternalRendererRequests: report.externalRequests.length === 0,
       noUnexpectedDialog: report.dialogCalls.length === 0,
       noFrontendFailure: report.failedIpcEvents.length === 0,
+      productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
+      themeFollowBehaviorPassed: !config.themeFollow || report.themeFollow?.ok === true,
     };
   } catch (error) {
-    report.startupOutcome = report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.startupOutcome = config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });
   } finally {
+    try { await themeFollowHarness?.detach(); } catch (error) { report.themeFollowDetachError = error.message; }
     report.finalActualWindowVisible = Boolean(browserWindow && !browserWindow.isDestroyed() && browserWindow.isVisible());
     report.ok = report.startupOutcome === 'frontend-ready'
       && report.assertions

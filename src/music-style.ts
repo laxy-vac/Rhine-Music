@@ -460,7 +460,7 @@ function schemeCardMarkup(scheme: ColourScheme, style: MusicStyle) {
   </button>`;
 }
 
-function designFamilyMarkup(style: MusicStyle, mode: "day" | "night") {
+function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean) {
   const choices = (["rhine", "archive"] as const).map(design => {
     const selected = style.design === design;
     const label = design === "rhine" ? "Future" : "Punk";
@@ -471,10 +471,19 @@ function designFamilyMarkup(style: MusicStyle, mode: "day" | "night") {
       <span class="theme-choice-copy"><strong>${label}</strong><small>${escapeHtml(design === "rhine" ? t("轻透材质与柔和层次", "TRANSLUCENT · SPATIAL") : t("仪表排版与档案细节", "INSTRUMENT · ARCHIVE"))}</small></span><i class="theme-choice-check" aria-hidden="true">${selected ? "✓" : ""}</i>
     </button>`;
   }).join("");
-  return `<section class="design-family-section" aria-label="${escapeHtml(t("完整主题", "Complete themes"))}"><div class="style-section-heading"><div><small>COMPLETE THEMES</small><h2>${escapeHtml(t("选择主题", "Choose a theme"))}</h2></div><span class="theme-choice-mode">${mode === "night" ? "DARK" : "LIGHT"}</span></div><div class="design-family-grid">${choices}</div></section>`;
+  const modeControls = `<aside class="theme-mode-controls" aria-labelledby="theme-mode-title">
+    <div class="theme-mode-heading"><small>APPEARANCE</small><h3 id="theme-mode-title">${escapeHtml(t("日夜模式", "Light and dark mode"))}</h3></div>
+    <div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
+      <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
+      <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
+    </div>
+    <label class="theme-follow-system"><span>${escapeHtml(t("跟随系统", "Follow system"))}</span><input type="checkbox" role="switch" data-follow-system-theme aria-label="${escapeHtml(t("跟随系统日夜模式", "Follow system light and dark mode"))}"${followSystemTheme ? " checked" : ""}></label>
+    <p class="theme-mode-hint">${escapeHtml(t("系统切换时跟随，手动选择仍会保留。", "Follow system changes while keeping manual choices."))}</p>
+  </aside>`;
+  return `<section class="design-family-section" aria-label="${escapeHtml(t("完整主题", "Complete themes"))}"><div class="style-section-heading"><div><small>COMPLETE THEMES</small><h2>${escapeHtml(t("选择主题", "Choose a theme"))}</h2></div></div><div class="design-family-layout"><div class="design-family-grid">${choices}</div>${modeControls}</div></section>`;
 }
 
-function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): string {
+function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean): string {
   const current = `${SCHEME_COPY[style.scheme].name}  ·  ${mode === "day" ? "LIGHT" : "DARK"}`;
   const textOptions = TEXT_SCALES.map((value) => [value, textScaleLabel(value)] as const);
   const arrayOptions = ARRAY_SCALES.map((value) => [value, textScaleLabel(value)] as const);
@@ -488,14 +497,9 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): stri
       </div>
       <div class="foobar-style-heading-tools">
         <span class="foobar-style-current" title="${escapeHtml(current)}"><i></i>${escapeHtml(current)}</span>
-        <div class="foobar-style-mode-toggle" role="group" aria-label="${escapeHtml(t("界面模式", "Interface mode"))}">
-          <span>${escapeHtml(t("模式", "MODE"))}</span>
-          <button type="button" data-theme="day" aria-pressed="${mode === "day"}">LIGHT</button>
-          <button type="button" data-theme="night" aria-pressed="${mode === "night"}">DARK</button>
-        </div>
       </div>
     </header>
-    ${designFamilyMarkup(style, mode)}
+    ${designFamilyMarkup(style, mode, followSystemTheme)}
     <div class="foobar-style-rule" aria-hidden="true"></div>
     <div class="foobar-style-main">
       <div class="foobar-style-library">
@@ -523,12 +527,12 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night"): stri
   </section>`;
 }
 
-export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night"): string {
+export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night", followSystemTheme = false): string {
   const style = normalizeMusicStyle(styleValue);
-  if (style.design === "archive") return archiveMusicStyleMarkup(style, mode);
+  if (style.design === "archive") return archiveMusicStyleMarkup(style, mode, followSystemTheme);
   const modeName = mode === "day" ? "LIGHT" : "DARK";
   const heading = `<header class="music-style-heading"><div><small>STYLE&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">STYLE</h1><p>${escapeHtml(t("调整界面外观、唱片盒与画质。", "Adjust the appearance, album case and render quality."))}</p></div><span class="style-mode-indicator"><i></i>${modeName}</span></header>`;
-  const themeSelector = designFamilyMarkup(style, mode);
+  const themeSelector = designFamilyMarkup(style, mode, followSystemTheme);
   const pageStart = `<section class="music-style-page" aria-labelledby="music-style-title">${heading}${themeSelector}`;
   return `${pageStart}<div id="theme-quality-slot" class="style-native-quality"></div></section>`;
 }

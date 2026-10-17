@@ -83,7 +83,7 @@ prepare-source-preview-runtime、prepare-lsp-plugin、prepare-pcm-codecs及Build
 | 内容 | 位置/规则 |
 | --- | --- |
 | 源码验证profile | 仓库旁 `music-data-source-preview/desktop`，不提交 |
-| 界面偏好 | profile/preferences.json，style/caseProfiles及全局画质/比例 |
+| 界面偏好 | profile/preferences.json，style/caseProfiles及全局画质/比例/日夜；followSystemTheme为全局跟随开关，手动主题重启保留至系统下次变化 |
 | 公共视图 | 同一preferences.json的view保存稳定key `shelf/array/grid`和show/group/sort：实体ARRAY对应`shelf`、MATRIX对应`array`、GRID对应`grid`；foobarArchive保留兼容投影，新值优先，不新增个人数据目录。两主题实体ARRAY仅选中列沿槽位方向滑动；盒体水波不跨排，离开的旧排可沿Y自然回落而Z位置冻结。bell峰值`.748`，selected额外`1.35`，总目标`2.098`并保留净空。当前可交互列的任意entry hover均独立叠加`.5*exp(-d²/2.2)`，中心轻抬并带起邻居，不改selection；TRACKS以entryKey定位。Reduced motion保留静态target；MATRIX原有动作不变。 |
 | ARRAY列位置 | 两主题共用列scroll anchor：默认各列首张对齐，选中项只移动当前列；切走将该列velocity归零并保留anchor，切回沿用。运行态Map按列保存，目录返回另以`rememberedSlots`恢复选中槽；均不写入磁盘。列移出视口仍隐藏，右侧旧列不会因已保存anchor留在画面；壳体、封面、纸卡、标题、托盘、框及点击命中同步隐藏。resize时pane暂不可测则按窗口比例缩放旧`arrayBrowseWidth`，native浏览clip使用相同`availableWidth`；Archive尺寸回退覆盖1040/1248/1664与65%边界，Future保留全scene宽度。native ARRAY固定`navigationOrbit=0`，MATRIX保留原orbit。 |
 | ARRAY强度与带起 | `off/basic/reduced/full`与持久化值不变，范围为每侧0/1/2/4张实际专辑，边界不填虚拟唱片。当前选中对应单凸起，integer距离`d`的bell为`0.748*(1+cos(pi*abs(d)/(R+1)))/2`，`abs(d)>R`严格为0，采样不低于托盘；selected目标`.748+1.35=2.098`。同列邻居用critical damping spring速率13/7平滑追随，不传播或累积packet；被选中时继承已有高度保持连续。悬停与选中两套目标独立相加；hover高斯中心`.5`、相邻1/2/3槽约`.317/.081/.0084`，不受选中带起档位影响，不抢selection/focus，移开后自然回落。ARRAY“水波强度”四档label为仅抬起/轻柔/适中/强烈，shelf hint为“调整选中项带起的前后专辑数量；悬停轻抬独立生效。”；MATRIX label/hint及原波不变。参数是用户反馈驱动的本项目观感模拟。 |

@@ -17,6 +17,8 @@ Future参考《莱茵生命：访问》和现有唱片页，融合现代工业�
 
 - renderQuality全局共用：流畅/均衡/高画质/极致/自定义，分调波动、模型细节、光照、终端光及已有AA/阴影/AO/景深/传输等。
 - 日夜由独立全局偏好决定，切换主题不从主题profile覆写；主题选择使用当前全局日夜绘制紧凑风格预览卡。中文模式保留英文共用Punk/Audio Archive词表；说明、错误和确认随界面语言，曲库元数据保留原文。
+- 预览卡右侧的日夜控件共用LIGHT/DARK与“跟随系统”，Future使用圆角材质，Punk使用方角；窄窗在预览下方靠右排列。followSystemTheme是独立全局布尔偏好，默认关闭；不写进单主题profile。
+- 启用跟随时读取`prefers-color-scheme: dark`当前状态，与播放器不同才同步。后续MediaQueryList change先重读当前系统状态并去重，再与播放器状态比较；相同时不保存/重绘。手动选择不取消跟随，返回页面、切换主题或重启都不主动改回，等下次系统真正变化才跟随。不按通知简单翻转，也不轮询。
 - windowAspect全局：16:9默认、16:10、4:3、3:2、21:9、自由；固定模式等比缩放，最大化/全屏留边。
 - styleProfiles保存各主题陈列/配色；caseProfiles保存各主题结构/材质/部件。
 - 公共布局/目录设置由view保存（shelf/array/grid及show/group/sort/gridPageSize）；gridPageSize为10/36/50/75/100/200，默认36，切主题共享。foobarArchive兼容投影；新字段逐项优先，旧ARRAY→shelf、FUTURE→array、GRID→grid。主题外观档不拥有全局视图，播放顺序不再按主题切换。
@@ -25,6 +27,8 @@ Future参考《莱茵生命：访问》和现有唱片页，融合现代工业�
 - 设计基准1920×1080及以上，保留工作区DIP容纳和既有触控，不另做低分辨率适配。
 
 ## 当前页面与专辑流程
+
+系统日夜语义检查`node --experimental-strip-types --test scripts/check-music-theme-follow.mjs`为5/5通过；`node desktop/check-startup-entry.cjs --theme-follow`使用真实Electron/preload/生产偏好白名单及窗口内CDP系统主题模拟，9项行为、两主题昼夜与窄窗5组几何、保存/reload均通过。报告和5张图在`.tools/theme-follow-2026-10-17/desktop-entry-1792215769009-13528`，构建日志在同任务目录`build.log`。仅使用合成曲库和内存偏好，无外网、扫描或音频操作；不作为个人设备验收。
 
 Archive从EQ/歌词/信号/主题等同窗口页面返回原唱片上下文，保留详情；已在唱片页点击Archive才主动回专辑架。曲库管理在设置 → 音乐库。页面间使用导航按钮或再次点击当前入口返回；Esc只在当前页面内返回/关闭弹窗/取消编辑，管理页无弹窗时不切页。管理页暂停隐藏三维绘制。
 

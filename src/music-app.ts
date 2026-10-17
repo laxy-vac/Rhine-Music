@@ -112,6 +112,7 @@ import { musicApplication } from "./music-application-state";
 import { legacyCatalogOptions, migrateMusicViewSettings, musicGridPageSizes, type MusicGridPageSize, type LegacyCatalogOptions, type MusicViewSettings } from "./music-view-settings";
 import { getMusicGridPage, paginateMusicGridGroups } from "./music-grid-page";
 import { musicInterfaceLabels } from "./music-interface-labels";
+import { setupMusicThemeFollow } from "./music-theme-follow";
 import { setupAlbumCasePreview } from "./album-case-preview";
 import type { ArchiveRecord } from "./data";
 import "./music-theme-choice.css";
@@ -257,6 +258,7 @@ const preferences = {
   ...{
     language: uiLanguage(),
     theme: "day" as Theme,
+    followSystemTheme: false,
     windowAspect: "16:9" as WindowAspect,
     style: { ...defaultMusicStyle },
     styleProfiles: undefined as DesignProfiles | undefined,
@@ -285,6 +287,7 @@ const preferences = {
     Partial<{
       language: "zh-CN" | "en";
       theme: Theme;
+      followSystemTheme: boolean;
       windowAspect: WindowAspect;
       style: MusicStyle;
       styleProfiles: DesignProfiles;
@@ -312,6 +315,7 @@ const preferences = {
   >("rhine-music-preferences", {}),
 };
 preferences.language = uiLanguage();
+preferences.followSystemTheme = preferences.followSystemTheme === true;
 preferences.futurePunkPresets = normalizeCaseUserPresets(preferences.futurePunkPresets);
 preferences.archivePunkPresets = normalizeCaseUserPresets(preferences.archivePunkPresets);
 preferences.windowAspect = normalizeWindowAspect(preferences.windowAspect);
@@ -601,6 +605,10 @@ const signalPage = setupSignalPage($("#signal-page-content"), { seek: position =
 const pageScan = new PageScanTransition($(".music-page-scan"));
 const terminalLighting = setupTerminalLighting(stage);
 terminalLighting.setQuality(renderQuality);
+const themeFollowing = setupMusicThemeFollow(
+  window.matchMedia("(prefers-color-scheme: dark)"), preferences.followSystemTheme,
+  { getTheme: () => preferences.theme, applyTheme: setTheme },
+);
 stage.addEventListener("lyrics-settings-updated", () => {
   if (page !== "settings") return;
   settingsSelectControls?.destroy();
@@ -833,9 +841,21 @@ function syncThemeButtons() {
     .forEach((b) =>
       b.setAttribute("aria-pressed", String(b.dataset.theme === theme)),
     );
+  document.querySelectorAll<HTMLInputElement>("[data-follow-system-theme]").forEach(control => {
+    control.checked = preferences.followSystemTheme;
+  });
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", preferences.style.design === "rhine" ? theme === "night" ? "#0a1220" : "#e8e5e1" : stylePalette(preferences.style, theme).bg);
+}
+function setFollowSystemTheme(following: boolean) {
+  if (following === preferences.followSystemTheme) return;
+  const previousTheme = preferences.theme;
+  preferences.followSystemTheme = following;
+  themeFollowing.setFollowing(following);
+  // A changed mode has already saved both fields through setTheme.
+  if (preferences.theme === previousTheme) savePrefs();
+  syncThemeButtons();
 }
 function syncDesignIdentity() {
   const archive = preferences.style.design === "archive";
@@ -1863,12 +1883,14 @@ function renderThemePage() {
   const focusField = focused?.dataset.styleField;
   const focusScheme = focused?.dataset.styleScheme;
   const focusDesign = focused?.dataset.styleDesign;
+  const focusTheme = focused && content.contains(focused) ? focused.dataset.theme : undefined;
+  const focusFollowing = focused && content.contains(focused) && focused.hasAttribute("data-follow-system-theme");
   settingsSelectControls?.destroy();
   cleanupStylePreview?.();
   cleanupQualityDetection?.();
   caseEditor?.destroy();
   caseEditor = undefined;
-  content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme);
+  content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme, preferences.followSystemTheme);
   content.querySelector(".music-style-heading")?.insertAdjacentHTML("afterend", windowAspectMarkup(preferences.windowAspect));
   content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design, musicApplication.view.layout));
   cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#theme-quality-slot")!, {
@@ -1916,7 +1938,7 @@ function renderThemePage() {
   updateQuality();
   editableRanges?.sync();
   content.scrollTop = scroll;
-  const restored = focusField ? content.querySelector<HTMLElement>(`[data-style-field="${focusField}"]`) : focusScheme ? content.querySelector<HTMLElement>(`[data-style-scheme="${focusScheme}"]`) : focusDesign ? content.querySelector<HTMLElement>(`[data-style-design="${focusDesign}"]`) : null;
+  const restored = focusField ? content.querySelector<HTMLElement>(`[data-style-field="${focusField}"]`) : focusScheme ? content.querySelector<HTMLElement>(`[data-style-scheme="${focusScheme}"]`) : focusDesign ? content.querySelector<HTMLElement>(`[data-style-design="${focusDesign}"]`) : focusFollowing ? content.querySelector<HTMLElement>("[data-follow-system-theme]") : focusTheme ? content.querySelector<HTMLElement>(`button[data-theme="${focusTheme}"]`) : null;
   restored?.focus({ preventScroll: true });
 }
 
@@ -4069,6 +4091,10 @@ document.addEventListener("keydown", event => {
 });
 document.addEventListener("change", (e) => {
   const control = e.target as HTMLInputElement | HTMLSelectElement;
+  if (control instanceof HTMLInputElement && control.hasAttribute("data-follow-system-theme")) {
+    setFollowSystemTheme(control.checked);
+    return;
+  }
   if (control.hasAttribute("data-processing-rate-choice")) {
     if (control.disabled) return;
     if (control.value === "custom") {

@@ -37,12 +37,13 @@ const audioPresetFile=storage.audioPresetFile;
 const audioPresetMaxBytes=16*1024*1024,audioPresetSourceMaxBytes=4*1024*1024;
 const emptyAudioPresetStore=()=>({schemaVersion:1,activeId:null,presets:[],eqBanks:{}});
 let audioPresetStore=emptyAudioPresetStore(),audioPresetStoreExists=false,audioPresetLoadError='',audioPresetFileFingerprint=null,audioPresetSaveTail=Promise.resolve();
-const preferenceKeys=new Set(['language','theme','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
+const preferenceKeys=new Set(['language','theme','followSystemTheme','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
 const selectPreferences=value=>{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid preferences');
  const text=JSON.stringify(value);if(Buffer.byteLength(text,'utf8')>2*1024*1024)throw new Error('Preferences exceed limit');
  const selected=Object.fromEntries(Object.entries(value).filter(([key])=>preferenceKeys.has(key)));
  if(selected.language!=='zh-CN'&&selected.language!=='en')delete selected.language;
+ if(typeof selected.followSystemTheme!=='boolean')delete selected.followSystemTheme;
  if(windowAspectModel)selected.windowAspect=windowAspectModel.normalizeWindowAspect(selected.windowAspect);
  return selected;
 };
