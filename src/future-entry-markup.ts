@@ -33,6 +33,7 @@ export function futureEntryMarkup(copy: EntryTextCopy = {}): string {
           </div>
         </section>
       </div>
+      <div class="future-entry-shelf-caption" aria-hidden="true"><span>COLLECTION / ARRAY</span><i></i></div>
       <button class="future-entry-skip" type="button">SKIP INTRO ↗</button>
     </div>
   `;

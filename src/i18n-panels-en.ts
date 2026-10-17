@@ -55,7 +55,7 @@ export const panelsEnglish: Record<string, string> = {
   "重播入场 ↗": "Replay entrance ↗",
   "重播会回到专辑总览，不影响音乐播放。": "Replay returns to the album overview without interrupting music.",
   "终端正在准备，请稍后重播。": "The terminal is preparing. Please try again shortly.",
-  "当前入场适用于 Future 的 ALBUMS / MATRIX 视图。": "This entrance is available in the Future ALBUMS / MATRIX view.",
+  "当前入场适用于 Future 的 ALBUMS / MATRIX 或 ARRAY 视图。": "This entrance is available in the Future ALBUMS / MATRIX or ARRAY views.",
   "添加专辑后可播放终端入场。": "Add albums to play the terminal entrance.",
   "关闭“减少动态效果”后可重播入场。": "Turn off Reduce motion to replay the entrance.",
   "曲库正在更新，请稍后重播。": "The library is updating. Please try again shortly.",

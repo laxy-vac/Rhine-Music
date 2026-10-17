@@ -40,6 +40,7 @@ import "./music-design.css";
 import "./foobar-pages.css";
 import "./foobar-style.css";
 import "./foobar-shell.css";
+import "./punk-archive.css";
 import "./punk-eq.css";
 import "./punk-lyrics.css";
 import "./punk-signal.css";
@@ -77,7 +78,7 @@ import { syncQualityUI } from "./quality-settings";
 import { displaySettingsMarkup, motionSettingsMarkup } from "./graphics-settings";
 import { mountGpuSettings, type GpuReport } from "./gpu-settings";
 import { ArchiveScene } from "./scene";
-import { FutureEntry, futureEntryEnd, futureEntryShot } from "./future-entry";
+import { FutureEntry, futureEntryEndFor, futureEntryShot } from "./future-entry";
 import { ENTRY_TEXT_MAX_LENGTH, defaultEntryWelcome, defaultEntryIdentity, normalizeEntryText } from "./entry-preferences.mjs";
 import { setupEntryTextControls } from "./entry-text-controls";
 import { mountQualityDetection } from "./quality-detection";
@@ -918,8 +919,8 @@ function showBrowseSurface(immediate = false) {
 
 function entryPlaybackUnavailable(): string {
   if (!ready || !scene) return trUi("终端正在准备，请稍后重播。");
-  if (preferences.style.design !== "rhine" || musicApplication.view.layout !== "array" ||
-    musicApplication.view.show !== "albums") return trUi("当前入场适用于 Future 的 ALBUMS / MATRIX 视图。");
+  if (preferences.style.design !== "rhine" || !["array", "shelf"].includes(musicApplication.view.layout) ||
+    musicApplication.view.show !== "albums") return trUi("当前入场适用于 Future 的 ALBUMS / MATRIX 或 ARRAY 视图。");
   if (!albums.length) return trUi("添加专辑后可播放终端入场。");
   if (preferences.reduced) return trUi("关闭“减少动态效果”后可重播入场。");
   if (libraryRebuilding) return trUi("曲库正在更新，请稍后重播。");
@@ -938,6 +939,8 @@ function syncEntrySettings() {
 
 function startFutureEntry() {
   if (futureEntry?.active || entryPlaybackUnavailable()) return false;
+  const entryLayout = musicApplication.view.layout === "shelf" ? "shelf" : "array";
+  if (entryLayout === "shelf") scene?.showMusicArchiveImmediately(performance.now() / 1000);
   effects.setScene("boot");
   effects.restartBoot();
   // Native cues use offline synthesis; the desktop entry needs no browser
@@ -949,11 +952,14 @@ function startFutureEntry() {
     const now = ms / 1000;
     if (skipped) scene?.showMusicArchiveImmediately(now);
     else {
-      scene?.update(now, futureEntryShot(futureEntryEnd));
+      scene?.update(now, futureEntryShot(futureEntryEndFor(entryLayout), entryLayout));
       scene?.finishMusicIntro(now);
     }
     syncSelectionMotion();
-  }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity });
+  }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity }, entryLayout);
+  // Prepare the real rack/material variants beneath the opaque shared prelude.
+  // Compilation must not consume the first visible seconds of the new act.
+  if (entryLayout === "shelf") scene?.update(performance.now() / 1000, futureEntryShot(22, entryLayout));
   return true;
 }
 
@@ -4755,7 +4761,7 @@ async function start() {
       openSettingsPage();
     }
     if (restoreTheme) openThemePage();
-    // Only the Future album MATRIX has an approved entry composition so far.
+    // Future album MATRIX and ARRAY each have their own scene choreography.
     // Saved layouts, the Punk theme, empty libraries and reduced motion retain
     // the existing immediate archive path; settings returns keep their page.
     if (preferences.entryOnOpen && !restoreSettings && !restoreTheme) startFutureEntry();

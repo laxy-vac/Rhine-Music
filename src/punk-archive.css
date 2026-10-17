@@ -1,0 +1,293 @@
+/* Shared Punk archive browsing frame for the public ARRAY and MATRIX views.
+   The legacy data value is "array" for ARRAY/shelf and "future" for MATRIX/array. */
+.music-app[data-design="archive"] {
+  --foobar-scene-bleed: 0px;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) {
+  --foobar-scene-bleed: 64px;
+  --punk-archive-info-pad: clamp(16px, 1.5vw, 24px);
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-workspace {
+  isolation: isolate;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-workspace::before {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc(var(--foobar-info-width) + 24px + var(--foobar-scene-bleed));
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--page-bg) var(--foobar-scene-bleed),
+    var(--page-bg) 100%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-home-info {
+  z-index: 2;
+  padding: var(--punk-archive-info-pad);
+  background: transparent;
+  box-shadow: none;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools {
+  top: 14px;
+  right: calc(var(--foobar-info-width) + 24px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-color: color-mix(in srgb, var(--muted) 48%, transparent) transparent;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools::-webkit-scrollbar {
+  height: 3px;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 48%, transparent);
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-toolbar {
+  display: flex;
+  width: max-content;
+  min-width: calc(100% - 140px);
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  margin-left: 140px;
+  border-block: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  background: color-mix(in srgb, var(--page-bg) 94%, transparent);
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-toolbar__row {
+  display: contents;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control[data-field="show"],
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control[data-field="layout"],
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control[data-field="group"],
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control[data-field="sort"] {
+  display: grid;
+  grid-template-rows: 9px auto;
+  align-content: center;
+  gap: 2px;
+  min-width: max-content;
+  min-height: 42px;
+  padding: 4px 7px 5px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: transparent;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control[data-field="sort"] {
+  border-right: 0;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control > small {
+  color: var(--muted);
+  font-size: 7px;
+  line-height: 9px;
+  letter-spacing: 1px;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control > div {
+  flex-wrap: nowrap;
+  gap: 1px;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control button {
+  min-height: 22px;
+  padding: 3px 4px;
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: .35px;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control button:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-catalog-control button[aria-pressed="true"] {
+  color: var(--page-bg);
+  background: var(--ink);
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-random {
+  top: 8px;
+  left: 8px;
+  min-height: 24px;
+  border-color: color-mix(in srgb, var(--line) 82%, transparent);
+  background: var(--page-bg);
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+  [data-foobar-layout="array"],
+  [data-foobar-layout="future"]
+) .foobar-catalog-tools .foobar-random:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+@media (max-width: 1100px) {
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) {
+    --foobar-scene-bleed: 32px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools .foobar-catalog-control[data-field="show"],
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools .foobar-catalog-control[data-field="layout"],
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools .foobar-catalog-control[data-field="group"],
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools .foobar-catalog-control[data-field="sort"] {
+    padding-inline: 5px;
+  }
+}
+
+@media (max-width: 720px) {
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) {
+    --foobar-scene-bleed: 0px;
+    --punk-archive-info-pad: 14px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-workspace::before {
+    content: none;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools {
+    top: 12px;
+    right: 16px;
+    left: 16px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-home-info {
+    margin-inline: 16px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-toolbar {
+    margin-left: 126px;
+  }
+}
+
+@media (max-width: 480px) {
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-tools {
+    right: 12px;
+    left: 12px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-home-info {
+    margin-inline: 12px;
+    padding: 12px;
+  }
+
+  .music-app[data-design="archive"][data-page="music"][data-mode="archive"]:is(
+    [data-foobar-layout="array"],
+    [data-foobar-layout="future"]
+  ) .foobar-catalog-toolbar {
+    margin-left: 118px;
+  }
+}

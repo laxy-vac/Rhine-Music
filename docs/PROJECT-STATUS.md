@@ -1,13 +1,13 @@
 # 当前项目状态
 
-更新：2026-10-17。本文只记录现行实现状态；下一步见[优化基线](OPTIMIZATION-BASELINE.md)，操作见[本地开发](LOCAL-DEVELOPMENT.md)，工作规则见[AGENTS](../AGENTS.md)。
+更新：2026-10-18。本文只记录现行实现状态；下一步见[优化基线](OPTIMIZATION-BASELINE.md)，操作见[本地开发](LOCAL-DEVELOPMENT.md)，工作规则见[AGENTS](../AGENTS.md)。
 
 ## 已完成基线
 
 | 区域 | 当前能力 |
 | --- | --- |
 | 统一架构 | Future/Punk 共用应用状态、目录、视图、播放和 ArchiveScene/WebGL；共享资源与生命周期，保留主题皮肤及兼容偏好读取 |
-| 专辑浏览 | ARRAY / MATRIX / GRID、SHOW / GROUP / SORT、筛选与分页；打开、播放、返回和非首曲身份保持一致 |
+| 专辑浏览 | ARRAY / MATRIX / GRID、SHOW / GROUP / SORT、筛选与分页；两主题空间排列平滑切换与快速反向，MATRIX 鼠标拖动/惯性/悬停；Punk 顶部工具轨与右栏衔接；打开、播放、返回和非首曲身份保持一致 |
 | STYLE 外观 | 两主题保留原 Style 视觉与预览；Future LIGHT 可选暖白或 RhineLabUI 原版日间色，双层胶囊原位过渡并保存；日夜、主题色、文字字号、盒体与场景外观各自管理。内部页面值仍为 `theme` |
 | Settings | 固定七类：界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于；界面与交互默认打开，各项控件只在所属类别出现一次 |
 | 显示与性能 | 窗口比例、全屏、渲染画质、优先显卡和性能检测集中在 Settings；减少动态与唱片波动位于界面与交互 |
@@ -18,7 +18,7 @@
 | EQ | 入门图形/参数界面、曲线、频段图例和主题控件；Future 推子与高低音滑条采用同一细轨道/圆形滑块材质及紧凑读数，移除整块悬停受光；LSP 采用官方 CLAP 原生窗口 |
 | 设置与弹窗 | Future Settings 使用编号目录、统一内距与控件对齐，桌面按内容分栏、窄窗单列；横向滑杆悬停展成长胶囊，拖动锁定尺寸，浮动读数与精确输入共用原值，填色无左侧固定空边。搜索/在线曲库保留固定标题、内部细滚动条、自绘下拉与紧凑分区 |
 | 唱片盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光与磨砂可调，封面和金边独立，玻璃与金边不叠加资料，预览沿用主界面封面遮挡；编辑、独立预设、铭牌、格式标识和纸面遮挡 |
-| 启动 | 后台初始化及首帧就绪后首次显示窗口；Future ALBUMS/MATRIX 每次打开播放可跳过的入场；欢迎文案/ID 可自定义并限制字母、空格与长度；Punk 保留待适配的禁用入口；已显示窗口重载保持可见 |
+| 启动 | 后台初始化及首帧就绪后首次显示窗口；Future ALBUMS/MATRIX 与 ARRAY 每次打开播放各自可跳过的入场；欢迎文案/ID 可自定义并限制字母、空格与长度；Punk 入场暂缓，保留禁用入口；已显示窗口重载保持可见 |
 | 音频与来源 | 本地/FTP/在线专辑，PCM/DSD/DoP 输出与处理，Sony 音效、音频信息及明确的设备错误 |
 | 界面音效与释放 | Future 按参考接入入场与交互音序、方向声像和十声部尾音叠加，跟随播放器输出，音乐播放期间静音，Punk 禁用待设计；暂停、停止、结束及错误后关闭音乐设备，暂停保留准确进度以供重开恢复 |
 
@@ -46,6 +46,8 @@ Future Settings 整体布局通过 TypeScript/Vite 构建与隔离 Electron 检�
 
 Future 简单款玻璃通过类型与构建、现有 GLB/独立封面/金边检查及 `--case-glass` 隔离窗口的 13 项检查：透光与磨砂分别保存、玻璃主体与背板联动、金边材质不变、结构与日夜往返、局部重置及纹理上传。三张 PNG 合成封面截图由主 Agent 复核，低透光、高透光及强磨砂下封面均保持清晰，玻璃与金边没有附加信息；未使用个人曲库或真实音频设备。
 
+Archive 动效通过 9 项离线检查及 `--archive-motion` 隔离窗口的 65 项检查：Future/Punk 共 9 次空间排列切换与快速反向、MATRIX 持键拖动/惯性/吸附/悬停、Punk 工具轨及右栏衔接，以及 Future ARRAY 入场的跳过、重播和自然结束。17 张截图包含入场尾段与最终总览，由主 Agent 复核；ARRAY 自然入场实测约 27.1 秒，结束保持 ARRAY 总览和原选中身份。Punk 入场保持禁用；合成目录验收没有扫描个人曲库、调用真实音频设备或发送外部请求。
+
 Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项混音/路由/取消检查及 39 项 Electron 离线合成与生命周期检查；6 项硬件检查明确跳过。全部 17 类参考音色均生成不同的非静音 PCM WAV，原生音效路径的 AudioContext 创建数为零；既有原生解码器的无输出模式也已逐样本验证渐进 Float32 输入。Future/Punk 昼夜滑杆填充、拖动、键盘、数字编辑/去重和禁用态均经隔离窗口检查；入场自然播放约 25.36 秒并停在总览，跳过、重播和十次首帧就绪/重载通过。参考触发映射见[界面音效](INTERFACE-AUDIO.md)。上述结果不包含真实设备听音验收。
 
 ## 源码地图
@@ -56,11 +58,13 @@ Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项�
 | Future 控件与 Settings 呈现 | `src/future-settings-layout.ts`、`src/future-settings.css`、`src/future-range-interaction.ts`、`src/future-controls.css` |
 | 公共状态、目录、展示 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
 | 场景、布局、货架和资源 | `src/scene.ts`、`src/music-spatial-layout.ts`、`src/music-shelf.ts`、`src/music-scene-resources.ts` |
+| 空间切换、MATRIX 拖动与 ARRAY 入场 | `src/music-layout-transition.ts`、`src/music-matrix-drag.ts`、`src/future-entry.ts`；Punk 衔接样式为 `src/punk-archive.css` |
 | 专辑、队列和焦点 | `src/album-panel.ts`、`src/album-interaction.ts`、`src/album-queue.ts` |
 | 主题和盒体 | `src/music-style.ts`、`src/case-model.ts`、`src/case-editor.ts`、`src/future-*.css`、`src/punk-*.css` |
 | 歌词、频谱与信号 | `src/lyrics-page.ts`、`src/lyrics-settings.ts`、`src/signal-page.ts` |
 | EQ、音频与服务 | `src/eq-controls.ts`、`scripts/music-server.mjs`、`scripts/native-output.mjs`、`native/audio-host.cpp` |
 | 窗口和启动 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs` |
 | 隔离质量检测 | `src/quality-detection.ts`、`quality-benchmark.html` |
+| Archive 动效验收 | `scripts/check-music-layout-motion.mjs`、`desktop/check-archive-motion.mjs`、`desktop/check-startup-entry.cjs --archive-motion` |
 
 规范见[文档索引](README.md)，资源权利见[NOTICE](../NOTICE.md)。

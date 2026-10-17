@@ -13,9 +13,12 @@ import "./future-entry.css";
 // its second extraction, with the same matrix pose used for browsing.
 export const futureEntryStart = 1.76;
 export const futureEntryEnd = 27.12;
-export function futureEntryShot(time: number) {
+export type FutureEntryLayout = "shelf" | "array";
+export const futureShelfEntryEnd = 28.6;
+export const futureEntryEndFor = (layout: FutureEntryLayout) => layout === "shelf" ? futureShelfEntryEnd : futureEntryEnd;
+export function futureEntryShot(time: number, entryLayout: FutureEntryLayout = "array") {
   return { reveal: smooth(progress(time, 22, 22.4)), lift: 0, zoom: 0,
-    time: Math.min(time, futureEntryEnd), musicIntro: true };
+    time: Math.min(time, futureEntryEndFor(entryLayout)), musicIntro: true, entryLayout };
 }
 
 export class FutureEntry {
@@ -35,6 +38,7 @@ export class FutureEntry {
     private stage: HTMLElement,
     private finish: (skipped: boolean, ms: number) => void,
     copy: EntryTextCopy = {},
+    readonly layout: FutureEntryLayout = "array",
   ) {
     const welcome = normalizeEntryText(copy.welcome, defaultEntryWelcome);
     const identity = normalizeEntryText(copy.identity, defaultEntryIdentity);
@@ -47,6 +51,7 @@ export class FutureEntry {
     this.film = this.overlay.querySelector<HTMLElement>(".future-entry-film")!;
     this.sequence = new BootSequence(this.film, { identity });
     stage.dataset.futureEntry = "access";
+    stage.dataset.futureEntryLayout = layout;
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(stage);
     this.resize();
@@ -100,16 +105,16 @@ export class FutureEntry {
       if (this.lastTime !== undefined) this.time += Math.max(0, ms - this.lastTime) / 1000;
       this.lastTime = ms;
     }
-    if (this.time >= futureEntryEnd) {
+    if (this.time >= futureEntryEndFor(this.layout)) {
       this.end(false, ms);
       return undefined;
     }
     this.render();
-    return futureEntryShot(this.time);
+    return futureEntryShot(this.time, this.layout);
   }
 
   get state() {
-    return { active: this.active, time: this.time, phase: this.stage.dataset.futureEntry ?? "archive" };
+    return { active: this.active, time: this.time, layout: this.layout, phase: this.stage.dataset.futureEntry ?? "archive" };
   }
 
   private resize() {
@@ -148,10 +153,15 @@ export class FutureEntry {
   private render() {
     const motion = this.sequence.update(this.time);
     this.overlay.style.setProperty("--future-entry-backdrop-opacity", String(motion.backgroundOpacity));
-    const phase = this.time >= 25.3 ? "settle" : this.time >= 22 ? "array" : motion.step;
+    const shelf = this.layout === "shelf";
+    const settleAt = shelf ? 26.7 : 25.3;
+    const phase = this.time >= settleAt ? "settle" : this.time >= 22 ? shelf ? "shelf-feed" : "array" : motion.step;
     if (this.stage.dataset.futureEntry !== phase) this.stage.dataset.futureEntry = phase;
-    this.overlay.style.setProperty("--future-entry-brand-opacity", String(1 - smooth(progress(this.time, 24.9, 25.3))));
-    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, 25.3, 26.72))));
+    this.overlay.style.setProperty("--future-entry-brand-opacity", String(1 - smooth(progress(this.time, settleAt - .4, settleAt))));
+    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, settleAt, shelf ? 27.55 : 26.72))));
+    this.overlay.style.setProperty("--future-entry-caption-opacity", String(shelf
+      ? smooth(progress(this.time, 22.3, 22.9)) * (1 - smooth(progress(this.time, 26, 26.7))) : 0));
+    this.overlay.style.setProperty("--future-entry-caption-progress", String(progress(this.time, 22.3, 26.7)));
   }
 
   private end(skipped: boolean, ms = performance.now()) {
@@ -162,6 +172,7 @@ export class FutureEntry {
     this.sequence.reset();
     this.overlay.remove();
     delete this.stage.dataset.futureEntry;
+    delete this.stage.dataset.futureEntryLayout;
     this.stage.style.removeProperty("--future-entry-ui-opacity");
     for (const { node, inert } of this.siblings) node.inert = inert;
     this.finish(skipped, ms);

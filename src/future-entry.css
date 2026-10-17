@@ -76,7 +76,7 @@
   border: 0;
   color: inherit;
   background: transparent;
-  opacity: calc(.55 * var(--future-entry-brand-opacity, 1));
+  opacity: .65;
   font: inherit;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -86,7 +86,26 @@
 
 .music-app .future-entry-skip:hover,
 .music-app .future-entry-skip:focus-visible {
-  opacity: var(--future-entry-brand-opacity, 1);
+  opacity: 1;
+}
+
+.future-entry-shelf-caption {
+  position: absolute;
+  left: 7%;
+  bottom: 12%;
+  width: min(260px, 28%);
+  opacity: var(--future-entry-caption-opacity, 0);
+  font: 10px/1.5 "Archive Mono", monospace;
+  letter-spacing: .18em;
+  pointer-events: none;
+}
+.future-entry-shelf-caption i {
+  display: block;
+  height: 1px;
+  margin-top: 10px;
+  background: currentColor;
+  transform-origin: left;
+  transform: scaleX(var(--future-entry-caption-progress, 0));
 }
 
 .music-app .future-entry-skip:focus-visible {

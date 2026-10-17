@@ -13,6 +13,8 @@
 
 [README.original.md](README.original.md) 保留上游原说明，其中“本项目”“原创”等措辞归属于该上游文档的语境。RonaldDeng 不代表 LBEILC，音乐适配不表示上游作者参与、认可或为本衍生版本提供支持。
 
+MATRIX 鼠标拖动、惯性和悬停适配参考上游的 [archive-drag.ts](https://github.com/LBEILC/RhineLabUI/blob/main/src/archive-drag.ts) 与 [scene.ts](https://github.com/LBEILC/RhineLabUI/blob/main/src/scene.ts)，沿用其投影与运动参数。两排列之间的迁移及 Future ARRAY 入场后半段为本播放器新增设计，仍使用现有共享场景和盒体资源。
+
 ## 原作及非代码资产
 
 视觉参考为《明日方舟》特别映像[「莱茵生命：访问」](https://www.bilibili.com/video/BV1rr4y1b7sz/)。相关作品、名称、标志、设定、视觉设计、原 PV 及其声音的权利归相应权利人所有。本项目是独立爱好者工程，与官方制作方无隶属、赞助或授权合作关系，不主张拥有原作版权或商标。

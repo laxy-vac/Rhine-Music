@@ -1,6 +1,6 @@
 # 下一步优化基线
 
-更新：2026-10-17。本文件统一记录已交付结果、仍需完善的工作和下一步的验收口径；当前功能地图见[PROJECT-STATUS](PROJECT-STATUS.md)。
+更新：2026-10-18。本文件统一记录已交付结果、仍需完善的工作和下一步的验收口径；当前功能地图见[PROJECT-STATUS](PROJECT-STATUS.md)。
 
 ## 已完成并关闭
 
@@ -17,7 +17,8 @@
 | 系统日夜跟随 | 开启时按系统当前状态对齐，之后仅跟随真实变化；手动选择不被持续纠正，重启保留手动状态 |
 | 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
 | 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
-| Future MATRIX 入场 | ALBUMS/MATRIX 默认每次打开播放终端/Logo/圆环/欢迎与阵列演出后停在总览；英文跳过、昼夜、减少动态、持久化自动播放开关及手动重播按主题规范处理 |
+| Future MATRIX/ARRAY 入场 | ALBUMS 的两种空间排列共用终端/Logo/圆环/欢迎前导；MATRIX 延续阵列演出，ARRAY 沿轨归档并由低角度绕到总览；英文跳过、昼夜、减少动态、自动播放开关与手动重播沿用原规则，Punk 入场暂缓 |
+| 空间排列与浏览 | 两主题共用 MATRIX/ARRAY 的镜头与唱片过渡、快速反向接续；MATRIX 支持投影换算的双轴拖动、惯性与轻微悬停抬起；Punk 资料区背景与工具轨衔接 |
 | STYLE、Settings 与入场个性化 | 两主题 STYLE 只管理主题、日夜配色、文字字号、盒体与场景外观预览；Settings 七类各自拥有唯一控件，界面与交互默认打开；Future 欢迎文案与 ID 可改并受字母/空格/24 字符边界保护，Punk 入场入口预留且禁用 |
 | 显示与性能、全屏与物理显卡 | Settings 中管理比例、全屏、渲染画质、优先显卡与性能检测；原生全屏往返与状态同步；显卡按稳定物理 PnP 身份归并 DXGI 逻辑别名，缺失身份不猜卡，保存后重启生效 |
 
@@ -29,7 +30,7 @@
 | --- | --- | --- |
 | 启动耗时 | 已实现加载好再显示；尚无真实曲库的分阶段耗时基线 | 分开测服务/偏好/索引、资源读取、场景创建、着色器与首帧，定位关键路径和窗口等待时间 |
 | RTX 5080 掉帧 | 已确认本机 4 个 DXGI/KMT 逻辑 LUID 映射到同一物理 RTX 5080；掉帧瓶颈仍未测定，不是已定位的 GPU 或 CPU 故障 | 固定场景采集帧时间、主线程/GPU负载、资源与内存；分别比较静止、切专辑、滚动、开合和页面切换 |
-| 其他入场构图 | 当前只为 Future ALBUMS/MATRIX 接入用户给定参考；其他主题与排列保持直接显示 | 按用户后续参考逐项确定，沿用公共状态、首帧门与 renderer，不自动推广当前镜头或恢复旧加载页 |
+| 其他入场构图与 Punk UI | Future ALBUMS/MATRIX 与 ARRAY 已有各自入场；Punk UI 后续大修，其入场明确暂缓，GRID 等其他排列直接显示 | 按用户后续方向确定 Punk UI 和其余入场，沿用公共状态、首帧门与 renderer，不自动移植 Future 入场或恢复旧加载页 |
 | 资源与交互开销 | 两主题已共用 renderer/资源；ARRAY 仍有遮罩合成、玻璃与阴影等实际成本 | 依据测量处理首载、重复工作、资源生命周期和长任务，验证视觉质量及选择/点击命中不退化 |
 | 复杂音频实时性 | LSP 当前使用通用 DSP 核，复杂设置的实时性能未全面测量 | 如另行开展音频优化，独立测处理耗时、缓冲和输出，不用图形 FPS 推断音频稳定性 |
 
@@ -65,6 +66,7 @@
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
 | Future 简单款玻璃与预览 | `node desktop/check-startup-entry.cjs --case-glass`，合成专辑与 mock 音频，检查透光/磨砂保存、结构往返及局部重置 |
+| 两主题布局切换、拖动与 ARRAY 入场 | `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；`node desktop/check-startup-entry.cjs --archive-motion` |
 | 三维资源/盒体专项 | `scripts/check-case-system.mjs`，按相关模式运行 |
 
 只运行与当前改动相关的必要检查，命令索引不要求逐次补跑全部旧矩阵。环境与边界见[本地开发](LOCAL-DEVELOPMENT.md)。
