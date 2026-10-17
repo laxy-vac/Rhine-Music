@@ -19,7 +19,8 @@ import "./music-transport-title.css";
 import "./music-theme.css";
 import "./music-theme-switch.css";
 import "./music-style-page.css";
-import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
+import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, syncMusicStyleAppearance, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
+import { handleFutureAppearanceKey } from "./future-appearance-picker";
 import { getMusicCatalogShelves, getMusicRecordLocation, navigateMusicEntry } from "./music-catalog-shelves";
 import { configureMusicCatalog, getMusicCatalogOptions, getMusicCatalogRecords, getMusicCatalogGroups, getMusicEntry, getMusicEntryByKey, getMusicFocusedEntry, focusMusicEntry } from "./music-catalog";
 import { musicBrowseControlsMarkup, syncMusicViewControls } from "./music-view-controls";
@@ -124,6 +125,8 @@ import type { ArchiveRecord } from "./data";
 import "./music-theme-choice.css";
 import "./future-controls.css";
 import "./future-panels.css";
+import "./future-day-palette.css";
+import "./future-appearance-picker.css";
 import { viewportLayout } from "./viewport-layout";
 import { applyWindowAspect } from "./window-aspect";
 import { normalizeWindowAspect, type WindowAspectId as WindowAspect } from "./window-aspect-model.mjs";
@@ -992,7 +995,21 @@ function setTheme(theme: Theme) {
   lyricsPage.refreshCasePreview();
   syncThemeButtons();
   savePrefs();
-  if (page === "theme") renderThemePage();
+  if (page === "theme") {
+    if (preferences.style.design === "rhine") {
+      syncMusicStyleAppearance($("#theme-page-content"), preferences.style, preferences.theme, preferences.followSystemTheme);
+      caseEditor?.refresh();
+    } else renderThemePage();
+  }
+}
+function setFutureDayPalette(value: string) {
+  if (preferences.style.design !== "rhine" || (value !== "soft" && value !== "original") || value === preferences.style.dayPalette) return;
+  preferences.style = normalizeMusicStyle({ ...preferences.style, dayPalette: value });
+  applyStylePalette(stage, preferences.style, preferences.theme);
+  scene?.setMusicStyle(preferences.style, !preferences.reduced);
+  syncThemeButtons();
+  terminalLighting.refresh();
+  savePrefs();
 }
 function syncThemeButtons() {
   const theme = preferences.theme;
@@ -1006,7 +1023,9 @@ function syncThemeButtons() {
   });
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", preferences.style.design === "rhine" ? theme === "night" ? "#0a1220" : "#e8e5e1" : stylePalette(preferences.style, theme).bg);
+    ?.setAttribute("content", preferences.style.design === "rhine" && theme === "night" ? "#0a1220" : stylePalette(preferences.style, theme).bg);
+  if (page === "theme" && preferences.style.design === "rhine")
+    syncMusicStyleAppearance($("#theme-page-content"), preferences.style, theme, preferences.followSystemTheme);
 }
 function setFollowSystemTheme(following: boolean) {
   if (following === preferences.followSystemTheme) return;
@@ -4017,6 +4036,10 @@ document.addEventListener("click", (e) => {
     setTheme(target.dataset.theme as Theme);
     return;
   }
+  if (target.dataset.dayPalette) {
+    setFutureDayPalette(target.dataset.dayPalette);
+    return;
+  }
   if (target.dataset.styleScheme) {
     setMusicStyle({ ...preferences.style, scheme: target.dataset.styleScheme as MusicStyle["scheme"] });
     return;
@@ -4456,6 +4479,7 @@ document.addEventListener("dblclick", (event) => {
   }
 });
 document.addEventListener("keydown", (e) => {
+  if (handleFutureAppearanceKey(e)) return;
   if (e.defaultPrevented) return;
 
   if (viewer?.isOpen) return;

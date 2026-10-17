@@ -16,6 +16,21 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 两主题的 `STYLE` 页面沿用原 Style 界面与预览，管理主题、日夜配色、主题色板、文字字号、唱片盒和场景外观。渲染画质、性能检测、窗口和显卡设置不放在 STYLE。内部页面值与导航 action 仍为 <code>theme</code>；<code>#music-theme-page</code>、<code>#theme-page-content</code> 和 <code>#music-style-title</code> 等兼容 DOM ID 保留，<code>#theme-quality-slot</code> 作为唱片盒编辑内容的插入位置。
 
+Future 的日间配色在 STYLE → LIGHT 下选择“暖白 / 原版”（英文 SOFT / ORIGINAL）；DARK 仍是独立的全局日夜模式。保留旧偏好的暖白为默认，参考原版依据 [RhineLabUI theme-ui.ts](https://github.com/LBEILC/RhineLabUI/blob/12cc5e4013acb9408f753ff71de6b8492299b7c8/src/theme-ui.ts) 的亮色值，并与播放器既有控件材质结合：
+
+| 基础颜色 | 暖白 | 参考原版 |
+| --- | --- | --- |
+| 页面底色 | `#e8e5e1` | `#e8e5e1` |
+| 主文字 | `#232722` | `#080a08` |
+| 弱文字 | `#74786f` | `#77756d` |
+| 强调色 | `#b56834` | `#9b7247` |
+| 分隔线 | `rgba(42,49,42,.18)` | `#aaa59a` |
+| 面板 | `rgba(245,244,239,.97)` | `#edebe4` |
+
+参考输入区域使用 `#e7e3d9`。Three 背景/雾 `#eae5e1` 本已与上游一致；播放器专用唱片材质、灯光、空间布局保持其现有职责。选项保存于 Future 的 `style.dayPalette` 和主题档案中，缺失/非法值回退 `soft`；夜间和 Punk 不使用此配色字段，跨主题往返保留 Future 的选择。
+
+控件参考用户视频采用两层共用胶囊：大选中底板在 LIGHT/DARK 间移动，日间的子底板在两种配色间移动。暖白和原版均保留左侧强调色色点；整个 Appearance 卡片随可用宽度扩展，标题、跟随系统与说明一起对齐，窄窗口收成单列。切换期间保持节点、焦点和页面滚动位置，快速反向操作从当前动画位置接续。颜色沿已有 650ms 过渡，减少动态时立即到位。键盘方向键和 Home/End 可选，Night 时日间子选项 inert，不接受 Tab 或指针操作。
+
 Settings 固定为七类，每个控件只在所属类别出现一次：
 
 - “界面与交互”（内部 ID <code>interface</code>，默认打开）管理界面语言、减少动态、唱片波动、终端入场、欢迎文案与 ID、界面音效和氛围 BGM。终端入场及当前音效仅 Future 生效；Punk 保留明确禁用的适配入口，不修改 Future 偏好。Future 音效跟随播放器输出设备，音乐准备/播放期间静音，暂停或停止后恢复；具体路由及释放规则见[音频实现](AUDIO-CORE-IMPLEMENTATION.md)。

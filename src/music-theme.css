@@ -39,6 +39,11 @@
   inherits: true;
   initial-value: rgba(236, 233, 225, 0.72);
 }
+@property --future-control-well {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e3e0da;
+}
 @property --music-status-ink {
   syntax: "<color>";
   inherits: true;
@@ -101,6 +106,7 @@
     --panel,
     --page-bg,
     --veil,
+    --future-control-well,
     --music-status-ink,
     --music-night-mix,
     --music-side-veil-opacity,

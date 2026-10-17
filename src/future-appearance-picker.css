@@ -1,0 +1,91 @@
+/* Keep the selectable surfaces mounted while both indicator layers travel. */
+.music-app[data-design="rhine"] .music-style-page .design-family-section { max-width: 1280px; }
+.music-app[data-design="rhine"] .music-style-page .design-family-layout { grid-template-columns: minmax(0, 740px) minmax(320px, 1fr); }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px;
+  border: 1px solid var(--future-control-edge);
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--future-control-well) 78%, transparent);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--future-shadow) 6%, transparent);
+}
+.music-app[data-design="rhine"] .future-mode-indicator {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  width: calc((100% - 12px) / 2);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--future-control-edge));
+  box-sizing: border-box;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--future-control-face));
+  box-shadow: inset 0 1px 0 var(--future-control-inset), 0 2px 5px color-mix(in srgb, var(--future-shadow) 6%, transparent);
+  pointer-events: none;
+  transition: transform 480ms cubic-bezier(.22,1,.36,1), background-color 650ms ease;
+}
+.music-app[data-design="rhine"] .future-appearance-switch[data-appearance-mode="night"] .future-mode-indicator { transform: translateX(calc(100% + 4px)); }
+.music-app[data-design="rhine"] .future-light-choice { position: relative; min-width: 0; min-height: 40px; }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch button {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px;
+  border: 0;
+  border-radius: 23px;
+  color: var(--future-label);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: color 220ms ease, opacity 200ms ease, transform 380ms cubic-bezier(.22,1,.36,1);
+}
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch button[aria-pressed="true"] { color: var(--ink); background: transparent; border: 0; box-shadow: none; font-weight: 600; }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch button:hover { color: var(--ink); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-appearance-switch[data-appearance-mode="day"] .future-light-trigger { opacity: 0; transform: translateY(-8px) scale(.95); pointer-events: none; }
+.music-app[data-design="rhine"] .future-day-options {
+  position: absolute;
+  inset: 3px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  opacity: 0;
+  transform: translateY(7px) scale(.94);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 400ms cubic-bezier(.22,1,.36,1);
+}
+.music-app[data-design="rhine"] .future-appearance-switch[data-appearance-mode="day"] .future-day-options { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; transition-delay: 90ms; }
+.music-app[data-design="rhine"] .future-day-indicator {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  border-radius: 22px;
+  background: var(--future-control-face);
+  box-shadow: inset 0 1px 0 var(--future-control-inset), 0 1px 3px color-mix(in srgb, var(--future-shadow) 10%, transparent);
+  pointer-events: none;
+  transition: transform 420ms cubic-bezier(.22,1,.36,1), background-color 650ms ease;
+}
+.music-app[data-design="rhine"] .future-appearance-switch[data-day-choice="original"] .future-day-indicator { transform: translateX(100%); }
+html .music-app[data-design="rhine"] #music-theme-page .music-style-page .future-day-options button[data-day-palette] { min-height: 34px; padding: 3px 8px; gap: 7px; font-size: 11px; letter-spacing: 0; }
+.music-app[data-design="rhine"] .future-day-options .theme-mode-dot { display: block; flex: 0 0 7px; width: 7px; height: 7px; min-width: 7px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent); }
+.music-app[data-design="rhine"] .theme-mode-dot.soft { background: #b56834; }
+.music-app[data-design="rhine"] .theme-mode-dot.original { background: #9b7247; }
+.music-app[data-design="rhine"] .future-day-palette-note { margin: 10px 2px 2px; color: var(--muted); font-size: 10px; }
+.music-app[data-design="rhine"] .future-day-palette-note > span { font-size: 9px; letter-spacing: .1em; }
+.music-app[data-design="rhine"] .future-day-palette-note > b { color: var(--ink); font-weight: 500; }
+.music-app[data-design="rhine"].reduce-motion :is(.future-mode-indicator, .future-day-indicator, .future-day-options),
+html .music-app[data-design="rhine"].reduce-motion #music-theme-page .music-style-page .future-appearance-switch button { transition: none; }
+@media (max-width: 1050px) {
+  .music-app[data-design="rhine"] .music-style-page .design-family-layout { grid-template-columns: 1fr; }
+  html .music-app[data-design="rhine"] #music-theme-page .music-style-page .theme-mode-controls { width: min(100%, 460px); justify-self: end; }
+}

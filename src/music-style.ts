@@ -1,8 +1,10 @@
 import styleTokensJson from "./assets/style/tokens.json";
 import { uiLanguage } from "./i18n";
+import { futureAppearancePickerMarkup, syncFutureAppearancePicker } from "./future-appearance-picker";
 
 export type MusicStyle = {
   design: "rhine" | "archive";
+  dayPalette: "soft" | "original";
   camera: "player" | "foobar";
   caseStyle:
     | "rhine"
@@ -73,6 +75,7 @@ const INSPECT_SCALES = [1, 1.15, 1.3, 1.5];
 
 export const defaultMusicStyle: MusicStyle = {
   design: "rhine",
+  dayPalette: "soft",
   camera: "player",
   caseStyle: "rhine",
   scheme: "rhine",
@@ -146,10 +149,16 @@ export function normalizeMusicStyle(value: unknown): MusicStyle {
     ? candidate.design
     : "rhine";
 
-  if (design === "rhine") return { ...defaultMusicStyle };
+  if (design === "rhine") return {
+    ...defaultMusicStyle,
+    dayPalette: isOneOf(candidate.dayPalette, ["soft", "original"])
+      ? candidate.dayPalette
+      : defaultMusicStyle.dayPalette,
+  };
 
   return {
     design: "archive",
+    dayPalette: "soft",
     camera: "foobar",
     caseStyle: isOneOf(candidate.caseStyle, CASE_STYLES)
       ? candidate.caseStyle
@@ -226,6 +235,28 @@ const RHINE_PALETTES: Record<"day" | "night", StylePalette> = {
   },
 };
 
+const RHINE_ORIGINAL_DAY_PALETTE: StylePalette = {
+  bg: "#e8e5e1",
+  fg: "#080a08",
+  muted: "#77756d",
+  line: "#aaa59a",
+  accent: "#9b7247",
+  surface: "#edebe4",
+  panel: "#edebe4",
+  veil: "rgba(232, 229, 225, 0.72)",
+  well: "#e7e3d9",
+  "fg-soft": "#44443e",
+  "text-muted": "#77756d",
+  mark: "#928e83",
+  "line-dim": "#aaa59a",
+  "line-faint": "#aaa59a",
+  hair: "#aaa59a",
+  "panel-hi": "#f4f1e9",
+  case: "#edebe4",
+  "case-hi": "#f4f1e9",
+  "on-accent": "#fffaf1",
+};
+
 function rgbaFromHex(hex: string, alpha: number) {
   const value = hex.replace("#", "");
   const red = Number.parseInt(value.slice(0, 2), 16);
@@ -235,6 +266,9 @@ function rgbaFromHex(hex: string, alpha: number) {
 }
 
 export function stylePalette(style: MusicStyle, mode: "day" | "night"): StylePalette {
+  if (style.design === "rhine" && mode === "day" && style.dayPalette === "original")
+    return { ...RHINE_ORIGINAL_DAY_PALETTE };
+  if (style.design === "rhine") return { ...RHINE_PALETTES[mode] };
   if (style.scheme === "rhine") return { ...RHINE_PALETTES[mode] };
 
   const raw = TOKEN_SCHEMES[style.scheme]?.[mode === "day" ? "light" : "dark"];
@@ -310,8 +344,11 @@ export function applyStylePalette(
     for (const property of new Set(PALETTE_CSS_PROPERTIES)) {
       stage.style.removeProperty(property);
     }
+    stage.dataset.futureDayPalette = style.dayPalette;
     return;
   }
+
+  delete stage.dataset.futureDayPalette;
 
   stage.dataset.camera = style.camera;
   stage.dataset.scheme = style.scheme;
@@ -471,12 +508,15 @@ function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSyst
       <span class="theme-choice-copy"><strong>${label}</strong><small>${escapeHtml(design === "rhine" ? t("轻透材质与柔和层次", "TRANSLUCENT · SPATIAL") : t("仪表排版与档案细节", "INSTRUMENT · ARCHIVE"))}</small></span><i class="theme-choice-check" aria-hidden="true">${selected ? "✓" : ""}</i>
     </button>`;
   }).join("");
-  const modeControls = `<aside class="theme-mode-controls" aria-labelledby="theme-mode-title">
-    <div class="theme-mode-heading"><small>APPEARANCE</small><h3 id="theme-mode-title">${escapeHtml(t("日夜模式", "Light and dark mode"))}</h3></div>
-    <div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
+  const themeControls = style.design === "rhine"
+    ? futureAppearancePickerMarkup(style.dayPalette, mode)
+    : `<div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
       <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
       <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
-    </div>
+    </div>`;
+  const modeControls = `<aside class="theme-mode-controls" aria-labelledby="theme-mode-title">
+    <div class="theme-mode-heading"><small>APPEARANCE</small><h3 id="theme-mode-title">${escapeHtml(t("日夜模式", "Light and dark mode"))}</h3></div>
+    ${themeControls}
     <label class="theme-follow-system"><span>${escapeHtml(t("跟随系统", "Follow system"))}</span><input type="checkbox" role="switch" data-follow-system-theme aria-label="${escapeHtml(t("跟随系统日夜模式", "Follow system light and dark mode"))}"${followSystemTheme ? " checked" : ""}></label>
     <p class="theme-mode-hint">${escapeHtml(t("系统切换时跟随，手动选择仍会保留。", "Follow system changes while keeping manual choices."))}</p>
   </aside>`;
@@ -535,6 +575,45 @@ export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night", 
   const themeSelector = designFamilyMarkup(style, mode, followSystemTheme);
   const pageStart = `<section class="music-style-page" aria-labelledby="music-style-title">${heading}${themeSelector}`;
   return `${pageStart}<div id="theme-quality-slot" class="style-native-quality"></div></section>`;
+}
+
+/** Synchronize live STYLE controls without replacing their DOM or stealing focus. */
+export function syncMusicStyleAppearance(
+  root: HTMLElement,
+  styleValue: MusicStyle,
+  mode: "day" | "night",
+  followSystemTheme: boolean,
+): void {
+  const style = normalizeMusicStyle(styleValue);
+  for (const preview of root.querySelectorAll<HTMLElement>(".theme-choice-preview")) {
+    const design = preview.dataset.previewDesign === "archive" ? "archive" : "rhine";
+    const previewStyle = design === style.design
+      ? style
+      : design === "rhine" ? defaultMusicStyle : archiveMusicStyle;
+    const palette = stylePalette(previewStyle, mode);
+    const properties: Record<string, string> = {
+      "--mini-bg": palette.bg,
+      "--mini-fg": palette.fg,
+      "--mini-muted": palette.muted,
+      "--mini-line": palette.line,
+      "--mini-accent": palette.accent,
+      "--mini-panel": palette.panel,
+      "--mini-surface": palette.surface,
+      "--mini-well": palette.well,
+    };
+    for (const [property, value] of Object.entries(properties))
+      preview.style.setProperty(property, value);
+    preview.dataset.previewMode = mode;
+  }
+  root.querySelectorAll<HTMLButtonElement>("button[data-theme]").forEach((button) =>
+    button.setAttribute("aria-pressed", String(button.dataset.theme === mode)),
+  );
+  root.querySelectorAll<HTMLInputElement>("[data-follow-system-theme]").forEach((control) => {
+    control.checked = followSystemTheme;
+  });
+  syncFutureAppearancePicker(root, style.dayPalette, mode);
+  const indicator = root.querySelector<HTMLElement>(".style-mode-indicator");
+  if (indicator?.lastChild?.nodeType === Node.TEXT_NODE) indicator.lastChild.textContent = mode === "day" ? "LIGHT" : "DARK";
 }
 
 type PreviewChoice = { kind: "scheme"; id: ColourScheme };

@@ -1,0 +1,19 @@
+/* The original RhineLabUI light palette is an optional Future day palette.
+   Its colors use the shared registered tokens so theme-motion-ready can
+   interpolate them with the existing theme transition. */
+.music-app[data-design="rhine"][data-theme="day"][data-future-day-palette="original"] {
+  --ink: #080a08;
+  --muted: #77756d;
+  --line: #aaa59a;
+  --accent: #9b7247;
+  --surface: #edebe4;
+  --panel: #edebe4;
+  --page-bg: #e8e5e1;
+  --veil: rgba(232, 229, 225, 0.72);
+  --well: #e7e3d9;
+  --future-control-well: #e7e3d9;
+}
+
+html .music-app[data-design="rhine"][data-theme="day"][data-future-day-palette="original"] :is(#music-settings, #music-theme-page, .music-panel) :is(input:not([type="range"], [type="checkbox"], [type="radio"], [type="hidden"], [type="button"], [type="submit"]), textarea, select:not(.settings-select-native), .settings-select-trigger) {
+  background-color: var(--future-control-well);
+}

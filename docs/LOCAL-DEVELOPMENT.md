@@ -22,6 +22,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 窗口在后台初始化与首帧就绪后首次显示；已显示窗口重载保持可见，无旧加载页或 Punk intro。
 - Future 的 ALBUMS/MATRIX 默认每次新开窗口在显示后播放入场并停在总览；按钮、Enter、Esc 可跳过。设置 → 界面与交互 → 终端入场可配置自动播放、欢迎文案与 ID 或手动重播；Punk 保留禁用入口。两主题的 STYLE 页面只管理主题、日夜配色、文字字号、盒体与场景外观预览。
 - Settings → 界面与交互管理语言、减少动态、唱片波动、入场和界面声音；Settings → 显示与性能管理窗口比例、全屏、渲染画质、优先显卡与性能检测。各项控件只出现于对应类别，Style 页面不重复这些设置。显卡选择完全退出并重开后生效；默认自动，设备按物理 PnP 身份归并，不安装工具或改系统配置。若选卡后无法正常启动，可运行 `node scripts/launch-source-preview.mjs --gpu-auto` 仅本次使用自动，再到 Settings → 显示与性能选择自动恢复默认；安装版也接受 `--gpu-auto` 启动参数。
+- Future 的 STYLE → LIGHT 下可选“暖白 / 原版”，选择随 Future 主题档案保存；切 DARK 或 Punk 不覆盖它。旧偏好缺少此字段时保持暖白。`node scripts/check-day-palette.mjs` 检查规范化/保存结构和颜色映射；`node desktop/check-startup-entry.cjs --graphics` 包含双层胶囊、颜色过渡、键盘/焦点和日夜/Punk 隔离检查。
 
 `启动音乐播放器.bat`、`.command`及其旧 launcher 保留兼容测试引用，不是当前开发入口。`Build-Windows-EXE.cmd`是当前品尝版打包的兼容包装。
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { checkDayPalette } from './check-day-palette.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const settingsCategories = ['interface', 'appearance', 'audio', 'lyrics', 'library', 'sources', 'about'];
@@ -446,15 +447,24 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         assert.equal(interfaceSound.volumeDisabled,design==='archive','Punk sound volume must remain reserved');
         assert.match(interfaceSound.status,design==='archive'?/Punk/:/Future/);
         if(theme==='day')await capture(`${design}-interface-sound`,'#interface-sound-settings');
-        await evaluate(`(() => {window.__settingsSwitchProbe=[...document.querySelectorAll('#music-settings input[type=checkbox][role=switch]')].filter(node=>node.getClientRects().length).map(node=>({node,checked:node.checked,indeterminate:node.indeterminate}));})()`);
+        await evaluate(`(() => {
+          // Background state sync owns the real controls. Use an identical
+          // stand-in for this CSS-only endpoint check without changing any
+          // sound/BGM preference or dispatching user-input events.
+          window.__settingsSwitchProbe=[...document.querySelectorAll('#music-settings input[type=checkbox][role=switch]')].filter(node=>node.getClientRects().length).map(original=>{
+            const node=original.cloneNode(true),sourceId=original.id,display=original.style.getPropertyValue('display'),priority=original.style.getPropertyPriority('display');
+            node.removeAttribute('id');original.after(node);original.style.setProperty('display','none','important');
+            return {node,original,sourceId,display,priority};
+          });
+        })()`);
         try {
           for (const checked of [false, true]) {
             await evaluate(`window.__settingsSwitchProbe.forEach(({node})=>{node.checked=${checked};node.indeterminate=false;})`);
             await pause(260);
-            const measurements=await evaluate(`window.__settingsSwitchProbe.map(({node})=>{
+            const measurements=await evaluate(`window.__settingsSwitchProbe.map(({node,sourceId})=>{
               const thumb=getComputedStyle(node,'::after'),style=getComputedStyle(node),x=new DOMMatrixReadOnly(thumb.transform==='none'?undefined:thumb.transform).m41;
               const inset=parseFloat(thumb.left),left=inset+x,top=parseFloat(thumb.top),size=parseFloat(thumb.width);
-              return {id:node.id,checked:node.checked,indeterminate:node.indeterminate,width:node.getBoundingClientRect().width,flexBasis:style.flexBasis,inset,left,right:node.clientWidth-left-size,top,bottom:node.clientHeight-top-parseFloat(thumb.height)};
+              return {id:sourceId,checked:node.checked,indeterminate:node.indeterminate,width:node.getBoundingClientRect().width,flexBasis:style.flexBasis,inset,left,right:node.clientWidth-left-size,top,bottom:node.clientHeight-top-parseFloat(thumb.height)};
             })`);
             assert.ok(measurements.length>=4, 'The interface category must expose its real settings switches');
             for(const item of measurements){
@@ -467,14 +477,15 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
             if(design==='rhine'&&theme==='day') await capture(`future-switches-${checked?'on':'off'}`,'#motion-settings');
           }
         } finally {
-          await evaluate(`window.__settingsSwitchProbe?.forEach(({node,checked,indeterminate})=>{node.checked=checked;node.indeterminate=indeterminate});delete window.__settingsSwitchProbe;`);
+          await evaluate(`window.__settingsSwitchProbe?.forEach(({node,original,display,priority})=>{node.remove();if(display)original.style.setProperty('display',display,priority);else original.style.removeProperty('display')});delete window.__settingsSwitchProbe;`);
         }
         await checkSettingsRange(design,theme);
       }
     }
     await openStyle();
     await click(`aside.theme-mode-controls button[data-theme=${savedTheme}]`);
-    return { ok: true, cases, screenshots, switchChecks, rangeChecks };
+    const dayPalette = await checkDayPalette({ browserWindow, outputDirectory });
+    return { ok: true, cases, screenshots: [...screenshots, ...dayPalette.screenshots], switchChecks, rangeChecks, dayPalette };
   } finally {
     if (!browserWindow.isDestroyed()) { if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false); wc.setBackgroundThrottling(true); }
   }
