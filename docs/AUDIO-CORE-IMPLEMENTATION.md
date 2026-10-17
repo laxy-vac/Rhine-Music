@@ -60,7 +60,7 @@ ASIO有效整数位右对齐，WASAPI整数容器按Windows有效位规则左对
 
 音效合成沿用 [RhineLabUI 的 audio.ts](https://github.com/LBEILC/RhineLabUI/blob/main/src/audio.ts)，仅 Future 启用，Punk 入口禁用并提示另行设计。音乐准备及播放期间静音界面反馈；暂停/停止后可恢复。切主题、隐藏窗口、关闭音效、切场景和开始播放音乐会停止已有提示音，并使迟到请求失效。
 
-浏览器兼容输出沿用 Web Audio。原生输出先以 OfflineAudioContext 生成同一套短提示音，编码为最长 2.5 秒的 48 kHz 双声道 PCM16 WAV，再经现有音频主机播放；不创建默认设备 AudioContext，不回退到其它设备。WASAPI 跟随播放器所选 endpoint 并使用共享模式；ASIO 跟随所选驱动和输出通道，提示音结束即 stop/free。音效使用独立音量及未启用音乐 DSP 的 PCM 设置，不参与歌曲队列、Sony、DSD/DoP 或纯输出链路；原生提示音为单声部，新提示可替换旧提示。音乐打开设备前等待提示音停止确认，播放操作进行中拒绝新提示。
+浏览器兼容输出沿用 Web Audio。原生输出先以 OfflineAudioContext 生成同一套短提示音，编码为最长 2.5 秒的 48 kHz 双声道 PCM16 WAV，再以最多十个声部混入现有主机的渐进 Float32 PCM 流；不创建默认设备 AudioContext，不回退到其它设备。WASAPI 跟随播放器所选 endpoint 并使用共享模式；ASIO 跟随所选驱动和输出通道，音效尾音排空后 stop/free。音效使用独立音量及未启用音乐 DSP 的 PCM 设置，不参与歌曲队列、Sony、DSD/DoP 或纯输出链路；连续提示共用会话并保留尾音。音乐打开设备前等待提示音停止确认，播放操作进行中拒绝新提示。参考音色、触发、入场时钟及边界见[界面音效](INTERFACE-AUDIO.md)。
 
 前后端均校验主题/音乐忙碌状态，使用前端身份、设置 revision、递增序号及取消代次防止旧请求复活。后端仅接受规范 PCM WAV，不接受文件路径；生成文件位于 dataDir/interface-audio-v1，按 SHA-256 命名并以受控索引保留最多 32 项，外部更改拒绝覆盖。氛围 BGM 是独立既有功能，目前仍仅支持浏览器兼容输出。
 

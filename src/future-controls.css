@@ -5,6 +5,8 @@ html .music-app[data-design="rhine"] {
   --future-control-glass: color-mix(in srgb, var(--surface) 76%, transparent);
   --future-control-well: color-mix(in srgb, var(--surface) 74%, var(--page-bg));
   --future-control-inset: color-mix(in srgb, var(--future-highlight) 62%, transparent);
+  --future-range-well: color-mix(in srgb, var(--future-control-well) 58%, var(--future-control-edge));
+  --future-range-fill: color-mix(in srgb, var(--accent) 86%, var(--future-control-face));
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page) :is(.settings-category, .panel-section) {
@@ -184,49 +186,97 @@ html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .mu
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
-  width: 100%;
-  min-height: 22px;
+  box-sizing: border-box;
+  height: 28px;
+  min-height: 28px;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   accent-color: var(--accent);
+  cursor: grab;
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-webkit-slider-runnable-track {
-  height: 3px;
+  height: 5px;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--future-control-edge) 78%, transparent);
+  background:
+    linear-gradient(
+      to right,
+      var(--future-range-fill) 0,
+      var(--future-range-fill) var(--range-progress, 0%),
+      transparent var(--range-progress, 0%) 100%
+    ) 8px center / calc(100% - 16px) 100% no-repeat,
+    var(--future-range-well);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--future-control-edge) 76%, var(--ink));
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -4.5px;
-  border: 1px solid color-mix(in srgb, var(--future-control-edge) 80%, var(--ink));
+  width: 16px;
+  height: 16px;
+  margin-top: -5.5px;
+  border: 2px solid var(--future-control-face);
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, var(--future-highlight), var(--accent));
-  box-shadow: inset 0 1px 0 var(--future-control-inset), 0 1px 3px color-mix(in srgb, var(--future-shadow) 12%, transparent);
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent), 0 1px 2px color-mix(in srgb, var(--future-shadow) 18%, transparent);
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-moz-range-track {
-  height: 3px;
+  height: 5px;
+  border: 1px solid color-mix(in srgb, var(--future-control-edge) 76%, var(--ink));
+  border-radius: 999px;
+  background: var(--future-range-well);
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-moz-range-progress {
+  height: 5px;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--future-control-edge) 78%, transparent);
+  background: var(--future-range-fill);
 }
 
 html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: 1px solid color-mix(in srgb, var(--future-control-edge) 80%, var(--ink));
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--future-control-face);
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, var(--future-highlight), var(--accent));
-  box-shadow: inset 0 1px 0 var(--future-control-inset), 0 1px 3px color-mix(in srgb, var(--future-shadow) 12%, transparent);
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent), 0 1px 2px color-mix(in srgb, var(--future-shadow) 18%, transparent);
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb,
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:focus-visible:not(:disabled)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:active:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:hover:not(:disabled)::-moz-range-thumb,
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:focus-visible:not(:disabled)::-moz-range-thumb {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:active:not(:disabled)::-moz-range-thumb {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent), inset 0 1px 0 color-mix(in srgb, var(--future-highlight) 42%, transparent);
+}
+
+html .music-app[data-design="rhine"] :is(#music-settings, #music-theme-page, .music-panel) input[type="range"]:disabled {
+  opacity: .48;
+  cursor: not-allowed;
 }
 
 html .music-app[data-design="rhine"] .settings-select-trigger {

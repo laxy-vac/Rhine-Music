@@ -707,7 +707,7 @@ export class TerminalAudio {
       this.duck!.gain.linearRampToValueAtTime(1, now + 0.9);
     }
   }
-  updateBoot(appTime: number, frozen = false) {
+  updateBoot(appTime: number, frozen = false, lastCueTime = Infinity, identity?: string) {
     const time = appTime + 5;
     const previous = this.bootTime;
     this.bootTime = time;
@@ -734,8 +734,8 @@ export class TerminalAudio {
       return;
     }
     for (const cue of BOOT_CUES)
-      if (cue.time > previous && cue.time <= time) this.play(cue.sound);
-    if (hasTypingBetween(previous, time)) this.play("key");
+      if (cue.time > previous && cue.time <= time && cue.time <= lastCueTime) this.play(cue.sound);
+    if (hasTypingBetween(previous, time, identity)) this.play("key");
   }
   stats() {
     return {

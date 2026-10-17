@@ -124,6 +124,186 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
     await fs.writeFile(file, (await browserWindow.capturePage()).toPNG());
     screenshots.push(file);
   };
+  const rangeChecks = [];
+  const checkSettingsRange = async (design, theme) => {
+    await click('#music-settings [data-settings-category-target=appearance]');
+    await until(state=>state.page==='settings'&&state.category==='appearance'&&state.appearance?.grouped,`${design}/${theme} slider settings`);
+    const initial = await evaluate(`(() => {
+      const details=document.querySelector('#graphics-display-settings .quality-settings details.quality-advanced');
+      const range=document.querySelector('#graphics-display-settings .quality-settings input[type="range"][data-quality="scale"]');
+      if(!details||!range)throw new Error('Missing graphics quality range');
+      const detailsWasOpen=details.open;
+      details.open=true;
+      range.scrollIntoView({block:'center'});
+      const button=range.parentElement.querySelector('.editable-range-value');
+      if(!button)throw new Error('Missing editable quality range value');
+      const output=range.parentElement.querySelector('output[data-quality-output]');
+      if(output?.getClientRects().length)throw new Error('Slider value is duplicated by its legacy output');
+      const probe={range,details,original:{value:range.value,min:range.getAttribute('min'),max:range.getAttribute('max'),disabled:range.disabled,detailsOpen:detailsWasOpen},events:[],listener:event=>probe.events.push(event.type)};
+      range.addEventListener('input',probe.listener);
+      range.addEventListener('change',probe.listener);
+      range.addEventListener('click',probe.listener);
+      window.__graphicsRangeProbe=probe;
+      return {min:Number(range.min),max:Number(range.max),step:Number(range.step)||1,value:Number(range.value),buttonText:button.textContent};
+    })()`);
+    const middle = Math.round(((initial.min + initial.max) / 2 - initial.min) / initial.step) * initial.step + initial.min;
+    const setValue = async value => evaluate(`(() => {
+      const range=window.__graphicsRangeProbe.range;
+      range.value=${JSON.stringify(String(value))};
+      range.dispatchEvent(new Event('input',{bubbles:true}));
+      range.dispatchEvent(new Event('change',{bubbles:true}));
+      return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress')};
+    })()`);
+    const percent = text => Number(String(text).replace('%',''));
+    let mouseIsDown=false;
+    try {
+      for (const [value, expected] of [[initial.min,0],[middle,50],[initial.max,100]]) {
+        const result=await setValue(value);
+        assert.equal(result.value,value,`${design}/${theme} range accepts value ${value}`);
+        assert.ok(Math.abs(percent(result.progress)-expected)<0.02,`${design}/${theme} ${value} must set --range-progress to ${expected}%: ${JSON.stringify(result)}`);
+      }
+      await evaluate(`(() => {
+        const range=window.__graphicsRangeProbe.range;
+        range.value=${JSON.stringify(String(middle))};
+        range.setAttribute('max',range.getAttribute('max')??'');
+      })()`);
+      await pause(30);
+      const programmatic=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress')}})()`);
+      assert.ok(Math.abs(percent(programmatic.progress)-50)<0.02,`${design}/${theme} sync must refresh progress after a property-only value update: ${JSON.stringify(programmatic)}`);
+
+      await setValue(middle);
+      const metrics=await evaluate(`(() => {
+        const range=window.__graphicsRangeProbe.range;
+        const input=getComputedStyle(range),track=getComputedStyle(range,'::-webkit-slider-runnable-track'),thumb=getComputedStyle(range,'::-webkit-slider-thumb');
+        const rules=[...document.styleSheets].flatMap(sheet=>{try{return [...sheet.cssRules]}catch{return []}});
+        const trackRules=rules.filter(rule=>rule.selectorText?.includes('[data-design="rhine"]')&&rule.selectorText.includes('input[type="range"]::-webkit-slider-runnable-track')&&rule.selectorText.includes('#music-settings'));
+        const thumbRules=rules.filter(rule=>rule.selectorText?.includes('[data-design="rhine"]')&&rule.selectorText.includes('input[type="range"]::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings')&&!rule.selectorText.includes(':hover')&&!rule.selectorText.includes(':focus-visible')&&!rule.selectorText.includes(':active'));
+        const hoverRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:hover:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
+        const focusRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:focus-visible:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
+        const activeRules=rules.filter(rule=>rule.selectorText?.includes('input[type="range"]:active:not(:disabled)::-webkit-slider-thumb')&&rule.selectorText.includes('#music-settings'));
+        return {height:parseFloat(input.height),appearance:input.appearance,inputBackground:input.backgroundColor,trackHeight:parseFloat(track.height),trackRadius:track.borderTopLeftRadius,trackImage:track.backgroundImage,trackRuleCount:trackRules.length,trackRuleHeight:parseFloat(trackRules[0]?.style.height),trackRuleText:trackRules[0]?.cssText,thumbWidth:parseFloat(thumb.width),thumbHeight:parseFloat(thumb.height),thumbRadius:thumb.borderTopLeftRadius,thumbShadow:thumb.boxShadow,thumbRuleCount:thumbRules.length,thumbRuleWidth:parseFloat(thumbRules[0]?.style.width),thumbRuleHeight:parseFloat(thumbRules[0]?.style.height),thumbRuleRadius:thumbRules[0]?.style.borderRadius,hoverRuleCount:hoverRules.length,focusRuleCount:focusRules.length,activeRuleCount:activeRules.length,activeTransform:activeRules[0]?.style.transform,children:range.childElementCount,progress:range.style.getPropertyValue('--range-progress')};
+      })()`);
+      assert.equal(metrics.children,0,`${design}/${theme} range must remain a single native input rail`);
+      if(design==='rhine'){
+        assert.equal(metrics.appearance,'none','Future slider must use its single custom track');
+        assert.equal(metrics.inputBackground,'rgba(0, 0, 0, 0)','Future slider input background must not create a second rail');
+        assert.equal(metrics.height,28,'Future slider must retain a 28px hit area');
+        assert.equal(metrics.trackRuleCount,1,'Future slider must keep one WebKit rail rule');
+        assert.equal(metrics.trackRuleHeight,5,'Future slider track rule must be 5px high');
+        assert.ok(metrics.trackRuleText.includes('linear-gradient'),'Future slider track must paint its progress fill');
+        assert.equal(metrics.thumbRuleCount,1,'Future slider must keep one base WebKit thumb rule');
+        assert.equal(metrics.thumbRuleWidth,16,'Future slider thumb rule must be 16px wide');
+        assert.equal(metrics.thumbRuleHeight,16,'Future slider thumb rule must be 16px high');
+        assert.equal(metrics.thumbRuleRadius,'50%','Future slider thumb must stay round');
+        assert.equal(metrics.hoverRuleCount,1,'Future slider must have a hover thumb state');
+        assert.equal(metrics.focusRuleCount,1,'Future slider must have a focus thumb state');
+        assert.equal(metrics.activeRuleCount,1,'Future slider must have an active thumb state');
+        assert.equal(metrics.activeTransform,'scale(1.08)');
+      }else{
+        assert.equal(metrics.trackRadius,'0px','Punk slider rail must keep its square corners');
+        assert.equal(metrics.thumbRadius,'0px','Punk slider thumb must keep its square corners');
+      }
+
+      await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;range.disabled=true})()`);
+      const disabled=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range,style=getComputedStyle(range);return {opacity:Number(style.opacity),cursor:style.cursor}})()`);
+      if(design==='rhine'){
+        assert.ok(disabled.opacity<=0.5,`${design}/${theme} disabled slider must be visibly dimmed: ${JSON.stringify(disabled)}`);
+        assert.equal(disabled.cursor,'not-allowed');
+      }
+      await evaluate(`(() => {window.__graphicsRangeProbe.range.disabled=window.__graphicsRangeProbe.original.disabled})()`);
+
+      await setValue(middle);
+      await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;range.focus()})()`);
+      browserWindow.focus();
+      wc.sendInputEvent({type:'keyDown',keyCode:'RIGHT'});
+      wc.sendInputEvent({type:'keyUp',keyCode:'RIGHT'});
+      await pause(40);
+      const afterArrow=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),focusVisible:range.matches(':focus-visible'),outline:getComputedStyle(range).outlineStyle}})()`);
+      assert.ok(afterArrow.value>middle,`${design}/${theme} ArrowRight must advance the native range`);
+      assert.ok(percent(afterArrow.progress)>50,`${design}/${theme} ArrowRight must refresh progress`);
+      assert.ok(afterArrow.focusVisible&&afterArrow.outline!=='none',`${design}/${theme} keyboard focus must remain visible`);
+      wc.sendInputEvent({type:'keyDown',keyCode:'PAGEUP'});
+      wc.sendInputEvent({type:'keyUp',keyCode:'PAGEUP'});
+      await pause(40);
+      const afterPageUp=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress')}})()`);
+      assert.ok(afterPageUp.value>afterArrow.value,`${design}/${theme} PageUp must advance farther than ArrowRight`);
+      assert.ok(percent(afterPageUp.progress)>percent(afterArrow.progress),`${design}/${theme} PageUp must refresh progress`);
+
+      await setValue(middle);
+      const bounds=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {left:r.left,top:r.top,width:r.width,height:r.height}})()`);
+      const y=Math.round(bounds.top+bounds.height/2), startX=Math.round(bounds.left+bounds.width/2), endX=Math.round(bounds.left+bounds.width-2);
+      browserWindow.focus();
+      await evaluate(`window.__graphicsRangeProbe.nativeEventStart=window.__graphicsRangeProbe.events.length`);
+      wc.sendInputEvent({type:'mouseMove',x:startX,y});
+      await pause(30);
+      const hover=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range,thumb=getComputedStyle(range,'::-webkit-slider-thumb');return {hover:range.matches(':hover'),shadow:thumb.boxShadow}})()`);
+      if(design==='rhine')assert.ok(hover.hover&&metrics.hoverRuleCount===1,`${design}/${theme} hover must visibly respond`);
+      wc.sendInputEvent({type:'mouseMove',x:endX,y,movementX:endX-startX,movementY:0});
+      wc.sendInputEvent({type:'mouseDown',x:endX,y,button:'left',clickCount:1});
+      mouseIsDown=true;
+      const active=await evaluate(`(() => {const range=window.__graphicsRangeProbe.range;return {active:range.matches(':active')}})()`);
+      if(design==='rhine')assert.ok(active.active&&metrics.activeTransform==='scale(1.08)',`${design}/${theme} active drag must visibly respond`);
+      wc.sendInputEvent({type:'mouseUp',x:endX,y,button:'left',clickCount:1});
+      mouseIsDown=false;
+      await pause(40);
+      const afterDrag=await evaluate(`(() => {const probe=window.__graphicsRangeProbe,range=probe.range;return {value:Number(range.value),progress:range.style.getPropertyValue('--range-progress'),events:probe.events.slice(probe.nativeEventStart)}})()`);
+      assert.ok(afterDrag.value>middle,`${design}/${theme} native pointer input must update the range: ${JSON.stringify(afterDrag)}`);
+      assert.ok(percent(afterDrag.progress)>50,`${design}/${theme} native pointer input must update progress`);
+
+      await setValue(middle);
+      await evaluate(`(() => {
+        const probe=window.__graphicsRangeProbe,range=probe.range,button=range.parentElement.querySelector('.editable-range-value');
+        if(!button)throw new Error('Missing editable range value button');
+        probe.eventStart=probe.events.length;
+        button.click();
+      })()`);
+      await pause(30);
+      const editorState=await evaluate(`(() => {
+        const probe=window.__graphicsRangeProbe,range=probe.range,editor=range.parentElement.querySelector('.editable-range-number');
+        return {editor:!!editor,editorFocused:!!editor&&document.activeElement===editor,value:Number(range.value),events:probe.events.slice(probe.eventStart)};
+      })()`);
+      assert.ok(editorState.editor&&editorState.editorFocused,`${design}/${theme} numeric button must open and focus its editor without label activation`);
+      assert.equal(editorState.value,middle,`${design}/${theme} opening the numeric editor must not change the slider`);
+      assert.ok(!editorState.events.includes('click')&&!editorState.events.includes('input')&&!editorState.events.includes('change'),`${design}/${theme} numeric button must not reactivate its wrapping label`);
+      await evaluate(`(() => {const probe=window.__graphicsRangeProbe,editor=probe.range.parentElement.querySelector('.editable-range-number');editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))})()`);
+      if(design==='rhine'){
+        await setValue(initial.min);
+        await capture(`${design}-sliders-${theme}-low`, '#graphics-display-settings .quality-settings .quality-range');
+        await setValue(middle);
+        await capture(`${design}-sliders-${theme}-middle`, '#graphics-display-settings .quality-settings .quality-range');
+        await setValue(initial.max);
+        await capture(`${design}-sliders-${theme}-high`, '#graphics-display-settings .quality-settings .quality-range');
+      }else{
+        await setValue(middle);
+        await capture(`${design}-sliders-${theme}`, '#graphics-display-settings .quality-settings .quality-range');
+      }
+      rangeChecks.push({design,theme,minProgress:0,middleProgress:percent((await setValue(middle)).progress),maxProgress:100,dimensions:metrics,disabled,arrowRight:afterArrow.value,pageUp:afterPageUp.value,nativePointer:afterDrag.value,numericButtonFocused:editorState.editorFocused});
+    } finally {
+      if(mouseIsDown){
+        const point=await evaluate(`(() => {const r=window.__graphicsRangeProbe.range.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()`);
+        wc.sendInputEvent({type:'mouseUp',x:point.x,y:point.y,button:'left',clickCount:1});
+      }
+      await evaluate(`(() => {
+        const probe=window.__graphicsRangeProbe;
+        if(!probe)return;
+        const {range,details,original,listener}=probe;
+        const editor=range.parentElement.querySelector('.editable-range-number');
+        editor?.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+        range.removeEventListener('input',listener);
+        range.removeEventListener('change',listener);
+        range.removeEventListener('click',listener);
+        if(original.min===null)range.removeAttribute('min');else range.setAttribute('min',original.min);
+        if(original.max===null)range.removeAttribute('max');else range.setAttribute('max',original.max);
+        range.disabled=original.disabled;
+        range.value=original.value;
+        range.dispatchEvent(new Event('input',{bubbles:true}));
+        range.dispatchEvent(new Event('change',{bubbles:true}));
+        details.open=original.detailsOpen;
+        delete window.__graphicsRangeProbe;
+      })()`);
+      await pause(30);
+    }
+  };
   const cases = [];
   const switchChecks = [];
   wc.setBackgroundThrottling(false);
@@ -289,11 +469,12 @@ export async function checkGraphics({ browserWindow, outputDirectory }) {
         } finally {
           await evaluate(`window.__settingsSwitchProbe?.forEach(({node,checked,indeterminate})=>{node.checked=checked;node.indeterminate=indeterminate});delete window.__settingsSwitchProbe;`);
         }
+        await checkSettingsRange(design,theme);
       }
     }
     await openStyle();
     await click(`aside.theme-mode-controls button[data-theme=${savedTheme}]`);
-    return { ok: true, cases, screenshots, switchChecks };
+    return { ok: true, cases, screenshots, switchChecks, rangeChecks };
   } finally {
     if (!browserWindow.isDestroyed()) { if (browserWindow.isFullScreen()) browserWindow.setFullScreen(false); wc.setBackgroundThrottling(true); }
   }

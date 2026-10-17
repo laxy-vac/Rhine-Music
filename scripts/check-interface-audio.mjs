@@ -35,6 +35,13 @@ function silentWav({ durationMs = 120, sampleRate = 48000, channels = 2, bitsPer
   return wav;
 }
 
+function constantWav({ durationMs = 120, amplitude = 0.25 } = {}) {
+  const wav = silentWav({ durationMs });
+  const sample = Math.round(amplitude * 32767);
+  for (let offset = 44; offset < wav.length; offset += 2) wav.writeInt16LE(sample, offset);
+  return wav;
+}
+
 function makeNative({ owner, idle = true, commandHandler } = {}) {
   let currentOwner = owner;
   let currentlyIdle = idle;
@@ -288,6 +295,47 @@ test('music taking native idle during open prevents the cue from reaching play',
   releaseOpen?.();
 });
 
+test('late play ACK after cancel or Punk returns stale without reviving the cue', async () => {
+  for (const mode of ['cancel', 'punk']) {
+    const id = identity();
+    let releasePlay;
+    const playGate = new Promise(resolve => { releasePlay = resolve; });
+    await withAudio(`late-play-ack-${mode}`, {
+      owner: id.clientId,
+      commandHandler: async command => {
+        if (command.cmd === 'play' || command.cmd === 'stop') {
+          await playGate;
+          return { ok: true, cmd: command.cmd, session: command.session, state: command.cmd === 'stop' ? 'idle' : 'playing' };
+        }
+      },
+    }, async ({ audio, native }) => {
+      await audio.configure(config(id));
+      const pendingPlay = audio.play(cue(id, {
+        sequence: 1,
+        wav: constantWav({ durationMs: 900, amplitude: 0.2 }).toString('base64'),
+      }));
+      await waitFor(() => native.commands.some(command => command.cmd === 'play'), 'delayed play ACK');
+      let drain;
+      if (mode === 'punk') {
+        audio.configure(config(id, { revision: 2, design: 'archive' }));
+        drain = audio.tail;
+      } else drain = audio.cancel();
+      await waitFor(() => native.commands.some(command => command.cmd === 'stop'), 'stop queued after the pending play');
+      releasePlay();
+      const result = await pendingPlay;
+      await drain;
+      assert.equal(result.played, false, 'a late ACK from an invalidated generation must report stale');
+      assert.equal(native.commands.filter(command => command.cmd === 'open').length, 1);
+      assert.equal(native.commands.filter(command => command.cmd === 'play').length, 1,
+        'the invalidated cue must not dispatch a second play');
+      const playIndex = native.commands.findIndex(command => command.cmd === 'play');
+      const stopIndex = native.commands.findIndex(command => command.cmd === 'stop');
+      assert.ok(stopIndex > playIndex, 'the drain stop must follow the pending play request');
+    });
+    releasePlay?.();
+  }
+});
+
 test('cancel drains the active UI session before a music open may proceed', async () => {
   const id = identity();
   let releaseStop;
@@ -316,6 +364,58 @@ test('cancel drains the active UI session before a music open may proceed', asyn
     assert.ok(stopIndex > playIndex, 'native stop must follow the active UI cue');
   });
   releaseStop?.();
+});
+
+test('cancel during a status pump invalidates queued work and drains the stream', async () => {
+  const id = identity();
+  let releasePlay;
+  const playGate = new Promise(resolve => { releasePlay = resolve; });
+  let releaseStatus;
+  const statusGate = new Promise(resolve => { releaseStatus = resolve; });
+  await withAudio('cancel-during-pump', {
+    owner: id.clientId,
+    commandHandler: async command => {
+      if (command.cmd === 'play') {
+        await playGate;
+        return { ok: true, cmd: 'play', session: command.session, state: 'playing' };
+      }
+      if (command.cmd === 'status') {
+        await statusGate;
+        return { ok: true, cmd: 'status', session: command.session, playing: true, position: 0.08 };
+      }
+    },
+  }, async ({ audio, native }) => {
+    await audio.configure(config(id));
+    const pendingPlay = audio.play(cue(id, {
+      wav: constantWav({ durationMs: 900, amplitude: 0.2 }).toString('base64'),
+    }));
+    await waitFor(() => native.commands.some(command => command.cmd === 'play'), 'pending native play ACK');
+    const openFile = native.commands.find(command => command.cmd === 'open').file;
+    const beforePlayAck = (await readFile(openFile)).length;
+    await wait(80);
+    assert.ok((await readFile(openFile)).length > beforePlayAck,
+      'the mixer should refill the stream while the native play ACK is pending');
+    releasePlay();
+    assert.equal((await pendingPlay).played, true);
+    await waitFor(() => native.commands.some(command => command.cmd === 'status'), 'status pump before cancel');
+    const before = (await readFile(openFile)).length;
+    await wait(80);
+    const during = (await readFile(openFile)).length;
+    assert.ok(during > before, 'the file pump must keep writing while a native status response is pending');
+    const draining = audio.cancel();
+    releaseStatus();
+    await draining;
+    assert.ok(native.commands.some(command => command.cmd === 'stop'), 'cancel must stop the shared native session');
+    await assert.rejects(() => access(openFile), /ENOENT/, 'cancel must remove its own progressive stream');
+    const statusCount = native.commands.filter(command => command.cmd === 'status').length;
+    await wait(60);
+    assert.equal(native.commands.filter(command => command.cmd === 'status').length, statusCount,
+      'a pump invalidated by cancel must not schedule another status tick');
+    assert.equal(native.commands.filter(command => command.cmd === 'open').length, 1,
+      'cancel must not allow the old cue to open a replacement stream');
+  });
+  releasePlay?.();
+  releaseStatus?.();
 });
 
 test('explicit stop honors identity, revision, and increasing sequence', async () => {
@@ -352,7 +452,127 @@ test('close stops an active cue and releases the session', async () => {
     await waitFor(() => native.commands.some(command => command.cmd === 'play'), 'active cue before close');
     await audio.close();
     assert.ok(native.commands.some(command => command.cmd === 'stop'), 'close must release the active native session');
+    const streamFile = native.commands.find(command => command.cmd === 'open')?.file;
+    assert.ok(streamFile?.endsWith('.wav.partial'), 'native playback should use the owned progressive stream');
+    await assert.rejects(() => access(streamFile), /ENOENT/, 'close must remove the stream created by this instance');
     assertNoMusicRouting(native.commands);
+  });
+});
+
+test('rapid cues overlap in one growing float32 stream and preserve the earlier tail', async () => {
+  const id = identity();
+  await withAudio('overlapping-progressive-mix', { owner: id.clientId }, async ({ audio, native, dataDir }) => {
+    await audio.configure(config(id));
+    const first = await audio.play(cue(id, {
+      sequence: 1,
+      volume: 0.5,
+      wav: constantWav({ durationMs: 700, amplitude: 0.25 }).toString('base64'),
+    }));
+    assert.equal(first.played, true);
+    await wait(90);
+    const second = await audio.play(cue(id, {
+      sequence: 2,
+      volume: 0.5,
+      wav: constantWav({ durationMs: 160, amplitude: 0.25 }).toString('base64'),
+    }));
+    assert.equal(second.played, true);
+    const [firstVoice, secondVoice] = audio.voice.voices;
+    assert.ok(firstVoice && secondVoice);
+    const overlapStart = Math.max(firstVoice.startFrame, secondVoice.startFrame);
+    const overlapEnd = Math.min(firstVoice.endFrame, secondVoice.endFrame);
+    assert.ok(overlapEnd > overlapStart, 'the selected cues should overlap on the mix timeline');
+    const overlapFrame = overlapStart + Math.floor(Math.min(10 * 48, (overlapEnd - overlapStart) / 2));
+    assert.ok(firstVoice.endFrame > secondVoice.endFrame, 'the first cue should outlast the shorter second cue');
+    const tailFrame = secondVoice.endFrame + Math.floor(Math.min(50 * 48, (firstVoice.endFrame - secondVoice.endFrame) / 2));
+
+    const opens = native.commands.filter(command => command.cmd === 'open');
+    const plays = native.commands.filter(command => command.cmd === 'play');
+    assert.equal(opens.length, 1, 'a short interval between cues must not reopen the native output');
+    assert.equal(plays.length, 1, 'both cues must share the same native play session');
+    assert.equal(opens[0].growingBytes, 44 + 120 * 48000 * 8, 'the WAV extent must be fixed and bounded to 120 seconds');
+    assert.equal(opens[0].volume, 1, 'cue volumes must be applied in the software mixer');
+    assert.equal(opens[0].sourceFormat.bitsPerSample, 32);
+    assert.equal(opens[0].file.startsWith(path.join(dataDir, 'interface-audio-v1')), true);
+    assert.ok(opens[0].file.endsWith('.wav.partial'));
+    const header = await readFile(opens[0].file);
+    assert.equal(header.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(header.readUInt16LE(20), 3, 'the progressive stream must be IEEE float32');
+    assert.equal(header.readUInt16LE(22), 2);
+    assert.equal(header.readUInt32LE(24), 48000);
+
+    const neededMs = tailFrame * 1000 / 48000;
+    const elapsedMs = performance.now() - audio.voice.startedAt;
+    await wait(Math.max(0, neededMs - 100 - elapsedMs + 45));
+    const grown = await readFile(opens[0].file);
+    assert.ok(grown.length > header.length, 'the stream should grow as the 20 ms mixer pump advances');
+    const sampleAtFrame = frame => grown.readFloatLE(44 + frame * 8);
+    assert.ok(sampleAtFrame(overlapFrame) > 0.21, 'overlapping cues should sum in the same output frames');
+    assert.ok(Math.abs(sampleAtFrame(tailFrame) - 0.125) < 0.002,
+      'the first cue tail should remain audible after the shorter second cue has ended');
+    assert.equal(native.commands.some(command => command.cmd === 'stop'), false,
+      'the active mix must not be stopped between cues');
+
+    for (let sequence = 3; sequence <= 12; sequence++) {
+      const result = await audio.play(cue(id, {
+        sequence,
+        wav: constantWav({ durationMs: 700, amplitude: 0.05 }).toString('base64'),
+      }));
+      assert.equal(result.played, true);
+      assert.ok(audio.voice?.voices.length <= 10, 'the active software voice count must stay bounded at ten');
+    }
+    assert.equal(native.commands.filter(command => command.cmd === 'open').length, 1,
+      'adding voices to an active stream must not create more native sessions');
+  });
+});
+
+test('a full progressive stream rotates only after its prior mix has drained', async () => {
+  const id = identity();
+  await withAudio('progressive-stream-rotation', { owner: id.clientId }, async ({ audio, native }) => {
+    await audio.configure(config(id));
+    assert.equal((await audio.play(cue(id, {
+      sequence: 1,
+      wav: constantWav({ durationMs: 900, amplitude: 0.2 }).toString('base64'),
+    }))).played, true);
+    const oldStream = audio.voice;
+    const oldFile = oldStream.file;
+    oldStream.voices.length = 0;
+    oldStream.contentEndFrame = 119.5 * 48000;
+    oldStream.writeFrames = 120 * 48000 - 3000;
+    oldStream.startedAt = performance.now() - 119900;
+
+    const nextPromise = audio.play(cue(id, {
+      sequence: 2,
+      wav: constantWav({ durationMs: 2500, amplitude: 0.2 }).toString('base64'),
+    }));
+    await waitFor(() => native.commands.filter(command => command.cmd === 'open').length === 2,
+      'the replacement stream to open');
+    const next = await nextPromise;
+    assert.equal(next.played, true, 'a cue too large for the remaining extent should move to a fresh stream');
+    const opens = native.commands.filter(command => command.cmd === 'open');
+    assert.equal(opens.length, 2, 'the mix should open one replacement stream at the extent boundary');
+    assert.notEqual(opens[0].file, opens[1].file);
+    assert.ok(opens.every(command => command.growingBytes === 44 + 120 * 48000 * 8),
+      'stream rotation must keep every declared file extent bounded');
+    await assert.rejects(() => access(oldFile), /ENOENT/, 'the drained old stream should be removed after its stop ACK');
+    assert.equal(audio.voice.file, opens[1].file);
+
+    const waitingStream = audio.voice;
+    const waitingFile = waitingStream.file;
+    waitingStream.voices.length = 0;
+    waitingStream.contentEndFrame = 119.5 * 48000;
+    waitingStream.writeFrames = 120 * 48000 - 3000;
+    waitingStream.startedAt = performance.now() - 119900;
+    const waitingCue = audio.play(cue(id, {
+      revision: 1,
+      sequence: 3,
+      wav: constantWav({ durationMs: 2500, amplitude: 0.2 }).toString('base64'),
+    }));
+    await waitFor(() => audio.deferredCues.length === 1, 'a cue deferred at the old stream boundary');
+    audio.configure(config(id, { revision: 2, design: 'archive' }));
+    assert.equal(await waitingCue.then(result => result.played), false,
+      'a revision change must resolve and invalidate a cue deferred for stream rotation');
+    await audio.cancel();
+    await assert.rejects(() => access(waitingFile), /ENOENT/, 'theme change must drain and remove the old stream');
   });
 });
 

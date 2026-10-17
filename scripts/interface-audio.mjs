@@ -7,6 +7,18 @@ const SOUNDS = new Set(['page-open','page-close','ui-tick','brand','text-reveal'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const HASH = /^[0-9a-f]{64}$/
 const PROCESSING = normalizeProcessing({ transition: { transportFade: true, transportMs: 20, seekFade: false } })
+const SAMPLE_RATE = 48000
+const CHANNELS = 2
+const FLOAT_FRAME_BYTES = CHANNELS * 4
+const STREAM_SECONDS = 120
+const STREAM_FRAMES = SAMPLE_RATE * STREAM_SECONDS
+const STREAM_BYTES = 44 + STREAM_FRAMES * FLOAT_FRAME_BYTES
+const PREWRITE_FRAMES = SAMPLE_RATE * 100 / 1000
+const INITIAL_BUFFER_FRAMES = PREWRITE_FRAMES
+const PUMP_INTERVAL_MS = 20
+const STATUS_INTERVAL_MS = 60
+const DRAIN_MS = 250
+const MAX_VOICES = 10
 const fail = message => Object.assign(new Error(message), { status: 400 })
 function object(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) throw fail('界面音效请求包含无效字段。')
@@ -25,7 +37,32 @@ function decodeWav(value) {
   return wav
 }
 
-/** One short UI voice on the music host. Music always drains this voice before opening. */
+function floatStreamHeader() {
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0, 'ascii')
+  header.writeUInt32LE(STREAM_BYTES - 8, 4)
+  header.write('WAVE', 8, 'ascii')
+  header.write('fmt ', 12, 'ascii')
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(3, 20)
+  header.writeUInt16LE(CHANNELS, 22)
+  header.writeUInt32LE(SAMPLE_RATE, 24)
+  header.writeUInt32LE(SAMPLE_RATE * FLOAT_FRAME_BYTES, 28)
+  header.writeUInt16LE(FLOAT_FRAME_BYTES, 32)
+  header.writeUInt16LE(32, 34)
+  header.write('data', 36, 'ascii')
+  header.writeUInt32LE(STREAM_FRAMES * FLOAT_FRAME_BYTES, 40)
+  return header
+}
+
+function cueSamples(wav, volume) {
+  const frames = (wav.length - 44) / 4
+  const samples = new Float32Array(frames * CHANNELS)
+  for (let index = 0; index < samples.length; index++) samples[index] = wav.readInt16LE(44 + index * 2) / 32768 * volume
+  return samples
+}
+
+/** One progressively written UI mix on the music host. Music drains it before opening. */
 export class InterfaceAudio {
   constructor({ native, dataDir }) {
     this.native = native
@@ -35,6 +72,9 @@ export class InterfaceAudio {
     this.generation = 0
     this.sequence = 0
     this.closed = false
+    this.voice = undefined
+    this.pendingCueCount = 0
+    this.deferredCues = []
   }
   enqueue(operation) {
     const task = this.tail.catch(() => {}).then(operation)
@@ -59,7 +99,7 @@ export class InterfaceAudio {
     this.config = structuredClone(value)
     this.sequence = 0
     this.generation++
-    clearTimeout(this.timer)
+    this.invalidatePump(true)
     // Configuration takes effect synchronously, including an open already in flight.
     void this.enqueue(() => this.stopVoice()).catch(error => { this.lastError = error })
     return { enabled: this.eligible() === true }
@@ -71,44 +111,306 @@ export class InterfaceAudio {
     const wav = decodeWav(value.wav)
     if (!this.matches(value) || value.sequence <= this.sequence || !this.eligible()) return Promise.resolve({ played: false, reason: 'inactive' })
     this.sequence = value.sequence
-    const generation = ++this.generation
+    const generation = this.generation
     const current = () => generation === this.generation && this.matches(value) && this.eligible()
+    if (!value.volume) return Promise.resolve({ played: false, reason: 'inactive' })
+    this.pendingCueCount++
     return this.enqueue(async () => {
-      if (!current()) return { played: false, reason: 'stale' }
-      await this.stopVoice()
-      if (!current() || !value.volume) return { played: false, reason: 'inactive' }
-      if (this.lastError) { const error = this.lastError; this.lastError = undefined; throw error }
-      const file = await this.cache(wav)
-      if (!current()) return { played: false, reason: 'stale' }
-      const session = randomUUID(), output = this.config.output
-      const voice = this.voice = { session, generation, duration: (wav.length-44)/192000, startedAt: Date.now() }
       try {
-        await this.native.command({ cmd: 'open', session, file, mode: 'pcm', dsd: false, backend: output.backend, device: output.device, channel: output.channel, wasapiDevice: output.wasapiDevice || 'default', wasapiMode: 'shared', processing: structuredClone(PROCESSING), volume: value.volume, position: 0, sourceFormat: { sampleRate: 48000, bitsPerSample: 16, codec: 'PCM', lossless: true } })
-        if (!current()) { await this.stopVoice(); return { played: false, reason: 'stale' } }
-        await this.native.command({ cmd: 'play', session })
-        if (!current()) { await this.stopVoice(); return { played: false, reason: 'stale' } }
-        this.scheduleFinish(voice, Math.ceil(voice.duration*1000)+30)
-        return { played: true }
-      } catch (error) { await this.stopVoice().catch(() => {}); throw error }
-    })
+        if (!current()) return { played: false, reason: 'stale' }
+        if (this.lastError) { const error = this.lastError; this.lastError = undefined; throw error }
+        await this.cache(wav)
+        if (!current()) return { played: false, reason: 'stale' }
+        const samples = cueSamples(wav, value.volume)
+        if (!samples.length) return { played: false, reason: 'inactive' }
+        let stream = this.voice
+        if (!stream) stream = await this.openStream(generation, value)
+        if (!stream || !current() || this.voice !== stream) return { played: false, reason: 'stale' }
+        if (!this.addCue(stream, samples)) {
+          const deferred = this.deferCue(stream, { generation, request: value, samples })
+          this.schedulePump(PUMP_INTERVAL_MS)
+          return { deferred }
+        }
+        return { acknowledgement: stream.playPromise, generation, request: value }
+      } catch (error) {
+        if (this.voice?.generation === generation) await this.stopVoice().catch(() => {})
+        throw error
+      } finally {
+        this.pendingCueCount = Math.max(0, this.pendingCueCount - 1)
+      }
+    }).then(result => this.settlePlayResult(result))
   }
-  scheduleFinish(voice, delay) {
+
+  invalidatePump(discardDeferred = false) {
     clearTimeout(this.timer)
+    this.timer = undefined
+    if (this.voice) {
+      this.voice.cancelled = true
+      this.voice.voices.length = 0
+    }
+    if (discardDeferred) {
+      for (const cue of this.deferredCues.splice(0)) cue.resolve({ played: false, reason: 'stale' })
+    }
+  }
+
+  makeVoiceRoom(stream) {
+    while (stream.voices.length + this.deferredCues.length >= MAX_VOICES) {
+      if (stream.voices.length) stream.voices.shift()
+      else this.deferredCues.shift()?.resolve({ played: false, reason: 'voice-limit' })
+    }
+  }
+
+  addCue(stream, samples) {
+    const nowFrame = Math.floor(Math.max(0, performance.now() - stream.startedAt) * SAMPLE_RATE / 1000)
+    const startFrame = Math.max(stream.writeFrames, nowFrame + PREWRITE_FRAMES)
+    const endFrame = startFrame + samples.length / CHANNELS
+    if (endFrame > STREAM_FRAMES) return false
+    this.makeVoiceRoom(stream)
+    stream.voices.push({ order: ++stream.voiceOrder, startFrame, endFrame, samples })
+    this.schedulePump(PUMP_INTERVAL_MS)
+    return true
+  }
+
+  deferCue(stream, cue) {
+    this.makeVoiceRoom(stream)
+    let resolve
+    const promise = new Promise(done => { resolve = done })
+    this.deferredCues.push({ ...cue, resolve })
+    return promise
+  }
+
+  settlePlayResult(result) {
+    if (result?.deferred) return result.deferred.then(value => this.settlePlayResult(value))
+    if (result?.acknowledgement) return result.acknowledgement.then(() => {
+      const current = result.generation === this.generation && this.matches(result.request) && this.eligible()
+      return current ? { played: true } : { played: false, reason: 'stale' }
+    })
+    return result
+  }
+
+  async startDeferredCues() {
+    const cues = this.deferredCues.splice(0)
+    const eligible = cues.filter(cue => {
+      const valid = cue.generation === this.generation && this.matches(cue.request) && this.eligible()
+      if (!valid) cue.resolve({ played: false, reason: 'stale' })
+      return valid
+    })
+    if (!eligible.length) return
+    let stream
+    try { stream = await this.openStream(eligible[0].generation, eligible[0].request) }
+    catch (error) {
+      for (const cue of eligible) cue.resolve({ played: false, reason: 'error' })
+      throw error
+    }
+    if (!stream) {
+      for (const cue of eligible) cue.resolve({ played: false, reason: 'stale' })
+      return
+    }
+    for (const cue of eligible) {
+      if (cue.generation !== this.generation || !this.matches(cue.request) || !this.eligible()) {
+        cue.resolve({ played: false, reason: 'stale' })
+      } else if (this.addCue(stream, cue.samples)) {
+        cue.resolve({ acknowledgement: stream.playPromise, generation: cue.generation, request: cue.request })
+      }
+      else cue.resolve({ played: false, reason: 'stream-limit' })
+    }
+  }
+
+  async writeAt(stream, bytes, position) {
+    let offset = 0
+    while (offset < bytes.length) {
+      const result = await stream.writer.write(bytes, offset, bytes.length - offset, position + offset)
+      if (!result.bytesWritten) throw fail('界面音效渐进流写入失败。')
+      offset += result.bytesWritten
+    }
+  }
+
+  async openStream(generation, request) {
+    const stream = {
+      session: randomUUID(), generation, voices: [], voiceOrder: 0, writeFrames: 0,
+      contentEndFrame: 0, startedAt: 0, lastStatusAt: 0, statusPending: false, cancelled: false,
+      openAttempted: false, opened: false, file: undefined, fileIdentity: undefined, writer: undefined,
+    }
+    this.voice = stream
+    try {
+      await fs.mkdir(this.cacheDir, { recursive: true })
+      const [root, directory] = await Promise.all([fs.realpath(this.dataDir), fs.realpath(this.cacheDir)])
+      if (path.dirname(directory) !== root) throw fail('界面音效缓存目录已变化。')
+      stream.file = path.join(directory, `ui-${randomUUID()}.wav.partial`)
+      stream.writer = await fs.open(stream.file, 'wx+')
+      stream.fileIdentity = await stream.writer.stat()
+      await this.writeAt(stream, floatStreamHeader(), 0)
+      const initial = Buffer.alloc(INITIAL_BUFFER_FRAMES * FLOAT_FRAME_BYTES)
+      await this.writeAt(stream, initial, 44)
+      stream.writeFrames = INITIAL_BUFFER_FRAMES
+      if (generation !== this.generation || stream.cancelled || !this.matches(request) || !this.eligible()) {
+        await this.stopVoice()
+        return undefined
+      }
+      const output = this.config.output
+      stream.openAttempted = true
+      await this.native.command({
+        cmd: 'open', session: stream.session, file: stream.file, growingBytes: STREAM_BYTES,
+        mode: 'pcm', dsd: false, backend: output.backend, device: output.device, channel: output.channel,
+        wasapiDevice: output.wasapiDevice || 'default', wasapiMode: 'shared',
+        processing: structuredClone(PROCESSING), volume: 1, position: 0,
+        sourceFormat: { sampleRate: SAMPLE_RATE, bitsPerSample: 32, codec: 'IEEE_FLOAT', lossless: true },
+      })
+      stream.opened = true
+      if (generation !== this.generation || stream.cancelled || !this.matches(request) || !this.eligible()) {
+        await this.stopVoice()
+        return undefined
+      }
+      stream.startedAt = performance.now()
+      stream.lastStatusAt = stream.startedAt
+      stream.playPromise = Promise.resolve()
+        .then(() => this.native.command({ cmd: 'play', session: stream.session }))
+        .catch(error => {
+          if (this.voice === stream && !stream.cancelled) {
+            this.lastError = error
+            this.generation++
+            this.invalidatePump(true)
+            void this.enqueue(() => this.stopVoice()).catch(() => {})
+          }
+          throw error
+        })
+      stream.playPromise.catch(() => {})
+      return stream
+    } catch (error) {
+      if (this.voice === stream) await this.stopVoice().catch(() => {})
+      throw error
+    }
+  }
+
+  async mixFrames(stream, startFrame, frames) {
+    const bytes = Buffer.alloc(frames * FLOAT_FRAME_BYTES)
+    const endFrame = startFrame + frames
+    for (const voice of stream.voices) {
+      if (!voice.samples) continue
+      const overlapStart = Math.max(startFrame, voice.startFrame)
+      const overlapEnd = Math.min(endFrame, voice.endFrame)
+      if (overlapEnd <= overlapStart) continue
+      const sourceOffset = (overlapStart - voice.startFrame) * CHANNELS
+      const destinationOffset = (overlapStart - startFrame) * CHANNELS
+      const sampleCount = (overlapEnd - overlapStart) * CHANNELS
+      for (let index = 0; index < sampleCount; index++) {
+        const sample = bytes.readFloatLE((destinationOffset + index) * 4) + voice.samples[sourceOffset + index]
+        bytes.writeFloatLE(Math.max(-1, Math.min(1, sample)), (destinationOffset + index) * 4)
+      }
+      stream.contentEndFrame = Math.max(stream.contentEndFrame, overlapEnd)
+    }
+    await this.writeAt(stream, bytes, 44 + startFrame * FLOAT_FRAME_BYTES)
+    stream.writeFrames = endFrame
+    for (const voice of stream.voices) if (voice.endFrame <= stream.writeFrames) voice.samples = undefined
+  }
+
+  schedulePump(delay = PUMP_INTERVAL_MS) {
+    if (this.timer || !this.voice || this.voice.cancelled) return
     this.timer = setTimeout(() => {
-      void this.enqueue(async () => {
-        if (this.voice !== voice) return
-        const status = await this.native.command({ cmd: 'status', session: voice.session })
-        if (status.ended || status.error || !status.playing || Date.now()-voice.startedAt > voice.duration*1000+2000) await this.stopVoice()
-        else this.scheduleFinish(voice, 60)
-      }).catch(error => { this.lastError = error; void this.enqueue(() => this.stopVoice()).catch(() => {}) })
+      this.timer = undefined
+      void this.enqueue(() => this.pump()).catch(error => {
+        this.lastError = error
+        this.invalidatePump(true)
+        void this.enqueue(() => this.stopVoice()).catch(() => {})
+      })
     }, delay)
     this.timer.unref?.()
   }
+
+  pollStatus(stream, now) {
+    if (stream.statusPending || now - stream.lastStatusAt < STATUS_INTERVAL_MS) return
+    stream.lastStatusAt = now
+    stream.statusPending = true
+    void Promise.resolve().then(() => this.native.command({ cmd: 'status', session: stream.session })).then(status => {
+      stream.statusPending = false
+      if (this.voice !== stream || stream.cancelled || stream.generation !== this.generation) return
+      void this.enqueue(() => this.handleStatus(stream, status)).catch(error => {
+        this.lastError = error
+        this.invalidatePump(true)
+        void this.enqueue(() => this.stopVoice()).catch(() => {})
+      })
+    }, error => {
+      stream.statusPending = false
+      if (this.voice !== stream || stream.cancelled || stream.generation !== this.generation) return
+      this.lastError = error
+      this.generation++
+      this.invalidatePump(true)
+      void this.enqueue(() => this.stopVoice()).catch(() => {})
+    })
+  }
+
+  async handleStatus(stream, status) {
+    if (this.voice !== stream || stream.cancelled || stream.generation !== this.generation) return
+    if (!this.eligible()) {
+      this.invalidatePump(true)
+      await this.stopVoice()
+      return
+    }
+    if (status?.ended === true || status?.error || (status?.playing === false && status?.buffering !== true)) {
+      await this.stopVoice()
+      await this.startDeferredCues()
+    }
+  }
+
+  async pump() {
+    const stream = this.voice
+    if (!stream) return
+    if (stream.cancelled || stream.generation !== this.generation || !this.eligible()) {
+      if (!this.eligible()) this.invalidatePump(true)
+      await this.stopVoice()
+      return
+    }
+    const now = performance.now()
+    const elapsedMs = Math.max(0, now - stream.startedAt)
+    const playbackFrame = Math.floor(elapsedMs * SAMPLE_RATE / 1000)
+    const targetFrame = Math.min(STREAM_FRAMES, playbackFrame + PREWRITE_FRAMES)
+    while (stream.writeFrames < targetFrame) {
+      if (this.voice !== stream || stream.cancelled || stream.generation !== this.generation || !this.eligible()) {
+        if (!this.eligible()) this.invalidatePump(true)
+        await this.stopVoice()
+        return
+      }
+      const frames = Math.min(targetFrame - stream.writeFrames, SAMPLE_RATE / 5)
+      await this.mixFrames(stream, stream.writeFrames, frames)
+    }
+    if (this.voice !== stream || stream.cancelled || stream.generation !== this.generation) return
+    if (!this.eligible()) {
+      this.invalidatePump(true)
+      await this.stopVoice()
+      return
+    }
+    stream.voices = stream.voices.filter(voice => voice.endFrame > playbackFrame)
+    if (this.pendingCueCount === 0 && stream.voices.length === 0 && stream.contentEndFrame > 0
+      && elapsedMs >= stream.contentEndFrame * 1000 / SAMPLE_RATE + DRAIN_MS) {
+      await this.stopVoice()
+      await this.startDeferredCues()
+      return
+    }
+    this.pollStatus(stream, now)
+    if (this.voice === stream) this.schedulePump(PUMP_INTERVAL_MS)
+  }
+
   async stopVoice() {
-    clearTimeout(this.timer)
-    const voice = this.voice
+    this.invalidatePump()
+    const stream = this.voice
     this.voice = undefined
-    if (voice) await this.native.command({ cmd: 'stop', session: voice.session })
+    if (!stream) return
+    let stopError
+    let stopped = !stream.opened
+    if (stream.openAttempted) {
+      try {
+        await this.native.command({ cmd: 'stop', session: stream.session })
+        stopped = true
+      } catch (error) { stopError = error }
+    }
+    let closeError
+    try { await stream.writer?.close() } catch (error) { closeError = error }
+    if (stopped && stream.file && stream.fileIdentity) {
+      const existing = await fs.stat(stream.file).catch(error => { if (error.code !== 'ENOENT') throw error; return null })
+      if (existing && existing.dev === stream.fileIdentity.dev && existing.ino === stream.fileIdentity.ino) await fs.unlink(stream.file)
+    }
+    if (stopError) throw stopError
+    if (closeError) throw closeError
   }
   stop(value) {
     identity(value, ['sequence'])
@@ -119,7 +421,7 @@ export class InterfaceAudio {
   }
   cancel() {
     this.generation++
-    clearTimeout(this.timer)
+    this.invalidatePump(true)
     return this.enqueue(() => this.stopVoice())
   }
   async close() { this.closed = true; await this.cancel() }

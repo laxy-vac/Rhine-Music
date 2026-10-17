@@ -933,7 +933,14 @@ function syncEntrySettings() {
 
 function startFutureEntry() {
   if (futureEntry?.active || entryPlaybackUnavailable()) return false;
+  effects.setScene("boot");
+  effects.restartBoot();
+  // Native cues use offline synthesis; the desktop entry needs no browser
+  // autoplay grant. Browser output still follows its normal gesture policy.
+  if (window.rhineDesktop?.native) void effects.unlock();
   futureEntry = new FutureEntry(stage, (skipped, ms) => {
+    effects.setScene("archive");
+    if (skipped) effects.play("confirm");
     const now = ms / 1000;
     if (skipped) scene?.showMusicArchiveImmediately(now);
     else {
@@ -960,7 +967,7 @@ function replayFutureEntry() {
   scene?.showMusicArchiveImmediately(performance.now() / 1000);
   showBrowseSurface(true);
   effects.setScene("archive");
-  if (startFutureEntry()) futureEntry?.arm();
+  if (startFutureEntry()) { futureEntry?.arm(); effects.play("ui-tick"); }
 }
 function savePrefs() {
   preferences.view = musicApplication.view;
@@ -1359,6 +1366,7 @@ function commitSelection(index: number, navigation?: ArchiveNavigation, keepDeta
     navigation && "axis" in navigation && navigation.axis === "lane"
       ? "column"
       : "tick",
+    navigation && "axis" in navigation && navigation.axis === "lane" ? navigation.direction * .45 : 0,
   );
 }
 function select(index: number, navigation?: ArchiveNavigation, openAfter = presentation.openingOrDetail, route?: AlbumSelection["route"], entryKey?: string) {
@@ -1750,6 +1758,7 @@ function selectSettingsCategory(next: SettingsCategory, focus = false) {
   const content = $("#settings-page-content");
   if (next !== settingsCategory) settingsScrollPositions.set(settingsCategory, content.scrollTop);
   const changed = next !== settingsCategory;
+  if (changed && focus) effects.play("ui-tick");
   settingsCategory = next;
   document.querySelectorAll<HTMLElement>("[data-settings-category]").forEach((node) => {
     node.hidden = node.dataset.settingsCategory !== next;
@@ -1838,6 +1847,7 @@ function closeManagementPage(restoreFocus = true) {
     return;
   }
   if (restoreFocus && pageScan.change(() => closeManagementPage(restoreFocus), preferences.reduced)) return;
+  if (restoreFocus) effects.play("page-close");
   if (page === "theme") themePageScrollTop = $("#theme-page-content").scrollTop;
   cleanupStylePreview?.();
   cleanupStylePreview = undefined;
@@ -2120,6 +2130,7 @@ function closePanel(after?: () => void) {
   pendingPanelAfter = after;
   if (panelClosing) return;
   panelClosing = true;
+  effects.play("page-close");
   panelSelectControls?.close();
   panelTransition?.hide(preferences.reduced, () => {
     panel = null;
@@ -4166,7 +4177,7 @@ document.addEventListener("click", (e) => {
       // Temporarily unavailable for the simplified CD shell (no inner assembly).
       break;
     case "sound-preview":
-      effects.play("page-open");
+      effects.play("confirm");
       break;
     case "fullscreen":
       void changeFullscreen();
@@ -4427,6 +4438,15 @@ document.addEventListener("change", (e) => {
     savePrefs();
   }
 });
+// Reference settings use a confirmation after a committed preference change.
+// Volume dragging stays silent; the explicit preview auditions that level.
+document.addEventListener("change", (event) => {
+  const control = event.target;
+  if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement) || control.disabled) return;
+  if (!control.matches('#sound-setting,#bgm-setting,#reduced-motion,#entry-on-open,[data-quality="wave"]')) return;
+  queueMicrotask(() => effects.play("confirm"));
+});
+
 document.addEventListener("dblclick", (event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>('[data-action="foobar-select"]');
   if (!target || page !== "music" || panel || viewer?.isOpen || presentation.phase !== "archive") return;
@@ -4572,6 +4592,9 @@ function frame(ms: number) {
   if (!document.hidden && scene && page === "music") {
     const entryWasActive = !!futureEntry?.active;
     const entryShot = futureEntry?.update(ms);
+    // The music entry ends at the overview. Omit the reference's later
+    // extraction/inspection cues, which belong to a detail transition.
+    if (entryShot) effects.updateBoot(entryShot.time, false, 26.92, preferences.entryIdentity);
     // The prepared WebGL frame stays beneath the opaque terminal film. Start
     // rendering its cinematic path when the welcome screen actually releases it.
     if (!viewer?.isOpen && (!entryShot || entryShot.time >= 21.9) &&

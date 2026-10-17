@@ -20,6 +20,7 @@ if (require.main === module) {
 const rendererModule = String.raw`
 import { renderInterfaceSound, TerminalAudio } from '/src/audio.ts';
 import { InterfaceAudioClient } from '/src/interface-audio.ts';
+import { hasTypingBetween } from '/src/typing-rhythm.ts';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const check = (checks, name, condition, detail = '') => {
@@ -94,6 +95,40 @@ window.__interfaceAudioProbe = {
       check(checks, 'rendered WAV duration matches its frame count',
         rendered.duration > 0 && rendered.duration <= 2.5 && Math.abs(rendered.duration - payloadDuration) < 1 / 48000,
         'duration=' + rendered.duration + ', payload=' + payloadDuration);
+
+      const palette = ['page-open','page-close','ui-tick','brand','text-reveal','key','tick','column','open','confirm','back','scan','welcome','array','inspect','explode','assemble'];
+      const signatures = new Set();
+      for (const sound of palette) {
+        const cue = await renderInterfaceSound(sound);
+        const data = new DataView(cue.wav.buffer,cue.wav.byteOffset,cue.wav.byteLength);
+        let energy = 0;
+        for (let offset=44;offset<cue.wav.length;offset+=2) energy += Math.abs(data.getInt16(offset,true));
+        check(checks, 'reference palette '+sound+' renders non-silent bounded PCM', energy>0 && cue.duration<=2.5);
+        const digest = await crypto.subtle.digest('SHA-256',cue.wav);
+        signatures.add(Array.from(new Uint8Array(digest)).join(','));
+      }
+      check(checks, 'all 17 reference sounds have distinct rendered waveforms',signatures.size===17);
+      const left = await renderInterfaceSound('column',-.45), right = await renderInterfaceSound('column',.45);
+      const channelEnergy = bytes => {
+        const data = new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength); let l=0,r=0;
+        for(let offset=44;offset<bytes.length;offset+=4){l+=Math.abs(data.getInt16(offset,true));r+=Math.abs(data.getInt16(offset+2,true));}
+        return [l,r];
+      };
+      const l=channelEnergy(left.wav),r=channelEnergy(right.wav);
+      check(checks,'column navigation retains directional stereo panning',l[0]>l[1] && r[1]>r[0]);
+      const timeline = new TerminalAudio(), cues=[];
+      timeline.play = sound => cues.push(sound);
+      try {
+        timeline.restartBoot();
+        for(let frame=44;frame<=678;frame++)timeline.updateBoot(frame/25,false,26.92,'Kristen Wright');
+        check(checks,'Future entry plays reference cues through array without detail extraction',
+          JSON.stringify(cues.filter(sound=>sound!=='key'))===JSON.stringify(['brand','confirm','scan','confirm','welcome','text-reveal','text-reveal','array']));
+        check(checks,'entry typing is driven by the animation clock',cues.filter(sound=>sound==='key').length>20);
+        const typingCount = identity => {let count=0;for(let frame=321;frame<=339;frame++)if(hasTypingBetween((frame-1)/25,frame/25,identity))count++;return count;};
+        check(checks,'typing rhythm follows the configured welcome ID',typingCount('ABCDEFGHIJKLMNOPQRSTUVWX')>typingCount('A'));
+        cues.length=0;timeline.restartBoot();timeline.updateBoot(10,false,26.92);timeline.updateBoot(10.04,true,26.92);timeline.updateBoot(9,false,26.92);
+        check(checks,'time jumps, frozen entry and rewind never replay missed cues',cues.length===0);
+      }finally{timeline.dispose();}
 
       client = new InterfaceAudioClient(error => errors.push(String(error?.message ?? error)));
       client.configure({

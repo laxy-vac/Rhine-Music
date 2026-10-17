@@ -26,6 +26,7 @@
 | 文档 | 职责 |
 | --- | --- |
 | [AUDIO-CORE-IMPLEMENTATION](AUDIO-CORE-IMPLEMENTATION.md) | 当前解码、处理链与输出实现 |
+| [INTERFACE-AUDIO](INTERFACE-AUDIO.md) | Future 参考音效、触发映射、入场时钟与互斥规则 |
 | [LSP-ADVANCED-EQ](LSP-ADVANCED-EQ.md) | 官方原生 EQ 窗口与能力边界 |
 | [DSD-PLAYBACK](DSD-PLAYBACK.md) | DSD / DoP 独立链路 |
 | [SONY-WALKMAN](SONY-WALKMAN.md) | Sony 组件来源、适配与许可边界 |

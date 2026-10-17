@@ -9,7 +9,15 @@ type EditableRangeRecord = {
   previousTitle: string | null;
 };
 
+type RangeProgressRecord = {
+  update: () => void;
+  previousValue: string;
+  previousPriority: string;
+  lastValue: string;
+};
+
 const RANGE_SELECTOR = 'input[type="range"]';
+const RANGE_PROGRESS_PROPERTY = "--range-progress";
 
 function numberText(value: number, step: string) {
   const decimals = step === "any" ? 2 : Math.min(4, Math.max(0, (step.split(".")[1] || "").length));
@@ -73,8 +81,49 @@ function setInvalid(editor: HTMLInputElement, message: string) {
 
 export function setupEditableRanges(root: Document | HTMLElement = document) {
   const records = new Map<HTMLInputElement, EditableRangeRecord>();
+  const progressRecords = new Map<HTMLInputElement, RangeProgressRecord>();
   const documentRef = root instanceof Document ? root : root.ownerDocument;
   const observer = new MutationObserver(() => sync());
+
+  const updateRangeProgress = (range: HTMLInputElement) => {
+    let progressRecord = progressRecords.get(range);
+    if (!progressRecord) {
+      progressRecord = {
+        update: () => {},
+        previousValue: range.style.getPropertyValue(RANGE_PROGRESS_PROPERTY),
+        previousPriority: range.style.getPropertyPriority(RANGE_PROGRESS_PROPERTY),
+        lastValue: "",
+      };
+      progressRecord.update = () => {
+        const rawMin = range.min === "" ? 0 : Number(range.min);
+        const rawMax = range.max === "" ? 100 : Number(range.max);
+        const min = Number.isFinite(rawMin) ? rawMin : 0;
+        const max = Number.isFinite(rawMax) ? rawMax : 100;
+        const value = range.valueAsNumber;
+        const ratio = Number.isFinite(value) && max > min
+          ? Math.min(1, Math.max(0, (value - min) / (max - min)))
+          : 0;
+        const nextValue = `${Number((ratio * 100).toFixed(3))}%`;
+        if (progressRecord!.lastValue === nextValue && range.style.getPropertyValue(RANGE_PROGRESS_PROPERTY) === nextValue) return;
+        range.style.setProperty(RANGE_PROGRESS_PROPERTY, nextValue);
+        progressRecord!.lastValue = nextValue;
+      };
+      progressRecords.set(range, progressRecord);
+      range.addEventListener("input", progressRecord.update);
+      range.addEventListener("change", progressRecord.update);
+    }
+    progressRecord.update();
+  };
+
+  const restoreRangeProgress = (range: HTMLInputElement, progressRecord: RangeProgressRecord) => {
+    range.removeEventListener("input", progressRecord.update);
+    range.removeEventListener("change", progressRecord.update);
+    if (progressRecord.previousValue) {
+      range.style.setProperty(RANGE_PROGRESS_PROPERTY, progressRecord.previousValue, progressRecord.previousPriority);
+    } else {
+      range.style.removeProperty(RANGE_PROGRESS_PROPERTY);
+    }
+  };
 
   const cancelEditor = (record: EditableRangeRecord, focus = false) => {
     const editor = record.editor;
@@ -150,9 +199,11 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
     button.title = rangeUnit(range) ? ui`点击输入数值 · 单位${rangeUnit(range)}` : trUi("点击输入数值");
     button.addEventListener("click", () => startEditor(records.get(range)!));
     let hiddenOutput: HTMLOutputElement | undefined;
-    if (range.id === "playback-volume" || range.id === "playback-progress") {
-      const outputSelector = range.id === "playback-volume" ? "#playback-volume-value" : "#playback-elapsed";
-      hiddenOutput = documentRef.querySelector<HTMLOutputElement>(outputSelector) || undefined;
+    if (range.id === "playback-volume" || range.id === "playback-progress" || range.dataset.quality !== undefined) {
+      const outputSelector = range.id === "playback-volume" ? "#playback-volume-value" : range.id === "playback-progress" ? "#playback-elapsed" : undefined;
+      hiddenOutput = outputSelector ? documentRef.querySelector<HTMLOutputElement>(outputSelector) || undefined
+        : Array.from(range.parentElement?.querySelectorAll<HTMLOutputElement>('output[data-quality-output]') ?? [])
+          .find(output => output.dataset.qualityOutput === range.dataset.quality);
       if (hiddenOutput) {
         const outputWasHidden = hiddenOutput.hidden;
         const outputWasAriaHidden = hiddenOutput.getAttribute("aria-hidden");
@@ -199,6 +250,7 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
       candidates.push(...root.querySelectorAll<HTMLInputElement>(RANGE_SELECTOR));
     }
     for (const range of candidates) {
+      updateRangeProgress(range);
       if (!records.has(range)) createRecord(range);
       const record = records.get(range);
       if (!record) continue;
@@ -206,6 +258,11 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
       if (record.valueButton.disabled !== range.disabled) record.valueButton.disabled = range.disabled;
       const label = valueLabel(record);
       if (record.valueButton.textContent !== label) record.valueButton.textContent = label;
+    }
+    for (const [range, progressRecord] of progressRecords) {
+      if (range.isConnected) continue;
+      restoreRangeProgress(range, progressRecord);
+      progressRecords.delete(range);
     }
     for (const [range, record] of records) {
       if (range.isConnected) continue;
@@ -221,12 +278,14 @@ export function setupEditableRanges(root: Document | HTMLElement = document) {
 
   sync();
   const observeRoot = root instanceof Document ? root.documentElement : root;
-  observer.observe(observeRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ["min", "max", "step", "disabled"] });
+  observer.observe(observeRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ["min", "max", "step", "value", "disabled"] });
 
   return {
     sync,
     destroy() {
       observer.disconnect();
+      for (const [range, progressRecord] of progressRecords) restoreRangeProgress(range, progressRecord);
+      progressRecords.clear();
       for (const [range, record] of records) {
         cancelEditor(record);
         record.valueButton.remove();
