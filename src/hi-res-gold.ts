@@ -5,6 +5,32 @@ import * as THREE from "three";
 const pale = new THREE.Color("#ddc77c").toArray().map(n => n.toFixed(8)).join(", ");
 const deep = new THREE.Color("#b4802c").toArray().map(n => n.toFixed(8)).join(", ");
 type Shader = Parameters<THREE.Material["onBeforeCompile"]>[0];
+const previewGold = new WeakMap<THREE.Material, { value: number }>();
+
+/** Read-only specimens use the same source-format rail finish as the archive. */
+export function prepareHiResGold(group: THREE.Object3D, enabled: boolean) {
+  group.traverse(child => {
+    if (!(child instanceof THREE.Mesh) || child.userData.surface !== "Ivory_Edges" || child.userData.preserveCaseFinish) return;
+    const materials: THREE.Material[] = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      let amount = previewGold.get(material);
+      if (!amount) {
+        amount = { value: enabled ? 1 : 0 };
+        previewGold.set(material, amount);
+        const prior = material.onBeforeCompile;
+        const priorKey = material.customProgramCacheKey.bind(material);
+        const uniform = amount;
+        material.onBeforeCompile = (shader, renderer) => {
+          prior.call(material, shader, renderer);
+          shadeHiResGold(shader, uniform);
+        };
+        material.customProgramCacheKey = () => `${priorKey()}-hires-specimen-v1`;
+        material.needsUpdate = true;
+      }
+      amount.value = enabled ? 1 : 0;
+    }
+  });
+}
 
 export function shadeHiResGold(shader: Shader, amount?: { value: number }) {
   const input = amount ? "uniform float hiResAlbum;" : "attribute float hiResAlbum;";

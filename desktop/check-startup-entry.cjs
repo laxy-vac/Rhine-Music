@@ -104,12 +104,13 @@ async function runLauncher() {
   const graphicsOnlyMode = process.argv.includes('--graphics');
   const manualGpuMode = graphicsOnlyMode && process.argv.includes('--gpu-manual');
   const themeFollowMode = process.argv.includes('--theme-follow') || graphicsOnlyMode;
+  const caseGlassMode = process.argv.includes('--case-glass');
   const futurePanelsMode = process.argv.includes('--future-panels');
   const futureEntryMode = process.argv.includes('--future-entry');
-  const syntheticFixtureMode = futurePanelsMode || futureEntryMode;
-  if ([themeFollowMode, futurePanelsMode, futureEntryMode].filter(Boolean).length > 1)
+  const syntheticFixtureMode = futurePanelsMode || futureEntryMode || caseGlassMode;
+  if ([themeFollowMode, futurePanelsMode, futureEntryMode, caseGlassMode].filter(Boolean).length > 1)
     throw new Error('Choose one isolated checker mode per Electron process.');
-  const toolRoot = path.join(projectRoot, '.tools', graphicsOnlyMode ? 'graphics-2026-10-17' : futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
+  const toolRoot = path.join(projectRoot, '.tools', graphicsOnlyMode ? 'graphics-2026-10-17' : caseGlassMode ? 'case-glass-2026-10-17' : futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -139,7 +140,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: graphicsOnlyMode ? 'production-electron-graphics' : futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
+    mode: caseGlassMode ? 'production-electron-case-glass' : graphicsOnlyMode ? 'production-electron-graphics' : futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -208,6 +209,13 @@ async function runLauncher() {
     }).init();
     if (syntheticFixtureMode) {
       syntheticPanelLibrary = makeSyntheticPanelLibrary();
+      if (caseGlassMode) {
+        for (const track of syntheticPanelLibrary.albums[0].tracks) Object.assign(track, {
+          format: 'FLAC', codec: 'FLAC', lossless: true, sampleRate: 96000, bitsPerSample: 24,
+        });
+        const coverPng = await fs.readFile(path.join(projectRoot, 'public', 'icons', 'icon-512.png'));
+        syntheticPanelLibrary.albums[0].coverUrl = `data:image/png;base64,${coverPng.toString('base64')}`;
+      }
       store.snapshot = () => structuredClone(syntheticPanelLibrary);
     }
     const initialLibrary = store.snapshot();
@@ -275,19 +283,21 @@ async function runLauncher() {
         volume: 0,
         reduced: false,
         output: { backend: 'browser' },
-        ...(futureEntryMode ? {
-          entryOnOpen: true,
+        ...(futureEntryMode || caseGlassMode ? {
+          entryOnOpen: futureEntryMode,
           style: { design: 'rhine' },
           view: { layout: 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
         } : {}),
       },
-      reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode,
+      reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode && !caseGlassMode,
       themeFollow: themeFollowMode,
       graphicsOnly: graphicsOnlyMode,
       gpuStartupPreferenceFile: path.join(runDirectory, 'startup-gpu-preferences.json'),
       futurePanels: futurePanelsMode,
       futureEntry: futureEntryMode,
+      caseGlass: caseGlassMode,
       syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
+      caseGlassFixtureHiRes: !caseGlassMode || (syntheticPanelLibrary?.albums[0]?.tracks.length > 0 && syntheticPanelLibrary.albums[0].tracks.every(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
       runDirectory,
     };
     if (manualGpuMode) {
@@ -316,6 +326,9 @@ async function runLauncher() {
     if (futureEntryMode) {
       await fs.copyFile(path.join(projectRoot, 'desktop', 'check-future-entry.mjs'), path.join(appDirectory, 'check-future-entry.mjs'));
     }
+    if (caseGlassMode) {
+      await fs.copyFile(path.join(projectRoot, 'desktop', 'check-case-glass.mjs'), path.join(appDirectory, 'check-case-glass.mjs'));
+    }
     await fs.writeFile(path.join(appDirectory, 'package.json'), `${JSON.stringify({
       name: 'rhine-isolated-startup-entry-probe',
       version: '1.0.0',
@@ -325,7 +338,7 @@ async function runLauncher() {
     const environment = { ...process.env, RHINE_STARTUP_PROBE_CONFIG: configPath };
     delete environment.ELECTRON_RUN_AS_NODE;
     childResult = await new Promise((resolve, reject) => {
-      const child = spawn(electronPath, [appDirectory, ...((futureEntryMode || themeFollowMode) ? ['--capture-probe'] : [])], {
+      const child = spawn(electronPath, [appDirectory, ...((futureEntryMode || themeFollowMode || caseGlassMode) ? ['--capture-probe'] : [])], {
         cwd: projectRoot,
         env: environment,
         // Match launch-source-preview.mjs: SW_HIDE at process creation can
@@ -337,10 +350,10 @@ async function runLauncher() {
       let stderr = '';
       // Entry covers the cinematic, text edits and both themes. Theme-follow
       // covers palette/layout cases and reload. Keep watchdogs mode-specific.
-      const timeout = setTimeout(() => child.kill(), futureEntryMode ? 210000 : themeFollowMode ? 150000 : 90000);
+      const timeout = setTimeout(() => child.kill(), futureEntryMode || caseGlassMode ? 210000 : themeFollowMode ? 150000 : 90000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
-      child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); });
+      child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); if (caseGlassMode) process.stdout.write(chunk); });
       child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000); });
       child.once('error', error => { clearTimeout(timeout); reject(error); });
       child.once('close', (code, signal) => { clearTimeout(timeout); resolve({ code, signal, stdout, stderr }); });
@@ -369,6 +382,8 @@ async function runLauncher() {
       roots: initialLibrary.roots.length,
       syntheticPanelFixture: futurePanelsMode,
       syntheticFutureEntryFixture: futureEntryMode,
+      syntheticCaseGlassFixture: caseGlassMode,
+      caseGlassHiResAlbum: caseGlassMode ? { trackCount: initialLibrary.albums[0]?.tracks.length ?? 0, hiResTrackCount: initialLibrary.albums[0]?.tracks.filter(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24).length } : null,
     };
 
     const unsafeNativeCalls = adapterCalls.native.start || adapterCalls.native.queue || adapterCalls.native.control;
@@ -388,6 +403,7 @@ async function runLauncher() {
       onlineSearchReachedMock: !futurePanelsMode || (panelOnlineCalls?.searchRequests.length >= 4 && panelOnlineCalls.searchRequests.every(item => item.source === 'internetarchive' && item.query === 'fixturepanel')),
       onlineSearchUsedLocalRoute: !futurePanelsMode || serviceRequests.filter(entry => entry.path.startsWith('/api/online/search')).length >= 4,
       serviceDataInsideRunDirectory: path.resolve(serviceDataDirectory).startsWith(path.resolve(runDirectory)),
+      caseGlassFixtureIsHiRes: !caseGlassMode || (initialLibrary.albums[0]?.tracks.length > 0 && initialLibrary.albums[0].tracks.every(track => track.format === 'FLAC' && track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
     };
     report.ok = report.isolationChecks.electronChildExitedCleanly
       && report.isolationChecks.electronReportWritten
@@ -419,6 +435,7 @@ async function runLauncher() {
       themeFollow: report.electron?.themeFollow?.summary ?? null,
       futurePanels: report.electron?.futurePanels?.summary ?? null,
       futureEntry: report.electron?.futureEntry?.summary ?? null,
+      caseGlass: report.electron?.caseGlass?.summary ?? null,
       graphics: report.electron?.graphics ? { cases: report.electron.graphics.cases.length, screenshots: report.electron.graphics.screenshots.length } : null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
       revealedBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'frontend-ready')?.effective ?? null,
@@ -481,6 +498,7 @@ async function runElectronProbe() {
   let themeFollowModule;
   let futurePanelsModule;
   let futureEntryModule;
+  let caseGlassModule;
   let mockPreferences;
   let selectPreferencesForMock;
   let currentStartedAt = 0;
@@ -659,7 +677,8 @@ async function runElectronProbe() {
   try {
     if (!configPath) throw new Error('Missing RHINE_STARTUP_PROBE_CONFIG.');
     config = JSON.parse(await fs.readFile(configPath, 'utf8'));
-    if (config.graphicsOnly) report.mode = 'real-electron-graphics';
+    if (config.caseGlass) report.mode = 'real-electron-case-glass';
+    else if (config.graphicsOnly) report.mode = 'real-electron-graphics';
     else if (config.futureEntry) report.mode = 'real-electron-future-entry';
     else if (config.futurePanels) report.mode = 'real-electron-future-panels';
     else if (config.themeFollow) report.mode = 'real-electron-theme-follow';
@@ -672,17 +691,18 @@ async function runElectronProbe() {
     mockPreferences = { ...config.preferences };
     const source = await fs.readFile(path.join(config.projectRoot, 'desktop', 'main.cjs'), 'utf8');
     selectPreferencesForMock = value => value;
-    if (config.themeFollow || config.futureEntry) {
+    if (config.themeFollow || config.futureEntry || config.caseGlass) {
       const keysMatch = source.match(/const preferenceKeys=new Set\((\[[\s\S]*?\])\);/);
       const selectMatch = source.match(/const selectPreferences=value=>\{[\s\S]*?\n\};/);
       if (!keysMatch || !selectMatch) throw new Error('Could not extract production preference whitelist and selectPreferences function.');
       const keys = new Set(new Function(`return ${keysMatch[1]};`)());
-      const entryPreferencesModel = config.futureEntry
+      const entryPreferencesModel = config.futureEntry || config.caseGlass
         ? await import(pathToFileURL(path.join(config.projectRoot, 'src', 'entry-preferences.mjs')).href)
         : null;
       const gpuSelectionModel = require(path.join(config.projectRoot, 'desktop', 'gpu-selection.cjs'));
       selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', 'entryPreferencesModel', 'gpuSelectionModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null, entryPreferencesModel, gpuSelectionModel);
       if (config.themeFollow) report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
+      if (config.caseGlass) report.productionPreferenceWhitelistHasCaseProfiles = keys.has('caseProfiles');
       if (config.futureEntry) {
         report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
         report.productionPreferenceWhitelistHasEntryWelcome = keys.has('entryWelcome');
@@ -712,7 +732,7 @@ async function runElectronProbe() {
       },
     });
     ipcMain.on('rhine:preferences:get', event => {
-      const value = config.themeFollow || config.futureEntry ? mockPreferences : config.preferences;
+      const value = config.themeFollow || config.futureEntry || config.caseGlass ? mockPreferences : config.preferences;
       if (config.themeFollow) report.preferenceReads.push({ theme: value.theme, followSystemTheme: value.followSystemTheme, keys: Object.keys(value).length });
       event.returnValue = value;
     });
@@ -720,7 +740,7 @@ async function runElectronProbe() {
       event.returnValue = { ok: true, exists: false, value: { schemaVersion: 1, activeId: null, presets: [], eqBanks: {} } };
     });
     ipcMain.handle('rhine:preferences:save', async (_event, value) => {
-      if (!config.themeFollow && !config.futureEntry) return { ok: true };
+      if (!config.themeFollow && !config.futureEntry && !config.caseGlass) return { ok: true };
       try {
         mockPreferences = { ...selectPreferencesForMock(value), gpuPreference: mockPreferences.gpuPreference ?? 'auto' };
         report.preferenceSaves.push({
@@ -734,6 +754,10 @@ async function runElectronProbe() {
           allowedEntryWelcome: Object.hasOwn(mockPreferences, 'entryWelcome'),
           entryIdentity: mockPreferences.entryIdentity,
           allowedEntryIdentity: Object.hasOwn(mockPreferences, 'entryIdentity'),
+          ...(config.caseGlass ? {
+            style: structuredClone(mockPreferences.style),
+            caseProfiles: mockPreferences.caseProfiles ? structuredClone(mockPreferences.caseProfiles) : null,
+          } : {}),
         });
         return { ok: true };
       } catch (error) {
@@ -1004,6 +1028,19 @@ async function runElectronProbe() {
         throw error;
       }
     }
+    if (firstResult.ready && config.caseGlass) {
+      caseGlassModule = await import(pathToFileURL(path.join(__dirname, 'check-case-glass.mjs')).href);
+      try {
+        report.caseGlass = await caseGlassModule.checkCaseGlass({
+          browserWindow,
+          outputDirectory: config.runDirectory,
+          probeReport: report,
+        });
+      } catch (error) {
+        report.caseGlass = error.caseGlassResult ?? { ok: false, error: String(error?.stack ?? error) };
+        throw error;
+      }
+    }
 
     report.finishedAtMs = Date.now() - currentStartedAt;
     report.finalRendererState = await captureState();
@@ -1041,15 +1078,18 @@ async function runElectronProbe() {
       noFrontendFailure: report.failedIpcEvents.length === 0,
       productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
       productionWhitelistRetainsEntryOnOpen: !config.futureEntry || report.productionPreferenceWhitelistHasEntryOnOpen === true,
+      productionWhitelistRetainsCaseProfiles: !config.caseGlass || report.productionPreferenceWhitelistHasCaseProfiles === true,
       productionPreferenceSelectorSavedEntryOnOpenFalse: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === false && item.allowedEntryOnOpen),
       productionPreferenceSelectorSavedEntryOnOpenTrue: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === true && item.allowedEntryOnOpen),
       themeFollowBehaviorPassed: !config.themeFollow || config.graphicsOnly || report.themeFollow?.ok === true,
       graphicsBehaviorPassed: !config.themeFollow || report.graphics?.ok === true,
       futurePanelsBehaviorPassed: !config.futurePanels || report.futurePanels?.ok === true,
       futureEntryBehaviorPassed: !config.futureEntry || report.futureEntry?.ok === true,
+      caseGlassBehaviorPassed: !config.caseGlass || report.caseGlass?.ok === true,
+      caseGlassSyntheticHiResFixture: !config.caseGlass || config.caseGlassFixtureHiRes === true,
     };
   } catch (error) {
-    report.startupOutcome = config?.graphicsOnly ? 'graphics-probe-error' : config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.startupOutcome = config?.caseGlass ? 'case-glass-probe-error' : config?.graphicsOnly ? 'graphics-probe-error' : config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
     report.failureRendererState = await captureState();
     report.failureWindowState = browserWindow && !browserWindow.isDestroyed() ? { fullscreen: browserWindow.isFullScreen(), fullscreenable: browserWindow.isFullScreenable(), visible: browserWindow.isVisible(), bounds: browserWindow.getBounds() } : null;
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });

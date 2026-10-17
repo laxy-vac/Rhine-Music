@@ -37,6 +37,8 @@ import { renderDimensions } from "./render-quality";
 import "./case-editor.css";
 import { CaseAlbumInfo } from "./rhine-album-info";
 import type { ArchiveRecord } from "./data";
+import { isHiResAlbum } from "./hi-res";
+import { prepareHiResGold } from "./hi-res-gold";
 import {
   CASE_USER_PRESET_LIMIT,
   caseUserPresetAppearance,
@@ -256,6 +258,12 @@ function editorMarkup() {
           <label class="case-editor__range-row"><span>${label("透光率")}</span><output data-rhine-optics-value="transmission">0%</output><input type="range" data-rhine-optics="transmission" min="0" max="1" step="0.01" aria-label="${label("透光率")}"></label>
           <label class="case-editor__range-row"><span>${label("透明度")}</span><output data-rhine-optics-value="transparency">0%</output><input type="range" data-rhine-optics="transparency" min="0" max="1" step="0.01" aria-label="${label("透明度")}"></label>
         </section>
+        <section class="case-editor__section" data-minimal-glass-section hidden aria-labelledby="case-minimal-glass-heading">
+          <div class="case-editor__section-heading"><small>02 / ESSENTIAL OPTICS</small><h3 id="case-minimal-glass-heading">${label("简单粗糙 · 玻璃设置")}</h3></div>
+          <p class="case-editor__help">${label("只调整玻璃主体与背板，专辑封面和金色边缘保持不变。")}</p>
+          <label class="case-editor__range-row"><span>${label("透光率")}</span><output data-minimal-glass-value="transmission">0%</output><input type="range" data-minimal-glass="transmission" data-editable-range="false" min="0" max="1" step="0.01" aria-label="${label("透光率")}"></label>
+          <label class="case-editor__range-row"><span>${label("磨砂度")}</span><output data-minimal-glass-value="roughness">0%</output><input type="range" data-minimal-glass="roughness" data-editable-range="false" min="0" max="1" step="0.01" aria-label="${label("磨砂度")}"></label>
+        </section>
         <section class="case-editor__section" data-punk-material-section hidden aria-labelledby="case-material-heading">
           <div class="case-editor__section-heading"><small>04 / PUNK FINISH</small><h3 id="case-material-heading">${label("颜色与材质")}</h3></div>
           <p class="case-editor__help" data-material-part></p>
@@ -321,6 +329,7 @@ export function setupCaseEditor(
   const deleteRow = root.querySelector<HTMLElement>("[data-delete-preset-row]")!;
   const originalFieldRows = [...fieldsNode.children];
   const rhineOpticsSection = root.querySelector<HTMLElement>("[data-rhine-optics-section]")!;
+  const minimalGlassSection = root.querySelector<HTMLElement>("[data-minimal-glass-section]")!;
   const opticalDetails = document.createElement("details");
   opticalDetails.className = "case-editor__advanced";
   opticalDetails.innerHTML = `<summary>${label("进阶光学参数")}</summary>`;
@@ -589,6 +598,20 @@ export function setupCaseEditor(
     }
   }
 
+  function syncMinimalGlass() {
+    const allowed = options.getDesign() === "rhine" && settings.structure === "minimal";
+    minimalGlassSection.hidden = !allowed;
+    const controls = minimalGlassSection.querySelectorAll<HTMLInputElement>("[data-minimal-glass]");
+    controls.forEach(control => { control.disabled = !allowed; });
+    if (!allowed) return;
+    const surface = currentAppearance().surfaces.cover;
+    for (const field of ["transmission", "roughness"] as const) {
+      const value = surface[field];
+      minimalGlassSection.querySelector<HTMLInputElement>(`[data-minimal-glass=${field}]`)!.value = String(value);
+      minimalGlassSection.querySelector<HTMLOutputElement>(`[data-minimal-glass-value=${field}]`)!.value = `${Math.round(value * 100)}%`;
+    }
+  }
+
   function syncTransformControls() {
     const transform = currentTransform();
     const visible = root.querySelector<HTMLInputElement>("[data-transform-visible]");
@@ -606,18 +629,22 @@ export function setupCaseEditor(
     configureLayout();
     root.dataset.design = options.getDesign();
     root.dataset.theme = options.getTheme();
+    previewStage.dataset.caseStructure = settings.structure;
     root.querySelector<HTMLElement>("[data-structure-description]")!.textContent = trUi(
       options.getDesign() === "archive"
         ? "Punk 主题仅使用自己的盒体，可调整外观和部件。"
-        : "简单粗糙款直接使用；精细款可调透光与透明度；Punk拓展可深度定制并保存预设。",
+        : "简单粗糙款可调玻璃透光与磨砂度；精细款可调透光与透明度；Punk拓展可深度定制并保存预设。",
     );
     coverVisibility.checked = showAlbumCover;
     syncStructureButtons();
     syncSurfaceControls();
+    syncMinimalGlass();
     partSection.hidden = true;
     const resetButton = root.querySelector<HTMLElement>("[data-action=reset]")!;
-    resetButton.hidden = options.getDesign() === "rhine" && settings.structure === "minimal";
-    resetButton.textContent = trUi(settings.structure === "rhine" ? "恢复原始透光设置" : "恢复当前盒体默认设置");
+    resetButton.hidden = false;
+    resetButton.textContent = trUi(options.getDesign() === "rhine" && settings.structure === "minimal"
+      ? "恢复玻璃默认设置"
+      : settings.structure === "rhine" ? "恢复原始透光设置" : "恢复当前盒体默认设置");
     root.querySelector<HTMLElement>(".case-editor__cover-toggle")!.hidden = options.getDesign() === "rhine" && settings.structure === "minimal";
     const punkOnly = settings.structure === "punk";
     root.querySelector<HTMLElement>("[data-preset-section]")!.hidden = !punkOnly;
@@ -718,15 +745,15 @@ export function setupCaseEditor(
     coverMesh.visible = showAlbumCover;
     const thickness = getCaseLayout(model).insertThickness ?? 0;
     const physical = thickness > 0;
-    if (physical !== (coverMaterial instanceof THREE.MeshLambertMaterial) && coverMaterial) {
+    if (!(coverMaterial instanceof THREE.MeshLambertMaterial) && coverMaterial) {
       const previous = coverMaterial;
-      coverMaterial = physical ? createAlbumPrintMaterial(previous.map) : new THREE.MeshBasicMaterial({ map: previous.map, toneMapped: false, depthWrite: false });
+      coverMaterial = createAlbumPrintMaterial(previous.map);
       coverMesh.material = coverMaterial;
       previous.dispose();
     }
-    if (coverMaterial) coverMaterial.depthWrite = physical;
-    coverMesh.renderOrder = physical ? 0 : 2;
-    coverMesh.receiveShadow = physical;
+    if (coverMaterial) coverMaterial.depthWrite = true;
+    coverMesh.renderOrder = 0;
+    coverMesh.receiveShadow = true;
     if (physical) {
       const nextKey = JSON.stringify([cover, thickness]);
       if (!insertMesh) { insertMesh = createAlbumInsert(cover, thickness); scene!.add(insertMesh); }
@@ -796,6 +823,8 @@ export function setupCaseEditor(
   function applyModelAppearance() {
     if (!model) return;
     updateCoverLayout();
+    if (settings.structure === "minimal")
+      prepareHiResGold(model, isHiResAlbum(options.getAlbumInfo?.().record?.album));
     applyCaseAppearance(model, previewAppearance(), {
       lighting: options.getTheme() === "night" ? "refined" : "baseline",
       transmission: options.getQuality().transmission,
@@ -832,7 +861,9 @@ export function setupCaseEditor(
   }
 
   function updateModel() {
-    if (destroyed || !scene) return;
+    if (destroyed) return;
+    previewStage.dataset.caseStructure = settings.structure;
+    if (!scene) return;
     // Editing always shows every available part; scene LOD must not turn a
     // screw/lettering control into a no-op while the user is adjusting it.
     const detail = settings.structure === "minimal" ? "low" : "high";
@@ -841,6 +872,7 @@ export function setupCaseEditor(
       modelRevision++;
       pendingKey = undefined;
       applyModelAppearance();
+      previewStage.dataset.casePreviewState = "ready";
       render();
       return;
     }
@@ -848,6 +880,7 @@ export function setupCaseEditor(
     const revision = ++modelRevision;
     pendingKey = key;
     const structure = settings.structure;
+    previewStage.dataset.casePreviewState = "loading";
     void createCaseModel(structure, detail)
       .then((nextModel) => {
         if (destroyed || revision !== modelRevision) {
@@ -867,11 +900,15 @@ export function setupCaseEditor(
         applyModelAppearance();
         syncSurfaceControls();
         scene!.add(model);
+        previewStage.dataset.caseStructure = structure;
+        previewStage.dataset.casePreviewState = "ready";
         render();
       })
       .catch((error: unknown) => {
         if (destroyed || revision !== modelRevision) return;
         pendingKey = undefined;
+        previewStage.dataset.caseStructure = structure;
+        previewStage.dataset.casePreviewState = "error";
         errorNode.hidden = false;
         errorNode.textContent = `${trUi("无法载入盒体模型：")} ${error instanceof Error ? error.message : String(error)}`;
       });
@@ -1030,8 +1067,21 @@ export function setupCaseEditor(
       return;
     }
     if (target.dataset.action === "reset") {
-      if (options.getDesign() === "rhine" && settings.structure === "minimal") return;
       const next = cloneSettings(settings);
+      if (options.getDesign() === "rhine" && settings.structure === "minimal") {
+        const defaults = defaultCaseSettings("rhine").appearances.minimal.surfaces;
+        for (const part of ["cover", "back"] as const) {
+          const surface = next.appearances.minimal.surfaces[part];
+          const base = defaults[part];
+          surface.transmission = base.transmission;
+          surface.roughness = base.roughness;
+          surface.preserveSource = base.preserveSource;
+        }
+        next.appearances.minimal.preset = "custom";
+        next.enabled = true;
+        onSettingsChanged(next);
+        return;
+      }
       if (options.getDesign() === "rhine" && settings.structure === "rhine") {
         for (const surface of Object.values(next.appearances.rhine.surfaces)) {
           delete surface.transmissionOverride;
@@ -1142,6 +1192,28 @@ export function setupCaseEditor(
     if (target.dataset.colorCode) {
       target.removeAttribute("aria-invalid");
       root.querySelector<HTMLElement>(`[data-color-code-error="${target.dataset.colorCode}"]`)!.hidden = true;
+      return;
+    }
+    if (target.dataset.minimalGlass) {
+      if (options.getDesign() !== "rhine" || settings.structure !== "minimal") return;
+      const field = target.dataset.minimalGlass;
+      if (field !== "transmission" && field !== "roughness") return;
+      const value = Number(target.value);
+      if (!Number.isFinite(value)) return;
+      const next = cloneSettings(settings);
+      const appearance = next.appearances.minimal;
+      const defaults = defaultCaseSettings("rhine").appearances.minimal.surfaces;
+      const normalized = clamp(value, 0, 1);
+      for (const part of ["cover", "back"] as const) {
+        const surface = appearance.surfaces[part];
+        if (surface.finish !== "glass" && surface.finish !== "frost")
+          surface.finish = defaults[part].finish;
+        surface[field] = normalized;
+        surface.preserveSource = false;
+      }
+      appearance.preset = "custom";
+      next.enabled = true;
+      onSettingsChanged(next);
       return;
     }
     if (target.dataset.rhineOptics) {
@@ -1273,16 +1345,13 @@ export function setupCaseEditor(
     const initialCover = getCaseLayout().cover;
     coverGeometry = new THREE.PlaneGeometry(initialCover.width, initialCover.height);
     coverLayoutKey = `${initialCover.width}:${initialCover.height}`;
-    coverMaterial = new THREE.MeshBasicMaterial({
-      color: "#ffffff",
-      toneMapped: false,
-      depthWrite: false,
-    });
+    coverMaterial = createAlbumPrintMaterial(null);
     coverMesh = new THREE.Mesh(coverGeometry, coverMaterial);
     coverMesh.name = "IndependentAlbumCover";
     coverMesh.position.set(initialCover.x, initialCover.y, initialCover.z);
     coverMesh.visible = showAlbumCover;
-    coverMesh.renderOrder = 2;
+    coverMesh.renderOrder = 0;
+    coverMesh.receiveShadow = true;
     scene.add(coverMesh);
 
     setTheme();

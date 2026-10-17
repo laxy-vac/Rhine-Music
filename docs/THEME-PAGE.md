@@ -99,7 +99,7 @@ Punk 右栏使用 accent 细框与方点显示格式摘要；专辑铭牌保留 
 
 ## 盒体与资源规则
 
-Future 的结构选择为简单粗糙（minimal）、精细（rhine）和 Punk 拓展（punk）；Punk 主题固定使用自己的可调模型。精细盒体使用上游 <code>public/assets/archive-cassette.glb</code> 外壳，保留源材质与外观。Future 精细款只允许分部件透光率和透明度覆盖；重置仅清除覆盖值，不改颜色、PBR、部件变换或已有外观。清晰窗默认透光率为 98%。
+Future 的结构选择为简单粗糙（minimal）、精细（rhine）和 Punk 拓展（punk）；Punk 主题固定使用自己的可调模型。简单粗糙款把清晰的封面印在玻璃块前方，STYLE 中可统一调整玻璃主体与背板的透光率、磨砂度；封面和金色边缘不参与调节。简单款的金边与玻璃保持干净，不叠加顶边专辑名、编号、铭牌或格式标识；封面原图中的内容保留。重置只恢复这两项玻璃参数，不改金边、颜色、部件变换或其他结构。主题编辑器和只读预览与主界面共用封面材质、深度遮挡及 Hi-Res 金边判断，玻璃不能盖过表面封面。精细盒体使用上游 <code>public/assets/archive-cassette.glb</code> 外壳，保留源材质与外观。Future 精细款只允许分部件透光率和透明度覆盖；重置仅清除覆盖值，不改颜色、PBR、部件变换或已有外观。清晰窗默认透光率为 98%。
 
 Future Punk 拓展与 Punk 主题共用编辑器分组和操作，视觉皮肤及个人库仍分开。HEX 输入接受 #RGB 和 #RRGGBB，可省略 #；提交时归一为大写六位，非法值不保存。个人预设保存完整材质与部件快照，不自动覆盖重名项目；两库各自最多 50 项。Punk 内置材质预设为 marble、hazard、white、glass、frost、red、blue、coral、tide、aurora。
 

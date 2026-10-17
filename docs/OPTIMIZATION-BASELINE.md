@@ -64,6 +64,7 @@
 | Settings 显示与性能、STYLE、全屏和显卡 | `node scripts/check-gpu-selection.cjs`；`node desktop/check-startup-entry.cjs --graphics`（兼容保留的 probe 名称，检查 Settings → 显示与性能及 STYLE）；可加 `--gpu-manual` 验证隔离配置中的物理卡启动路径 |
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
+| Future 简单款玻璃与预览 | `node desktop/check-startup-entry.cjs --case-glass`，合成专辑与 mock 音频，检查透光/磨砂保存、结构往返及局部重置 |
 | 三维资源/盒体专项 | `scripts/check-case-system.mjs`，按相关模式运行 |
 
 只运行与当前改动相关的必要检查，命令索引不要求逐次补跑全部旧矩阵。环境与边界见[本地开发](LOCAL-DEVELOPMENT.md)。

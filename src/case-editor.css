@@ -636,7 +636,7 @@
 }
 
 .case-editor [data-material-controls] > .case-editor__surface-fields { margin-top: 12px; }
-.case-editor[data-design="rhine"] [data-rhine-optics-section] .case-editor__range-row { margin-top: 16px; }
+.case-editor[data-design="rhine"] :is([data-rhine-optics-section], [data-minimal-glass-section]) .case-editor__range-row { margin-top: 16px; }
 
 .case-editor .case-editor__advanced[open] > :not(summary) {
   margin-top: 10px;

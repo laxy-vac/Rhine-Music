@@ -9,6 +9,8 @@ import { createCaseModel, applyCaseAppearance, disposeCaseModel } from "./case-m
 import { createCaseStudioLighting } from "./case-studio-lighting";
 import { normalizeCaseSettings, type CaseSettings, type CaseStructure } from "./case-settings.ts";
 import { trUi } from "./i18n";
+import { isHiResAlbum } from "./hi-res";
+import { prepareHiResGold } from "./hi-res-gold";
 import { createAlbumPrintMaterial } from "./music-model.ts";
 import { CaseAlbumInfo } from "./rhine-album-info";
 import { renderDimensions } from "./render-quality";
@@ -70,6 +72,7 @@ function albumInfoKeyFor(album: PreviewSnapshot["album"]): string {
     album.record?.id ?? null,
     typeof album.index === "number" && Number.isFinite(album.index) ? album.index : null,
     rhineSourceBadge(album.record?.album),
+    isHiResAlbum(album.record?.album),
   ]);
 }
 
@@ -240,7 +243,7 @@ export function setupAlbumCasePreview(
         coverMesh = new THREE.Mesh(coverGeometry, coverMaterial);
         coverMesh.name = "IndependentAlbumCover";
         coverMesh.position.set(cover.x, cover.y, cover.z);
-        coverMesh.renderOrder = 2;
+        coverMesh.renderOrder = 0;
         coverMesh.visible = false;
         scene.add(coverMesh);
       }
@@ -424,7 +427,7 @@ export function setupAlbumCasePreview(
     // Minimal is a front-surface print; the other structures put the same
     // matte print on a physical insert. Both must occlude later glass draws.
     coverMaterial.depthWrite = true;
-    coverMesh.renderOrder = physical ? 0 : 2;
+    coverMesh.renderOrder = 0;
     coverMesh.receiveShadow = true;
     coverMesh.visible = visible;
     if (physical) {
@@ -539,6 +542,7 @@ export function setupAlbumCasePreview(
 
   function presentModel(next: PreviewSnapshot, forceAppearance: boolean): void {
     if (!model || !scene || !camera || !renderer) return;
+    if (next.structure === "minimal") prepareHiResGold(model, isHiResAlbum(next.album.record?.album));
     if (forceAppearance || appearanceKey !== next.appearanceKey) {
       applyCaseAppearance(model, next.settings.appearances[next.structure], {
         lighting: next.theme === "night" ? "refined" : "baseline",

@@ -2017,7 +2017,7 @@ export class ArchiveScene {
         this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint);
         this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint);
         this.covers.setSlot(i, records[this.recordAtCell(this.cells[i])]);
-        if (this.caseTitles && this.shelfView && this.musicStyle.topTitles) {
+        if (this.caseTitles && this.caseSettings.structure !== "minimal" && this.shelfView && this.musicStyle.topTitles) {
           this.caseTitles.array.setMatrixAt(i, this.dummy.matrix);
           this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint);
           this.caseTitles.setSlot(i, musicSpatialEntry(this.cells[i], this.shelfView)?.record.title ?? "");
@@ -2044,7 +2044,7 @@ export class ArchiveScene {
     if (this.caseHitProxy) this.caseHitProxy.count = submitted;
     if (this.caseTitles) {
       this.caseTitles.array.count = submitted; this.caseTitles.array.instanceMatrix.needsUpdate = true;
-      this.caseTitles.array.visible = this.caseTitles.selected.visible = this.shelfView && this.musicStyle.topTitles && this.model.visible;
+      this.caseTitles.array.visible = this.caseTitles.selected.visible = this.caseSettings.structure !== "minimal" && this.shelfView && this.musicStyle.topTitles && this.model.visible;
       this.caseTitles.select(musicSpatialEntry(this.selectedCell, this.shelfView)?.record.title ?? "");
     }
     if (this.rhineInfo) {
