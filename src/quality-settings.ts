@@ -26,12 +26,11 @@ function range(
 ) {
   return `<label class="quality-control quality-range"><span>${label}<small>${hint}</small></span><div><input type="range" data-quality="${key}" aria-label="${label}" min="${min}" max="${max}" step="5" value="${quality[key]}"/><output data-quality-output="${key}">${quality[key]}%</output></div></label>`;
 }
-export function qualityMarkup(
+export function waveQualityMarkup(
   quality: RenderQuality,
   design?: "rhine" | "archive",
   layout?: MusicLayout,
 ) {
-  const preset = matchingPreset(quality);
   const archiveWave = design === "archive";
   const shelfArray = layout === "shelf";
   const english = uiLanguage() === "en";
@@ -56,18 +55,22 @@ export function qualityMarkup(
         ["reduced", trUi(archiveWave ? "适中" : "平衡")],
         ["full", trUi(archiveWave ? "强烈" : "完整")],
       ];
+  return select(quality, "wave", waveLabel, waveHint, waveChoices);
+}
+
+export function qualityMarkup(
+  quality: RenderQuality,
+  design?: "rhine" | "archive",
+  layout?: MusicLayout,
+  separateMotion = false,
+) {
+  const preset = matchingPreset(quality);
   return ui`<section class="quality-settings" aria-label="画质设置">
     <div class="quality-heading"><h3>RENDER QUALITY <span>渲染画质</span></h3><select id="quality-preset" aria-label="画质预设">${(Object.keys(presetLabels) as QualityPreset[]).map((key) => `<option value="${key}" ${preset === key ? "selected" : ""}>${presetLabels[key]}</option>`).join("")}<option value="custom" disabled ${preset === "custom" ? "selected" : ""}>自定义</option></select></div>
     <p class="quality-summary" id="quality-summary" aria-live="polite"></p>
     ${design ? `<p class="quality-note">${trUi("两种主题共用这组画质设置，切换主题后继续沿用。")}</p>` : ""}
     ${design ? `<div class="quality-grid quality-core-grid">
-    ${select(
-      quality,
-      "wave",
-      waveLabel,
-      waveHint,
-      waveChoices,
-    )}
+    ${separateMotion ? "" : waveQualityMarkup(quality, design, layout)}
     ${select(
       quality,
       "modelDetail",

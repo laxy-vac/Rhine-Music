@@ -21,6 +21,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 磁盘修改不会替换旧窗口内存或已载入模型。构建后完整退出并重开窗口。
 - 窗口在后台初始化与首帧就绪后首次显示；已显示窗口重载保持可见，无旧加载页或 Punk intro。
 - Future 的 ALBUMS/MATRIX 默认每次新开窗口在显示后播放入场并停在总览；按钮、Enter、Esc 可跳过。设置 → 交互与入场 → 终端入场可配置自动播放、欢迎文案与 ID 或手动重播；Punk 保留禁用入口。图形、主题、日夜和显示选项在两主题的 GRAPHICS 中统一调整。
+- GRAPHICS → 显示与渲染按窗口、动态、实验显卡和画质分组。显卡选择完全退出并重开后生效；默认自动，读取现有驱动，不安装工具或改系统配置。若实验选卡后无法正常启动，可运行 `node scripts/launch-source-preview.mjs --gpu-auto` 仅本次使用自动，再在 GRAPHICS 中选择自动恢复默认；安装版也接受 `--gpu-auto` 启动参数。
 
 `启动音乐播放器.bat`、`.command`及其旧 launcher 保留兼容测试引用，不是当前开发入口。`Build-Windows-EXE.cmd`是当前品尝版打包的兼容包装。
 
@@ -62,7 +63,9 @@ node scripts/build-source-preview.mjs --interface-only
 
 `npm test`是默认有限离线检查；`--interface-only`包含类型检查与前端构建。按实际改动选择[优化基线的检查入口](OPTIMIZATION-BASELINE.md)，不为了补历史台账重复运行全套测试。
 
-隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
+隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实音频设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
+
+显示分组、两主题原生全屏往返及本机显卡枚举使用 `node desktop/check-startup-entry.cjs --graphics`；加 `--gpu-manual` 在隔离配置中以第一张可用卡启动，验证真实前端的手动选卡路径。纯偏好及 LUID 边界检查为 `node scripts/check-gpu-selection.cjs`。这些检查不接入个人曲库、播放设备或设置系统显卡首选项。
 
 看不到修改时，依次核对当前源码入口与主题、构建来源清单、是否完整退出旧窗口、模型内容版本与地址。模型变更须同步对应资源版本并重建；不要清个人缓存或重置偏好制造新版效果。
 

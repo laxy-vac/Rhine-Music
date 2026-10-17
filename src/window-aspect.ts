@@ -3,7 +3,7 @@ import { WINDOW_ASPECTS, fitAspectSize, normalizeWindowAspect } from "./window-a
 
 export function windowAspectMarkup(value: unknown) {
   const selected = normalizeWindowAspect(value);
-  return ui`<section class="window-aspect-settings" aria-labelledby="window-aspect-title"><div class="style-section-heading"><div><small>GLOBAL / WINDOW</small><h2 id="window-aspect-title">播放器比例</h2></div></div><label class="settings-row"><span>窗口比例<small>Future 与 Punk 共用</small></span><select data-window-aspect aria-label="播放器窗口比例">${WINDOW_ASPECTS.map(item => `<option value="${item.id}" ${item.id === selected ? "selected" : ""}>${item.id === "free" ? ui`自由比例` : item.label}</option>`).join("")}</select></label><p>固定比例下，拖动窗口边框会保持比例；选择自由比例后可分别调整宽高。</p><small class="window-aspect-baseline">显示基准：1920 × 1080 及以上。</small></section>`;
+  return ui`<section class="window-aspect-settings" aria-labelledby="window-aspect-title"><h3 id="window-aspect-title">窗口显示</h3><label class="settings-row"><span>窗口比例<small>Future 与 Punk 共用</small></span><select data-window-aspect aria-label="播放器窗口比例">${WINDOW_ASPECTS.map(item => `<option value="${item.id}" ${item.id === selected ? "selected" : ""}>${item.id === "free" ? ui`自由比例` : item.label}</option>`).join("")}</select></label><p>固定比例下，拖动窗口边框会保持比例；选择自由比例后可分别调整宽高。</p><small class="window-aspect-baseline">显示基准：1920 × 1080 及以上。</small></section>`;
 }
 
 /** Keep the selected canvas ratio even when Windows maximizes the outer window. */

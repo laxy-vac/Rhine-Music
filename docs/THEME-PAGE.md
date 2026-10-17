@@ -16,6 +16,12 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 两主题的顶部 `GRAPHICS` 沿用原 Style 页的主题卡、Punk 配色和预览、盒体编辑与画质界面，集中管理主题、日夜与系统跟随、窗口比例、减少动态、全屏和渲染选项。旧 Settings 内的主题卡与显示动效控件不再重复，顶部日夜切换也合并到 Graphics 的模式区；这些选项继续使用原有共享偏好。
 
+“显示与渲染”使用一个共享容器，内部按窗口显示（比例、全屏）、动态效果（减少动态、唱片波动）、优先显卡（实验性）及渲染画质（预设、精细设置、性能检测）分组；不在主题卡附近另放孤立的显示动效区。Punk 自有的文字、场景尺寸和颗粒等仍归当前主题外观。桌面全屏通过拥有窗口的主 frame IPC 控制原生 BrowserWindow；按钮同步实际全屏状态，重复请求受忙碌保护，退出按钮与 Esc 均恢复当前页面和窗口，保持既有浏览器权限拒绝策略。Windows 原生全屏事件须在下一轮事件循环读取更新后的状态。
+
+Windows 的“优先显卡”默认自动，由播放器请求高性能偏好；也可从 DXGI 可见、非软件且 D3D11 可初始化的当前适配器中选择。它不是 PnP 全设备清单，也不将虚拟/远程适配器一律判断为物理显卡。手动选择仅为播放器下一次完整启动设置 ANGLE D3D11 与适配器 LUID，不修改系统显卡、驱动或应用图形配置；偏好与其它设置保存在同一个 preferences.json，普通前端保存不会覆盖桌面选卡偏好。列表异步读取、可刷新；显示驱动报告的当前用卡与待重启状态。缺失设备或同硬件多卡跨会话身份不明时回退自动并解释；同型号多卡的实际选中卡无法从 Electron GPUInfo 精确确认时明确提示。
+
+LUID 仅在当前会话有效；保存硬件身份及会话 LUID，后续启动只在同硬件唯一时重新匹配。相关边界依据当前 Electron 44.6.0 / Chromium 152 的 [LUID 选择实现](https://raw.githubusercontent.com/chromium/chromium/152.0.7977.130/ui/gl/gl_display.cc)、[GPU 信息接口](https://www.electronjs.org/docs/latest/api/app#appgetgpuinfoinfotype)和 [DXGI 描述](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1)。实验选卡不是已完成的硬件性能优化。
+
 普通 Settings 的“常规”保留语言和 Graphics 跳转，“交互与入场”保留终端入场与界面声音；音频、歌词、音乐库、来源和关于各自保持原职责。入场仅 Future 生效，Punk 保留设置入口并标明后续适配，当前入场控件禁用且不更改 Future 的入场偏好。
 
 ### 浏览与选择

@@ -5,6 +5,9 @@ const {createHash}=require('node:crypto');
 const {pathToFileURL}=require('node:url');
 const {resolveStorageLayout,prepareStorageSync,createPreferencesStore}=require('./app-storage.cjs');
 const {createStandardEqPresetStore,registerStandardEqPresetIpc}=require('./standard-eq-presets.cjs');
+const {registerWindowControls}=require('./window-controls.cjs');
+const gpuSelectionModel=require('./gpu-selection.cjs');
+const {configureStartupGpu,registerGpuControls}=require('./gpu-controller.cjs');
 const root=path.resolve(__dirname,'..');
 const args=process.argv.slice(1),selfTest=args.includes('--self-test');
 const sourcePreview=process.env.RHINE_SOURCE_PREVIEW==='1';
@@ -12,7 +15,6 @@ const settingsCheck=sourcePreview&&args.includes('--check-settings-page');
 const previewUICheck=args.includes('--check-preview-ui');
 if(previewUICheck)app.commandLine.appendSwitch('mute-audio');
 if(settingsCheck){app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');app.commandLine.appendSwitch('disable-renderer-backgrounding')}
-app.commandLine.appendSwitch('force_high_performance_gpu');
 app.setName(sourcePreview?'Rhine Music Source Preview':'Rhine Music Preview');
 const storage=resolveStorageLayout({projectRoot:root,execPath:process.execPath,sourcePreview});
 try{prepareStorageSync(storage)}catch(error){dialog.showErrorBox('Rhine Music 存储目录不可用',`${error.message}\n请选择普通用户可写的安装目录；程序不会改权限或回退到 AppData。`);app.exit(1);throw error}
@@ -25,19 +27,20 @@ app.setAppLogsPath(storage.logsDir);
 process.env.TEMP=storage.tempDir;process.env.TMP=storage.tempDir;
 const dataDir=storage.dataDir;
 const preferencesStore=createPreferencesStore(storage);
+const startupGpu=configureStartupGpu(app,storage.preferenceFile);
 process.env.SONY_WALKMAN_ASSETS=path.join(root,'vendor/sony-walkman');
 if(!sourcePreview||!process.env.SONY_WALKMAN_PYTHON)process.env.SONY_WALKMAN_PYTHON=path.join(root,'runtime/python/python.exe');
 process.env.SONY_WALKMAN_X86_DLL=path.join(root,'vendor/sony-walkman-x86/sony-dsp-x86.dll');
 const previewNative=path.join(root,'.tools/source-preview-native-audio/rhine-audio-host.exe');
 process.env.SONY_WALKMAN_NATIVE_DECODER=sourcePreview&&require('node:fs').existsSync(previewNative)?previewNative:path.join(root,'vendor/audio/windows-x64/rhine-audio-host.exe');
 process.env.RHINE_NATIVE_AUDIO=process.env.SONY_WALKMAN_NATIVE_DECODER;
-let service,window,quitting=false,preferences={},saveTail=Promise.resolve();
+let service,window,quitting=false,preferences={},saveTail=Promise.resolve(),gpuSaveTail=Promise.resolve();
 let windowAspectModel,windowAspectController,entryPreferencesModel;
 const audioPresetFile=storage.audioPresetFile;
 const audioPresetMaxBytes=16*1024*1024,audioPresetSourceMaxBytes=4*1024*1024;
 const emptyAudioPresetStore=()=>({schemaVersion:1,activeId:null,presets:[],eqBanks:{}});
 let audioPresetStore=emptyAudioPresetStore(),audioPresetStoreExists=false,audioPresetLoadError='',audioPresetFileFingerprint=null,audioPresetSaveTail=Promise.resolve();
-const preferenceKeys=new Set(['language','theme','followSystemTheme','entryOnOpen','entryWelcome','entryIdentity','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
+const preferenceKeys=new Set(['language','theme','followSystemTheme','entryOnOpen','entryWelcome','entryIdentity','gpuPreference','windowAspect','view','style','styleProfiles','caseProfiles','futurePunkPresets','archivePunkPresets','themeLayoutVersion','foobarArchive','sortMode','quality','reduced','volume','songFade','sony','sonyParallel','sonyStreaming','output','bgm','bgmVolume','sound','soundVolume','renderQuality']);
 const selectPreferences=value=>{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid preferences');
  const safeValue={...value};
@@ -51,6 +54,7 @@ const selectPreferences=value=>{
  if(typeof selected.followSystemTheme!=='boolean')delete selected.followSystemTheme;
  if(typeof selected.entryOnOpen!=='boolean')delete selected.entryOnOpen;
  if(windowAspectModel)selected.windowAspect=windowAspectModel.normalizeWindowAspect(selected.windowAspect);
+ try{selected.gpuPreference=gpuSelectionModel.normalizeGpuPreference(selected.gpuPreference)}catch{selected.gpuPreference='auto'}
  return selected;
 };
 const selectAudioPresetStore=value=>{
@@ -168,6 +172,19 @@ function createHiddenStartupGate({ipcMain,app,dialog,getWindow}){
 // HIDDEN_STARTUP_GATE_FACTORY_END
 const standardEqPresetStore=createStandardEqPresetStore({home:storage.home,audioPresetFile,projectRoot:root,dialog,shell,getWindow:()=>window});
 registerStandardEqPresetIpc({ipcMain,store:standardEqPresetStore,ownedEvent});
+const attachWindowControls=registerWindowControls({ipcMain,getWindow:()=>window});
+registerGpuControls({app,ipcMain,getWindow:()=>window,startup:startupGpu,getPreference:()=>preferences.gpuPreference,waitForPreference:()=>gpuSaveTail.catch(()=>{}),savePreference:value=>{
+ const operation=gpuSaveTail.catch(()=>{}).then(async()=>{
+  await saveTail.catch(()=>{});
+  const previous=preferences.gpuPreference;
+  const selected={...preferences,gpuPreference:gpuSelectionModel.normalizeGpuPreference(value)};
+  preferences=selected;
+  saveTail=preferencesStore.save(selected);
+  try{await saveTail}catch(error){preferences={...preferences,gpuPreference:previous};throw error}
+ });
+ gpuSaveTail=operation;
+ return operation;
+}});
 ipcMain.handle('rhine:about:known-issues',async(event,language)=>{
  if(!ownedEvent(event))throw new Error('无效的已知问题请求');
  const {getKnownIssuesText}=await import(pathToFileURL(path.join(root,'src/known-issues.mjs')).href);
@@ -191,7 +208,13 @@ ipcMain.handle('rhine:lyrics:choose-cache-folder',async(event,language)=>{
 });
 ipcMain.on('rhine:preferences:get',event=>{event.returnValue=ownedEvent(event)?preferences:{}});
 ipcMain.handle('rhine:preferences:save',async(event,value)=>{
+ // Keep ordinary saves out of a GPU write/rollback so they cannot capture and
+ // later persist a GPU value whose own save failed.
+ await gpuSaveTail.catch(()=>{});
  if(!ownedEvent(event))return{ok:false,error:'无效的播放器窗口'};let selected;try{selected=selectPreferences(value)}catch(error){return{ok:false,error:error.message}}
+ // Only the GPU IPC can alter this desktop startup setting. Ordinary renderer
+ // saves must retain it, including saves from an already-open older page.
+ selected.gpuPreference=preferences.gpuPreference??'auto';
  const aspectChanged=preferences.windowAspect!==selected.windowAspect;
  preferences=selected;
  if(aspectChanged)windowAspectController?.set(selected.windowAspect);
@@ -263,6 +286,7 @@ else {
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
    window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e6e8e3',show:false,autoHideMenuBar:true,icon:sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
    windowAspectController=attachWindowAspect(window,{screen:require('electron').screen,initialAspect:preferences.windowAspect});
+    attachWindowControls(window,origin);
    startupGate?.attachWindow(window,origin);
    {const title=sourcePreview?'Rhine Music · 源码验证':`Rhine Music · ${app.getVersion()}`;window.setTitle(title);window.webContents.on('page-title-updated',event=>{event.preventDefault();window.setTitle(title)})}
    // Restore the intended CSS proportions on startup/reload, including profiles
@@ -284,7 +308,7 @@ else {
  app.on('window-all-closed',()=>{if(!previewUICheck)app.quit()});
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;
-  const shut=async()=>{if(service){await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};
+  const shut=async()=>{if(service){await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),gpuSaveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};
   void shut().finally(()=>app.quit());
  });
 }

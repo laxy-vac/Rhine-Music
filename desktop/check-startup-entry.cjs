@@ -101,13 +101,15 @@ async function runLauncher() {
   const { spawn } = require('node:child_process');
   const { pathToFileURL } = require('node:url');
   const projectRoot = path.resolve(__dirname, '..');
-  const themeFollowMode = process.argv.includes('--theme-follow');
+  const graphicsOnlyMode = process.argv.includes('--graphics');
+  const manualGpuMode = graphicsOnlyMode && process.argv.includes('--gpu-manual');
+  const themeFollowMode = process.argv.includes('--theme-follow') || graphicsOnlyMode;
   const futurePanelsMode = process.argv.includes('--future-panels');
   const futureEntryMode = process.argv.includes('--future-entry');
   const syntheticFixtureMode = futurePanelsMode || futureEntryMode;
   if ([themeFollowMode, futurePanelsMode, futureEntryMode].filter(Boolean).length > 1)
     throw new Error('Choose one isolated checker mode per Electron process.');
-  const toolRoot = path.join(projectRoot, '.tools', futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
+  const toolRoot = path.join(projectRoot, '.tools', graphicsOnlyMode ? 'graphics-2026-10-17' : futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -137,7 +139,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
+    mode: graphicsOnlyMode ? 'production-electron-graphics' : futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -281,11 +283,28 @@ async function runLauncher() {
       },
       reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode,
       themeFollow: themeFollowMode,
+      graphicsOnly: graphicsOnlyMode,
+      gpuStartupPreferenceFile: path.join(runDirectory, 'startup-gpu-preferences.json'),
       futurePanels: futurePanelsMode,
       futureEntry: futureEntryMode,
       syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
       runDirectory,
     };
+    if (manualGpuMode) {
+      const { enumerateAdapters, adapterToPreference } = require(path.join(projectRoot, 'desktop', 'gpu-selection.cjs'));
+      await fs.mkdir(appPaths.temp, { recursive: true });
+      const previousTemp = process.env.TEMP, previousTmp = process.env.TMP;
+      try {
+        process.env.TEMP = appPaths.temp; process.env.TMP = appPaths.temp;
+        const adapters = await enumerateAdapters();
+        if (!adapters.length) throw new Error('Manual GPU check requires at least one usable adapter.');
+        config.preferences.gpuPreference = adapterToPreference(adapters[0]);
+        await fs.writeFile(config.gpuStartupPreferenceFile, JSON.stringify({ gpuPreference: config.preferences.gpuPreference }));
+      } finally {
+        if (previousTemp === undefined) delete process.env.TEMP; else process.env.TEMP = previousTemp;
+        if (previousTmp === undefined) delete process.env.TMP; else process.env.TMP = previousTmp;
+      }
+    }
     await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
     await fs.copyFile(__filename, path.join(appDirectory, 'main.cjs'));
     if (themeFollowMode) {
@@ -400,6 +419,7 @@ async function runLauncher() {
       themeFollow: report.electron?.themeFollow?.summary ?? null,
       futurePanels: report.electron?.futurePanels?.summary ?? null,
       futureEntry: report.electron?.futureEntry?.summary ?? null,
+      graphics: report.electron?.graphics ? { cases: report.electron.graphics.cases.length, screenshots: report.electron.graphics.screenshots.length } : null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
       revealedBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'frontend-ready')?.effective ?? null,
       runDirectory,
@@ -412,7 +432,10 @@ async function runLauncher() {
 async function runElectronProbe() {
   const { app, BrowserWindow, ipcMain, dialog } = require('electron');
   const { pathToFileURL } = require('node:url');
-  app.commandLine.appendSwitch('force_high_performance_gpu');
+  const earlyConfig = JSON.parse(require('node:fs').readFileSync(process.env.RHINE_STARTUP_PROBE_CONFIG, 'utf8'));
+  const { configureStartupGpu, registerGpuControls } = require(path.join(earlyConfig.projectRoot, 'desktop', 'gpu-controller.cjs'));
+  process.env.TEMP = earlyConfig.appPaths.temp; process.env.TMP = earlyConfig.appPaths.temp;
+  const startupGpu = configureStartupGpu(app, earlyConfig.gpuStartupPreferenceFile);
   const captureSchedulingOverrides = process.argv.includes('--capture-probe') || process.argv.includes('--future-entry-capture')
     ? ['disable-backgrounding-occluded-windows', 'disable-renderer-backgrounding'] : [];
   // Chromium consumes these before app readiness, so set them before any await.
@@ -428,6 +451,7 @@ async function runElectronProbe() {
     realDesktopMainExecuted: false,
     realPreloadUsed: true,
     realRendererUsed: true,
+    startupGpu,
     browserWindowOptions: { show: false, backgroundThrottlingExplicitlySet: false },
     ipcEvents: [],
     navigationEvents: [],
@@ -635,7 +659,8 @@ async function runElectronProbe() {
   try {
     if (!configPath) throw new Error('Missing RHINE_STARTUP_PROBE_CONFIG.');
     config = JSON.parse(await fs.readFile(configPath, 'utf8'));
-    if (config.futureEntry) report.mode = 'real-electron-future-entry';
+    if (config.graphicsOnly) report.mode = 'real-electron-graphics';
+    else if (config.futureEntry) report.mode = 'real-electron-future-entry';
     else if (config.futurePanels) report.mode = 'real-electron-future-panels';
     else if (config.themeFollow) report.mode = 'real-electron-theme-follow';
     for (const directory of Object.values(config.appPaths)) await fs.mkdir(directory, { recursive: true });
@@ -655,7 +680,8 @@ async function runElectronProbe() {
       const entryPreferencesModel = config.futureEntry
         ? await import(pathToFileURL(path.join(config.projectRoot, 'src', 'entry-preferences.mjs')).href)
         : null;
-      selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', 'entryPreferencesModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null, entryPreferencesModel);
+      const gpuSelectionModel = require(path.join(config.projectRoot, 'desktop', 'gpu-selection.cjs'));
+      selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', 'entryPreferencesModel', 'gpuSelectionModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null, entryPreferencesModel, gpuSelectionModel);
       if (config.themeFollow) report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
       if (config.futureEntry) {
         report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
@@ -677,6 +703,14 @@ async function runElectronProbe() {
     mockPreferences = selectPreferencesForMock(mockPreferences);
 
     instrumentIpcMain();
+    registerGpuControls({ app, ipcMain, getWindow: () => browserWindow, startup: startupGpu,
+      getPreference: () => mockPreferences.gpuPreference,
+      savePreference: async gpuPreference => {
+        mockPreferences = { ...mockPreferences, gpuPreference };
+        report.gpuPreferenceSaves ??= [];
+        report.gpuPreferenceSaves.push(gpuPreference);
+      },
+    });
     ipcMain.on('rhine:preferences:get', event => {
       const value = config.themeFollow || config.futureEntry ? mockPreferences : config.preferences;
       if (config.themeFollow) report.preferenceReads.push({ theme: value.theme, followSystemTheme: value.followSystemTheme, keys: Object.keys(value).length });
@@ -688,7 +722,7 @@ async function runElectronProbe() {
     ipcMain.handle('rhine:preferences:save', async (_event, value) => {
       if (!config.themeFollow && !config.futureEntry) return { ok: true };
       try {
-        mockPreferences = selectPreferencesForMock(value);
+        mockPreferences = { ...selectPreferencesForMock(value), gpuPreference: mockPreferences.gpuPreference ?? 'auto' };
         report.preferenceSaves.push({
           index: report.preferenceSaves.length + 1,
           theme: mockPreferences.theme,
@@ -744,6 +778,12 @@ async function runElectronProbe() {
       },
     });
     windowForGate = browserWindow;
+    report.fullscreenEvents = [];
+    for (const name of ['enter-full-screen', 'leave-full-screen']) browserWindow.on(name, () => {
+      report.fullscreenEvents.push({ name, state: browserWindow.isFullScreen(), bounds: browserWindow.getBounds() });
+    });
+    const { registerWindowControls } = require(path.join(config.projectRoot, 'desktop', 'window-controls.cjs'));
+    registerWindowControls({ ipcMain, getWindow: () => browserWindow })(browserWindow, config.serviceOrigin);
     const actualWebPreferences = browserWindow.webContents.getLastWebPreferences?.() ?? {};
     report.security = {
       contextIsolation: actualWebPreferences.contextIsolation,
@@ -903,13 +943,23 @@ async function runElectronProbe() {
     }
 
     if (firstResult.ready && config.themeFollow) {
-      report.themeFollow = await themeFollowModule.checkThemeFollow({
+      if (!config.graphicsOnly) report.themeFollow = await themeFollowModule.checkThemeFollow({
         browserWindow,
         outputDirectory: runDirectory,
         probeReport: report,
         getPreferences: () => mockPreferences,
         themeProbe: themeFollowHarness,
       });
+      const { checkGraphics } = await import(pathToFileURL(path.join(config.projectRoot, 'desktop', 'check-graphics.mjs')).href);
+      report.graphics = await checkGraphics({ browserWindow, outputDirectory: runDirectory });
+      const gpuInfo = await app.getGPUInfo('complete');
+      report.gpuRuntimeInfo = { devices: gpuInfo.gpuDevice, renderer: gpuInfo.auxAttributes?.glRenderer };
+      if (startupGpu.applied !== 'auto') {
+        const active = gpuInfo.gpuDevice?.filter(device => device.active) ?? [];
+        report.manualGpuVerified = active.length === 1 && active[0].vendorId === startupGpu.applied.vendorId && active[0].deviceId === startupGpu.applied.deviceId;
+        if (!report.manualGpuVerified) throw new Error('The requested hardware GPU was not reported active.');
+      }
+      if (!report.graphics.ok) throw new Error('Graphics interaction checks failed.');
     }
     if (firstResult.ready && config.futurePanels) {
       await browserWindow.webContents.executeJavaScript(
@@ -993,13 +1043,15 @@ async function runElectronProbe() {
       productionWhitelistRetainsEntryOnOpen: !config.futureEntry || report.productionPreferenceWhitelistHasEntryOnOpen === true,
       productionPreferenceSelectorSavedEntryOnOpenFalse: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === false && item.allowedEntryOnOpen),
       productionPreferenceSelectorSavedEntryOnOpenTrue: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === true && item.allowedEntryOnOpen),
-      themeFollowBehaviorPassed: !config.themeFollow || report.themeFollow?.ok === true,
+      themeFollowBehaviorPassed: !config.themeFollow || config.graphicsOnly || report.themeFollow?.ok === true,
+      graphicsBehaviorPassed: !config.themeFollow || report.graphics?.ok === true,
       futurePanelsBehaviorPassed: !config.futurePanels || report.futurePanels?.ok === true,
       futureEntryBehaviorPassed: !config.futureEntry || report.futureEntry?.ok === true,
     };
   } catch (error) {
-    report.startupOutcome = config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.startupOutcome = config?.graphicsOnly ? 'graphics-probe-error' : config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
     report.failureRendererState = await captureState();
+    report.failureWindowState = browserWindow && !browserWindow.isDestroyed() ? { fullscreen: browserWindow.isFullScreen(), fullscreenable: browserWindow.isFullScreenable(), visible: browserWindow.isVisible(), bounds: browserWindow.getBounds() } : null;
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });
   } finally {
     try { await themeFollowHarness?.detach(); } catch (error) { report.themeFollowDetachError = error.message; }

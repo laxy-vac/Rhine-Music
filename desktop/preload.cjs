@@ -20,6 +20,16 @@ try{
 }catch(error){audioPresetPersistenceError=`无法恢复本机音频预设：${error.message}`}
 contextBridge.exposeInMainWorld('rhineDesktop',{
  native:true,
+ gpuInfo:()=>ipcRenderer.invoke('rhine:gpu:info'),
+ selectGpu:id=>ipcRenderer.invoke('rhine:gpu:select',id),
+ fullscreen:action=>ipcRenderer.invoke('rhine:window:fullscreen',action),
+ onFullscreenChange:callback=>{
+  if(typeof callback!=='function')throw new TypeError('fullscreen callback must be a function');
+  const listener=(_event,isFullscreen)=>{if(typeof isFullscreen==='boolean')callback(isFullscreen)};
+  ipcRenderer.on('rhine:window:fullscreen-changed',listener);
+  let subscribed=true;
+  return()=>{if(!subscribed)return;subscribed=false;ipcRenderer.removeListener('rhine:window:fullscreen-changed',listener)};
+ },
  frontendReady:()=>{frontendReady=true;ipcRenderer.send('rhine:frontend-ready')},
  frontendFailed:reportFrontendFailure,
  audioPresetPersistenceError,

@@ -605,6 +605,9 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
     'desktop/self-test.mjs',
     'desktop/check-preview-ui.mjs',
     'desktop/window-aspect.mjs',
+    'desktop/window-controls.cjs',
+    'desktop/gpu-controller.cjs',
+    'desktop/gpu-selection.cjs',
     'src/known-issues.mjs',
     'src/window-aspect-model.mjs',
     'src/entry-preferences.mjs',
@@ -623,6 +626,7 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
   const sony = await verifySonyRuntime(project);
   const python = await verifyPythonRuntime(project, runtimeAssets);
   const requiredFiles = [
+    'desktop/gpu-adapters.ps1',
     'LICENSE',
     'NOTICE.md',
     'README.md',

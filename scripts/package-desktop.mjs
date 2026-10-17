@@ -18,7 +18,7 @@ async function main() {
  await copy(path.join(runtimeRoot,'electron'),staging);
  const appDir=path.join(staging,'resources/app');await fs.mkdir(appDir,{recursive:true});
  await copy(path.join(project,'dist'),path.join(appDir,'dist'));
- for(const file of ['main.cjs','preload.cjs','window-aspect.mjs','self-test.mjs','runtime-assets.json'])await copy(path.join(project,'desktop',file),path.join(appDir,'desktop',file));
+ for(const file of ['main.cjs','preload.cjs','window-aspect.mjs','window-controls.cjs','gpu-controller.cjs','gpu-selection.cjs','gpu-adapters.ps1','self-test.mjs','runtime-assets.json'])await copy(path.join(project,'desktop',file),path.join(appDir,'desktop',file));
  await copy(path.join(project,'src/window-aspect-model.mjs'),path.join(appDir,'src/window-aspect-model.mjs'));
  await copy(path.join(project,'src/entry-preferences.mjs'),path.join(appDir,'src/entry-preferences.mjs'));
  await copy(path.join(project,'windows/app.ico'),path.join(appDir,'desktop/app.ico'));

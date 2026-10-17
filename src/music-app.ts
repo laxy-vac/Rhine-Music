@@ -72,7 +72,9 @@ import { getKnownIssuesText } from "./known-issues.mjs";
 import { importPowerampPreset, importRhineProcessingBackup, normalizeProcessing, processingDefault, serializeRhineProcessingBackup, type ImportedPowerampPreset, type ProcessingSettings, type RhineProcessingBackup } from "./audio-processing-model.mjs";
 import { dsdBadgeMarkup, hiResBadgeMarkup, isDsdAlbum, isDsdTrack, isHiResAlbum, isHiResTrack } from "./hi-res";
 import { SurfaceTransition, PageScanTransition } from "./ui-transitions";
-import { qualityMarkup, syncQualityUI } from "./quality-settings";
+import { syncQualityUI } from "./quality-settings";
+import { graphicsSettingsMarkup } from "./graphics-settings";
+import { mountGpuSettings, type GpuReport } from "./gpu-settings";
 import { ArchiveScene } from "./scene";
 import { FutureEntry, futureEntryEnd, futureEntryShot } from "./future-entry";
 import { ENTRY_TEXT_MAX_LENGTH, defaultEntryWelcome, defaultEntryIdentity, normalizeEntryText } from "./entry-preferences.mjs";
@@ -122,13 +124,56 @@ import "./music-theme-choice.css";
 import "./future-controls.css";
 import "./future-panels.css";
 import { viewportLayout } from "./viewport-layout";
-import { applyWindowAspect, windowAspectMarkup } from "./window-aspect";
+import { applyWindowAspect } from "./window-aspect";
 import { normalizeWindowAspect, type WindowAspectId as WindowAspect } from "./window-aspect-model.mjs";
 import { normalizeSony, sonyOff, type SonySettings, type SonyStatus } from "./sony-audio";
 import { setupTouchRuler } from "./music-touch";
 import { sonyTechMarkup, updateSonyTechIndicators } from "./sony-tech-indicators";
 import { normalizeOutput, outputDefault, recoverNativeSession, discardNativeSession, type OutputSettings, type NativeStatus, type NativePlaybackSession } from "./native-audio";
-declare global { interface Window { rhineDesktop?: { native: boolean; frontendReady?(): void; frontendFailed?(message: string): void; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; standardEqPresets?(request: StandardEqFileRequest): Promise<StandardEqFileResult>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null> } } }
+declare global { interface Window { rhineDesktop?: { native: boolean; frontendReady?(): void; frontendFailed?(message: string): void; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; standardEqPresets?(request: StandardEqFileRequest): Promise<StandardEqFileResult>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null>; fullscreen?(action: "get" | "toggle" | "exit"): Promise<boolean>; onFullscreenChange?(callback: (fullscreen: boolean) => void): () => void; gpuInfo?(): Promise<GpuReport>; selectGpu?(id: string): Promise<GpuReport> } } }
+
+let windowFullscreen = Boolean(document.fullscreenElement);
+let cleanupGpuSettings: (() => void) | undefined;
+let fullscreenPending = false;
+function syncFullscreenUI() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-action="fullscreen"]')) {
+    button.textContent = trUi(windowFullscreen ? "退出全屏 ↙" : "进入全屏 ↗");
+    button.setAttribute("aria-pressed", String(windowFullscreen));
+    button.disabled = fullscreenPending;
+  }
+}
+async function changeFullscreen(action: "toggle" | "exit" = "toggle") {
+  if (fullscreenPending) return;
+  fullscreenPending = true;
+  syncFullscreenUI();
+  try {
+    if (window.rhineDesktop?.fullscreen) windowFullscreen = await window.rhineDesktop.fullscreen(action);
+    else {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (action === "toggle") await document.documentElement.requestFullscreen();
+      windowFullscreen = Boolean(document.fullscreenElement);
+    }
+  } catch {
+    notify(trUi("无法切换全屏，请重试。"));
+  } finally {
+    fullscreenPending = false;
+    syncFullscreenUI();
+  }
+}
+window.rhineDesktop?.onFullscreenChange?.(fullscreen => {
+  windowFullscreen = fullscreen;
+  syncFullscreenUI();
+});
+if (window.rhineDesktop?.fullscreen) {
+  void window.rhineDesktop.fullscreen("get").then(fullscreen => {
+    windowFullscreen = fullscreen;
+    syncFullscreenUI();
+  }).catch(() => {});
+}
+document.addEventListener("fullscreenchange", () => {
+  if (!window.rhineDesktop?.fullscreen) windowFullscreen = Boolean(document.fullscreenElement);
+  syncFullscreenUI();
+});
 
 type Theme = "day" | "night";
 type Panel = "search" | "online" | null;
@@ -1758,6 +1803,8 @@ function closeManagementPage(restoreFocus = true) {
   cleanupStylePreview = undefined;
   cleanupQualityDetection?.();
   cleanupQualityDetection = undefined;
+  cleanupGpuSettings?.();
+  cleanupGpuSettings = undefined;
   caseEditor?.destroy();
   caseEditor = undefined;
   settingsSelectControls?.close();
@@ -1961,13 +2008,14 @@ function renderThemePage() {
   settingsSelectControls?.destroy();
   cleanupStylePreview?.();
   cleanupQualityDetection?.();
+  cleanupGpuSettings?.();
   caseEditor?.destroy();
   caseEditor = undefined;
   content.innerHTML = musicStyleMarkup(preferences.style, preferences.theme, preferences.followSystemTheme);
-  content.querySelector(".music-style-heading")?.insertAdjacentHTML("afterend", windowAspectMarkup(preferences.windowAspect));
-  content.querySelector(".design-family-section")?.insertAdjacentHTML("afterend", ui`<section id="graphics-display-settings" class="graphics-display-settings window-aspect-settings" aria-labelledby="graphics-display-title"><div class="style-section-heading"><div><small>GLOBAL / DISPLAY</small><h2 id="graphics-display-title">显示与动效</h2></div></div><label class="style-setting-row style-switch-row"><span>减少动态效果<small>简化镜头、文字加载和页签过渡</small></span><input type="checkbox" role="switch" id="reduced-motion" ${preferences.reduced ? "checked" : ""}></label><button type="button" class="text-button" data-action="fullscreen">切换全屏 ↗</button></section>`);
-  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", qualityMarkup(renderQuality, preferences.style.design, musicApplication.view.layout));
-  cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#theme-quality-slot")!, {
+  content.querySelector("#theme-quality-slot")?.insertAdjacentHTML("beforeend", graphicsSettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.windowAspect, preferences.reduced));
+  const gpuBridge = window.rhineDesktop;
+  cleanupGpuSettings = mountGpuSettings(content.querySelector<HTMLElement>("[data-gpu-settings]")!, gpuBridge?.gpuInfo && gpuBridge.selectGpu ? { gpuInfo: gpuBridge.gpuInfo, selectGpu: gpuBridge.selectGpu } : undefined);
+  cleanupQualityDetection = mountQualityDetection(content.querySelector<HTMLElement>("#graphics-display-settings .quality-settings")!, {
     getStyle: () => preferences.style,
     getTheme: () => preferences.theme === "night" ? "night" : "day",
     getCaseSettings: () => caseProfiles[preferences.style.design],
@@ -2012,6 +2060,7 @@ function renderThemePage() {
   updateQuality();
   editableRanges?.sync();
   content.scrollTop = scroll;
+  syncFullscreenUI();
   const restored = focusField ? content.querySelector<HTMLElement>(`[data-style-field="${focusField}"]`) : focusScheme ? content.querySelector<HTMLElement>(`[data-style-scheme="${focusScheme}"]`) : focusDesign ? content.querySelector<HTMLElement>(`[data-style-design="${focusDesign}"]`) : focusFollowing ? content.querySelector<HTMLElement>("[data-follow-system-theme]") : focusTheme ? content.querySelector<HTMLElement>(`button[data-theme="${focusTheme}"]`) : null;
   restored?.focus({ preventScroll: true });
 }
@@ -4061,11 +4110,7 @@ document.addEventListener("click", (e) => {
       if (preferences.output.backend === "browser") effects.play("page-open");
       break;
     case "fullscreen":
-      void (
-        document.fullscreenElement
-          ? document.exitFullscreen()
-          : document.documentElement.requestFullscreen()
-      ).catch(() => notify(trUi("当前浏览器无法进入全屏。")));
+      void changeFullscreen();
       break;
     case "prev":
       stepAlbum(-1);
@@ -4360,6 +4405,7 @@ document.addEventListener("keydown", (e) => {
     if (e.repeat) return;
     // Escape belongs to the current page; peer-page navigation uses its tabs.
     if (panel) closePanel();
+    else if (windowFullscreen) void changeFullscreen("exit");
     else if (page === "music") setMode("archive");
     return;
   }

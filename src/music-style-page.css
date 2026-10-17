@@ -1039,6 +1039,72 @@
   margin-bottom: 10px;
 }
 
+.music-app #music-theme-page .graphics-display-settings {
+  padding: 20px;
+  border: 1px solid var(--style-rule);
+  border-radius: 12px;
+  background: var(--style-card-soft);
+}
+
+.music-app #music-theme-page .graphics-display-settings > .style-section-heading h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.music-app #music-theme-page .graphics-display-settings .window-aspect-settings {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.music-app #music-theme-page .graphics-display-settings :is(.graphics-window-settings, .graphics-motion-settings, .quality-settings) {
+  margin: 20px 0 0;
+  padding: 18px 0 0;
+  border: 0;
+  border-top: 1px solid var(--style-rule);
+  border-radius: 0;
+  background: transparent;
+}
+
+.music-app #music-theme-page .graphics-display-settings :is(h3, .window-aspect-settings h2) {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.music-app #music-theme-page .graphics-display-settings .window-aspect-settings .style-section-heading {
+  padding: 0;
+  border: 0;
+}
+
+.music-app #music-theme-page .graphics-display-settings .quality-heading h3 { margin: 0; }
+.music-app #music-theme-page .graphics-display-settings .graphics-window-settings { padding-top: 0; border-top: 0; }
+.music-app #music-theme-page .graphics-display-settings .quality-control { min-width: 0; }
+.music-app #music-theme-page .graphics-display-settings .quality-control > span { min-width: 0; }
+.music-app[data-design="archive"] #music-theme-page .graphics-display-settings { border-radius: 0; background: transparent; }
+
+.music-app #music-theme-page .gpu-settings {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--style-rule);
+}
+.music-app #music-theme-page .gpu-settings-heading { display: flex; align-items: center; gap: 12px; }
+.music-app #music-theme-page .gpu-settings-heading h3 { margin: 0; }
+.music-app #music-theme-page .gpu-settings-experimental { color: var(--accent); font-size: 9px; letter-spacing: .1em; }
+.music-app #music-theme-page .gpu-settings p { margin: 10px 0; color: var(--muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.music-app #music-theme-page .gpu-settings-choice { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 10px; }
+.music-app #music-theme-page .gpu-settings select { min-width: 190px; max-width: min(75%, 540px); padding: 9px 12px; border: 1px solid var(--style-rule); border-radius: 8px; background: var(--surface); color: var(--ink); text-overflow: ellipsis; }
+.music-app #music-theme-page .gpu-settings select:disabled { opacity: .5; }
+.music-app #music-theme-page .gpu-settings :is(.gpu-settings-error, .gpu-settings-warning) { color: var(--accent); }
+.music-app #music-theme-page .gpu-settings-refresh { padding: 7px 0; border: 0; background: transparent; color: var(--accent); font-size: 11px; }
+.music-app[data-design="archive"] #music-theme-page .gpu-settings select { border-radius: 0; }
+@media (max-width: 640px) {
+  .music-app #music-theme-page .gpu-settings-choice { align-items: stretch; flex-direction: column; gap: 8px; }
+  .music-app #music-theme-page .gpu-settings select { width: 100%; min-width: 0; max-width: 100%; }
+}
+
 .music-style-page .graphics-display-settings .style-setting-row {
   margin: 0;
   border-top-color: var(--style-rule);
@@ -1052,23 +1118,27 @@
   font-size: 9px;
 }
 
-.music-style-page .graphics-display-settings .text-button {
+.music-style-page .graphics-display-settings .graphics-fullscreen-button {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
-  margin: 10px 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--style-rule);
+  border-radius: 8px;
+  background: var(--style-card-soft);
   color: var(--accent);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-align: left;
 }
 
-.music-style-page .graphics-display-settings .text-button:hover {
+.music-style-page .graphics-display-settings .graphics-fullscreen-button:hover {
   color: var(--ink);
 }
+
+.music-style-page .graphics-display-settings .graphics-fullscreen-button:disabled { opacity: .5; cursor: wait; }
+.music-app[data-design="archive"] #music-theme-page .graphics-fullscreen-button { border-radius: 0; }
 
 .music-app[data-design="archive"] #music-theme-page .graphics-display-settings .style-switch-row input[role="switch"] {
   border-color: var(--line);
