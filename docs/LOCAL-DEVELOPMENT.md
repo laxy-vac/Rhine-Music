@@ -18,7 +18,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 启动器不会自动构建、准备工具或扫描曲库；前端优先使用源码预览，并检查指纹。
 - `.tools/source-preview-interface` 缺失时可能回退旧 `dist`，不能把它当成新版。
 - 磁盘修改不替换旧窗口内存；必要构建后完整退出并重开。
-- 当前源码预览已构建并包含 MATRIX 标签缓存、原方向固定照明及 MATRIX 固定对焦；完整安装包尚未重打，性能条件与对照见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
+- 当前源码预览已构建并包含 MATRIX 标签缓存、原方向固定照明/对焦，以及 2026-10-19 三项结构性优化；完整安装包尚未重打，性能条件与对照见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
 - 窗口首次显示受初始化/首帧门控制；已显示窗口重载保持可见。Future 入场可跳过，Punk 不播放入场。
 - `启动音乐播放器.bat`、`.command` 与旧 launcher 仅保留兼容引用，不是日常开发入口。
 

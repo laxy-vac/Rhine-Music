@@ -269,8 +269,17 @@ export class CardAppearance {
         mat.dispose();
         continue;
       }
-      if (mesh.userData.albumCover) mesh.userData.coverDisposed = true;
-      if (!mesh.userData.surface) mat.map?.dispose();
+      let managedCover = mesh.userData.coverTextureManaged === true;
+      if (mesh.userData.albumCover) {
+        mesh.userData.coverDisposed = true;
+        const release = mesh.userData.releaseCoverTexture;
+        if (typeof release === "function") {
+          managedCover = mesh.userData.coverTextureManaged = true;
+          delete mesh.userData.releaseCoverTexture;
+          release();
+        }
+      }
+      if (!mesh.userData.surface && !managedCover) mat.map?.dispose();
       mat.dispose();
     }
   }

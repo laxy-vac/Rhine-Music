@@ -65,6 +65,9 @@ import { MusicArrayFadePass } from "./music-array-fade-pass";
 import { MusicLayoutTransition, shelfEntryFrame, shelfEntryCamera, shelfEntryPose, musicGeometryPose, type LayoutSample, type CanonicalSlot } from "./music-layout-transition";
 import { shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment";
 import { MusicMatrixDrag } from "./music-matrix-drag";
+import { MusicInstanceDrawList } from "./music-instance-draw-list";
+import { MusicInstanceShadows } from "./music-instance-shadows";
+import { MusicSharedDepthBokehPass } from "./music-shared-depth-bokeh";
 import {
   archiveWave,
   extraction,
@@ -102,7 +105,20 @@ export class ArchiveScene {
   private playbackGlass?: PlaybackGlassPass;
   private arrayFade?: MusicArrayFadePass;
   private ao: SSAOPass;
-  private bokeh: BokehPass;
+  private bokeh: MusicSharedDepthBokehPass;
+  private readonly instanceDrawList = new MusicInstanceDrawList();
+  private readonly instanceShadows = new MusicInstanceShadows();
+  private readonly drawSlots: number[] = [];
+  private readonly visibleDrawSlots: number[] = [];
+  private readonly shadowDrawSlots: number[] = [];
+  private readonly drawBounds = new THREE.Box3();
+  private readonly worldDrawBounds = new THREE.Box3();
+  private readonly drawMatrix = new THREE.Matrix4();
+  private readonly drawProjection = new THREE.Matrix4();
+  private readonly drawFrustum = new THREE.Frustum();
+  private readonly identityDrawMatrix = new THREE.Matrix4();
+  private lastDrawCount = 0;
+  private lastShadowDrawCount = 0;
   private instances: THREE.InstancedMesh[] = [];
   private caseHitProxy?: THREE.InstancedMesh;
   private caseIllumination = createCaseIllumination(this.scene);
@@ -309,11 +325,14 @@ export class ArchiveScene {
     this.ao.minDistance = 0.001;
     this.ao.maxDistance = 0.09;
     this.composer.addPass(this.ao);
-    this.bokeh = new BokehPass(this.scene, this.camera, {
+    this.bokeh = new MusicSharedDepthBokehPass(this.scene, this.camera, {
       focus: 25,
       aperture: 0.0018,
       maxblur: 0.011,
     });
+    this.bokeh.setDepthSource(() => ({ target: this.ao.normalRenderTarget,
+      eligible: musicLibrary && this.ao.enabled && this.musicPresentation.phase === "archive" &&
+        !this.layoutTransition.active && this.detail < .001 && !this.targetDetail }));
     this.composer.addPass(this.bokeh);
     this.smaa.enabled = false;
     this.composer.addPass(this.smaa);
@@ -2266,6 +2285,7 @@ export class ArchiveScene {
       this.layoutTransition.primeTarget(this.selectedCell, selectedMatrix, true);
     }
     let lastRenderable = -1;
+    this.drawSlots.length = 0;
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i];
       const { row, lane } = this.cells[i];
@@ -2290,6 +2310,7 @@ export class ArchiveScene {
       );
       this.dummy.updateMatrix();
       if (this.dummy.scale.x > 0) {
+        this.drawSlots.push(i);
         this.layoutTransition.apply(this.dummy.matrix, this.cells[i]);
         const slot = slotFrames.get(cellKey(this.cells[i]));
         if (shelfIntroTime !== undefined && slot) shelfEntryPose(this.dummy.matrix, shelfIntroTime, slot, entryCaseTop);
@@ -2788,7 +2809,7 @@ export class ArchiveScene {
     this.playbackGlass?.update(performance.now() / 1000, this.reduced, 1 - this.themeWarmth.value);
     this.shelfEntryPhase = shelfIntroTime !== undefined ? shelfEntryFrame(shelfIntroTime).phase : undefined;
     this.shelfEntryDeployment = shelfIntroTime !== undefined ? shelfEntryFrame(shelfIntroTime).deployment : 1;
-    if (!(musicLibrary && this.displayLayout.grid && !this.musicPresentation.holdsDetail && this.detail < .001)) this.composer.render();
+    if (!(musicLibrary && this.displayLayout.grid && !this.musicPresentation.holdsDetail && this.detail < .001)) this.renderArchiveFrame();
     if (this.layoutWarmFrame && this.layoutTransition.active) {
       this.layoutWarmFrame = false;
       this.last = performance.now() / 1000;
@@ -2816,6 +2837,59 @@ export class ArchiveScene {
         !sameCell(this.matrixPhysicalSelection.cell, this.selectedCell) ||
         this.matrixPhysicalSelection.cell.foobarEntryKey !== this.selectedCell.foobarEntryKey))
       this.matrixPhysicalSelection = { cell: { ...this.selectedCell }, fingerprint: this.catalogMotionFingerprint(), version: this.displayCatalogVersion };
+  }
+  private renderArchiveFrame() {
+    if (!musicLibrary) { this.composer.render(); return; }
+    const meshes = [...this.instances, this.covers?.array, this.covers?.arrayInsert, this.caseTitles?.array,
+      this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge].filter((mesh): mesh is THREE.InstancedMesh => !!mesh);
+    let slots = this.drawSlots;
+    let shadowSlots = this.drawSlots;
+    let separateShadows = false;
+    if (this.instanceDrawList.enabled && this.musicPresentation.phase === "archive" &&
+      !this.layoutTransition.active && this.detail < .001 && !this.targetDetail) {
+      this.scene.updateMatrixWorld(true);
+      this.camera.updateMatrixWorld(true);
+      // Keep every possible shadow caster, including boxes outside the view.
+      // All current instance parts share the same world transform and slot pose.
+      if (meshes.every(mesh => mesh.matrixWorld.equals(this.identityDrawMatrix))) {
+        this.drawBounds.makeEmpty();
+        for (const mesh of meshes) if (mesh.visible) {
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+          if (mesh.geometry.boundingBox) this.drawBounds.union(mesh.geometry.boundingBox);
+        }
+        if (!this.drawBounds.isEmpty()) {
+          this.drawBounds.expandByScalar(.01); // Conservative raster/edge margin.
+          this.drawProjection.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+          this.drawFrustum.setFromProjectionMatrix(this.drawProjection, this.camera.coordinateSystem);
+          this.light.shadow.updateMatrices(this.light);
+          const shadowFrustum = this.light.shadow.getFrustum();
+          this.visibleDrawSlots.length = 0;
+          this.shadowDrawSlots.length = 0;
+          for (const slot of slots) {
+            this.instances[0].getMatrixAt(slot, this.drawMatrix);
+            this.worldDrawBounds.copy(this.drawBounds).applyMatrix4(this.drawMatrix);
+            const inView = this.drawFrustum.intersectsBox(this.worldDrawBounds);
+            if (inView)
+              this.visibleDrawSlots.push(slot);
+            if (inView || (this.renderer.shadowMap.enabled && this.light.castShadow && shadowFrustum.intersectsBox(this.worldDrawBounds)))
+              this.shadowDrawSlots.push(slot);
+          }
+          slots = this.visibleDrawSlots;
+          shadowSlots = this.shadowDrawSlots;
+          separateShadows = true;
+        }
+      }
+    }
+    this.lastDrawCount = this.instanceDrawList.enabled
+      ? slots.filter(slot => slot < (this.instances[0]?.count ?? 0)).length
+      : this.instances[0]?.count ?? 0;
+    this.lastShadowDrawCount = this.instanceDrawList.enabled ? shadowSlots.length : this.instances[0]?.count ?? 0;
+    // Picking and atlas ownership keep their logical slot numbers. Only the
+    // buffers used for these render passes are packed, then restored together.
+    const render = () => this.instanceDrawList.render(meshes, slots, () => this.composer.render());
+    if (separateShadows && this.renderer.shadowMap.enabled)
+      this.instanceShadows.render(this.renderer, this.scene, meshes, shadowSlots, render);
+    else render();
   }
   projectCard(x: number, y: number) {
     this.model.updateMatrixWorld(true);
@@ -2942,7 +3016,9 @@ export class ArchiveScene {
       design: this.musicStyle.design,
       archiveView: this.musicStyle.design === "archive" ? this.shelfView ? "shelf" : "future" : "future-theme",
       displayLayout: { ...this.displayLayout },
-      submittedInstances: this.instances[0]?.count ?? 0,
+      submittedInstances: musicLibrary ? this.lastDrawCount : this.instances[0]?.count ?? 0,
+      logicalInstances: this.instances[0]?.count ?? 0,
+      shadowInstances: this.lastShadowDrawCount,
       shelfResources: this.sceneResources?.group.visible ?? false,
       spatialSpacing: this.spatialSpacing,
       caseStructure: this.model.userData.caseStructure ?? null,

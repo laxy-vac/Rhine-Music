@@ -18,6 +18,14 @@ type SelectionText = {
   meta: string;
 };
 
+type PendingWrap = {
+  prepareContext(): void;
+  prepareMeasure(): void;
+  read(): () => void;
+};
+
+const WRAP_FIT_CACHE_LIMIT = 128;
+
 /** Keep the original archive's per-glyph reels alive across selection changes. */
 export function setupMusicTextMotion(root: HTMLElement) {
   const host = (id: string, kind: "text" | "number") => {
@@ -32,17 +40,22 @@ export function setupMusicTextMotion(root: HTMLElement) {
     // Hidden browse text is prepared before the camera finishes its return.
     pauseOffscreen: false,
   };
-  const pendingWraps = new Set<() => () => void>();
+  const pendingWraps = new Set<PendingWrap>();
   let wrappingFrame = 0;
   const flushWrapping = () => {
     wrappingFrame = 0;
-    // Read both metadata blocks before changing either reel's DOM/display.
-    const commits = [...pendingWraps].map((read) => read());
+    const batch = [...pendingWraps];
     pendingWraps.clear();
+    // Resolve cached font/width contexts for every host before measurement writes.
+    batch.forEach((wrap) => wrap.prepareContext());
+    // Stage only the latest uncached text in each hidden measurement span.
+    batch.forEach((wrap) => wrap.prepareMeasure());
+    // Read both metadata blocks before changing either reel's DOM/display.
+    const commits = batch.map((wrap) => wrap.read());
     commits.forEach((commit) => commit());
   };
-  const queueWrapping = (read: () => () => void) => {
-    pendingWraps.add(read);
+  const queueWrapping = (wrap: PendingWrap) => {
+    pendingWraps.add(wrap);
     if (!wrappingFrame) wrappingFrame = requestAnimationFrame(flushWrapping);
   };
   const number = (id: string, digits = 2) =>
@@ -149,38 +162,142 @@ export function setupMusicTextMotion(root: HTMLElement) {
       measured = false,
       fontChanged = false,
       disposed = false;
-    const readLayout = () => {
-      if (disposed) return () => {};
+    let styleEpoch = 0,
+      fontEpoch = 0,
+      widthEpoch = 0,
+      observedWidth: number | undefined,
+      cachedMetrics: {
+        styleEpoch: number;
+        fontEpoch: number;
+        widthEpoch: number;
+        available: number;
+        fontSignature: string;
+      } | undefined,
+      prepared: {
+        key: string;
+        available: number;
+        fits?: boolean;
+      } | undefined;
+    const fitCache = new Map<string, boolean>();
+    const clearFitCache = () => {
+      fitCache.clear();
+      cachedMetrics = undefined;
+    };
+    const rememberFit = (key: string, fits: boolean) => {
+      if (fitCache.has(key)) fitCache.delete(key);
+      fitCache.set(key, fits);
+      if (fitCache.size > WRAP_FIT_CACHE_LIMIT)
+        fitCache.delete(fitCache.keys().next().value!);
+    };
+    const metrics = () => {
+      if (cachedMetrics && cachedMetrics.styleEpoch === styleEpoch &&
+        cachedMetrics.fontEpoch === fontEpoch && cachedMetrics.widthEpoch === widthEpoch)
+        return cachedMetrics;
       const style = getComputedStyle(element);
+      const measureStyle = getComputedStyle(measure);
       const available =
         element.clientWidth -
         Number.parseFloat(style.paddingLeft) -
         Number.parseFloat(style.paddingRight);
-      const fits = available > 0 && measure.scrollWidth <= available;
-      return () => {
-        const previouslyUsingReel = usingReel;
-        usingReel = fits;
-        if (!measured || fits !== previouslyUsingReel) {
-          // Inline display overrides the library's .rn-root rule while hidden.
-          reel.style.display = fits ? "inline-block" : "none";
-          plain.style.display = fits ? "none" : "inline";
-        }
-        measured = true;
-        controller.update({
-          text: value,
-          animated: animated && fits && previouslyUsingReel,
-        });
-        if (fontChanged) { controller.refresh();fontChanged = false; }
-        if (fits && !previouslyUsingReel) controller.update({ animated });
+      const fontSignature = [
+        "font", "font-family", "font-size", "font-style", "font-weight",
+        "font-stretch", "font-kerning", "font-variant", "font-feature-settings",
+        "font-variation-settings", "font-optical-sizing", "letter-spacing",
+        "word-spacing", "text-transform", "direction", "writing-mode",
+      ].map((property) => measureStyle.getPropertyValue(property)).join("\u001f");
+      cachedMetrics = {
+        styleEpoch,
+        fontEpoch,
+        widthEpoch,
+        available,
+        fontSignature,
       };
+      return cachedMetrics;
+    };
+    const wrapEntry: PendingWrap = {
+      prepareContext() {
+        if (disposed) {
+          prepared = undefined;
+          return;
+        }
+        const current = metrics();
+        const key = JSON.stringify([
+          value,
+          element.dataset.cjk || "",
+          styleEpoch,
+          fontEpoch,
+          widthEpoch,
+          current.available,
+          current.fontSignature,
+        ]);
+        if (fitCache.has(key)) {
+          const fits = fitCache.get(key)!;
+          fitCache.delete(key);
+          fitCache.set(key, fits);
+          prepared = { key, available: current.available, fits };
+        } else if (!(current.available > 0)) {
+          // Hidden/zero-width hosts stay on the plain path until ResizeObserver
+          // reports a usable width and queues another measurement.
+          rememberFit(key, false);
+          prepared = { key, available: current.available, fits: false };
+        } else {
+          prepared = { key, available: current.available };
+        }
+      },
+      prepareMeasure() {
+        if (disposed || !prepared || prepared.fits !== undefined) return;
+        if (measure.textContent !== value) measure.textContent = value;
+      },
+      read() {
+        if (disposed || !prepared) return () => {};
+        const needsMeasure = prepared.fits === undefined;
+        const fits = prepared.fits ??
+          (prepared.available > 0 && measure.scrollWidth <= prepared.available);
+        if (needsMeasure) rememberFit(prepared.key, fits);
+        return () => {
+          if (disposed) return;
+          const previouslyUsingReel = usingReel;
+          usingReel = fits;
+          if (plain.textContent !== value) plain.textContent = value;
+          if (!measured || fits !== previouslyUsingReel) {
+            // Inline display overrides the library's .rn-root rule while hidden.
+            reel.style.display = fits ? "inline-block" : "none";
+            plain.style.display = fits ? "none" : "inline";
+          }
+          measured = true;
+          controller.update({
+            text: value,
+            animated: animated && fits && previouslyUsingReel,
+          });
+          if (fontChanged) { controller.refresh();fontChanged = false; }
+          if (fits && !previouslyUsingReel) controller.update({ animated });
+        };
+      },
     };
     const schedule = () => {
-      if (!disposed) queueWrapping(readLayout);
+      if (!disposed) queueWrapping(wrapEntry);
     };
-    const resize = new ResizeObserver(schedule);
+    const resize = new ResizeObserver((entries) => {
+      const entry = entries.find((item) => item.target === element);
+      if (entry) {
+        const nextWidth = entry.contentRect.width;
+        if (observedWidth === undefined || Math.abs(nextWidth - observedWidth) > 0.01) {
+          observedWidth = nextWidth;
+          widthEpoch += 1;
+          clearFitCache();
+        }
+      }
+      schedule();
+    });
     resize.observe(element);
-    document.fonts.addEventListener("loadingdone", schedule);
-    void document.fonts.ready.then(schedule);
+    const fontsChanged = () => {
+      if (disposed) return;
+      fontEpoch += 1;
+      clearFitCache();
+      schedule();
+    };
+    document.fonts.addEventListener("loadingdone", fontsChanged);
+    void document.fonts.ready.then(fontsChanged);
     return {
       update(options: { text?: string; animated?: boolean }) {
         let changedText = false;
@@ -188,11 +305,11 @@ export function setupMusicTextMotion(root: HTMLElement) {
           changedText = true;
           value = options.text;
           const script = String(containsCjk(value));
-          fontChanged ||= element.dataset.cjk !== script;
+          const scriptChanged = element.dataset.cjk !== script;
+          fontChanged ||= scriptChanged;
           element.dataset.cjk = script;
+          if (scriptChanged) cachedMetrics = undefined;
           element.title = value;
-          plain.textContent = value;
-          measure.textContent = value;
         }
         const changedMotion =
           options.animated !== undefined && options.animated !== animated;
@@ -207,14 +324,16 @@ export function setupMusicTextMotion(root: HTMLElement) {
         controller.update({ animated: false });
       },
       refresh() {
+        styleEpoch += 1;
+        clearFitCache();
         controller.refresh();
         schedule();
       },
       destroy() {
         disposed = true;
         resize.disconnect();
-        document.fonts.removeEventListener("loadingdone", schedule);
-        pendingWraps.delete(readLayout);
+        document.fonts.removeEventListener("loadingdone", fontsChanged);
+        pendingWraps.delete(wrapEntry);
         controller.destroy();
         element.textContent = value;
       },
@@ -248,6 +367,12 @@ export function setupMusicTextMotion(root: HTMLElement) {
   };
   return {
     setEnabled,
+    flushPending() {
+      if (wrappingFrame !== 0) {
+        cancelAnimationFrame(wrappingFrame);
+        flushWrapping();
+      }
+    },
     refresh,
     update(
       value: SelectionText,

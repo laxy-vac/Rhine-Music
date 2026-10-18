@@ -850,12 +850,13 @@ for (const event of ["wheel", "pointerdown", "touchstart", "keydown"] as const) 
   }, { passive: true });
 }
 let libraryRebuilding = false;
+let pendingArchiveVisual: { index: number; entryKey?: string; navigation?: ArchiveNavigation } | undefined;
 type LibraryIntent = AlbumSelection & { openAfter: boolean } |
   { mode: "archive" | "detail" };
 let libraryIntent: LibraryIntent | undefined;
 const presentation = new MusicPresentation({
   presentationReady: () => scene?.musicPresentationReady ?? false,
-  archiveReady: () => scene?.musicArchiveReady ?? false,
+  archiveReady: () => { flushArchiveVisual(); return scene?.musicArchiveReady ?? false; },
   archiveInteractive: () => scene?.musicArchiveInteractive ?? false,
   enterCamera: () => {
     scene?.setMode("detail");
@@ -870,6 +871,7 @@ const presentation = new MusicPresentation({
   select: ({ index, navigation, entryKey }) => commitSelection(index, navigation, false, entryKey),
   switchDetail: ({ index, navigation, entryKey }) => commitSelection(index, navigation, true, entryKey),
   mode: (next) => {
+    flushArchiveVisual();
     musicApplication.mode = next;
     stage.dataset.mode = next;
     albumPanel.setOpen(next === "detail");
@@ -964,6 +966,7 @@ function startFutureEntry() {
 }
 
 function replayFutureEntry() {
+  flushArchiveVisual();
   if (futureEntry?.active) return;
   const reason = entryPlaybackUnavailable();
   if (reason) { notify(reason); return; }
@@ -1210,6 +1213,7 @@ async function receiveLibrary(next: MusicLibrary, force = false) {
   }
 }
 async function applyLibrary() {
+  flushArchiveVisual();
   const hadAlbums = albums.length > 0;
   const previousDetail = JSON.stringify(currentAlbum());
   const visualKey = (items: MusicAlbum[], groups: MusicGenre[]) =>
@@ -1374,27 +1378,55 @@ function updateSelection(navigation?: ArchiveNavigation) {
   $("#detail-card-id").textContent =
     `ALBUM / ${String(musicApplication.selectedIndex + 1).padStart(3, "0")}`;
   $(".card-caption small").hidden = preferences.style.caseStyle !== "rhine";
-  renderDetail();
+  // prepareMenu builds the latest detail before it becomes visible.
+  if (musicApplication.mode === "detail") renderDetail();
   albumPanel.setVisible(page === "music" && ready, !!panel);
   // Hidden archive content can prepare its static reels before the reveal.
   if (!animated) syncSelectionMotion();
 }
 function commitSelection(index: number, navigation?: ArchiveNavigation, keepDetail = false, entryKey?: string) {
+  const deferVisual = !keepDetail && !!navigation && "axis" in navigation && ready && page === "music" &&
+    !libraryRebuilding && !panel && !viewer?.isOpen && !futureEntry?.active &&
+    musicApplication.mode === "archive" && presentation.phase === "archive" && !presentation.openingOrDetail &&
+    scene?.musicDisplayLayout.effective === "shelf" && scene.musicArchiveInteractive;
+  const previousAxis = pendingArchiveVisual?.navigation;
+  if (!deferVisual || (previousAxis && "axis" in previousAxis && navigation && "axis" in navigation &&
+    previousAxis.axis !== navigation.axis)) flushArchiveVisual();
   musicApplication.selectAlbum(wrap(index, records.length), records[wrap(index, records.length)]?.id);
   const requested = entryKey ? getMusicEntryByKey(entryKey) : undefined;
   if (requested?.recordIndex === musicApplication.selectedIndex) focusMusicEntry(requested.key);
   // Re-resolve visibility after SHOW/filter changes; stale requests use the current catalog fallback.
   const entry = getMusicFocusedEntry(musicApplication.selectedIndex);
   if (entry) focusMusicEntry(entry.key);
-  if (keepDetail) scene?.switchMusicAlbum(musicApplication.selectedIndex, navigation);
-  else scene?.select(musicApplication.selectedIndex, navigation);
-  updateSelection(navigation);
+  if (deferVisual) {
+    // Every input advances the authoritative cursor. Only the final target of
+    // this display frame needs a scene snapshot and derived browse DOM.
+    const previous = pendingArchiveVisual?.navigation;
+    const combined = previous && navigation && "axis" in previous && "axis" in navigation && previous.axis === navigation.axis
+      ? { axis: navigation.axis, direction: previous.direction + navigation.direction } : navigation;
+    pendingArchiveVisual = { index: musicApplication.selectedIndex, entryKey: entry?.key, navigation: combined };
+  } else {
+    if (keepDetail) scene?.switchMusicAlbum(musicApplication.selectedIndex, navigation);
+    else scene?.select(musicApplication.selectedIndex, navigation);
+    updateSelection(navigation);
+  }
   effects.play(
     navigation && "axis" in navigation && navigation.axis === "lane"
       ? "column"
       : "tick",
     navigation && "axis" in navigation && navigation.axis === "lane" ? navigation.direction * .45 : 0,
   );
+}
+function flushArchiveVisual() {
+  const pending = pendingArchiveVisual;
+  if (!pending) return;
+  pendingArchiveVisual = undefined;
+  if (pending.entryKey && getMusicEntryByKey(pending.entryKey)?.recordIndex === pending.index)
+    focusMusicEntry(pending.entryKey);
+  scene?.select(pending.index, pending.navigation);
+  updateSelection(pending.navigation);
+  textMotion.flushPending();
+  titleMotion.flushPending();
 }
 function select(index: number, navigation?: ArchiveNavigation, openAfter = presentation.openingOrDetail, route?: AlbumSelection["route"], entryKey?: string) {
   if (!records.length || !ready || index < 0) return;
@@ -1459,7 +1491,7 @@ function stepGenre(direction: number) {
   select(next.recordIndex, { axis: "lane", direction });
 }
 function setMode(next: "archive" | "detail") {
-
+  flushArchiveVisual();
   if (next === "archive") cancelTrackReveal();
   if (libraryRebuilding) { libraryIntent = { mode: next }; return; }
   if (next === "detail") {
@@ -1934,6 +1966,7 @@ function closeManagementPage(restoreFocus = true) {
   if (restoreFocus) pageFocus?.focus({ preventScroll: true });
 }
 function openSettingsPage() {
+  flushArchiveVisual();
   audioInfoPopup.close(false);
   if (page === "settings") { pageScan.cancelPending(); return; }
   if (panel) return closePanel(() => openSettingsPage());
@@ -1965,6 +1998,7 @@ function openLibrarySettings() {
   selectSettingsCategory("library", true);
 }
 function openArchivePage() {
+  flushArchiveVisual();
   if (panel) return closePanel(() => openArchivePage());
   const returningToMusic = page !== "music";
   if (page === "music") pageScan.cancelPending();
@@ -1978,6 +2012,7 @@ function openArchivePage() {
   if (musicApplication.mode === "archive" && presentation.phase === "archive") showBrowseSurface();
 }
 function openEqPage() {
+  flushArchiveVisual();
   audioInfoPopup.close(false);
   if (page === "eq") { pageScan.cancelPending(); return; }
   if (panel) return closePanel(() => openEqPage());
@@ -2000,6 +2035,7 @@ function openEqPage() {
 }
 
 function openLyricsPage() {
+  flushArchiveVisual();
   audioInfoPopup.close(false);
   if (page === "lyrics") { pageScan.cancelPending(); return; }
   if (panel) return closePanel(() => openLyricsPage());
@@ -2024,6 +2060,7 @@ function openLyricsPage() {
 }
 
 function openSignalPage() {
+  flushArchiveVisual();
   audioInfoPopup.close(false);
   if (page === "signal") { pageScan.cancelPending(); return; }
   if (panel) return closePanel(() => openSignalPage());
@@ -2053,6 +2090,7 @@ function openLyricsSettings() {
 }
 
 function openThemePage() {
+  flushArchiveVisual();
   audioInfoPopup.close(false);
   if (page === "theme") { pageScan.cancelPending(); return; }
   if (panel) return closePanel(() => openThemePage());
@@ -3906,6 +3944,7 @@ async function queryIntroductions(one = false) {
   }
 }
 function playAlbum(id?: string) {
+  flushArchiveVisual();
   const a = currentAlbum();
   if (!a?.tracks.length || a.offline) return;
   const focusedTrack=getMusicCatalogOptions().show==='tracks'?getMusicFocusedEntry(musicApplication.selectedIndex)?.track:undefined;
@@ -3958,6 +3997,7 @@ function musicArrangementPreset(): MusicSortMode | "custom" {
   return "custom";
 }
 function applyMusicView(next: Partial<MusicViewSettings>, query?: string) {
+  flushArchiveVisual();
   const previous = musicApplication.view;
   const layoutOnly = next.layout !== undefined && next.show === undefined && next.group === undefined && next.sort === undefined && query === undefined;
   const gridSizeOnly = next.gridPageSize !== undefined && next.layout === undefined && next.show === undefined && next.group === undefined && next.sort === undefined && query === undefined;
@@ -4621,6 +4661,7 @@ document.addEventListener("keydown", (e) => {
 let lastFrame = 0,
   frameCount = 0;
 function frame(ms: number) {
+  flushArchiveVisual();
   foobarShell?.tick(ms / 1000, preferences.reduced);
   if (!document.hidden && scene && page === "music") {
     const entryWasActive = !!futureEntry?.active;

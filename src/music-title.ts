@@ -371,6 +371,11 @@ export function setupMusicTitleLayout(root: HTMLElement) {
   document.fonts.addEventListener("loadingdone", fontsChanged);
   void document.fonts.ready.then(fontsChanged);
   return {
+    flushPending() {
+      if (!scheduled || destroyed) return;
+      cancelAnimationFrame(scheduled);
+      layout();
+    },
     update(next: string, animated: boolean) {
       title.dataset.cjk = probe.dataset.cjk = String(containsCjk(next));
       enabled = animated;
