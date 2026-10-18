@@ -49,7 +49,7 @@ LUID 只在当前会话有效；重新启动时按稳定物理身份匹配。选
 
 两主题共用 SHOW、LAYOUT、GROUP、SORT 和目录 query。可见布局名称为 ARRAY、MATRIX、GRID，内部稳定键分别是 <code>shelf</code>、<code>array</code>、<code>grid</code>。SHOW 为 ALBUMS/TRACKS；GROUP 为 GENRE/ARTIST/DECADE/A-Z/NONE；SORT 为 ARTIST/TITLE/YEAR/ADDED。
 
-Punk 空间布局的 SHOW/LAYOUT/GROUP/SORT 收在场景左上角的两行紧凑工具区，与 RANDOM 保持间距；较窄窗口允许横向访问。场景在资料边缘下方保留少量延伸，由背景渐变承接，保留单一 canvas、方角与工业配色。Future 工具栏仍位于左上。Punk 的 LAYOUT 选中使用固定橙色点；Future 工具栏不放额外筛选输入框，Punk 搜索使用顶栏 SEARCH ARCHIVE。GRID 时提供 PER PAGE 与当前结果总数；可选 10、36、50、75、100、200 条，默认 36。分组计数显示该组总量，不随当前页缩小。GRID 离开后隐藏 PER PAGE。Punk GRID 保留 RANDOM 操作及方形封面墙；Future 保留 136px 圆角文字卡片。
+Punk 空间布局的 SHOW/LAYOUT/GROUP/SORT 收在场景左上角的两行紧凑工具区，每行底板按自身内容宽度收口，与 RANDOM 保持间距；较窄窗口允许横向访问。场景在资料边缘下方保留少量延伸，由背景渐变承接，保留单一 canvas、方角与工业配色。Future 工具栏仍位于左上。Punk 的 LAYOUT 选中使用固定橙色点；Future 工具栏不放额外筛选输入框，Punk 搜索使用顶栏 SEARCH ARCHIVE。GRID 时提供 PER PAGE 与当前结果总数；可选 10、36、50、75、100、200 条，默认 36。分组计数显示该组总量，不随当前页缩小。GRID 离开后隐藏 PER PAGE。Punk GRID 保留 RANDOM 操作及方形封面墙；Future 保留 136px 圆角文字卡片。
 
 Punk 封面卡片为 106px 方形，约 26px 间距，选中使用黑色细框和主题色四角；标题与资料留在右栏、无障碍名称和悬停信息，不叠在封面图上。Future 的搜索、分组和排序使用相同目录结果，不在工具栏重复输入框。
 
