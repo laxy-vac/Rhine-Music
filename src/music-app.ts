@@ -4661,6 +4661,7 @@ document.addEventListener("keydown", (e) => {
 let lastFrame = 0,
   frameCount = 0;
 function frame(ms: number) {
+  if (!document.hidden && page === "music") scene?.prepareFrameViewport();
   flushArchiveVisual();
   foobarShell?.tick(ms / 1000, preferences.reduced);
   if (!document.hidden && scene && page === "music") {

@@ -67,6 +67,7 @@ import { shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment
 import { MusicMatrixDrag } from "./music-matrix-drag";
 import { MusicInstanceDrawList } from "./music-instance-draw-list";
 import { MusicInstanceTransforms } from "./music-instance-transforms";
+import { MusicFrameViewport } from "./music-frame-viewport";
 import { MusicInstanceShadows } from "./music-instance-shadows";
 import { MusicSharedDepthBokehPass } from "./music-shared-depth-bokeh";
 import {
@@ -109,6 +110,7 @@ export class ArchiveScene {
   private bokeh: MusicSharedDepthBokehPass;
   private readonly instanceDrawList = new MusicInstanceDrawList();
   private readonly instanceTransforms = new MusicInstanceTransforms();
+  private readonly frameViewport = new MusicFrameViewport();
   private readonly instanceShadows = new MusicInstanceShadows();
   private readonly drawSlots: number[] = [];
   private readonly visibleDrawSlots: number[] = [];
@@ -666,7 +668,8 @@ export class ArchiveScene {
   private get shelfView() { return musicLibrary && this.displayLayout.canvas === "shelf"; }
   /** A fixed front lip anchors all new racks; selection scrolls only its own rack. */
   private arrayComposition(shelfRowSpacing = this.spatialSpacing.row) {
-    const width = Math.max(1, this.container.clientWidth), height = Math.max(1, this.container.clientHeight);
+    const viewport = this.frameViewport.read(this.container);
+    const width = Math.max(1, viewport.width), height = Math.max(1, viewport.height);
     if (this.musicStyle.design === "archive" && !this.musicPresentation.holdsDetail && this.detail < .001) {
       const previousWidth = this.arrayBrowseViewportWidth > 0
         ? this.arrayBrowseWidth * width / this.arrayBrowseViewportWidth : this.arrayBrowseWidth;
@@ -675,7 +678,7 @@ export class ArchiveScene {
     }
     const availableWidth = this.musicStyle.design === "archive" ? this.arrayBrowseWidth || width * .65 : width;
     const bounds = this.caseLayout.bounds;
-    const compact = this.container.closest<HTMLElement>("[data-layout]")?.dataset.layout === "compact";
+    const compact = viewport.compact;
     const key = `${width}|${height}|${availableWidth}|${this.musicStyle.arrayScale}|${bounds.min}|${bounds.max}|${shelfRowSpacing}|${compact}`;
     if (this.arrayFrameCache?.key === key) return this.arrayFrameCache;
     return this.arrayFrameCache = { key, ...musicArrayCompositionFrame(width, height, availableWidth,
@@ -713,8 +716,8 @@ export class ArchiveScene {
     return this.canonicalCatalog;
   }
 
-  private syncDisplayViewportClip() {
-    const width = this.container.clientWidth;
+  private syncDisplayViewportClip(composition?: { availableWidth: number }) {
+    const width = this.frameViewport.read(this.container).width;
     const stage = this.container.closest<HTMLElement>(".music-app");
     const bleedKey = `${width}|${stage?.dataset.design}|${stage?.dataset.mode}|${stage?.dataset.page}|${stage?.dataset.foobarLayout}`;
     if (bleedKey !== this.bleedCacheKey) {
@@ -723,7 +726,7 @@ export class ArchiveScene {
     }
     const clipToInfo = this.catalogView && this.musicStyle.design === "archive";
     if (clipToInfo) this.displayViewportWidth = this.shelfView && this.detail < .001 && !this.musicPresentation.holdsDetail
-      ? this.arrayComposition().availableWidth : foobarArchiveWidth(this.container, width, this.detail, this.displayViewportWidth);
+      ? (this.frameViewport.enabled && composition ? composition : this.arrayComposition()).availableWidth : foobarArchiveWidth(this.container, width, this.detail, this.displayViewportWidth);
     // Preserve the existing information panel's clear background while the
     // unchanged Future camera still composes in the full scene coordinates.
     const bleed = clipToInfo && this.detail < .001 && !this.musicPresentation.holdsDetail ? this.displayBleed : 0;
@@ -772,6 +775,7 @@ export class ArchiveScene {
 
   /** Layout is independent of theme identity: Punk keeps its shell, palette and DOM. */
   setMusicStyle(value: MusicStyle, _animate = false) {
+    this.frameViewport.clear();
     if (this.layoutTransition.active && this.catalogMotionFingerprint() !== this.layoutCatalogFingerprint) this.clearLayoutTransition();
     const previousView = this.catalogView;
     const previousCanvas = this.displayLayout.canvas;
@@ -1523,6 +1527,7 @@ export class ArchiveScene {
     this.labelTexture.needsUpdate = true;
   }
   resize() {
+    this.frameViewport.clear();
     // Frozen flight endpoints belong to one viewport. A resize/quality change
     // adopts the requested normal layout instead of flying with a stale frustum.
     if (this.layoutTransition.active) this.clearLayoutTransition();
@@ -1846,6 +1851,11 @@ export class ArchiveScene {
       this.onHover?.(null);
     });
     window.addEventListener("blur", () => { this.matrixDrag.clear(); this.matrixHoverCell = undefined; });
+  }
+  prepareFrameViewport(): void {
+    if (musicLibrary && this.loaded && this.musicArchiveReady && !this.layoutTransition.active &&
+      this.detail < .001 && !this.targetDetail) this.frameViewport.prepare(this.container);
+    else this.frameViewport.clear();
   }
   update(
     time: number,
@@ -2572,10 +2582,10 @@ export class ArchiveScene {
         cameraAim.lerp(centerAim, musicCinematicPose(shot).centered);
       }
     }
-    const width = this.container.clientWidth, height = this.container.clientHeight;
-    this.syncDisplayViewportClip();
+    const { width, height, compact } = this.frameViewport.read(this.container);
+    this.syncDisplayViewportClip(arrayComposition);
     const framing = archiveFraming(width, height, span, detail,
-      this.container.closest<HTMLElement>("[data-layout]")?.dataset.layout === "compact");
+      compact);
     if (localArray && !framing.portrait && (this.musicPresentation.holdsDetail || detail > 0)) {
       const availableWidth = albumDetailWidth(this.container, width, this.arrayDetailWidthRatio * width);
       this.arrayDetailWidthRatio = availableWidth / Math.max(1, width);
@@ -2905,7 +2915,8 @@ export class ArchiveScene {
     const p = this.model
       .localToWorld(new THREE.Vector3(x, y, 0.255))
       .project(this.camera);
-    return [(p.x + 1) * this.container.clientWidth / 2, (1 - p.y) * this.container.clientHeight / 2];
+    const { width, height } = this.frameViewport.read(this.container);
+    return [(p.x + 1) * width / 2, (1 - p.y) * height / 2];
   }
   get decryptionFrame() { return this.decryption.frame; }
   finishDecryption() { this.decryption.finish(); }

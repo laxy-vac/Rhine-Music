@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+const result=await build({stdin:{contents:'export { MusicFrameViewport } from "./src/music-frame-viewport.ts";',resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,platform:'node',format:'esm'});
+const {MusicFrameViewport}=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+let width=2560,height=1440,compact=false,reads=0;
+const element={get clientWidth(){reads++;return width;},get clientHeight(){reads++;return height;},closest(){return{dataset:{layout:compact?'compact':'wide'}};}};
+const cache=new MusicFrameViewport();cache.prepare(element);const initial=cache.read(element);cache.read(element);assert.equal(reads,2);assert.deepEqual(initial,{width:2560,height:1440,compact:false});
+width=1920;height=1080;await Promise.resolve();assert.equal(cache.read(element).width,1920,'The next event/frame cannot reuse the old viewport.');
+cache.prepare(element);width=1280;compact=true;cache.clear();assert.deepEqual(cache.read(element),{width:1280,height:1080,compact:true},'Synchronous layout/resize invalidation reads the current viewport.');
+cache.enabled=false;cache.prepare(element);const before=reads;cache.read(element);cache.read(element);assert.equal(reads-before,4,'Diagnostic mode retains live measurement.');
+console.log('Frame viewport passed: one read per frame, microtask expiry, explicit resize/layout invalidation and diagnostic live path.');

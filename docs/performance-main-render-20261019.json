@@ -490,6 +490,299 @@
         "nightRun": "run-after-1792351242423-36784"
       },
       "invalidRunPolicy": "Day process completed valid day pairs, then failed night pointer activation; only completed day pairs retained. Night process completed measurement and regression."
+    },
+    {
+      "number": 3,
+      "change": "Measure viewport once before business DOM writes in the same frame",
+      "status": "retained",
+      "targetReached": false,
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 59.21812007561182,
+          "meanMs": 16.88672316384181,
+          "frames": 354,
+          "p95Ms": 16.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 59.99832873736108,
+          "meanMs": 16.667130919220057,
+          "frames": 359,
+          "p95Ms": 16.799999999995634,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 57.32526657084606,
+          "meanMs": 17.444314868804646,
+          "frames": 343,
+          "p95Ms": 33.30000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 59.276327873232205,
+          "meanMs": 16.870140845070406,
+          "frames": 355,
+          "p95Ms": 33.29999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 59.71896955503513,
+          "meanMs": 16.745098039215687,
+          "frames": 357,
+          "p95Ms": 16.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 59.99832873736108,
+          "meanMs": 16.667130919220057,
+          "frames": 359,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 61.111018350002446,
+          "meanMs": 16.36366120218581,
+          "frames": 366,
+          "p95Ms": 27.800000000017462,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 64.40281030444964,
+          "meanMs": 15.527272727272727,
+          "frames": 385,
+          "p95Ms": 27.79999999998836,
+          "over50Percent": 0
+        }
+      ],
+      "comparisonScope": "One valid 6-second A/B sample per case; final cumulative multi-repeat test still required",
+      "cpu": {
+        "captureFrames": 298,
+        "totalSampledMs": 4639.983,
+        "topSelf": [
+          {
+            "function": "(program)",
+            "ms": 810.8319999999994,
+            "msPerFrame": 2.7209127516778504,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "(program)",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "measure",
+            "ms": 340.3479999999999,
+            "msPerFrame": 1.1421073825503352,
+            "source": {
+              "columnNumber": 30997,
+              "functionName": "measure",
+              "lineNumber": 5269,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:1953/assets/scene-BBPpCAG6.js"
+            }
+          },
+          {
+            "function": "(idle)",
+            "ms": 242.8769999999999,
+            "msPerFrame": 0.8150234899328855,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "(idle)",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "setSlot",
+            "ms": 152.464,
+            "msPerFrame": 0.5116241610738255,
+            "source": {
+              "columnNumber": 8053,
+              "functionName": "setSlot",
+              "lineNumber": 5034,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:1953/assets/scene-BBPpCAG6.js"
+            }
+          },
+          {
+            "function": "getBoundingClientRect",
+            "ms": 86.74,
+            "msPerFrame": 0.2910738255033557,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "getBoundingClientRect",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "update",
+            "ms": 86.695,
+            "msPerFrame": 0.29092281879194626,
+            "source": {
+              "columnNumber": 39998,
+              "functionName": "update",
+              "lineNumber": 5387,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:1953/assets/scene-BBPpCAG6.js"
+            }
+          },
+          {
+            "function": "getBoundingClientRect",
+            "ms": 71.08399999999999,
+            "msPerFrame": 0.23853691275167782,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "getBoundingClientRect",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "toArray",
+            "ms": 54.287,
+            "msPerFrame": 0.18217114093959733,
+            "source": {
+              "columnNumber": 52402,
+              "functionName": "toArray",
+              "lineNumber": 0,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:1953/assets/scene-BBPpCAG6.js"
+            }
+          }
+        ]
+      },
+      "labelPixelParity": true,
+      "caseSettings": [
+        {
+          "name": "original",
+          "max": 8,
+          "changedPercent": 0.001458815586419753,
+          "overOnePercent": 0.00007233796296296296,
+          "mean": 0.0000068319187242798355
+        },
+        {
+          "name": "opaque cover",
+          "max": 28,
+          "changedPercent": 0.010199652777777778,
+          "overOnePercent": 0.00012056327160493826,
+          "mean": 0.0000411522633744856
+        },
+        {
+          "name": "clear cover",
+          "max": 3,
+          "changedPercent": 0.01089891975308642,
+          "overOnePercent": 0.00007233796296296296,
+          "mean": 0.00003825874485596708
+        },
+        {
+          "name": "frosted cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "opaque optics",
+          "max": 28,
+          "changedPercent": 0.012502411265432098,
+          "overOnePercent": 0.00019290123456790125,
+          "mean": 0.00005087770061728395
+        },
+        {
+          "name": "clear optics",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "colored marble",
+          "max": 28,
+          "changedPercent": 0.012803819444444446,
+          "overOnePercent": 0.0002290702160493827,
+          "mean": 0.000055459104938271606
+        },
+        {
+          "name": "preset",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "hidden parts",
+          "max": 1,
+          "changedPercent": 0.00004822530864197531,
+          "overOnePercent": 0,
+          "mean": 1.6075102880658437e-7
+        },
+        {
+          "name": "label transform",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        }
+      ],
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2571,
+        "visibleResourceChecks": 12149,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "viewportRegression": [
+        {
+          "ok": true,
+          "viewport": [
+            1920,
+            1080
+          ],
+          "canvas": [
+            2880,
+            1620
+          ]
+        },
+        {
+          "ok": true,
+          "viewport": [
+            2560,
+            1440
+          ],
+          "canvas": [
+            3840,
+            2160
+          ]
+        }
+      ],
+      "inputMethod": {
+        "method": "CDP Input trusted browser events, modifiers explicitly zero, non-focusable isolated window",
+        "failures": []
+      },
+      "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
+      "runReference": "run-after-1792351601331-42316"
     }
   ],
   "limitations": [
