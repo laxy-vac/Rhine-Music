@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { CaseLayout } from "./case-layout";
 import { archiveFraming } from "./viewport-layout.ts";
 import { ARRAY_SELECTED_BELL_LIFT, ARRAY_SELECTED_EXTRA_LIFT } from "./music-array-motion.ts";
-import { MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout.ts";
+import { MUSIC_SHELF_VIEW } from "./music-display-layout.ts";
 
 export type MusicArrayComposition = {
   span: number;
@@ -51,40 +51,4 @@ export function musicArrayCompositionFrame(
   const portraitSpan = archiveFraming(width, height, 10.5, 0, compact);
   const effectiveSpan = portraitSpan.portrait ? portraitSpan.span / scale : span;
   return { span, effectiveSpan, availableWidth, visibleSlots: Math.max(6, visibleSlots) };
-}
-
-export function musicMatrixOverviewSpan(arrayEffectiveSpan: number) {
-  return Math.max(MUSIC_MATRIX_VIEW.minimumSpan, arrayEffectiveSpan * MUSIC_MATRIX_VIEW.arraySpanMultiplier);
-}
-
-/** Fit the finite resident field at the ordinary MATRIX endpoint as well as in flight. */
-export function musicMatrixResidentFrame(aim: THREE.Vector3, outward: THREE.Vector3, span: number,
-  aspect: number, points: THREE.Vector3[], clip = { minX: -.96, maxX: .96, minY: -.94, maxY: .94 }) {
-  if (!points.length) return { aim, span };
-  const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), outward).normalize();
-  const up = new THREE.Vector3().crossVectors(outward, right).normalize();
-  const distance = MUSIC_MATRIX_VIEW.distance;
-  const coordinates = points.map(point => {
-    const relative = point.clone().sub(aim);
-    return { x: relative.dot(right), y: relative.dot(up), depth: distance - relative.dot(outward) };
-  });
-  const intervals = (candidate: number) => {
-    const tan = candidate / (2 * distance);
-    return {
-      left: Math.max(...coordinates.map(p => p.x - clip.maxX * p.depth * tan * aspect)),
-      right: Math.min(...coordinates.map(p => p.x - clip.minX * p.depth * tan * aspect)),
-      bottom: Math.max(...coordinates.map(p => p.y - clip.maxY * p.depth * tan)),
-      top: Math.min(...coordinates.map(p => p.y - clip.minY * p.depth * tan)),
-    };
-  };
-  const feasible = (candidate: number) => { const box = intervals(candidate); return box.left <= box.right && box.bottom <= box.top; };
-  let low = span, high = span;
-  while (!feasible(high)) high *= 1.25;
-  if (high > low) {
-    for (let i = 0; i < 24; i++) { const middle = (low + high) / 2; if (feasible(middle)) high = middle; else low = middle; }
-    high *= 1.03;
-  }
-  const box = intervals(high);
-  return { span: high, aim: aim.clone().addScaledVector(right, THREE.MathUtils.clamp(0, box.left, box.right))
-    .addScaledVector(up, THREE.MathUtils.clamp(0, box.bottom, box.top)) };
 }

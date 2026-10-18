@@ -5,8 +5,47 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const ARCHIVE_MOTION_MATRIX_LANE_COUNT = 9;
 const ARCHIVE_MOTION_MATRIX_ROWS = 48;
 const ARCHIVE_MOTION_SHELF_SLOTS = 20;
+// Independent copy of the e6ae98f static MATRIX camera contract. Keep these
+// values and equations local to this oracle so production framing changes
+// cannot update both the expected and observed camera at once.
+const E6_MATRIX_CAMERA = Object.freeze({
+  yaw:59, elevation:25, distance:140, span:7.33,
+  aim:Object.freeze({ x:-1.091, y:-0.045, z:0.481 }),
+});
 const wrapIndex = (value, count) => count > 0 ? ((value % count) + count) % count : 0;
 const finiteValue = value => value !== null && value !== undefined && Number.isFinite(Number(value));
+const e6CameraSmooth = value => {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+};
+const e6SettlingWave = (distance, time) => {
+  const age = time - 25.05 - Math.abs(distance) * 0.065;
+  const envelope = Math.max(-0.42, 2.15 - 0.17 * (Math.sqrt(distance * distance + 1) - 1));
+  const rise = e6CameraSmooth(age / 0.62);
+  const ring = age > 0 ? Math.sin(age * 5.1) * Math.exp(-age * 1.3) : 0;
+  return envelope * (rise + 0.18 * ring * e6CameraSmooth(age / 0.16));
+};
+const e6CameraIsPortrait = (width, height) => Math.max(1, width) / Math.max(1, height) < 1.05;
+const e6ArchiveCameraFraming = (width, height, span, detail, compact) => {
+  width = Math.max(1, width);
+  height = Math.max(1, height);
+  const aspect = width / height;
+  const portrait = e6CameraIsPortrait(width, height);
+  const baseSpan = span + (5.9 - span) * detail;
+  const portraitDetailSpan = Math.max(6.3 / aspect, 3.7 * height / Math.max(100, 0.54 * height - 156));
+  const viewSpan = portrait
+    ? Math.max(baseSpan, 8.4 / aspect + (portraitDetailSpan - 8.4 / aspect) * detail)
+    : Math.max(baseSpan, baseSpan * (16 / 9) / aspect);
+  return { span:viewSpan, portrait, previewY:portrait ? 0.36 : 0.5,
+    detailX:portrait ? 0.5 : compact ? 0.27 : 550 / 1920,
+    detailY:portrait ? 0.27 + 34 / height : compact ? 0.49 : 560 / 1080 };
+};
+const e6MusicArchiveOffset = (width, height) => {
+  if (e6CameraIsPortrait(width, height)) return { x:0, y:0 };
+  const aspect = Math.max(1, width) / Math.max(1, height);
+  const wide = e6CameraSmooth((aspect - 16 / 9) / (21 / 9 - 16 / 9));
+  return { x:0.035 * wide, y:0.08 + 0.02 * wide };
+};
 const quinticStep = (value, start = 0, end = 1) => {
   const t = Math.max(0, Math.min(1, (value - start) / (end - start)));
   return t * t * t * (t * (t * 6 - 15) + 10);
@@ -46,7 +85,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
   const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [],
     geometryFrames:[], flightSamples:[], routeEndpointBridges:[], matrixSlotAudits:[], extraRiseReversals:[],
-    retargets:[], qSampleMisses:[], entryTimeline:[], windowRestores:[], summary: {} };
+    retargets:[], qSampleMisses:[], entryTimeline:[], windowRestores:[], legacyCameraAudits:[],
+    cameraEndpointBridges:[], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
   let transitionSequence = 0;
@@ -62,6 +102,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const app = window.rhineMusic;
     const stats = app?.stats?.() ?? null;
     const canvas = document.querySelector('#three-scene canvas');
+    let reducedMotionPreference = null;
+    try { reducedMotionPreference = JSON.parse(localStorage.getItem('rhine-music-preferences') || '{}')?.reduced ?? null; } catch {}
     const info = document.querySelector('.foobar-home-info');
     const tools = document.querySelector('.foobar-catalog-tools');
     const workspace = document.querySelector('.foobar-workspace');
@@ -105,6 +147,10 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       mode:stage?.dataset.mode ?? null,
       theme:stage?.dataset.theme ?? null,
       design:app?.design?.design ?? stage?.dataset.design ?? null,
+      compactLayout:document.querySelector('#three-scene')?.closest('[data-layout]')?.dataset.layout === 'compact',
+      styleArrayScale:app?.design?.arrayScale ?? stage?.dataset.styleArrayScale ?? null,
+      reducedMotionPreference,
+      reducedMotionActive:stage?.classList.contains('reduce-motion') ?? null,
       viewLayout,
       legacyLayout:stage?.dataset.foobarLayout ?? null,
       visibility:document.visibilityState,
@@ -415,6 +461,191 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   };
   const xyz = value => Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every(Number.isFinite)
     ? value.slice(0, 3).map(Number) : null;
+  const add3 = (left, right) => left.map((value, index) => value + right[index]);
+  const scale3 = (value, amount) => value.map(component => component * amount);
+  const subtract3 = (left, right) => left.map((value, index) => value - right[index]);
+  const cross3 = (left, right) => [left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2], left[0] * right[1] - left[1] * right[0]];
+  const length3 = value => Math.hypot(...value);
+  const normalize3 = value => {
+    const length = length3(value);
+    return length > 1e-9 ? scale3(value, 1 / length) : null;
+  };
+  const e6MatrixCameraExpectation = state => {
+    const viewport = state?.stats?.motionViewport ?? {};
+    const width = Number(viewport.width ?? state?.viewport?.width);
+    const height = Number(viewport.height ?? state?.viewport?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0)
+      return { ok:false, reason:'missing rendered viewport dimensions' };
+    const compact = state.compactLayout === true || viewport.kind === 'compact';
+    const framing = e6ArchiveCameraFraming(width, height, E6_MATRIX_CAMERA.span, 0, compact);
+    const yaw = E6_MATRIX_CAMERA.yaw * Math.PI / 180;
+    const elevation = E6_MATRIX_CAMERA.elevation * Math.PI / 180;
+    const direction = [-Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation),
+      Math.cos(yaw) * Math.cos(elevation)];
+    const right = normalize3(cross3([0, 1, 0], direction));
+    const up = normalize3(cross3(direction, right));
+    let aim;
+    if (framing.portrait) {
+      const previewAim = [0, -4.6 + e6SettlingWave(0, 26.56) + 0.4 + 1.85, -2.17];
+      aim = add3(previewAim, scale3(up, (framing.previewY - 0.5) * framing.span));
+    } else {
+      const offset = e6MusicArchiveOffset(width, height);
+      aim = add3([E6_MATRIX_CAMERA.aim.x, E6_MATRIX_CAMERA.aim.y, E6_MATRIX_CAMERA.aim.z],
+        add3(scale3(right, offset.x * framing.span * width / height), scale3(up, offset.y * framing.span)));
+    }
+    const position = add3(aim, scale3(direction, E6_MATRIX_CAMERA.distance));
+    const fieldOfView = 2 * Math.atan(framing.span / (2 * E6_MATRIX_CAMERA.distance)) * 180 / Math.PI;
+    return { ok:true, viewport:{ width, height, compact, portrait:framing.portrait }, framing, offset:framing.portrait ? { x:0, y:0 } : e6MusicArchiveOffset(width, height),
+      direction, aim, position, span:framing.span, yaw:E6_MATRIX_CAMERA.yaw,
+      elevation:E6_MATRIX_CAMERA.elevation, distance:E6_MATRIX_CAMERA.distance, fieldOfView };
+  };
+  const cameraPose = state => {
+    const position = xyz(state?.stats?.cameraPosition), aim = xyz(state?.stats?.cameraAim);
+    if (!position || !aim) return null;
+    const offset = subtract3(position, aim);
+    const distance = length3(offset);
+    if (!Number.isFinite(distance) || distance <= 1e-6) return null;
+    const yaw = Math.atan2(-offset[0], offset[2]) * 180 / Math.PI;
+    const elevation = Math.asin(Math.max(-1, Math.min(1, offset[1] / distance))) * 180 / Math.PI;
+    const fieldOfView = Number(state?.stats?.fieldOfView);
+    if (!Number.isFinite(fieldOfView)) return null;
+    return { position, aim, yaw, elevation, distance, fieldOfView,
+      span:2 * distance * Math.tan(fieldOfView * Math.PI / 360) };
+  };
+  const angleDelta = (left, right) => Math.abs(((left - right + 540) % 360) - 180);
+  const compareCameraEndpoints = (from, to, responsiveMatrix = false) => {
+    const left = cameraPose(from), right = cameraPose(to);
+    if (!left || !right) return { ok:false, reason:'missing camera pose', from:left, to:right };
+    let comparison = right, viewportChange = null;
+    if (responsiveMatrix) {
+      const before = e6MatrixCameraExpectation(from), after = e6MatrixCameraExpectation(to);
+      if (!before.ok || !after.ok) return { ok:false, reason:'missing legacy viewport camera', before, after };
+      viewportChange = { from:before.viewport, to:after.viewport,
+        aim:subtract3(after.aim, before.aim), position:subtract3(after.position, before.position),
+        span:after.span - before.span, fieldOfView:after.fieldOfView - before.fieldOfView };
+      comparison = { ...right, aim:subtract3(right.aim, viewportChange.aim),
+        position:subtract3(right.position, viewportChange.position), span:right.span - viewportChange.span,
+        fieldOfView:right.fieldOfView - viewportChange.fieldOfView };
+    }
+    const deltas = {
+      yaw:angleDelta(left.yaw, comparison.yaw), elevation:Math.abs(left.elevation - comparison.elevation),
+      distance:Math.abs(left.distance - comparison.distance), fieldOfView:Math.abs(left.fieldOfView - comparison.fieldOfView),
+      span:Math.abs(left.span - comparison.span), aim:length3(subtract3(left.aim, comparison.aim)),
+      position:length3(subtract3(left.position, comparison.position)),
+    };
+    return { ok:deltas.yaw <= .2 && deltas.elevation <= .2 && deltas.distance <= .25 &&
+      deltas.fieldOfView <= .12 && deltas.span <= .25 && deltas.aim <= .035 && deltas.position <= .4,
+      deltas, from:left, to:right, viewportChange };
+  };
+  const legacyMatrixCameraAudit = state => {
+    const expected = e6MatrixCameraExpectation(state), actual = cameraPose(state);
+    if (!expected.ok || !actual) return { ok:false, expected, actual, reason:expected.reason ?? 'missing camera pose' };
+    const aimDelta = length3(subtract3(actual.aim, expected.aim));
+    const positionDelta = length3(subtract3(actual.position, expected.position));
+    const errors = { yaw:angleDelta(actual.yaw, expected.yaw), elevation:Math.abs(actual.elevation - expected.elevation),
+      distance:Math.abs(actual.distance - expected.distance), span:Math.abs(actual.span - expected.span),
+      fieldOfView:Math.abs(actual.fieldOfView - expected.fieldOfView), aim:aimDelta, position:positionDelta };
+    return { ok:state.viewLayout === 'array' && state.stats?.layoutTransition?.active !== true &&
+      state.presentation?.phase === 'archive' && errors.yaw <= .35 && errors.elevation <= .35 &&
+      errors.distance <= .4 && errors.span <= .035 && errors.fieldOfView <= .08 &&
+      errors.aim <= .035 && errors.position <= .5,
+      expected, actual, errors, viewLayout:state.viewLayout, presentation:state.presentation?.phase ?? null,
+      selectedProjectedCenter:state.stats?.projectedCenter ?? null };
+  };
+  const recordLegacyMatrixCamera = (label, state, settled) => {
+    const audit = { label, settled, ...legacyMatrixCameraAudit(state) };
+    result.legacyCameraAudits.push(audit);
+    record(`${label} matches the independent e6 static MATRIX camera contract`, settled && audit.ok, audit);
+    return audit;
+  };
+  const recordCameraEndpointBridge = (label, from, to, fromLayout, toLayout, responsiveMatrix = false) => {
+    const bridge = { label, fromLayout, toLayout, ...compareCameraEndpoints(from, to, responsiveMatrix) };
+    result.cameraEndpointBridges.push(bridge);
+    record(`${label} preserves the static camera endpoint`, bridge.ok, bridge);
+    return bridge;
+  };
+  const setReducedMotionForEndpointProbe = async enabled => {
+    let current = await snapshot();
+    if (current.reducedMotionPreference === enabled && current.reducedMotionActive === enabled) return current;
+    if (current.page !== 'settings') {
+      await click('[data-action="settings"]');
+      current = await waitFor(state => state.page === 'settings' && state.settingsHidden === false,
+        'open Interface settings for the static camera probe');
+    }
+    if (current.interfaceCategoryHidden !== false) {
+      await click('[data-settings-category-target="interface"]');
+      current = await waitFor(state => state.page === 'settings' && state.interfaceCategoryHidden === false,
+        'open Interface settings for the static camera probe');
+    }
+    const changed = await evaluate(`(() => {
+      const input = document.querySelector('#reduced-motion');
+      if (!input) return false;
+      input.checked = ${JSON.stringify(enabled)};
+      input.dispatchEvent(new Event('change', { bubbles:true }));
+      return true;
+    })()`);
+    if (!changed) throw new Error('Missing reduced-motion setting for the static camera probe.');
+    await waitFor(state => state.page === 'settings' && state.reducedMotionPreference === enabled &&
+      state.reducedMotionActive === enabled, `set static camera probe reduced motion to ${enabled}`);
+    await click('[data-action="library"]');
+    return waitFor(state => state.page === 'music' && state.mode === 'archive' &&
+      state.presentation?.phase === 'archive', 'return to the archive after the static camera probe setting');
+  };
+  const withReducedMotionEndpointProbe = async task => {
+    const initial = await snapshot();
+    const originalPreference = initial.reducedMotionPreference ?? (getPreferences()?.reduced === true);
+    let toggled = false;
+    try {
+      if (originalPreference !== true) {
+        await setReducedMotionForEndpointProbe(true);
+        toggled = true;
+      }
+      return await task();
+    } finally {
+      if (toggled) await setReducedMotionForEndpointProbe(originalPreference === true);
+    }
+  };
+  const captureStaticCameraEndpoint = async (label, layout, identity) => withReducedMotionEndpointProbe(async () => {
+    const state = await waitFor(value => value.viewLayout === layout && value.page === 'music' && value.mode === 'archive' &&
+      value.stats?.layoutTransition?.active !== true && value.presentation?.phase === 'archive' &&
+      (!identity || identityMatches(value, identity)), `${label} static ${layout} camera endpoint`, 10000, 35);
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    return { state:await snapshot(), settled:true, reducedMotion:true };
+  });
+  const setArrayScaleFromStylePage = async requestedValue => {
+    let state = await snapshot();
+    if (state.page !== 'theme') {
+      if (state.page !== 'music') throw new Error(`Cannot open STYLE from ${state.page} while probing ARRAY scale.`);
+      await click('[data-action="theme"]');
+      state = await waitFor(value => value.page === 'theme', 'open STYLE for the ARRAY scale probe');
+    }
+    const selection = await evaluate(`(() => {
+      const select = document.querySelector('select[data-style-field="arrayScale"]');
+      if (!select) return { available:false, reason:'missing ARRAY scale selector' };
+      const current = String(select.value);
+      const options = Array.from(select.options).map(option => String(option.value)).filter(value => Number.isFinite(Number(value)) && Number(value) > 0);
+      const requested = ${JSON.stringify(requestedValue)};
+      const target = requested === null
+        ? options.filter(value => value !== current).sort((left, right) =>
+            Math.abs(Math.log(Number(right) / Number(current))) - Math.abs(Math.log(Number(left) / Number(current))))[0] ?? null
+        : options.find(value => value === String(requested)) ?? null;
+      if (target === null) return { available:options.length > 0, changed:false, current, options };
+      if (target !== current) {
+        select.value = target;
+        select.dispatchEvent(new Event('change', { bubbles:true }));
+      }
+      return { available:true, changed:target !== current, current, value:target, options };
+    })()`);
+    if (!selection?.available) throw new Error(`ARRAY scale selector is unavailable: ${selection?.reason ?? 'no numeric options'}`);
+    if (selection.changed) await waitFor(value => value.page === 'theme' &&
+      Math.abs(Number(value.styleArrayScale) - Number(selection.value)) < 1e-8,
+    `apply ARRAY scale ${selection.value}`, 10000, 35);
+    await click('[data-action="library"]');
+    const archive = await waitFor(value => value.page === 'music' && value.mode === 'archive' &&
+      value.presentation?.phase === 'archive', 'return to archive after the ARRAY scale probe');
+    return { ...selection, archive };
+  };
   const geometryPoseMap = samples => new Map((Array.isArray(samples) ? samples : [])
     .filter(sample => sample && (sample.id || sample.motionId || sample.entry || sample.cell) && xyz(sample.position) && xyz(sample.scale))
     .map(sample => [sample.id || sample.motionId || sample.entry || sample.cell,
@@ -1245,7 +1476,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       .map(track => track.lane).filter(Number.isFinite))].sort((a, b) => a - b);
     const residentPathOkay = residentTracks.length > 0 && residentLanes.length >= 2 &&
       residentTracks.every(track => track.presentEveryFrame && track.routeStable && track.arrayCellStable &&
-        track.alphaOkay && track.scaleDepthOkay && track.allVisible && track.geometryPathFinite &&
+        track.alphaOkay && track.scaleDepthOkay && track.geometryPathFinite &&
         track.badgeKindValid && track.extraClipMatchesRoute) &&
       residentMovedLanes.length === residentLanes.length;
     const matrixOnlyEndpointEntries = traceEndpointEntries(matrixEndpoint,
@@ -1718,9 +1949,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       audit.residentWindowQ.length > 0 && audit.residentMiddleSampleCaptured,
       { residentActualQ:audit.residentWindowQ, residentMiddleActualQ:audit.residentMiddleQ,
         missedQSamples:audit.qSampleMisses });
-    record(`${context} camera lowers and pulls back continuously toward MATRIX`,
-      audit.cameraYMonotonic && audit.cameraYLowerAtMatrix && audit.pullsBackMonotonic && audit.pullsBackAtMatrix &&
-      audit.heroDistanceMonotonic && audit.heroDistanceGrows && audit.cameraOrbits,
+    record(`${context} camera follows the authored orbit into MATRIX`,
+      audit.cameraYMonotonic && audit.cameraYLowerAtMatrix && audit.cameraOrbits,
       { cameraYMonotonic:audit.cameraYMonotonic, cameraYLowerAtMatrix:audit.cameraYLowerAtMatrix,
         pullsBackMonotonic:audit.pullsBackMonotonic, pullsBackAtMatrix:audit.pullsBackAtMatrix,
         heroDistanceMonotonic:audit.heroDistanceMonotonic, heroDistanceGrows:audit.heroDistanceGrows,
@@ -1743,12 +1973,12 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         allVisibleEndpointEntriesRouted:audit.allVisibleEndpointEntriesRouted, routeCoverage:audit.routeCoverage });
     record(`${context} MATRIX endpoint owns all 432 physical slots through production shelf mapping`,
       audit.matrixSlotOwnership.ok, audit.matrixSlotOwnership);
-    record(`${context} carries every ARRAY-visible resident across multiple columns without withdrawal or re-entry`,
+    record(`${context} keeps ARRAY resident identities rendered and unit-scale through MATRIX`,
       audit.residentPathOkay,
       { residentTrackCount:audit.residentTrackCount, arrayCellLanes:audit.residentArrayCellLanes,
         movedLanes:audit.residentMovedLanes,
         failingTracks:audit.residentTracks.filter(track => !(track.presentEveryFrame && track.routeStable &&
-          track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay && track.allVisible &&
+          track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay &&
           track.geometryPathFinite && track.badgeKindValid && track.extraClipMatchesRoute)).slice(0, 12),
         tracks:audit.residentTracks });
     record(context + ' resident surfaces add the scheduled lift over the eased ARRAY-to-MATRIX baseline',
@@ -2179,18 +2409,25 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         row:Number.isFinite(Number(cell?.row)) ? Number(cell.row) : null,
         entry:cell?.foobarEntryKey ?? state?.selectedEntryKey ?? null };
     };
-    const beforeState = await waitFor(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active !== true &&
-      identityMatches(state, identity), `${label} dragged MATRIX selection settles before a fresh round trip`, 10000, 35);
+    const sourceCapture = await captureStaticCameraEndpoint(`${label} MATRIX source`, 'array', identity);
+    const beforeState = sourceCapture.state;
+    const sourceCamera = recordLegacyMatrixCamera(`${label} MATRIX source`, beforeState, sourceCapture.settled);
     const before = addressOf(beforeState);
     const validBefore = Number.isInteger(before.lane) && Number.isInteger(before.row) && before.entry === identity.selectedEntryKey;
     const canonicalShelf = fixtureMatrixShelves.findIndex(shelf => shelf.includes(before.entry));
     const canonicalSlot = canonicalShelf >= 0 ? fixtureMatrixShelves[canonicalShelf].indexOf(before.entry) : -1;
     const canonicalA = { lane:canonicalShelf, row:canonicalSlot >= 0 ? 12 + canonicalSlot : null, entry:before.entry };
-    const arrayEndpoint = await transitionTo(label, 'shelf', identity);
+    await transitionTo(label, 'shelf', identity);
+    const arrayCapture = await captureStaticCameraEndpoint(`${label} ARRAY after MATRIX`, 'shelf', identity);
+    const arrayEndpoint = arrayCapture.state;
     const arrayAddress = addressOf(arrayEndpoint);
     const arrayIsCanonical = canonicalShelf >= 0 && arrayAddress.lane === canonicalA.lane &&
       arrayAddress.row === canonicalA.row && arrayAddress.entry === canonicalA.entry;
-    const matrixEndpoint = await transitionTo(label, 'array', identity);
+    await transitionTo(label, 'array', identity);
+    const matrixCapture = await captureStaticCameraEndpoint(`${label} MATRIX after ARRAY`, 'array', identity);
+    const matrixEndpoint = matrixCapture.state;
+    const matrixCamera = recordLegacyMatrixCamera(`${label} MATRIX after ARRAY`, matrixEndpoint, matrixCapture.settled);
+    const mToAToMBridge = recordCameraEndpointBridge(`${label} M→A→M`, beforeState, matrixEndpoint, 'array', 'array');
     const after = addressOf(matrixEndpoint);
     const beforeIsNonCanonical = validBefore && canonicalShelf === fixtureMatrixShelves.length - 1 &&
       Number.isInteger(canonicalA.row) && before.row !== canonicalA.row;
@@ -2200,7 +2437,111 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       { canonicalM:before, canonicalA:arrayAddress, canonicalB:after, beforeIsNonCanonical,
         arrayIsCanonical, identity,
         arrayLayout:arrayEndpoint.viewLayout, matrixLayout:matrixEndpoint.viewLayout });
-    return matrixEndpoint;
+    await transitionTo(label, 'shelf', identity);
+    const arrayAgainCapture = await captureStaticCameraEndpoint(`${label} ARRAY after MATRIX round trip`, 'shelf', identity);
+    const aToMToABridge = recordCameraEndpointBridge(`${label} A→M→A`, arrayEndpoint, arrayAgainCapture.state, 'shelf', 'shelf');
+    await transitionTo(label, 'array', identity);
+    const finalMatrixCapture = await captureStaticCameraEndpoint(`${label} final MATRIX endpoint`, 'array', identity);
+    const finalMatrixCamera = recordLegacyMatrixCamera(`${label} final MATRIX endpoint`, finalMatrixCapture.state,
+      finalMatrixCapture.settled);
+    const finalMBridge = recordCameraEndpointBridge(`${label} repeated MATRIX endpoint`, matrixEndpoint,
+      finalMatrixCapture.state, 'array', 'array');
+    record(`${label} M↔A camera sequence preserves both original static endpoints`,
+      sourceCamera.ok && matrixCamera.ok && finalMatrixCamera.ok && mToAToMBridge.ok && aToMToABridge.ok &&
+      finalMBridge.ok && identityMatches(arrayAgainCapture.state, identity) && identityMatches(finalMatrixCapture.state, identity),
+    { mToAToMBridge, aToMToABridge, finalMBridge,
+      finalM:finalMatrixCamera.expected, finalMErrors:finalMatrixCamera.errors,
+      arrayEndpoint:cameraPose(arrayEndpoint), arrayAgain:cameraPose(arrayAgainCapture.state) });
+    return finalMatrixCapture.state;
+  };
+  const verifyArrayScaleCameraIsolation = async (label, identity) => {
+    const sourceM = await captureStaticCameraEndpoint(`${label} ARRAY scale source MATRIX`, 'array', identity);
+    const sourceMatrixAudit = recordLegacyMatrixCamera(`${label} ARRAY scale source MATRIX`, sourceM.state, sourceM.settled);
+    const originalScale = Number(sourceM.state.styleArrayScale);
+    if (!Number.isFinite(originalScale) || originalScale <= 0) {
+      record(`${label} ARRAY scale probe has a readable original scale`, false,
+        { styleArrayScale:sourceM.state.styleArrayScale });
+      return sourceM.state;
+    }
+    await transitionTo(label, 'shelf', identity);
+    const sourceA = await captureStaticCameraEndpoint(`${label} ARRAY scale source ARRAY`, 'shelf', identity);
+    await transitionTo(label, 'array', identity);
+    const matrixBeforeChange = await captureStaticCameraEndpoint(`${label} ARRAY scale MATRIX before change`, 'array', identity);
+    const beforeChangeBridge = recordCameraEndpointBridge(`${label} ARRAY scale setup M→A→M`, sourceM.state,
+      matrixBeforeChange.state, 'array', 'array');
+    let scaleChangeAttempted = false;
+    let failure = null;
+    let finalMatrixState = matrixBeforeChange.state;
+    try {
+      scaleChangeAttempted = true;
+      const change = await setArrayScaleFromStylePage(null);
+      if (!change.changed) {
+        scaleChangeAttempted = false;
+        record(`${label} ARRAY scale isolation probe has an alternate ARRAY size`, true,
+          { skipped:true, reason:'the STYLE control has no alternate numeric scale', originalScale, options:change.options });
+      } else {
+        const changedScale = Number(change.value);
+        const matrixAfterChange = await captureStaticCameraEndpoint(`${label} MATRIX after ARRAY scale change`, 'array', identity);
+        const matrixAfterAudit = recordLegacyMatrixCamera(`${label} MATRIX after ARRAY scale change`,
+          matrixAfterChange.state, matrixAfterChange.settled);
+        const matrixBridge = recordCameraEndpointBridge(`${label} MATRIX ignores ARRAY scale`, matrixBeforeChange.state,
+          matrixAfterChange.state, 'array', 'array');
+        await transitionTo(label, 'shelf', identity);
+        const arrayAfterChange = await captureStaticCameraEndpoint(`${label} ARRAY after ARRAY scale change`, 'shelf', identity);
+        const beforeArrayPose = cameraPose(sourceA.state), afterArrayPose = cameraPose(arrayAfterChange.state);
+        const expectedSpanRatio = originalScale / changedScale;
+        const actualSpanRatio = beforeArrayPose && afterArrayPose ? afterArrayPose.span / beforeArrayPose.span : NaN;
+        const arrayScaleEffect = { originalScale, changedScale, expectedSpanRatio, actualSpanRatio,
+          yawDelta:beforeArrayPose && afterArrayPose ? angleDelta(beforeArrayPose.yaw, afterArrayPose.yaw) : null,
+          elevationDelta:beforeArrayPose && afterArrayPose ? Math.abs(beforeArrayPose.elevation - afterArrayPose.elevation) : null,
+          distanceDelta:beforeArrayPose && afterArrayPose ? Math.abs(beforeArrayPose.distance - afterArrayPose.distance) : null,
+          aimDelta:beforeArrayPose && afterArrayPose ? length3(subtract3(beforeArrayPose.aim, afterArrayPose.aim)) : null };
+        const arrayScaleEffectOkay = Number.isFinite(actualSpanRatio) && Math.abs(expectedSpanRatio - 1) >= .04 &&
+          Math.abs(actualSpanRatio - expectedSpanRatio) <= .035 && arrayScaleEffect.yawDelta <= .2 &&
+          arrayScaleEffect.elevationDelta <= .2 && arrayScaleEffect.distanceDelta <= .25;
+        record(`${label} ARRAY scale changes only ARRAY framing while MATRIX stays on the e6 camera`,
+          sourceMatrixAudit.ok && matrixAfterAudit.ok && matrixBridge.ok && beforeChangeBridge.ok && arrayScaleEffectOkay,
+        { sourceMatrixAudit, matrixAfterAudit, matrixBridge, beforeChangeBridge, arrayScaleEffect });
+      }
+    } catch (error) {
+      failure = error;
+    } finally {
+      if (scaleChangeAttempted) {
+        try {
+          const restoredScale = await setArrayScaleFromStylePage(originalScale);
+          const restoreState = restoredScale.archive;
+          const restoreValue = Number(restoreState.styleArrayScale);
+          const restoredA = await captureStaticCameraEndpoint(`${label} ARRAY scale restored ARRAY`, 'shelf', identity);
+          const restoredABridge = recordCameraEndpointBridge(`${label} ARRAY scale restores ARRAY endpoint`,
+            sourceA.state, restoredA.state, 'shelf', 'shelf');
+          record(`${label} ARRAY scale probe restores its original setting`,
+            Math.abs(restoreValue - originalScale) <= 1e-8 && restoredABridge.ok && identityMatches(restoredA.state, identity),
+          { originalScale, restoreValue, restoredABridge });
+        } catch (error) {
+          failure ??= error;
+          record(`${label} ARRAY scale probe restores its original setting`, false,
+            { originalScale, restoreError:String(error?.message ?? error) });
+        }
+      }
+      try {
+        const current = await snapshot();
+        if (current.viewLayout !== 'array' && current.page === 'music') await transitionTo(label, 'array', identity);
+        const restoredM = await captureStaticCameraEndpoint(`${label} ARRAY scale restored MATRIX`, 'array', identity);
+        const restoredAudit = recordLegacyMatrixCamera(`${label} ARRAY scale restored MATRIX`, restoredM.state, restoredM.settled);
+        const restoredBridge = recordCameraEndpointBridge(`${label} ARRAY scale leaves MATRIX at its endpoint`,
+          sourceM.state, restoredM.state, 'array', 'array');
+        record(`${label} ARRAY scale probe ends in the original MATRIX endpoint`,
+          restoredAudit.ok && restoredBridge.ok && identityMatches(restoredM.state, identity),
+        { restoredAudit, restoredBridge, priorFailure:failure ? String(failure?.message ?? failure) : null });
+        finalMatrixState = restoredM.state;
+      } catch (error) {
+        failure ??= error;
+        record(`${label} ARRAY scale probe ends in the original MATRIX endpoint`, false,
+          { finalError:String(error?.message ?? error), priorFailure:failure ? String(failure?.message ?? failure) : null });
+      }
+    }
+    if (failure) throw failure;
+    return finalMatrixState;
   };
   const exercisePunkControls = async () => {
     const baseline = await waitFor(state => state.design === 'archive' && state.page === 'music' && state.mode === 'archive', 'Punk browse controls ready');
@@ -2462,7 +2803,21 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const futureMatrixRoundTrip = await verifyMatrixPhysicalSelectionRoundTrip('Future', identity);
     identity = { selectedAlbumId:futureMatrixRoundTrip.selectedAlbumId, selectedEntryKey:futureMatrixRoundTrip.selectedEntryKey };
 
-    let punk = await switchDesign('archive');
+    const futureThemeEndpoint = await captureStaticCameraEndpoint('Future before Punk theme switch', 'array', identity);
+    const futureThemeCamera = recordLegacyMatrixCamera('Future before Punk theme switch', futureThemeEndpoint.state,
+      futureThemeEndpoint.settled);
+    let punk = await withReducedMotionEndpointProbe(async () => {
+      const switched = await switchDesign('archive');
+      const punkThemeEndpoint = await captureStaticCameraEndpoint('Punk after Future theme switch', 'array', identity);
+      const punkThemeCamera = recordLegacyMatrixCamera('Punk after Future theme switch', punkThemeEndpoint.state,
+        punkThemeEndpoint.settled);
+      const themeBridge = recordCameraEndpointBridge('Future→Punk M theme switch', futureThemeEndpoint.state,
+        punkThemeEndpoint.state, 'array', 'array', true);
+      record('Future to Punk theme switch keeps the e6 MATRIX camera contract',
+        futureThemeCamera.ok && punkThemeCamera.ok && themeBridge.ok && switched.selectedAlbumId === identity.selectedAlbumId,
+      { futureThemeCamera, punkThemeCamera, themeBridge, switched:shortState(switched) });
+      return punkThemeEndpoint.state;
+    });
     record('theme switch preserves the selected album', punk.selectedAlbumId === identity.selectedAlbumId,
       { selectedAlbumId:punk.selectedAlbumId, expected:identity.selectedAlbumId });
     punk = await selectFixtureAlbumInFirstArrayLane('fixture-album-02', 'Punk multi-column flight after MATRIX interaction');
@@ -2491,6 +2846,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     identity = { selectedAlbumId:punkMatrixEnd.selectedAlbumId, selectedEntryKey:punkMatrixEnd.selectedEntryKey };
     const punkMatrixRoundTrip = await verifyMatrixPhysicalSelectionRoundTrip('Punk', identity);
     identity = { selectedAlbumId:punkMatrixRoundTrip.selectedAlbumId, selectedEntryKey:punkMatrixRoundTrip.selectedEntryKey };
+    const punkArrayScaleEnd = await verifyArrayScaleCameraIsolation('Punk', identity);
+    identity = { selectedAlbumId:punkArrayScaleEnd.selectedAlbumId, selectedEntryKey:punkArrayScaleEnd.selectedEntryKey };
     const punkSettings = await enterInterfaceSettings('Punk entry protection');
     record('Punk Future replay remains disabled', punkSettings.design === 'archive' &&
       punkSettings.entryReplayDisabled === true && punkSettings.entryOnOpenDisabled === true,
@@ -2501,7 +2858,22 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       shortState(punkStillNoEntry));
     await leaveManagementPage('Punk entry protection');
 
-    let future = await switchDesign('rhine');
+    const punkBeforeFutureEndpoint = await captureStaticCameraEndpoint('Punk before Future theme switch', 'array', identity);
+    const punkBeforeFutureCamera = recordLegacyMatrixCamera('Punk before Future theme switch', punkBeforeFutureEndpoint.state,
+      punkBeforeFutureEndpoint.settled);
+    let future = await withReducedMotionEndpointProbe(async () => {
+      const switched = await switchDesign('rhine');
+      const futureAfterPunkEndpoint = await captureStaticCameraEndpoint('Future after Punk theme switch', 'array', identity);
+      const futureAfterPunkCamera = recordLegacyMatrixCamera('Future after Punk theme switch', futureAfterPunkEndpoint.state,
+        futureAfterPunkEndpoint.settled);
+      const themeBridge = recordCameraEndpointBridge('Punk→Future M theme switch', punkBeforeFutureEndpoint.state,
+        futureAfterPunkEndpoint.state, 'array', 'array', true);
+      record('Punk to Future theme switch keeps the e6 MATRIX camera contract',
+        punkBeforeFutureCamera.ok && futureAfterPunkCamera.ok && themeBridge.ok &&
+        switched.selectedAlbumId === identity.selectedAlbumId,
+      { punkBeforeFutureCamera, futureAfterPunkCamera, themeBridge, switched:shortState(switched) });
+      return futureAfterPunkEndpoint.state;
+    });
     identity = { selectedAlbumId:future.selectedAlbumId, selectedEntryKey:future.selectedEntryKey };
     record('return to Future keeps a stable current catalog identity',
       !!identity.selectedAlbumId && !!identity.selectedEntryKey && future.selectedAlbumId === future.selectedAlbumFromApp,
@@ -2652,7 +3024,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       matrixSlotAudits:result.matrixSlotAudits.length,
       extraRiseReversals:result.extraRiseReversals.length,
       retargets:result.retargets.length, qSampleMisses:result.qSampleMisses.length,
-      geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
+      geometryFrames:result.geometryFrames.length, legacyCameraAudits:result.legacyCameraAudits.length,
+      cameraEndpointBridges:result.cameraEndpointBridges.length, entryPhaseSequence:observedEntryPhases,
       keyframeCount, naturalPlaybackSeconds,
       finalLayout:naturalEnd.viewLayout, selectedAlbumId:naturalEnd.selectedAlbumId };
     return result;
@@ -2664,7 +3037,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       matrixSlotAudits:result.matrixSlotAudits.length,
       extraRiseReversals:result.extraRiseReversals.length,
       retargets:result.retargets.length, qSampleMisses:result.qSampleMisses.length,
-      geometryFrames:result.geometryFrames.length };
+      geometryFrames:result.geometryFrames.length, legacyCameraAudits:result.legacyCameraAudits.length,
+      cameraEndpointBridges:result.cameraEndpointBridges.length };
     error.archiveMotionResult = result;
     throw error;
   } finally {

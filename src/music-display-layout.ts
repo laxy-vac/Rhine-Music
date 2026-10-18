@@ -8,11 +8,6 @@ export const MUSIC_ARRAY_VIEW = {
   aim: { x: -1.091, y: -0.045, z: 0.481 },
 } as const;
 
-/** MATRIX overview framing is intentionally wider and farther than ARRAY. */
-export const MUSIC_MATRIX_VIEW = {
-  yaw: 59, elevation: 25, distance: 170, minimumSpan: 16.8, arraySpanMultiplier: 1.2,
-} as const;
-
 /** Shared finite shelf contract; the same entries and spacing serve both themes. */
 export const MUSIC_SHELF_VIEW = {
   slots: 20, rowSpacing: 1, columnSpacing: 4.7, originX: 0.37, bottomInset: 87,

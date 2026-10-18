@@ -43,11 +43,10 @@ import { ThemeTransition } from "./theme-transition";
 import { defaultMusicStyle, normalizeMusicStyle, stylePalette, type MusicStyle } from "./music-style";
 import { getMusicCatalogOptions, getMusicCatalogVersion, getMusicCatalogGroups, getMusicFocusedEntry, getMusicEntryByKey } from "./music-catalog";
 import { getMusicCatalogShelves } from "./music-catalog-shelves";
-import { MUSIC_ARRAY_VIEW, MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW, musicArrayPosition, musicPointerDragThreshold, resolveMusicDisplayLayout } from "./music-display-layout";
-import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "./music-layout-framing";
+import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW, musicArrayPosition, musicPointerDragThreshold, resolveMusicDisplayLayout } from "./music-display-layout";
+import { musicArrayCompositionFrame } from "./music-layout-framing";
 import { musicSpatialCell, musicSpatialEntry, musicSpatialSelectionCell, musicShelfPoolCell } from "./music-spatial-layout";
 import { musicArraySnapCell } from "./music-array-layout";
-import { musicLayoutAddresses } from "./music-layout-addresses";
 import { MusicSceneResources, type MusicSceneResourceUpdate } from "./music-scene-resources";
 import { musicLabFloorColor } from "./music-surface-textures";
 import { MusicCaseTitles } from "./music-case-titles";
@@ -2396,44 +2395,28 @@ export class ArchiveScene {
     // Do not calibrate field of view from the visible fragment of a file.
     const orbit = ease((shot - 22.6) / 1.6);
     const settle = ease((shot - 24.25) / 2.25);
-    const matrixMusicIntro = Boolean(musicLibrary && !this.shelfView && !this.displayLayout.grid && musicIntro &&
-      cinematic?.entryLayout === "array");
-    const matrixOverview = Boolean(musicLibrary && !this.shelfView && !this.displayLayout.grid && !cinematic);
-    const matrixArrayFrame = matrixMusicIntro || matrixOverview
-      ? this.arrayComposition(-Math.max(MUSIC_SHELF_VIEW.rowSpacing, this.caseLayout.depth + .2))
-      : undefined;
-    const matrixNormalSpan = matrixArrayFrame ? musicMatrixOverviewSpan(matrixArrayFrame.effectiveSpan) : undefined;
     const navigationOrbit = musicLibrary && !cinematic && !localArray
       ? this.musicCamera.navigation(this.columnCamera.velocity / spacing.column,
           this.rail.velocity / spacing.row, detail, dt, this.reduced)
       : { yaw: 0, elevation: 0 };
     const arrayCamera = musicLibrary && !cinematic ? this.shelfView
       ? { ...MUSIC_ARRAY_VIEW, yaw: -38, elevation: 35, span: 10.5, aim: { x: -.7, y: -.6, z: -.3 } }
-      : matrixOverview && matrixNormalSpan !== undefined
-        ? { ...MUSIC_ARRAY_VIEW, yaw: MUSIC_MATRIX_VIEW.yaw, elevation: MUSIC_MATRIX_VIEW.elevation,
-          span: matrixNormalSpan, distance: MUSIC_MATRIX_VIEW.distance }
-        : MUSIC_ARRAY_VIEW : undefined;
+      : MUSIC_ARRAY_VIEW : undefined;
     const yaw = THREE.MathUtils.degToRad(arrayCamera?.yaw ?? 89 - 22 * orbit - 8 * settle) + navigationOrbit.yaw;
     const elevation = THREE.MathUtils.degToRad(
       arrayCamera?.elevation ?? 3 + 40 * ease((shot - 21.96) / 0.22) - 8 * orbit - 16 * settle +
         (musicIntro ? 6 * introSettle : musicLibrary && !cinematic ? 6 : 0),
     ) + navigationOrbit.elevation;
-    const baseSpan = arrayCamera?.span ?? THREE.MathUtils.lerp(
+    const span = arrayCamera?.span ?? THREE.MathUtils.lerp(
       THREE.MathUtils.lerp(10.8, 10.3, orbit),
       7.33,
       settle,
     );
-    const span = matrixMusicIntro && matrixNormalSpan !== undefined
-      ? THREE.MathUtils.lerp(baseSpan, matrixNormalSpan, introSettle)
-      : baseSpan;
-    const baseDistance = THREE.MathUtils.lerp(
+    const distance = THREE.MathUtils.lerp(
       arrayCamera?.distance ?? THREE.MathUtils.lerp(28 + 7 * orbit, 140, settle),
       72,
       detail,
     );
-    const distance = matrixMusicIntro
-      ? THREE.MathUtils.lerp(baseDistance, MUSIC_MATRIX_VIEW.distance, introSettle)
-      : baseDistance;
     const arrayAim = new THREE.Vector3(
       arrayCamera?.aim.x ?? -1.091,
       arrayCamera?.aim.y ?? THREE.MathUtils.lerp(-2.55 + 0.4 * orbit, -0.045, settle),
@@ -2562,13 +2545,6 @@ export class ArchiveScene {
       const inspectSpan = archiveFraming(width, height, span, 1, false).span / this.musicStyle.inspectScale;
       framing.span = THREE.MathUtils.lerp(arrayComposition.span, inspectSpan, detail);
     }
-    if (matrixOverview && matrixNormalSpan !== undefined) {
-      const inspection = archiveFraming(width, height, MUSIC_ARRAY_VIEW.span, 1,
-        this.container.closest<HTMLElement>("[data-layout]")?.dataset.layout === "compact");
-      framing.span = THREE.MathUtils.lerp(matrixNormalSpan, inspection.span, detail);
-    }
-    else if (matrixMusicIntro && matrixNormalSpan !== undefined)
-      framing.span = THREE.MathUtils.lerp(framing.span, matrixNormalSpan, introSettle);
     const right = new THREE.Vector3()
       .crossVectors(new THREE.Vector3(0, 1, 0), viewDirection).normalize();
     const up = new THREE.Vector3().crossVectors(viewDirection, right).normalize();
@@ -2621,44 +2597,6 @@ export class ArchiveScene {
       detailAim.addScaledVector(right, (0.5 - detailX) * width / pixelScale);
       detailAim.addScaledVector(up, (detailY - 0.5) * height / pixelScale);
       cameraAim.lerp(detailAim, detail);
-    }
-    if ((matrixOverview || matrixMusicIntro) && matrixNormalSpan !== undefined && matrixArrayFrame) {
-      const selectedSlot = canonicalCatalog.get(this.selectedCell.foobarEntryKey ?? ""), points: THREE.Vector3[] = [];
-      const addresses = selectedSlot && !this.layoutTransition.active ? musicLayoutAddresses(canonicalCatalog,
-        { ...this.selectedCell, lane: selectedSlot.lane, row: selectedSlot.row }, this.selectedCell, caseMotionCells) : undefined;
-      const residentShelves = selectedSlot ? getMusicCatalogShelves().slice(selectedSlot.lane, selectedSlot.lane + 4) : [];
-      for (const shelf of residentShelves) for (const key of shelf.entryKeys) {
-        const slot = canonicalCatalog.get(key)!;
-        if (!selectedSlot) continue;
-        const arrayCell = { lane: slot.lane, row: slot.row, foobarEntryKey: key };
-        const matrixCell = (this.layoutTransition.active ? this.layoutTransition.matrixCellForArray(arrayCell) : undefined)
-          ?? addresses?.toMatrix(arrayCell) ?? arrayCell;
-        const x = (matrixCell.lane - this.selectedCell.lane) * spacing.column;
-        const z = MUSIC_ARRAY_VIEW.inspectionZ + (matrixCell.row - this.selectedCell.row) * spacing.row;
-        // A fixed vertical envelope avoids breathing with hover/idle springs.
-        for (const bx of [this.caseLayout.bounds.min[0], this.caseLayout.bounds.max[0]])
-          for (const by of [this.caseLayout.bounds.min[1], this.caseLayout.bounds.max[1] + 2.5])
-            for (const bz of [this.caseLayout.bounds.min[2], this.caseLayout.bounds.max[2]])
-              points.push(new THREE.Vector3(x + bx, MUSIC_ARRAY_VIEW.floorY + by, z + bz));
-      }
-      const overviewYaw = matrixMusicIntro ? THREE.MathUtils.degToRad(MUSIC_MATRIX_VIEW.yaw) : yaw;
-      const overviewElevation = matrixMusicIntro ? THREE.MathUtils.degToRad(MUSIC_MATRIX_VIEW.elevation) : elevation;
-      const overviewDirection = new THREE.Vector3(-Math.sin(overviewYaw) * Math.cos(overviewElevation), Math.sin(overviewElevation), Math.cos(overviewYaw) * Math.cos(overviewElevation));
-      const overviewRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), overviewDirection).normalize();
-      const overviewUp = new THREE.Vector3().crossVectors(overviewDirection, overviewRight).normalize();
-      const overviewAim = framing.portrait ? new THREE.Vector3(0, -4.6 + settlingWave(0, 26.56) + .4 + 1.85, -2.17)
-        .addScaledVector(overviewUp, (framing.previewY - .5) * matrixNormalSpan)
-        : new THREE.Vector3(MUSIC_ARRAY_VIEW.aim.x, MUSIC_ARRAY_VIEW.aim.y, MUSIC_ARRAY_VIEW.aim.z);
-      const offset = musicArchiveOffset(width, height);
-      overviewAim.addScaledVector(overviewRight, offset.x * matrixNormalSpan * width / Math.max(1, height))
-        .addScaledVector(overviewUp, offset.y * matrixNormalSpan);
-      const clipRight = this.musicStyle.design === "archive"
-        ? 2 * (matrixArrayFrame.availableWidth + this.displayBleed) / Math.max(1, width) - 1 : 1;
-      const fitted = musicMatrixResidentFrame(overviewAim, overviewDirection, matrixNormalSpan, width / Math.max(1, height), points,
-        { minX: -.96, maxX: clipRight - .04, minY: -.94, maxY: .94 });
-      const overviewAmount = matrixMusicIntro ? introSettle : 1 - detail;
-      cameraAim.addScaledVector(fitted.aim.sub(overviewAim), overviewAmount);
-      framing.span += (fitted.span - matrixNormalSpan) * overviewAmount;
     }
     const cameraPosition = cameraAim
       .clone()

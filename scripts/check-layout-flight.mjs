@@ -1,18 +1,53 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "three";
 import { MusicLayoutTransition } from "../src/music-layout-transition.ts";
 import { deploymentStep } from "../src/music-shelf-deployment.ts";
-import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "../src/music-layout-framing.ts";
-import { MUSIC_ARRAY_VIEW, MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW } from "../src/music-display-layout.ts";
+import { musicArrayCompositionFrame } from "../src/music-layout-framing.ts";
+import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "../src/music-display-layout.ts";
+import { archiveFraming } from "../src/viewport-layout.ts";
 
 const CENTER = new THREE.Vector3(0, 1.85, 0);
 const CASE_BOUNDS = new THREE.Box3(new THREE.Vector3(-2.225, .175, -.07), new THREE.Vector3(2.225, 3.525, .07));
 const CASE_BOUND_ARRAYS = { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() };
 const ARRAY_EXTRA_GROUND = MUSIC_ARRAY_VIEW.floorY + CASE_BOUNDS.min.y - MUSIC_SHELF_VIEW.floorDrop;
 const ARRAY_EXTRA_Y = ARRAY_EXTRA_GROUND - CASE_BOUNDS.max.y - .24;
-const ARRAY_OVERVIEW_SPAN = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1, CASE_BOUND_ARRAYS, CENTER, false).effectiveSpan;
-const MATRIX_OVERVIEW_SPAN = musicMatrixOverviewSpan(ARRAY_OVERVIEW_SPAN);
+// Frozen from e6ae98f, the pre-transition camera contract. MATRIX reused
+// MUSIC_ARRAY_VIEW until the separate MATRIX framing policy was introduced.
+const LEGACY_MATRIX_CAMERA = Object.freeze({
+  yaw: 59, elevation: 25, span: 7.33, distance: 140,
+  aim: Object.freeze({ x: -1.091, y: -.045, z: .481 }),
+  detailYaw: 8, detailElevation: 20, detailDistance: 72,
+});
+const SCENE_SOURCE = await readFile(new URL("../src/scene.ts", import.meta.url), "utf8");
+const LEGACY_ARRAY_FRAME = Object.freeze({ pixelsPerUnit: .54 * 98, referenceWidth: 936, referenceHeight: 731,
+  portraitAspect: 1.05, portraitSpan: 10.5 });
+function legacyViewportSpan(width, height, span, detail = 0) {
+  width = Math.max(1, width); height = Math.max(1, height);
+  const aspect = width / height, portrait = aspect < LEGACY_ARRAY_FRAME.portraitAspect;
+  const baseSpan = span + (5.9 - span) * detail;
+  const portraitDetailSpan = Math.max(6.3 / aspect, 3.7 * height / Math.max(100, .54 * height - 156));
+  return portrait
+    ? Math.max(baseSpan, 8.4 / aspect + (portraitDetailSpan - 8.4 / aspect) * detail)
+    : Math.max(baseSpan, baseSpan * (16 / 9) / aspect);
+}
+function legacyArrayFrame(width, height, availableWidth, arrayScale) {
+  width = Math.max(1, width); height = Math.max(1, height);
+  availableWidth = Math.max(1, availableWidth);
+  const scale = Math.max(.01, arrayScale);
+  const zoom = THREE.MathUtils.clamp(Math.min(availableWidth / LEGACY_ARRAY_FRAME.referenceWidth,
+    height / LEGACY_ARRAY_FRAME.referenceHeight), 1, 1.6);
+  const span = height / (LEGACY_ARRAY_FRAME.pixelsPerUnit * zoom * scale);
+  const portrait = width / height < LEGACY_ARRAY_FRAME.portraitAspect;
+  return { span, effectiveSpan: portrait ? legacyViewportSpan(width, height, LEGACY_ARRAY_FRAME.portraitSpan) / scale : span };
+}
+function legacyMatrixSpan(width, height, detail = 0, compact = false) {
+  // `compact` affects detail placement, not the legacy visible-height rule.
+  void compact;
+  return legacyViewportSpan(width, height, LEGACY_MATRIX_CAMERA.span, detail);
+}
+const MATRIX_OVERVIEW_SPAN = legacyMatrixSpan(1600, 1000);
 const RACK_BOUNDS = new THREE.Box3(new THREE.Vector3(-12, -4.425, -18), new THREE.Vector3(12, -.425, 18));
 const GRID_COLUMNS = 3;
 const GRID_ROWS = 20;
@@ -36,7 +71,9 @@ const ARRAY = {
 const MATRIX = {
   selected: { lane: 4, row: GRID_FIRST_ROW + 20 + 10, foobarEntryKey: "hero" },
   spacing: { column: -5.2, row: -.62 }, anchor: new THREE.Vector3(0, -3.25, 0),
-  aim: new THREE.Vector3(0, -3.25, 0), yaw: 59, elevation: 25, distance: MUSIC_MATRIX_VIEW.distance, span: 50,
+  aim: new THREE.Vector3(LEGACY_MATRIX_CAMERA.aim.x, LEGACY_MATRIX_CAMERA.aim.y, LEGACY_MATRIX_CAMERA.aim.z),
+  yaw: LEGACY_MATRIX_CAMERA.yaw, elevation: LEGACY_MATRIX_CAMERA.elevation,
+  distance: LEGACY_MATRIX_CAMERA.distance, span: MATRIX_OVERVIEW_SPAN,
   offsets: latticeOffsets(GRID_ROWS * 2),
 };
 const STEP = 1 / 120;
@@ -46,6 +83,60 @@ function close(actual, expected, epsilon = 1e-6) {
   assert.ok(Number.isFinite(actual), `expected finite value, got ${actual}`);
   assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${actual} to be within ${epsilon} of ${expected}`);
 }
+
+test("pre-transition ARRAY and MATRIX camera contracts remain independent", () => {
+  assert.deepEqual({ yaw: MUSIC_ARRAY_VIEW.yaw, elevation: MUSIC_ARRAY_VIEW.elevation, span: MUSIC_ARRAY_VIEW.span,
+    distance: MUSIC_ARRAY_VIEW.distance, aim: MUSIC_ARRAY_VIEW.aim }, {
+    yaw: LEGACY_MATRIX_CAMERA.yaw, elevation: LEGACY_MATRIX_CAMERA.elevation, span: LEGACY_MATRIX_CAMERA.span,
+    distance: LEGACY_MATRIX_CAMERA.distance, aim: LEGACY_MATRIX_CAMERA.aim,
+  }, "e6ae98f used the shared MUSIC_ARRAY_VIEW contract for ordinary MATRIX");
+  const viewports = [
+    { name: "16:9", width: 1920, height: 1080, compact: false },
+    { name: "16:10", width: 1600, height: 1000, compact: false },
+    { name: "portrait", width: 390, height: 844, compact: true },
+  ];
+  for (const viewport of viewports) {
+    const overviewSpan = legacyMatrixSpan(viewport.width, viewport.height, 0, viewport.compact);
+    const detailSpan = legacyMatrixSpan(viewport.width, viewport.height, 1, viewport.compact);
+    close(archiveFraming(viewport.width, viewport.height, LEGACY_MATRIX_CAMERA.span, 0, viewport.compact).span, overviewSpan);
+    close(archiveFraming(viewport.width, viewport.height, LEGACY_MATRIX_CAMERA.span, 1, viewport.compact).span, detailSpan);
+    const camera = new THREE.PerspectiveCamera(34, viewport.width / viewport.height, 5, 300);
+    const aim = new THREE.Vector3(LEGACY_MATRIX_CAMERA.aim.x, LEGACY_MATRIX_CAMERA.aim.y, LEGACY_MATRIX_CAMERA.aim.z);
+    const direction = outward(LEGACY_MATRIX_CAMERA);
+    camera.position.copy(aim).addScaledVector(direction, LEGACY_MATRIX_CAMERA.distance);
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(overviewSpan / (2 * LEGACY_MATRIX_CAMERA.distance)));
+    close(camera.position.distanceTo(aim), 140);
+    close(visibleSpan(camera, aim), overviewSpan, .00001);
+    close(THREE.MathUtils.radToDeg(Math.atan2(-direction.x, direction.z)), 59, .00001);
+    close(THREE.MathUtils.radToDeg(Math.asin(direction.y)), 25, .00001);
+    close(THREE.MathUtils.lerp(LEGACY_MATRIX_CAMERA.yaw, LEGACY_MATRIX_CAMERA.detailYaw, 1), 8, .00001);
+    close(THREE.MathUtils.lerp(LEGACY_MATRIX_CAMERA.elevation, LEGACY_MATRIX_CAMERA.detailElevation, 1), 20, .00001);
+    close(THREE.MathUtils.lerp(LEGACY_MATRIX_CAMERA.distance, LEGACY_MATRIX_CAMERA.detailDistance, 1), 72, .00001);
+    assert.equal(legacyMatrixSpan(viewport.width, viewport.height, 0), overviewSpan,
+      `${viewport.name}: MATRIX span depends on viewport only, not ARRAY scale or catalog length`);
+  }
+});
+
+test("ArchiveScene routes ordinary MATRIX through the legacy shared camera frame", () => {
+  assert.match(SCENE_SOURCE,
+    /const arrayCamera = musicLibrary && !cinematic \? this\.shelfView[\s\S]*?: MUSIC_ARRAY_VIEW : undefined;/,
+    "ordinary MATRIX resolves to MUSIC_ARRAY_VIEW when the shelf override is inactive");
+  assert.match(SCENE_SOURCE,
+    /const span = arrayCamera\?\.span \?\? THREE\.MathUtils\.lerp\([\s\S]*?\n\s*7\.33,\n\s*settle,\n\s*\);/,
+    "the shared camera retains the old 7.33 span target");
+  assert.match(SCENE_SOURCE,
+    /const distance = THREE\.MathUtils\.lerp\([\s\S]*?arrayCamera\?\.distance \?\? THREE\.MathUtils\.lerp\(28 \+ 7 \* orbit, 140, settle\),\n\s*72,\n\s*detail,\n\s*\);/,
+    "the shared camera retains the old 140-to-72 distance rule");
+  assert.match(SCENE_SOURCE, /archiveFraming\(width, height, span, detail,/,
+    "Scene applies the established viewport framing to MATRIX");
+  assert.match(SCENE_SOURCE, /const arrayComposition = localArray \? this\.arrayComposition\(\) : undefined;/,
+    "ARRAY composition and arrayScale stay scoped to local ARRAY mode");
+  assert.match(SCENE_SOURCE, /const cameraPosition = cameraAim\s*\.clone\(\)\s*\.addScaledVector\(viewDirection, distance\);/,
+    "Scene derives the MATRIX camera position from the legacy aim, angle and distance");
+  assert.doesNotMatch(SCENE_SOURCE,
+    /\b(?:matrixOverview|matrixNormalSpan|matrixMusicIntro)\b|MUSIC_MATRIX_VIEW|musicMatrixOverviewSpan|musicMatrixResidentFrame/,
+    "no MATRIX-specific framing override replaces the shared endpoints");
+});
 
 function matrixAt(position, scale = new THREE.Vector3(1, 1, 1), rotation = new THREE.Quaternion()) {
   return new THREE.Matrix4().compose(position.clone(), rotation.clone(), scale.clone());
@@ -502,8 +593,10 @@ function assertResidentRoutes(flight) {
 }
 
 function assertAllActorsPresentAndOpaque(flight, state, label) {
-  assert.equal(state.matricesById.size, flight.plan.filter(cell => flight.transition.routeFor(cell)).length,
-    `${label} keeps a matrix for each bound physical occurrence`);
+  const expectedIds = flight.plan.filter(cell => flight.transition.routeFor(cell))
+    .map(cell => flight.transition.occurrenceId(cell)).sort();
+  assert.deepEqual([...state.matricesById.keys()].sort(), expectedIds,
+    `${label} keeps the same physical actor identities in the scene`);
   for (const cell of flight.plan) {
     const route = flight.transition.routeFor(cell);
     if (!route) continue;
@@ -551,8 +644,6 @@ test("ARRAY/MATRIX share one 3x20 lattice and the camera path is direction-symme
     for (const id of sharedIds) {
       assert.ok(forward.matricesById.has(id) && reverse.matricesById.has(id), `resident ${id} exists in both directions`);
       assertMatrixNear(forward.matricesById.get(id), reverse.matricesById.get(id), .015, `resident ${id} q=${q}`);
-      assert.equal(forward.sides.get(id), undefined, `resident ${id} stays in view at q=${q}`);
-      assert.equal(reverse.sides.get(id), undefined, `resident ${id} stays in view at q=${q}`);
     }
     assertMatrixNear(forward.rack.matrix, reverse.rack.matrix, .01, `rack q=${q}`);
     assert.equal(forward.rack.visible, reverse.rack.visible);
@@ -571,9 +662,9 @@ test("ARRAY/MATRIX share one 3x20 lattice and the camera path is direction-symme
   const arrayEnd = moveToSettled(arrayToMatrix);
   assert.deepEqual(arrayToMatrix.transition.endpointSelection, arrayToMatrix.targetSelected);
   assertTargetPoses(arrayToMatrix, arrayEnd);
-  assert.ok(arrayToMatrix.targetCamera.position.distanceTo(matrixPosition(arrayToMatrix.targetMatrices.get(cellSignature(MATRIX.selected)))) >
-    arrayToMatrix.sourceCamera.position.distanceTo(matrixPosition(endpointMatrix(ARRAY, ARRAY.selected, true))) + 10,
-  "MATRIX pullback must increase camera-to-hero distance");
+  close(arrayToMatrix.targetCamera.position.distanceTo(arrayToMatrix.targetCamera.aim), LEGACY_MATRIX_CAMERA.distance, .00001);
+  vectorNear(arrayToMatrix.targetCamera.aim, MATRIX.aim, .00001, "MATRIX retains the legacy overview aim");
+  close(visibleSpan(arrayToMatrix.targetCamera.camera, arrayToMatrix.targetCamera.aim), MATRIX.span, .03);
   assert.ok(arrayToMatrix.targetCamera.position.y < arrayToMatrix.sourceCamera.position.y,
     "MATRIX endpoint camera must sit lower in world space");
   assertCameraEndpoint(arrayEnd.camera, arrayEnd.aim, arrayToMatrix.targetCamera);
@@ -728,16 +819,13 @@ test("retarget at five canonical q points preserves velocity and plan identity",
   }
 });
 
-test("resident boxes remain visible while loop copies follow their reversible rise path", () => {
+test("resident actors keep identity, opacity and unit scale while the camera clips naturally", () => {
   const flights = [makeFlight("array", "matrix"), makeFlight("matrix", "array")];
   const qSamples = Array.from({ length: 21 }, (_, index) => index / 20);
   for (const flight of flights) {
-    const residentIds = assertResidentRoutes(flight);
+    assertResidentRoutes(flight);
     const sourceIds = new Set(flight.sourceSamples.map(sample => sample.cell.motionId));
-    const sourceStart = renderState(flight);
-    const visibleResidentIds = new Set([...sourceIds].filter(id => residentIds.has(id) && sourceStart.sides.get(id) === undefined));
     const residentLiftTracks = new Map();
-    assert.equal(visibleResidentIds.size, residentIds.size, "every existing resident starts fully in view");
     const sampleOrder = flight.sourceName === "array" ? qSamples : [...qSamples].reverse();
     for (const q of sampleOrder) {
       const state = advanceToQ(flight, q, .0000001);
@@ -745,8 +833,6 @@ test("resident boxes remain visible while loop copies follow their reversible ri
       assertAllActorsPresentAndOpaque(flight, state, `${flight.sourceName}→${flight.targetName} q=${q}`);
       assertDirectLatticePath(flight, state);
       assertNoCaseOverlaps(state, `${flight.sourceName}→${flight.targetName} q=${q}`);
-      for (const id of visibleResidentIds) assert.equal(state.sides.get(id), undefined,
-        `resident ${id} remains in view at q=${q}`);
       for (const id of sourceIds) {
         assert.ok(state.matricesById.has(id), `existing physical occurrence ${id} remains present at q=${q}`);
       }
@@ -756,9 +842,6 @@ test("resident boxes remain visible while loop copies follow their reversible ri
         const id = flight.transition.occurrenceId(cell), track = residentLiftTracks.get(id) ?? [];
         track.push({ q: state.frame.q, lift: route.rise.lift, start: route.rise.start, row: route.arrayCell.row });
         residentLiftTracks.set(id, track);
-      }
-      for (const id of visibleResidentIds) {
-        assert.equal(state.sides.get(id), undefined, `visible source occurrence ${id} does not leave and re-enter at q=${q}`);
       }
     }
     const selected = flight.plan.find(cell => flight.transition.isSelected(cell));
@@ -862,56 +945,34 @@ test("rack remains fully assembled and draw visibility ends only after the whole
   assert.ok(end.rack.projected.every(Number.isFinite));
 });
 
-test("responsive ARRAY span feeds a wider MATRIX span for Future, Punk and portrait viewports", () => {
+test("responsive ARRAY framing matches the legacy scale rule while MATRIX keeps its own legacy frame", () => {
   const bounds = { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() };
-  const future = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1, bounds, CENTER, false);
-  const punk = musicArrayCompositionFrame(1920, 1080, 1920, .8, -1, bounds, CENTER, false);
-  const normalScale = musicArrayCompositionFrame(1920, 1080, 1920, 1, -1, bounds, CENTER, false);
-  const portrait = musicArrayCompositionFrame(390, 844, 390, .8, -1, bounds, CENTER, true);
-  for (const frame of [future, punk, portrait]) {
-    assert.ok(frame.effectiveSpan > 0 && Number.isFinite(frame.effectiveSpan));
-    assert.ok(musicMatrixOverviewSpan(frame.effectiveSpan) > frame.effectiveSpan);
-    assert.equal(frame.availableWidth, frame === future ? 1100 : frame === punk ? 1920 : 390);
-  }
-  assert.ok(future.effectiveSpan > punk.effectiveSpan,
-    "Future's narrower information viewport must use its measured available width");
-  assert.ok(punk.effectiveSpan > normalScale.effectiveSpan,
-    "arrayScale .8 must widen ARRAY relative to scale 1");
-  assert.ok(portrait.effectiveSpan > 0, "portrait ARRAY framing feeds a finite MATRIX span");
-});
-
-test("resident MATRIX framing fits every case across four finite columns", () => {
-  const points = [];
-  for (let column = -2; column < 2; column++) for (let row = 0; row < GRID_ROWS; row++) {
-    const cell = { lane: MATRIX.selected.lane + column, row: GRID_FIRST_ROW + row + 20, foobarEntryKey: `frame-${column}-${row}` };
-    const matrix = endpointMatrix(MATRIX, cell);
-    points.push(...transformedCorners(matrix));
-  }
-  const distance = MUSIC_MATRIX_VIEW.distance;
-  const fullClip = { minX: -.96, maxX: .96, minY: -.94, maxY: .94 };
-  const punkClip = { minX: -.96, maxX: .36, minY: -.94, maxY: .94 };
   const cases = [
-    { name: "fullcanvas 1920x1080", aspect: 1920 / 1080, clip: fullClip },
-    { name: "Punk 1920x1080", aspect: 1920 / 1080, clip: punkClip },
-    { name: "fullcanvas portrait 390x844", aspect: 390 / 844, clip: fullClip },
-    { name: "Punk portrait 390x844", aspect: 390 / 844, clip: punkClip },
+    { name: "Future", width: 1920, height: 1080, availableWidth: 1100, scale: .8, compact: false },
+    { name: "Punk", width: 1920, height: 1080, availableWidth: 1920, scale: .8, compact: false },
+    { name: "portrait", width: 390, height: 844, availableWidth: 390, scale: .8, compact: true },
   ];
+  const frames = cases.map(viewport => {
+    const frame = musicArrayCompositionFrame(viewport.width, viewport.height, viewport.availableWidth,
+      viewport.scale, -1, bounds, CENTER, viewport.compact);
+    const legacy = legacyArrayFrame(viewport.width, viewport.height, viewport.availableWidth, viewport.scale);
+    close(frame.span, legacy.span);
+    close(frame.effectiveSpan, legacy.effectiveSpan);
+    close(frame.availableWidth, viewport.availableWidth);
+    assert.ok(frame.effectiveSpan > 0 && Number.isFinite(frame.effectiveSpan));
+    return frame;
+  });
+  const [future, punk, portrait] = frames;
+  const normalScale = musicArrayCompositionFrame(1920, 1080, 1920, 1, -1, bounds, CENTER, false);
+  assert.ok(future.effectiveSpan > punk.effectiveSpan,
+    "the narrower archive reading pane preserves the legacy ARRAY viewport response");
+  assert.ok(punk.effectiveSpan > normalScale.effectiveSpan,
+    "arrayScale .8 widens ARRAY relative to scale 1, as in the old rule");
+  assert.ok(portrait.effectiveSpan > 0, "portrait ARRAY framing uses the legacy portrait response");
   for (const viewport of cases) {
-    const fitted = musicMatrixResidentFrame(MATRIX.aim.clone(), outward(MATRIX), MATRIX_OVERVIEW_SPAN,
-      viewport.aspect, points, viewport.clip);
-    const camera = new THREE.PerspectiveCamera(34, viewport.aspect, .1, 300);
-    camera.position.copy(fitted.aim).addScaledVector(outward(MATRIX), distance);
-    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(fitted.span / (2 * distance)));
-    camera.lookAt(fitted.aim);
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld(true);
-    for (const point of points) {
-      const ndc = point.clone().project(camera);
-      assert.ok(ndc.x >= viewport.clip.minX - .01 && ndc.x <= viewport.clip.maxX + .01 &&
-        ndc.y >= viewport.clip.minY - .01 && ndc.y <= viewport.clip.maxY + .01,
-      `${viewport.name}: case must stay inside clip ${JSON.stringify(viewport.clip)}, got ${ndc.toArray()}`);
-    }
-    assert.ok(fitted.span >= MATRIX_OVERVIEW_SPAN, `${viewport.name}: fitted span must not shrink the source frame`);
+    const matrixSpan = legacyMatrixSpan(viewport.width, viewport.height);
+    close(matrixSpan, legacyViewportSpan(viewport.width, viewport.height, 7.33, 0));
+    close(archiveFraming(viewport.width, viewport.height, MUSIC_ARRAY_VIEW.span, 0, viewport.compact).span, matrixSpan);
   }
 });
 

@@ -2,7 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as THREE from "three";
 import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "../src/music-display-layout.ts";
-import { musicArrayCompositionFrame, musicMatrixOverviewSpan } from "../src/music-layout-framing.ts";
+import { musicArrayCompositionFrame } from "../src/music-layout-framing.ts";
+import { archiveFraming } from "../src/viewport-layout.ts";
 import { MusicLayoutTransition } from "../src/music-layout-flight.ts";
 import { deploymentStep } from "../src/music-shelf-deployment.ts";
 
@@ -37,6 +38,36 @@ const MATRIX_CONTINUITY_TOLERANCE = 2e-5;
 const ARRAY_GROUND_Y = MUSIC_ARRAY_VIEW.floorY + CASE_BOUNDS.min.y - MUSIC_SHELF_VIEW.floorDrop;
 const OUTPUT_PATH = path.join(process.cwd(), ".tools", "emergence-motion-2026-10-18", "check-archive-geometry.json");
 
+// Frozen from e6ae98f, when ordinary MATRIX reused MUSIC_ARRAY_VIEW.
+const LEGACY_MATRIX_CAMERA = Object.freeze({
+  yaw: 59, elevation: 25, span: 7.33, distance: 140,
+  aim: Object.freeze({ x: -1.091, y: -.045, z: .481 }),
+  detailYaw: 8, detailElevation: 20, detailDistance: 72,
+});
+const LEGACY_ARRAY_FRAME = Object.freeze({ pixelsPerUnit: .54 * 98, referenceWidth: 936, referenceHeight: 731,
+  portraitAspect: 1.05, portraitSpan: 10.5 });
+function legacyViewportSpan(width, height, span, detail = 0) {
+  width = Math.max(1, width); height = Math.max(1, height);
+  const aspect = width / height, portrait = aspect < LEGACY_ARRAY_FRAME.portraitAspect;
+  const baseSpan = span + (5.9 - span) * detail;
+  const portraitDetailSpan = Math.max(6.3 / aspect, 3.7 * height / Math.max(100, .54 * height - 156));
+  return portrait
+    ? Math.max(baseSpan, 8.4 / aspect + (portraitDetailSpan - 8.4 / aspect) * detail)
+    : Math.max(baseSpan, baseSpan * (16 / 9) / aspect);
+}
+function legacyArrayFrame(width, height, availableWidth, arrayScale) {
+  width = Math.max(1, width); height = Math.max(1, height); availableWidth = Math.max(1, availableWidth);
+  const scale = Math.max(.01, arrayScale);
+  const zoom = THREE.MathUtils.clamp(Math.min(availableWidth / LEGACY_ARRAY_FRAME.referenceWidth,
+    height / LEGACY_ARRAY_FRAME.referenceHeight), 1, 1.6);
+  const span = height / (LEGACY_ARRAY_FRAME.pixelsPerUnit * zoom * scale);
+  return { span, effectiveSpan: width / height < LEGACY_ARRAY_FRAME.portraitAspect
+    ? legacyViewportSpan(width, height, LEGACY_ARRAY_FRAME.portraitSpan) / scale : span };
+}
+function legacyMatrixSpan(width, height, detail = 0) {
+  return legacyViewportSpan(width, height, LEGACY_MATRIX_CAMERA.span, detail);
+}
+
 const scenariosToRun = [
   { name: "[20,20,5]", groupLengths: [20, 20, 5], selectedOrder: 1 },
   { name: "[20,19]-selected-row-211", groupLengths: [20, 19], selectedOrder: 19, matrixSelectedRow: 211 },
@@ -53,10 +84,66 @@ const cellKey = cell => Number.isFinite(Number(cell?.lane)) && Number.isFinite(N
 const mod = (value, count) => ((value % count) + count) % count;
 const addError = (errors, error) => { if (errors.length < 120) errors.push(error); };
 
-const ARRAY_OVERVIEW_SPAN = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1,
-  { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() },
-  { x: CASE_CENTER.x, y: CASE_CENTER.y, z: CASE_CENTER.z }, false).effectiveSpan;
-const MATRIX_OVERVIEW_SPAN = musicMatrixOverviewSpan(ARRAY_OVERVIEW_SPAN);
+function legacyCameraContractReport() {
+  const errors = [];
+  const shared = { yaw: MUSIC_ARRAY_VIEW.yaw, elevation: MUSIC_ARRAY_VIEW.elevation, span: MUSIC_ARRAY_VIEW.span,
+    distance: MUSIC_ARRAY_VIEW.distance, aim: MUSIC_ARRAY_VIEW.aim };
+  for (const key of ["yaw", "elevation", "span", "distance"])
+    if (Math.abs(shared[key] - LEGACY_MATRIX_CAMERA[key]) > 1e-9)
+      addError(errors, { reason: `MUSIC_ARRAY_VIEW.${key} differs from e6ae98f`, expected: LEGACY_MATRIX_CAMERA[key], actual: shared[key] });
+  for (const key of ["x", "y", "z"])
+    if (Math.abs(shared.aim[key] - LEGACY_MATRIX_CAMERA.aim[key]) > 1e-9)
+      addError(errors, { reason: `MUSIC_ARRAY_VIEW.aim.${key} differs from e6ae98f`, expected: LEGACY_MATRIX_CAMERA.aim[key], actual: shared.aim[key] });
+
+  const viewports = [
+    { name: "16:9", width: 1920, height: 1080, availableWidth: 1100, arrayScale: .8, compact: false },
+    { name: "16:10", width: 1600, height: 1000, availableWidth: 1200, arrayScale: .8, compact: false },
+    { name: "portrait", width: 390, height: 844, availableWidth: 390, arrayScale: .8, compact: true },
+  ];
+  const samples = viewports.map(viewport => {
+    const expectedArray = legacyArrayFrame(viewport.width, viewport.height, viewport.availableWidth, viewport.arrayScale);
+    const actualArray = musicArrayCompositionFrame(viewport.width, viewport.height, viewport.availableWidth,
+      viewport.arrayScale, -1, { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() },
+      { x: CASE_CENTER.x, y: CASE_CENTER.y, z: CASE_CENTER.z }, viewport.compact);
+    for (const key of ["span", "effectiveSpan"])
+      if (Math.abs(actualArray[key] - expectedArray[key]) > 1e-7)
+        addError(errors, { reason: `ARRAY ${key} differs from e6ae98f`, viewport: viewport.name,
+          expected: expectedArray[key], actual: actualArray[key] });
+
+    const matrixSpan = legacyMatrixSpan(viewport.width, viewport.height);
+    const actualViewportSpan = archiveFraming(viewport.width, viewport.height, LEGACY_MATRIX_CAMERA.span, 0,
+      viewport.compact).span;
+    if (Math.abs(matrixSpan - actualViewportSpan) > 1e-7)
+      addError(errors, { reason: "MATRIX viewport span differs from e6ae98f", viewport: viewport.name,
+        expected: matrixSpan, actual: actualViewportSpan });
+    const direction = new THREE.Vector3(-Math.sin(THREE.MathUtils.degToRad(LEGACY_MATRIX_CAMERA.yaw)) *
+      Math.cos(THREE.MathUtils.degToRad(LEGACY_MATRIX_CAMERA.elevation)),
+    Math.sin(THREE.MathUtils.degToRad(LEGACY_MATRIX_CAMERA.elevation)),
+    Math.cos(THREE.MathUtils.degToRad(LEGACY_MATRIX_CAMERA.yaw)) *
+      Math.cos(THREE.MathUtils.degToRad(LEGACY_MATRIX_CAMERA.elevation)));
+    const aim = new THREE.Vector3(LEGACY_MATRIX_CAMERA.aim.x, LEGACY_MATRIX_CAMERA.aim.y, LEGACY_MATRIX_CAMERA.aim.z);
+    const position = aim.clone().addScaledVector(direction, LEGACY_MATRIX_CAMERA.distance);
+    const fov = THREE.MathUtils.radToDeg(2 * Math.atan(matrixSpan / (2 * LEGACY_MATRIX_CAMERA.distance)));
+    const representedSpan = 2 * LEGACY_MATRIX_CAMERA.distance * Math.tan(THREE.MathUtils.degToRad(fov / 2));
+    if (Math.abs(representedSpan - matrixSpan) > 1e-7)
+      addError(errors, { reason: "MATRIX FOV does not represent its legacy span", viewport: viewport.name,
+        expected: matrixSpan, actual: representedSpan });
+    return { viewport: viewport.name,
+      array: { span: round(actualArray.span), effectiveSpan: round(actualArray.effectiveSpan),
+        legacySpan: round(expectedArray.span), legacyEffectiveSpan: round(expectedArray.effectiveSpan) },
+      matrix: { yaw: LEGACY_MATRIX_CAMERA.yaw, elevation: LEGACY_MATRIX_CAMERA.elevation,
+        aim: roundVector(aim), position: roundVector(position), distance: LEGACY_MATRIX_CAMERA.distance,
+        span: round(matrixSpan), fov: round(fov), detail: { yaw: LEGACY_MATRIX_CAMERA.detailYaw,
+          elevation: LEGACY_MATRIX_CAMERA.detailElevation, distance: LEGACY_MATRIX_CAMERA.detailDistance,
+          span: round(legacyMatrixSpan(viewport.width, viewport.height, 1)) } } };
+  });
+  return { source: "e6ae98f", errors, samples,
+    matrixInputs: ["viewport width", "viewport height"],
+    arrayFrameRule: "height / (0.54*98 * clamp(min(availableWidth/936,height/731),1,1.6) * arrayScale); portrait uses archiveFraming(10.5)/arrayScale" };
+}
+
+const ARRAY_OVERVIEW_SPAN = legacyArrayFrame(1920, 1080, 1100, .8).effectiveSpan;
+const MATRIX_OVERVIEW_SPAN = legacyMatrixSpan(1920, 1080);
 
 function makeMatrix(position, rotation = new THREE.Quaternion(), scale = new THREE.Vector3(1, 1, 1)) {
   return new THREE.Matrix4().compose(position.clone(), rotation.clone(), scale.clone());
@@ -161,12 +248,13 @@ function modeAnchor(mode) {
 
 function modeCamera(mode) {
   const isArray = mode === "array";
-  const yaw = THREE.MathUtils.degToRad(isArray ? -38 : 59);
-  const elevation = THREE.MathUtils.degToRad(isArray ? 35 : 25);
-  const distance = isArray ? 140 : 170;
-  const aim = isArray ? new THREE.Vector3(0, -4.425, -2.17) : new THREE.Vector3(-1.091, -.045, .481);
+  const yaw = THREE.MathUtils.degToRad(isArray ? -38 : LEGACY_MATRIX_CAMERA.yaw);
+  const elevation = THREE.MathUtils.degToRad(isArray ? 35 : LEGACY_MATRIX_CAMERA.elevation);
+  const distance = isArray ? 140 : LEGACY_MATRIX_CAMERA.distance;
+  const aim = isArray ? new THREE.Vector3(0, -4.425, -2.17)
+    : new THREE.Vector3(LEGACY_MATRIX_CAMERA.aim.x, LEGACY_MATRIX_CAMERA.aim.y, LEGACY_MATRIX_CAMERA.aim.z);
   const span = isArray ? ARRAY_OVERVIEW_SPAN : MATRIX_OVERVIEW_SPAN;
-  const camera = new THREE.PerspectiveCamera(34, 16 / 10, 5, 300);
+  const camera = new THREE.PerspectiveCamera(34, 16 / 9, 5, 300);
   const outward = new THREE.Vector3(Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation),
     Math.cos(yaw) * Math.cos(elevation));
   camera.position.copy(aim).addScaledVector(outward, distance);
@@ -813,6 +901,7 @@ function runFlightScenario(scenario, sourceMode, targetMode) {
 }
 
 async function main() {
+  const cameraContract = legacyCameraContractReport();
   const scenarios = [];
   for (const spec of scenariosToRun) {
     const scenario = makeScenario(spec);
@@ -821,6 +910,7 @@ async function main() {
   }
   const report = {
     generatedAt: new Date().toISOString(),
+    cameraContract,
     contract: {
       implementation: "src/music-layout-flight.ts MusicLayoutTransition",
       canonicalArray: { rowsPerColumn: ARRAY_ROWS, fixtures: scenariosToRun.map(item => item.groupLengths),
@@ -830,7 +920,7 @@ async function main() {
       qBounds: [-Q_BOUND, 1 + Q_BOUND], qVelocityLimit: VELOCITY_LIMIT,
       caseBounds: { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray(), dimensions: CASE_SIZE.toArray() },
       collisionMethod: "current-frame AABB broadphase followed by 15-axis OBB separating-axis test on the full transformed CASE_BOUNDS",
-      cameraDepth: "production flight camera endpoints; every sampled case bbox is checked against camera near/far depth",
+      cameraDepth: "pre-transition camera endpoints with responsive span; actors remain in the pool through natural viewport clipping; near/far depth is audited",
       loopCopies: "M-only copies remain unit-scale and alpha one; their ARRAY endpoint is fully below the floor, then each rises on its address-derived q interval",
       residentLift: "residents use the same address schedule and add a .22*sin(pi*amount)^2 single-peak lift without leaving the ARRAY lattice",
     },
@@ -845,6 +935,7 @@ async function main() {
       geometryErrors: scenarios.reduce((sum, item) => sum + item.geometryErrors.length + item.endpointErrors.length, 0),
       retargetEvents: scenarios.reduce((sum, item) => sum + item.retarget.midflightReversals.length, 0),
       retargetErrors: scenarios.reduce((sum, item) => sum + item.retarget.errors.length, 0),
+      cameraContractErrors: cameraContract.errors.length,
       qVelocityLimit: VELOCITY_LIMIT,
       worstPenetration: Math.max(0, ...scenarios.flatMap(item => item.collisions.pairs.map(pair => pair.maximumPenetration))),
     },
@@ -861,7 +952,8 @@ async function main() {
         minimumVerticalClearance: item.arrayLoopEndpoint.minimumVerticalClearance },
       geometryErrors: item.geometryErrors.length, geometryErrorSamples: item.geometryErrors.slice(0, 3),
       collisions: item.collisions.uniquePairs })) }, null, 2));
-  if (report.summary.geometryErrors > 0 || report.summary.uniqueCollisionPairs > 0 || report.summary.retargetErrors > 0)
+  if (report.summary.geometryErrors > 0 || report.summary.uniqueCollisionPairs > 0 || report.summary.retargetErrors > 0 ||
+    report.summary.cameraContractErrors > 0)
     process.exitCode = 1;
 }
 
