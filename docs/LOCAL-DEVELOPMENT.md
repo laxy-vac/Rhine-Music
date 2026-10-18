@@ -38,14 +38,6 @@ node scripts/build-source-preview.mjs --interface-only
 
 这些位置不构成安装或变更授权。prepare/runtime/codec/LSP 等脚本可能联网、下载或修改环境，不能当作普通接手步骤。缺少 Node、依赖或桌面组件时报告，不自动执行 pnpm/npm install、恢复缓存或修改 PATH/全局配置。
 
-### 当前运行时报警
-
-2026-10-18，用户报告卡巴斯基删除 `PDM:Trojan.Win32.Generic` 对象：`C:\Users\Entropy\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\pnpm\dist\pnpm.mjs`，发起进程为同一运行时的 `node.exe`，PID 22036，时间 20:37:07（Asia/Shanghai）。
-
-只读排查确认 Codex 工具包 `26.1011.51657` 声明 Node v24.19.0、pnpm 11.25.0；Node 的 OpenJS Foundation 数字签名有效。排查时 pnpm 的 `bin/pnpm.mjs` 和 `dist/pnpm.mjs` 均缺失，随后现有 Node 仍完成了项目构建。项目构建入口及其直接 helper 没有 pnpm、安装/下载或共享运行时写入调用。
-
-具体触发行为及是否误报未确认；缺少卡巴斯基完整命令行、父进程和行为链。用户曾自行退出卡巴允许继续，不能据此假定后续保护状态或性能基准环境。Agent 未恢复文件、添加白名单、安装依赖或修改安全设置。后续若受阻，先核对现状和完整事件，不绕过保护或自动修复运行时。
-
 ## 个人数据
 
 源码启动器在 `source/<仓库>` 布局下使用工作区根的 `music-data-source-preview`；其他布局使用仓库父目录下同名目录。最终路径由 `scripts/launch-source-preview.mjs` 计算，不自动迁移。

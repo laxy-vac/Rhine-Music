@@ -30,7 +30,6 @@
 - 本机此前枚举的四个 DXGI/KMT 逻辑 LUID 对应同一张物理 RTX 5080，位置 PCI 1:0.0，报告显存约 15.6 GiB。身份修正不等于掉帧修复。
 - 尚未建立当前版本的真实运行帧时间、CPU/GPU 负载、内存/显存或分阶段启动基线。不能将旧合成窗口 ready 时间、屏幕 FPS 或功能测试通过数当成性能结论。
 - 现有质量建议使用合成场景；`ArchiveScene.stats().frameTime` 是场景累计时钟，不是单帧耗时。
-- 卡巴斯基对 Codex 缓存运行时 pnpm 的报警原因仍未知；环境现状和限制见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)。
 
 ## 源码地图
 
