@@ -783,6 +783,790 @@
       },
       "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
       "runReference": "run-after-1792351601331-42316"
+    },
+    {
+      "number": 4,
+      "change": "Same renderer and motion with outer UI/metadata scheduling frozen in isolated build",
+      "status": "diagnosis-only",
+      "targetReached": false,
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 59.999331483771684,
+          "meanMs": 16.666852367688048,
+          "frames": 359,
+          "p95Ms": 16.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 59.99832873736108,
+          "meanMs": 16.667130919220057,
+          "frames": 359,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 58.9404084086092,
+          "meanMs": 16.966288951841292,
+          "frames": 353,
+          "p95Ms": 33.29999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 95.00751377525464,
+          "meanMs": 10.52548330404218,
+          "frames": 569,
+          "p95Ms": 16.70000000001164,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 59.94222838155977,
+          "meanMs": 16.682729805013945,
+          "frames": 359,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 59.99832873736108,
+          "meanMs": 16.667130919220057,
+          "frames": 359,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 40.57370890451002,
+          "meanMs": 24.646502057613073,
+          "frames": 243,
+          "p95Ms": 50,
+          "over50Percent": 4.11522633744856
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 86.15795625313032,
+          "meanMs": 11.606589147286877,
+          "frames": 516,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        }
+      ],
+      "comparisonScope": "One valid 6-second A/B sample per case; final cumulative multi-repeat test still required",
+      "cpu": null,
+      "labelPixelParity": true,
+      "caseSettings": [
+        {
+          "name": "original",
+          "max": 28,
+          "changedPercent": 0.011417341820987654,
+          "overOnePercent": 0.00009645061728395063,
+          "mean": 0.000045010288065843624
+        },
+        {
+          "name": "opaque cover",
+          "max": 28,
+          "changedPercent": 0.010187596450617285,
+          "overOnePercent": 0.00006028163580246913,
+          "mean": 0.000040067193930041155
+        },
+        {
+          "name": "clear cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "frosted cover",
+          "max": 28,
+          "changedPercent": 0.01704764660493827,
+          "overOnePercent": 0.00006028163580246913,
+          "mean": 0.00006309477880658436
+        },
+        {
+          "name": "opaque optics",
+          "max": 28,
+          "changedPercent": 0.012803819444444446,
+          "overOnePercent": 0.00007233796296296296,
+          "mean": 0.000049109439300411525
+        },
+        {
+          "name": "clear optics",
+          "max": 28,
+          "changedPercent": 0.011188271604938273,
+          "overOnePercent": 0.00009645061728395063,
+          "mean": 0.0000442065329218107
+        },
+        {
+          "name": "colored marble",
+          "max": 1,
+          "changedPercent": 0.000024112654320987656,
+          "overOnePercent": 0,
+          "mean": 8.037551440329219e-8
+        },
+        {
+          "name": "preset",
+          "max": 5,
+          "changedPercent": 0.0007113233024691358,
+          "overOnePercent": 0.000024112654320987656,
+          "mean": 0.0000030140817901234566
+        },
+        {
+          "name": "hidden parts",
+          "max": 1,
+          "changedPercent": 0.0000843942901234568,
+          "overOnePercent": 0,
+          "mean": 2.8131430041152265e-7
+        },
+        {
+          "name": "label transform",
+          "max": 8,
+          "changedPercent": 0.016517168209876545,
+          "overOnePercent": 0.000024112654320987656,
+          "mean": 0.000056584362139917696
+        }
+      ],
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2562,
+        "visibleResourceChecks": 13186,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "inputMethod": {
+        "method": "CDP Input trusted browser events, modifiers explicitly zero, non-focusable isolated window",
+        "failures": []
+      },
+      "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
+      "runReference": "run-after-1792352063364-44080",
+      "mainRenderProfiles": [
+        {
+          "name": "day-matrix",
+          "byMaterial": false,
+          "valid": true,
+          "frames": 33,
+          "gpuMsPerFrame": {
+            "main-transparent": 0.27776678787878795,
+            "main-glass": 1.7197052121212122,
+            "main-opaque": 2.4731403636363636,
+            "main-overhead": 0.026734545454545452,
+            "transmission-backfaces": 1.0707743030303032,
+            "transmission-mipmap": 0.06465163636363636,
+            "transmission-resolve": 0.3063311515151514,
+            "transmission-opaque": 3.1594918787878785,
+            "transmission-build": 0.04886593939393938,
+            "shadow": 1.8169454545454549
+          }
+        },
+        {
+          "name": "day-matrix",
+          "byMaterial": true,
+          "valid": true,
+          "frames": 33,
+          "gpuMsPerFrame": {
+            "main-transparent::surface=optics|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=zt": 0.2695660606060606,
+            "main-transparent::surface=optics|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=zt": 0.003840969696969697,
+            "main-glass::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.3492063030303031,
+            "main-glass::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.228717575757576,
+            "main-glass::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.11470351515151515,
+            "main-glass::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.00879418181818182,
+            "main-glass::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.01927078787878788,
+            "main-glass::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.009060848484848482,
+            "main-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ti|type=ti": 0.0006913939393939395,
+            "main-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ti|type=ti": 0.004103757575757576,
+            "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.0025958787878787876,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.00039175757575757574,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.00010666666666666668,
+            "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.0052082424242424225,
+            "main-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.002531878787878788,
+            "main-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0008814545454545455,
+            "main-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.00004363636363636365,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.005272242424242426,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0004683636363636364,
+            "main-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.00010860606060606063,
+            "main-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0026647272727272726,
+            "main-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.021331393939393938,
+            "main-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.010165333333333334,
+            "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.015975757575757574,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.006548363636363634,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.005835636363636365,
+            "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.42049648484848484,
+            "main-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.13160339393939396,
+            "main-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.044597333333333336,
+            "main-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0023631515151515156,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.023385212121212123,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.016727272727272726,
+            "main-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.003984484848484848,
+            "main-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.07555393939393942,
+            "main-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.06246690909090909,
+            "main-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.0351107878787875,
+            "main-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.004072727272727272,
+            "main-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.13431660606060605,
+            "main-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.011970909090909093,
+            "main-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.004988121212121213,
+            "main-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.32080193939393936,
+            "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.18569018181818184,
+            "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.7872446060606059,
+            "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.06626327272727273,
+            "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.010140121212121215,
+            "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.012749575757575758,
+            "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.01412945454545455,
+            "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ti|type=ti": 0.0006050909090909091,
+            "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ti|type=ti": 0.0027490909090909085,
+            "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.002054787878787879,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.0004460606060606061,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.000007757575757575758,
+            "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.006002424242424243,
+            "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.004497454545454546,
+            "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0030943030303030306,
+            "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.00006884848484848484,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.004607030303030302,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0036712727272727274,
+            "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.002460121212121212,
+            "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.004708848484848484,
+            "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.008588606060606062,
+            "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.011220363636363636,
+            "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.03482860606060607,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.00444509090909091,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.007198060606060606,
+            "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.5766661818181817,
+            "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.1935738181818182,
+            "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0033755151515151506,
+            "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0011296969696969698,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.0546201212121212,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.16611781818181814,
+            "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.00044218181818181824,
+            "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.08154860606060604,
+            "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.09814884848484846,
+            "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.1080349090909092,
+            "transmission-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.005652363636363636,
+            "transmission-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.16554375757575757,
+            "transmission-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.012198787878787877,
+            "transmission-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.006190545454545454,
+            "transmission-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.3325197575757575
+          }
+        },
+        {
+          "name": "night-matrix",
+          "byMaterial": false,
+          "valid": true,
+          "frames": 33,
+          "gpuMsPerFrame": {
+            "main-transparent": 0.27292799999999995,
+            "main-glass": 1.7334322424242423,
+            "main-opaque": 2.5157575757575756,
+            "main-overhead": 0.027504484848484848,
+            "transmission-backfaces": 1.0845682424242424,
+            "transmission-mipmap": 0.06819103030303028,
+            "transmission-resolve": 0.3235238787878787,
+            "transmission-opaque": 3.2494593939393943,
+            "transmission-build": 0.04918787878787878,
+            "shadow": 1.8286613333333335
+          }
+        },
+        {
+          "name": "night-matrix",
+          "byMaterial": true,
+          "valid": true,
+          "frames": 33,
+          "gpuMsPerFrame": {
+            "main-transparent::surface=optics|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=zt": 0.26596072727272724,
+            "main-transparent::surface=optics|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=zt": 0.0026753939393939405,
+            "main-transparent::surface=Tu|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Tu|type=Tu": 0.00030642424242424265,
+            "main-glass::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.3491665454545454,
+            "main-glass::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.2340072727272728,
+            "main-glass::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.115286303030303,
+            "main-glass::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.009652363636363634,
+            "main-glass::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.01939490909090909,
+            "main-glass::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.009280000000000002,
+            "main-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ti|type=ti": 0.0004926060606060606,
+            "main-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ti|type=ti": 0.004623515151515151,
+            "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.0023486060606060614,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.000192969696969697,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.00030545454545454544,
+            "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.004760242424242425,
+            "main-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.0024824242424242417,
+            "main-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0013546666666666668,
+            "main-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.000022303030303030304,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.007804121212121214,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0020955151515151516,
+            "main-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0007854545454545455,
+            "main-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.002501818181818182,
+            "main-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.010466909090909091,
+            "main-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.010616242424242426,
+            "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.027305696969696976,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.005503030303030304,
+            "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.006503757575757577,
+            "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.421388606060606,
+            "main-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.13132703030303033,
+            "main-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.013190787878787876,
+            "main-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0026152727272727274,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.026588121212121216,
+            "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.017796848484848485,
+            "main-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0065832727272727275,
+            "main-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.07612799999999999,
+            "main-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.061113212121212124,
+            "main-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.0420693333333335,
+            "main-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.004518787878787879,
+            "main-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.13883442424242423,
+            "main-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.012500363636363638,
+            "main-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.005122909090909092,
+            "main-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.3294031515151515,
+            "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.18495127272727271,
+            "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.791471515151515,
+            "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.06767806060606062,
+            "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=zt": 0.01066181818181818,
+            "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.012228848484848487,
+            "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.015920484848484847,
+            "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ti|type=ti": 0.0007641212121212122,
+            "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ti|type=ti": 0.0035044848484848496,
+            "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.002044121212121212,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.00030739393939393936,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.00019878787878787875,
+            "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.006078060606060606,
+            "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.004786424242424242,
+            "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.003927272727272727,
+            "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0007292121212121214,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.003999030303030303,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.0035335757575757575,
+            "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.001670787878787879,
+            "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0049871515151515165,
+            "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.008308363636363635,
+            "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.011874909090909092,
+            "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.03474133333333334,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.01880824242424243,
+            "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=zt": 0.006967272727272728,
+            "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=zt": 0.579120484848485,
+            "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=zt": 0.19419636363636364,
+            "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.027559757575757574,
+            "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.0035607272727272727,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=zt": 0.05166157575757576,
+            "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.45066957575757577,
+            "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=zt": 0.000018424242424242425,
+            "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 0.08254545454545455,
+            "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=zt": 0.09979248484848484,
+            "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=zt": 1.1162521212121213,
+            "transmission-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.005689212121212123,
+            "transmission-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.16827636363636359,
+            "transmission-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.012587636363636362,
+            "transmission-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=bl|type=bl": 0.006023757575757575,
+            "transmission-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=bl|type=bl": 0.3409347878787879
+          }
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "change": "Conservative near-first opaque submission; rejected because limited FPS benefit does not justify remaining optical pixel uncertainty",
+      "status": "rejected",
+      "targetReached": false,
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 69.79462347637335,
+          "meanMs": 14.32775119617225,
+          "frames": 418,
+          "p95Ms": 16.799999999995634,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 72.59073842302878,
+          "meanMs": 13.775862068965518,
+          "frames": 435,
+          "p95Ms": 19.099999999998545,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 70.31197808804856,
+          "meanMs": 14.222327790973885,
+          "frames": 421,
+          "p95Ms": 19.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 71.92439575144267,
+          "meanMs": 13.903488372093022,
+          "frames": 430,
+          "p95Ms": 19.30000000000291,
+          "over50Percent": 0
+        }
+      ],
+      "comparisonScope": "One valid 6-second A/B sample per case; final cumulative multi-repeat test still required",
+      "cpu": null,
+      "labelPixelParity": true,
+      "caseSettings": [
+        {
+          "name": "original",
+          "max": 8,
+          "changedPercent": 0.00024112654320987653,
+          "overOnePercent": 0.00004822530864197531,
+          "mean": 0.0000024916409465020577
+        },
+        {
+          "name": "opaque cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "clear cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "frosted cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "opaque optics",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "clear optics",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "colored marble",
+          "max": 14,
+          "changedPercent": 0.00044608410493827163,
+          "overOnePercent": 0.00009645061728395063,
+          "mean": 0.000005264596193415638
+        },
+        {
+          "name": "preset",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "hidden parts",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "label transform",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        }
+      ],
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2566,
+        "visibleResourceChecks": 11394,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "inputMethod": {
+        "method": "CDP Input trusted browser events, modifiers explicitly zero, non-focusable isolated window",
+        "failures": []
+      },
+      "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
+      "runReference": "run-after-1792352869258-22984"
+    },
+    {
+      "number": 6,
+      "change": "Submit ordinary Rhine ARRAY DOM after drawing in the same RAF; workflow passed but FPS regressed, reverted",
+      "status": "rejected",
+      "targetReached": false,
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 70.4449241169285,
+          "meanMs": 14.19548693586699,
+          "frames": 421,
+          "p95Ms": 19.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 70.41782357073564,
+          "meanMs": 14.200950118764842,
+          "frames": 421,
+          "p95Ms": 19.80000000000291,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 69.48504234244774,
+          "meanMs": 14.391586538461524,
+          "frames": 416,
+          "p95Ms": 25.5,
+          "over50Percent": 0
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 63.53494421932066,
+          "meanMs": 15.73937007874015,
+          "frames": 381,
+          "p95Ms": 26.59999999999127,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 69.32032672423877,
+          "meanMs": 14.425783132530114,
+          "frames": 415,
+          "p95Ms": 20.40000000000873,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 69.20183869619724,
+          "meanMs": 14.45048309178744,
+          "frames": 414,
+          "p95Ms": 19.70000000001164,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 71.95685927508876,
+          "meanMs": 13.897215777262208,
+          "frames": 431,
+          "p95Ms": 20.60000000000582,
+          "over50Percent": 0
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 67.21595836947088,
+          "meanMs": 14.877419354838723,
+          "frames": 403,
+          "p95Ms": 26.20000000001164,
+          "over50Percent": 0
+        }
+      ],
+      "comparisonScope": "One valid 6-second A/B sample per case; final cumulative multi-repeat test still required",
+      "cpu": {
+        "captureFrames": 312,
+        "totalSampledMs": 4629.381,
+        "topSelf": [
+          {
+            "function": "(program)",
+            "ms": 911.802,
+            "msPerFrame": 2.922442307692308,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "(program)",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "measure",
+            "ms": 317.7539999999999,
+            "msPerFrame": 1.0184423076923075,
+            "source": {
+              "columnNumber": 30997,
+              "functionName": "measure",
+              "lineNumber": 5269,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:10496/assets/scene-CLjwypsA.js"
+            }
+          },
+          {
+            "function": "(idle)",
+            "ms": 299.44399999999985,
+            "msPerFrame": 0.9597564102564098,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "(idle)",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "setSlot",
+            "ms": 171.57000000000005,
+            "msPerFrame": 0.5499038461538464,
+            "source": {
+              "columnNumber": 8053,
+              "functionName": "setSlot",
+              "lineNumber": 5034,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:10496/assets/scene-CLjwypsA.js"
+            }
+          },
+          {
+            "function": "update",
+            "ms": 89.25800000000002,
+            "msPerFrame": 0.2860833333333334,
+            "source": {
+              "columnNumber": 39998,
+              "functionName": "update",
+              "lineNumber": 5387,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:10496/assets/scene-CLjwypsA.js"
+            }
+          },
+          {
+            "function": "toArray",
+            "ms": 65.567,
+            "msPerFrame": 0.21015064102564102,
+            "source": {
+              "columnNumber": 52402,
+              "functionName": "toArray",
+              "lineNumber": 0,
+              "scriptId": "10",
+              "url": "http://127.0.0.1:10496/assets/scene-CLjwypsA.js"
+            }
+          },
+          {
+            "function": "getBoundingClientRect",
+            "ms": 64.48200000000001,
+            "msPerFrame": 0.20667307692307696,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "getBoundingClientRect",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          },
+          {
+            "function": "getBoundingClientRect",
+            "ms": 59.531,
+            "msPerFrame": 0.19080448717948717,
+            "source": {
+              "columnNumber": -1,
+              "functionName": "getBoundingClientRect",
+              "lineNumber": -1,
+              "scriptId": "0",
+              "url": ""
+            }
+          }
+        ]
+      },
+      "labelPixelParity": true,
+      "caseSettings": [
+        {
+          "name": "original",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "opaque cover",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "clear cover",
+          "max": 1,
+          "changedPercent": 0.0017843364197530865,
+          "overOnePercent": 0,
+          "mean": 0.000005987975823045267
+        },
+        {
+          "name": "frosted cover",
+          "max": 28,
+          "changedPercent": 0.016203703703703703,
+          "overOnePercent": 0.00009645061728395063,
+          "mean": 0.00006148726851851851
+        },
+        {
+          "name": "opaque optics",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "clear optics",
+          "max": 8,
+          "changedPercent": 0.01222511574074074,
+          "overOnePercent": 0.00010850694444444444,
+          "mean": 0.00004432709619341564
+        },
+        {
+          "name": "colored marble",
+          "max": 4,
+          "changedPercent": 0.011079764660493827,
+          "overOnePercent": 0.00006028163580246913,
+          "mean": 0.00003862043467078189
+        },
+        {
+          "name": "preset",
+          "max": 28,
+          "changedPercent": 0.0001326195987654321,
+          "overOnePercent": 0.00004822530864197531,
+          "mean": 0.000005907600308641975
+        },
+        {
+          "name": "hidden parts",
+          "max": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "mean": 0
+        },
+        {
+          "name": "label transform",
+          "max": 28,
+          "changedPercent": 0.01580584490740741,
+          "overOnePercent": 0.00012056327160493826,
+          "mean": 0.00006213027263374486
+        }
+      ],
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2754,
+        "visibleResourceChecks": 13762,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "inputMethod": {
+        "method": "CDP Input trusted browser events, modifiers explicitly zero, non-focusable isolated window",
+        "failures": []
+      },
+      "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
+      "runReference": "run-after-1792353179772-43564"
     }
   ],
   "limitations": [
