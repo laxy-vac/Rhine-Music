@@ -66,6 +66,7 @@ import { MusicLayoutTransition, shelfEntryFrame, shelfEntryCamera, shelfEntryPos
 import { shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment";
 import { MusicMatrixDrag } from "./music-matrix-drag";
 import { MusicInstanceDrawList } from "./music-instance-draw-list";
+import { MusicInstanceTransforms } from "./music-instance-transforms";
 import { MusicInstanceShadows } from "./music-instance-shadows";
 import { MusicSharedDepthBokehPass } from "./music-shared-depth-bokeh";
 import {
@@ -107,6 +108,7 @@ export class ArchiveScene {
   private ao: SSAOPass;
   private bokeh: MusicSharedDepthBokehPass;
   private readonly instanceDrawList = new MusicInstanceDrawList();
+  private readonly instanceTransforms = new MusicInstanceTransforms();
   private readonly instanceShadows = new MusicInstanceShadows();
   private readonly drawSlots: number[] = [];
   private readonly visibleDrawSlots: number[] = [];
@@ -2285,6 +2287,10 @@ export class ArchiveScene {
       this.layoutTransition.primeTarget(this.selectedCell, selectedMatrix, true);
     }
     let lastRenderable = -1;
+    const sharedInstanceMatrix = musicLibrary ? this.instanceTransforms.bind([
+      ...this.instances, this.caseHitProxy, this.covers?.array, this.covers?.arrayInsert,
+      this.caseTitles?.array, this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge,
+    ].filter((mesh): mesh is THREE.InstancedMesh => !!mesh)) : undefined;
     this.drawSlots.length = 0;
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i];
@@ -2322,9 +2328,11 @@ export class ArchiveScene {
               this.caseLayout.center.y, this.caseLayout.center.z).applyMatrix4(this.dummy.matrix).toArray() });
         }
       }
-      this.caseHitProxy?.setMatrixAt(i, this.dummy.matrix);
+      if (sharedInstanceMatrix) this.instances[0].setMatrixAt(i, this.dummy.matrix);
+      if (this.caseHitProxy && this.caseHitProxy.instanceMatrix !== sharedInstanceMatrix)
+        this.caseHitProxy.setMatrixAt(i, this.dummy.matrix);
       for (const inst of this.instances) {
-        inst.setMatrixAt(i, this.dummy.matrix);
+        if (inst.instanceMatrix !== sharedInstanceMatrix) inst.setMatrixAt(i, this.dummy.matrix);
         this.arrayAppearance.write(inst, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         if (inst.userData.hiResRail) {
           const flags = inst.geometry.getAttribute("hiResAlbum") as THREE.InstancedBufferAttribute;
@@ -2333,23 +2341,24 @@ export class ArchiveScene {
         }
       }
       if (musicLibrary && this.covers) {
-        this.covers.array.setMatrixAt(i, this.dummy.matrix);
-        this.covers.arrayInsert.setMatrixAt(i, this.dummy.matrix);
+        if (this.covers.array.instanceMatrix !== sharedInstanceMatrix) this.covers.array.setMatrixAt(i, this.dummy.matrix);
+        if (this.covers.arrayInsert.instanceMatrix !== sharedInstanceMatrix) this.covers.arrayInsert.setMatrixAt(i, this.dummy.matrix);
         this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         this.covers.setSlot(i, records[this.recordAtCell(this.cells[i])]);
         if (this.caseTitles && topDisplayEnabled && (this.shelfView || this.layoutTransition.active)) {
-          this.caseTitles.array.setMatrixAt(i, this.dummy.matrix);
+          if (this.caseTitles.array.instanceMatrix !== sharedInstanceMatrix) this.caseTitles.array.setMatrixAt(i, this.dummy.matrix);
           this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
           this.caseTitles.setSlot(i, (this.layoutTransition.active && this.cells[i].foobarEntryKey
             ? getMusicEntryByKey(this.cells[i].foobarEntryKey!) : musicSpatialEntry(this.cells[i], this.shelfView))?.record.title ?? "");
         }
         if (this.rhineInfo) {
           const index = this.recordAtCell(this.cells[i]);
-          this.rhineInfo.arrayLabel.setMatrixAt(i, this.dummy.matrix);
+          if (this.rhineInfo.arrayLabel.instanceMatrix !== sharedInstanceMatrix) this.rhineInfo.arrayLabel.setMatrixAt(i, this.dummy.matrix);
           this.arrayAppearance.write(this.rhineInfo.arrayLabel, i, rowAppearance.alpha, rowAppearance.tint, emerging);
           this.arrayAppearance.write(this.rhineInfo.arrayBadge, i, rowAppearance.alpha, rowAppearance.tint, emerging);
-          if (this.rhineInfo.arrayBadge.visible) this.rhineInfo.arrayBadge.setMatrixAt(i, this.dummy.matrix);
+          if (this.rhineInfo.arrayBadge.visible && this.rhineInfo.arrayBadge.instanceMatrix !== sharedInstanceMatrix)
+            this.rhineInfo.arrayBadge.setMatrixAt(i, this.dummy.matrix);
           this.rhineInfo.setSlot(i, records[index], index >= 0 ? index : undefined);
         }
       }
