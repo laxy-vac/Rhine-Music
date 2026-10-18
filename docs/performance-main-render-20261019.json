@@ -1567,6 +1567,272 @@
       },
       "pointerCaptureFixture": "Bypassed only for trusted CDP in-canvas synthetic drag; both A/B modes identical, production source unchanged",
       "runReference": "run-after-1792353179772-43564"
+    },
+    {
+      "number": 7,
+      "status": "rejected",
+      "change": "ARRAY-only equivalent shader program reuse, rejected due strict settings pixel regression",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 70.93382291579738,
+          "meanMs": 14.09764705882353,
+          "frames": 425,
+          "programs": {
+            "caseMaterials": 40,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 70.77839502041361,
+          "meanMs": 14.12860520094563,
+          "frames": 423,
+          "programs": {
+            "caseMaterials": 40,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 69.18449197860963,
+          "meanMs": 14.454106280193237,
+          "frames": 414,
+          "programs": {
+            "caseMaterials": 220,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 71.82348126743379,
+          "meanMs": 13.923023255813973,
+          "frames": 430,
+          "programs": {
+            "caseMaterials": 220,
+            "activeCasePrograms": 6
+          }
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 69.59431200334588,
+          "meanMs": 14.368990384615385,
+          "frames": 416,
+          "programs": {
+            "caseMaterials": 40,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 69.56870746024069,
+          "meanMs": 14.374278846153803,
+          "frames": 416,
+          "programs": {
+            "caseMaterials": 40,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 63.533463744127275,
+          "meanMs": 15.739736842105279,
+          "frames": 380,
+          "programs": {
+            "caseMaterials": 220,
+            "activeCasePrograms": 20
+          }
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 73.01221325580985,
+          "meanMs": 13.696338672768919,
+          "frames": 437,
+          "programs": {
+            "caseMaterials": 220,
+            "activeCasePrograms": 6
+          }
+        }
+      ],
+      "programParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "variantReuse": true
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "variantReuse": true
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "variantReuse": true
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "variantReuse": true
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.011706693672839507,
+              "overOnePercent": 0.0001326195987654321,
+              "mean": 0.000047943994341563784
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005626286008230453
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.01042872299382716,
+              "overOnePercent": 0.00009645061728395063,
+              "mean": 0.00004275977366255144
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.000005264596193415638
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2690,
+        "visibleResourceChecks": 12950,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "selectionTransaction": {
+        "ok": true,
+        "initial": "fixture-album-01",
+        "expectedForward": "fixture-album-06",
+        "expectedReverse": "fixture-album-04",
+        "startCell": {
+          "lane": 0,
+          "row": 12,
+          "foobarEntryKey": "fixture-album-01"
+        },
+        "forward": {
+          "app": "fixture-album-06",
+          "scene": "fixture-album-06"
+        },
+        "opened": {
+          "app": "fixture-album-04",
+          "scene": "fixture-album-04",
+          "hasTrack": true,
+          "title": "现场精选 第04辑"
+        },
+        "returned": true
+      },
+      "runReference": "run-after-1792354073871-45944",
+      "measurementOk": false,
+      "error": "Error: Incremental program settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792354073871-45944/electron-app/check-archive-motion.mjs:364:103)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792354073871-45944\\electron-app\\main.cjs:1214:32)"
     }
   ],
   "limitations": [
