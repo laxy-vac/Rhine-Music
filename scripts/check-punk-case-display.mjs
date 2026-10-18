@@ -334,14 +334,14 @@ async function main() {
   const phaseAt = q => phase(q, true, true, false);
   const phaseStart = phaseAt(0);
   const phaseEnd = phaseAt(1);
-  const traceQs = [1, 0.92, 0.8, 0.72, 0.70, 0.68, 0.55, 0.22, 0.1, 0];
+  const traceQs = [1, 0.98, 0.8, 0.62, 0.60, 0.58, 0.55, 0.1, 0];
   const phaseTrace = traceQs.map(q => ({ q, ...phaseAt(q) }));
   const phaseMonotonic = phaseTrace.every((row, index) => index === 0 ||
     (row.power >= phaseTrace[index - 1].power - 1e-8 && row.scan >= phaseTrace[index - 1].scan - 1e-8));
   check("phase endpoints map q=0 to ARRAY and q=1 to MATRIX", near(phaseStart.power, 1) && near(phaseStart.scan, 1) &&
     near(phaseEnd.power, 0) && near(phaseEnd.scan, 0), { q0Array: phaseStart, q1Matrix: phaseEnd });
-  const whiteBeforeScan = phaseAt(0.70);
-  const scanStartsAfterWhite = phaseAt(0.67);
+  const whiteBeforeScan = phaseAt(0.60);
+  const scanStartsAfterWhite = phaseAt(0.57);
   check("M-to-A powers a blank white screen before the title scan", near(whiteBeforeScan.power, 1) && near(whiteBeforeScan.scan, 0) &&
     near(scanStartsAfterWhite.power, 1) && scanStartsAfterWhite.scan > 0,
     { blankWhite: whiteBeforeScan, firstScanSample: scanStartsAfterWhite });

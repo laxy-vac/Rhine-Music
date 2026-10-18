@@ -9,8 +9,8 @@ const smoothStep = (value, start, end) => {
   return t * t * t * (t * (t * 6 - 15) + 10);
 };
 const expectedPhase = q => ({
-  power: 1 - smoothStep(q, 0.72, 0.92),
-  scan: 1 - smoothStep(q, 0.22, 0.68),
+  power: 1 - smoothStep(q, 0.62, 0.98),
+  scan: 1 - smoothStep(q, 0.10, 0.58),
 });
 const vectorLength = value => Math.hypot(Number(value?.[0]), Number(value?.[1]), Number(value?.[2]));
 const pointFromMatrix = (matrix, x, y, z) => [

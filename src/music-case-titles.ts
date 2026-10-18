@@ -222,10 +222,16 @@ export class MusicCaseTitles {
         "float titleRevealed = step(vTitleUv.x, uPunkDisplayScan);\n" +
         "float titleAccent = 1.0 - step(0.018, vTitleUv.x);\n" +
         "diffuseColor.rgb = mix(vec3(1.0), diffuseColor.rgb, max(titleRevealed, titleAccent));\n" +
-        "diffuseColor.a *= uPunkDisplayPower;");
+        // Extend the backing along the rail instead of flashing the whole strip.
+        // The feather travels beyond both ends so hiding never cuts a visible edge.
+        "float displayFeather = 0.075;\n" +
+        "float displayEdge = mix(-displayFeather, 1.0 + displayFeather, uPunkDisplayPower);\n" +
+        "float displayCoverage = 1.0 - smoothstep(displayEdge - displayFeather, displayEdge + displayFeather, vTitleUv.x);\n" +
+        "if (displayCoverage <= 0.0001) discard;\n" +
+        "diffuseColor.a *= displayCoverage;");
     };
     material.customProgramCacheKey = () =>
-      `music-case-title-display-v4-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
+      `music-case-title-display-v5-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
   }
   private updateDisplayVisibility() {
     const visible = this.displayEnabled && Boolean(this.mount) && this.displayPower.value > 0.0001;

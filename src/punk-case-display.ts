@@ -38,8 +38,8 @@ export function punkCaseDisplayPhase(
   const endpoint = shelf ? 1 : 0;
   if (reduced || !active) return { power: endpoint, scan: endpoint };
   return {
-    power: 1 - deploymentStep(q, 0.72, 0.92),
-    scan: 1 - deploymentStep(q, 0.22, 0.68),
+    power: 1 - deploymentStep(q, 0.62, 0.98),
+    scan: 1 - deploymentStep(q, 0.10, 0.58),
   };
 }
 
