@@ -1,0 +1,282 @@
+{
+  "date": "2026-10-19",
+  "iterationLimit": 20,
+  "continueAfterTarget": true,
+  "frameGeneration": "deferred by user",
+  "targetRealFps": 120,
+  "baselineCommit": "f3fceb9caf2bf80811ad71f86e6f92a9b02b465a",
+  "conditions": {
+    "quality": "ultra",
+    "caseStructure": "punk",
+    "design": "rhine",
+    "window": [
+      2560,
+      1440
+    ],
+    "canvas": [
+      3840,
+      2160
+    ],
+    "fixtureAlbums": 45,
+    "personalLibrary": false,
+    "realAudio": false
+  },
+  "rounds": [
+    {
+      "number": 1,
+      "change": "Immutable printed-label residency, 16 entries with reference-counted outgoing snapshots",
+      "status": "retained",
+      "targetReached": false,
+      "baselineFrameResults": {
+        "day-matrix": {
+          "frames": 1077,
+          "meanMs": 16.667130919220057,
+          "fps": 59.99832873736108,
+          "p95Ms": 16.80000000000291,
+          "over50Percent": 0
+        },
+        "day-array": {
+          "frames": 548,
+          "meanMs": 32.72518248175179,
+          "fps": 30.55750722116278,
+          "p95Ms": 50.09999999997672,
+          "over50Percent": 5.109489051094891
+        },
+        "night-matrix": {
+          "frames": 1077,
+          "meanMs": 16.667038068709374,
+          "fps": 59.99866298244052,
+          "p95Ms": 16.79999999998836,
+          "over50Percent": 0
+        },
+        "night-array": {
+          "frames": 622,
+          "meanMs": 28.859163987138253,
+          "fps": 34.65103841697122,
+          "p95Ms": 50,
+          "over50Percent": 3.536977491961415
+        }
+      },
+      "candidateFrameResults": {
+        "day-matrix": {
+          "frames": 947,
+          "meanMs": 18.954910242872224,
+          "fps": 52.75677843824339,
+          "p95Ms": 22.30000000000291,
+          "over50Percent": 0
+        },
+        "day-array": {
+          "frames": 529,
+          "meanMs": 33.953119092627595,
+          "fps": 29.452375119702474,
+          "p95Ms": 50.10000000000582,
+          "over50Percent": 5.8601134215500945
+        },
+        "night-matrix": {
+          "frames": 946,
+          "meanMs": 18.963213530655402,
+          "fps": 52.73367820192647,
+          "p95Ms": 22.300000000017462,
+          "over50Percent": 0
+        },
+        "night-array": {
+          "frames": 658,
+          "meanMs": 27.2632218844985,
+          "fps": 36.67945058865499,
+          "p95Ms": 44.5,
+          "over50Percent": 2.735562310030395
+        }
+      },
+      "warning": "Candidate completed all four timing cases, then failed a subsequent native-drag profile warmup. Cross-process FPS varies; no reliable average FPS benefit claimed.",
+      "sameProcessArrayAB": [
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 33.92663157015125,
+          "meanMs": 29.47536945812808,
+          "frames": 203
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 26.691133539077487,
+          "meanMs": 37.465625,
+          "frames": 160
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 36.40067458130879,
+          "meanMs": 27.472018348623827,
+          "frames": 218
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 29.524256861034704,
+          "meanMs": 33.87045454545453,
+          "frames": 176
+        }
+      ],
+      "mainGpuMsPerSampledFrame": {
+        "before": {
+          "main-transparent": 0.37735876923076916,
+          "main-glass": 0.6071286153846153,
+          "main-opaque": 1.577777230769231,
+          "main-overhead": 0.02273723076923077,
+          "transmission-backfaces": 0.6464418461538461,
+          "transmission-mipmap": 0.06141784615384616,
+          "transmission-resolve": 0.32332553846153844,
+          "transmission-opaque": 3.741654153846153,
+          "texture-upload": 13.326043076923078,
+          "transmission-build": 0.048504615384615375,
+          "shadow": 0.513344
+        },
+        "after": {
+          "main-transparent": 0.3350176,
+          "main-glass": 0.5881792,
+          "main-opaque": 1.4663808,
+          "main-overhead": 0.0228928,
+          "transmission-backfaces": 0.4609472,
+          "transmission-mipmap": 0.0780448,
+          "transmission-resolve": 0.40837120000000005,
+          "transmission-opaque": 2.5434848000000003,
+          "transmission-build": 0.048233599999999995,
+          "shadow": 0.7689888
+        }
+      },
+      "labelPixelParity": {
+        "ok": true,
+        "results": [
+          {
+            "structure": "punk",
+            "selectedAndOutgoingPixels": "identical",
+            "refreshRetainsOutgoing": true,
+            "qualitySettings": true,
+            "allLiveFallback": true
+          },
+          {
+            "structure": "rhine",
+            "selectedAndOutgoingPixels": "identical",
+            "refreshRetainsOutgoing": true,
+            "qualitySettings": true,
+            "allLiveFallback": true
+          }
+        ],
+        "managedDisposal": {
+          "releases": 1,
+          "disposals": 0
+        }
+      },
+      "caseSettingsRegression": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00003616898148148148,
+              "overOnePercent": 0,
+              "mean": 1.2056327160493827e-7
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "runReferences": {
+        "baseRun": "run-baseline-1792347770218-9496",
+        "afterRun": "run-after-1792349585181-42512",
+        "profileBefore": "run-baseline-1792348982980-47860",
+        "profileAfter": "run-after-1792349895428-33820",
+        "qaRun": "run-after-1792350165376-50420"
+      }
+    }
+  ],
+  "limitations": [
+    "Isolated synthetic library on RTX 5080; no other GPU tested",
+    "Pixel regression is finite and does not replace user visual acceptance",
+    "No-render scheduling exceeds 175 FPS; it is not a rendering result"
+  ]
+}

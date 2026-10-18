@@ -8,6 +8,7 @@ import { applyCaseMaterials } from "./case-materials";
 import type { CaseAppearance } from "./case-settings";
 import { albumLabelTileSizeForRows, createPaperAtlasLayout, type PaperAtlasLayout } from "./paper-atlas-layout.ts";
 import { LabelAtlasCache } from "./label-atlas-cache.ts";
+import { CoverSnapshotCache, type CoverSnapshotLease } from "./cover-snapshot-cache.ts";
 
 export type RhineInfoRecord = Pick<ArchiveRecord, "id" | "album">;
 export type RhineSourceBadge = ReturnType<typeof rhineSourceBadge>;
@@ -137,6 +138,8 @@ export class CaseAlbumInfo {
   readonly selectedLabel: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   readonly selectedBadge: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   readonly ready: Promise<void>;
+  /** Diagnostic switch for A/B captures. It takes effect on the next select/refresh. */
+  labelResidencyEnabled = true;
 
   private readonly count: number;
   private readonly atlasLayout: PaperAtlasLayout;
@@ -166,10 +169,19 @@ export class CaseAlbumInfo {
   private readonly arrayBadgeMaterial: THREE.ShaderMaterial;
   private readonly selectedLabelMaterial: THREE.MeshBasicMaterial;
   private readonly selectedBadgeMaterial: THREE.ShaderMaterial;
+  private readonly residentLabelTextures = new Set<THREE.CanvasTexture>();
+  private readonly snapshotLabelTextures = new CoverSnapshotCache<THREE.CanvasTexture>(16, texture => {
+    this.residentLabelTextures.delete(texture);
+    texture.dispose();
+  });
   private layout: CaseLayout;
   private selectedRecord?: RhineInfoRecord;
   private selectedIndex?: number;
   private selectedKey?: string;
+  private selectedLabelResidencyEnabled = true;
+  private selectedLabelLease?: CoverSnapshotLease<THREE.CanvasTexture>;
+  private labelGeneration = 0;
+  private labelSamplingSignature = "";
   private selectedBadgeKind: RhineSourceBadge;
   private labelMarkImage?: HTMLImageElement;
   private hiResImage?: HTMLImageElement;
@@ -266,6 +278,7 @@ export class CaseAlbumInfo {
     this.arrayBadge.name = "Rhine album badge atlas";
     this.selectedLabel.name = "Selected Rhine album label";
     this.selectedBadge.name = "Selected Rhine album badge";
+    this.selectedLabel.onBeforeRender = () => this.syncCachedLabelSampling();
 
     this.selectedBadgeKind = undefined;
     this.tagMesh(this.arrayLabel, "label", false);
@@ -566,14 +579,92 @@ export class CaseAlbumInfo {
     this.arrayBadge.userData.badgeType = this.badgeTypes;
   }
 
+  private activeSelectedLabelTexture(): THREE.CanvasTexture {
+    return (this.selectedLabelMaterial.map as THREE.CanvasTexture | null) ?? this.selectedTexture;
+  }
+
+  private labelTextureKey(index: number | undefined): string {
+    return JSON.stringify([this.structure, this.labelGeneration, formatLabelNumber(index)]);
+  }
+
+  private copyLabelSampling(source: THREE.Texture, target: THREE.Texture): void {
+    const changed = target.anisotropy !== source.anisotropy || target.minFilter !== source.minFilter ||
+      target.magFilter !== source.magFilter || target.wrapS !== source.wrapS || target.wrapT !== source.wrapT ||
+      target.generateMipmaps !== source.generateMipmaps || target.flipY !== source.flipY || target.colorSpace !== source.colorSpace;
+    if (!changed) return;
+    target.anisotropy = source.anisotropy;
+    target.minFilter = source.minFilter;
+    target.magFilter = source.magFilter;
+    target.wrapS = source.wrapS;
+    target.wrapT = source.wrapT;
+    target.generateMipmaps = source.generateMipmaps;
+    target.flipY = source.flipY;
+    target.colorSpace = source.colorSpace;
+    target.needsUpdate = true;
+  }
+
+  private syncCachedLabelSampling(): void {
+    const source = this.activeSelectedLabelTexture();
+    const signature = JSON.stringify([
+      source.anisotropy, source.minFilter, source.magFilter, source.wrapS, source.wrapT,
+      source.generateMipmaps, source.flipY, source.colorSpace,
+    ]);
+    if (signature === this.labelSamplingSignature) return;
+    this.labelSamplingSignature = signature;
+    for (const texture of this.residentLabelTextures)
+      if (texture !== source) this.copyLabelSampling(source, texture);
+  }
+
+  private createResidentLabelTexture(index: number | undefined): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = LABEL_WIDTH;
+    canvas.height = this.labelCanvasHeight;
+    paintArchiveLabel(canvas, index, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
+    const texture = new THREE.CanvasTexture(canvas);
+    configureCanvasTexture(texture, this.anisotropy);
+    this.copyLabelSampling(this.activeSelectedLabelTexture(), texture);
+    this.residentLabelTextures.add(texture);
+    return texture;
+  }
+
+  private paintPrivateSelectedLabel(index: number | undefined): void {
+    this.copyLabelSampling(this.activeSelectedLabelTexture(), this.selectedTexture);
+    paintArchiveLabel(this.selectedCanvas, index, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
+    this.selectedTexture.needsUpdate = true;
+    this.selectedLabelMaterial.map = this.selectedTexture;
+    this.selectedLabel.userData.rhineInfoOwnedTexture = false;
+  }
+
   private paintSelected(force = false): void {
     const badge = this.structure === "rhine" ? rhineSourceBadge(this.selectedRecord?.album) : undefined;
     const key = this.keyFor(this.selectedRecord, this.selectedIndex, badge);
-    if (!force && this.selectedKey === key) return;
+    const residencyEnabled = this.labelResidencyEnabled;
+    const updateLabel = force || this.selectedKey !== key || this.selectedLabelResidencyEnabled !== residencyEnabled;
     this.selectedKey = key;
     this.selectedBadgeKind = badge;
-    paintArchiveLabel(this.selectedCanvas, this.selectedIndex, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
-    this.selectedTexture.needsUpdate = true;
+    if (updateLabel) {
+      // Capture sampling-quality changes made by the scene before switching
+      // away from the currently active map.
+      this.syncCachedLabelSampling();
+      this.selectedLabelLease?.release();
+      this.selectedLabelLease = undefined;
+      this.selectedLabelResidencyEnabled = residencyEnabled;
+      if (residencyEnabled) {
+        const lease = this.snapshotLabelTextures.acquire(
+          this.labelTextureKey(this.selectedIndex),
+          () => this.createResidentLabelTexture(this.selectedIndex),
+        );
+        if (lease) {
+          this.selectedLabelLease = lease;
+          this.selectedLabelMaterial.map = lease.value;
+          this.selectedLabel.userData.rhineInfoOwnedTexture = false;
+        } else {
+          this.paintPrivateSelectedLabel(this.selectedIndex);
+        }
+      } else {
+        this.paintPrivateSelectedLabel(this.selectedIndex);
+      }
+    }
     const kind = badgeType(badge);
     this.selectedBadgeMaterial.uniforms.uBadgeKind.value = kind;
     this.selectedBadgeMaterial.uniformsNeedUpdate = true;
@@ -625,6 +716,7 @@ export class CaseAlbumInfo {
   /** Recompute visual keys and repaint after record metadata was edited in place. */
   refresh(): void {
     if (this.disposed) return;
+    this.labelGeneration++;
     this.labelPrints.clear();
     // Preserve the old atlas's opaque printed margins even in unused cache
     // tiles, so linear/anisotropic filtering cannot pick up transparent gaps.
@@ -711,15 +803,35 @@ export class CaseAlbumInfo {
       if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh ||
         object.userData.rhineAlbumInfo !== true) return;
       if (object.userData.role === "label") {
-        const canvas = copyCanvas(this.selectedCanvas, LABEL_WIDTH, this.labelCanvasHeight);
-        const texture = new THREE.CanvasTexture(canvas);
-        configureCanvasTexture(texture, this.anisotropy);
-        const material = this.createLabelMaterial(texture, false);
-        material.userData.rhineInfoOwnedTexture = true;
+        const lease = this.selectedLabelLease
+          ? this.snapshotLabelTextures.retain(this.selectedLabelLease.entry)
+          : undefined;
+        const activeTexture = this.activeSelectedLabelTexture();
+        let material: THREE.MeshBasicMaterial;
+        if (lease) {
+          material = this.createLabelMaterial(lease.value, false);
+          material.userData.rhineInfoOwnedTexture = false;
+          object.userData.rhineInfoOwnedTexture = false;
+          let released = false;
+          object.userData.releaseRhineInfoTexture = () => {
+            if (released) return;
+            released = true;
+            lease.release();
+          };
+        } else {
+          const image = (activeTexture.image as HTMLCanvasElement | undefined) ?? this.selectedCanvas;
+          const canvas = copyCanvas(image, LABEL_WIDTH, this.labelCanvasHeight);
+          const texture = new THREE.CanvasTexture(canvas);
+          configureCanvasTexture(texture, this.anisotropy);
+          this.copyLabelSampling(activeTexture, texture);
+          material = this.createLabelMaterial(texture, false);
+          material.userData.rhineInfoOwnedTexture = true;
+          object.userData.rhineInfoOwnedTexture = true;
+          delete object.userData.releaseRhineInfoTexture;
+        }
         material.visible = this.selectedLabel.material.visible;
         object.material = material;
         object.visible = this.visible;
-        object.userData.rhineInfoOwnedTexture = true;
       } else if (object.userData.role === "badge") {
         const kind = Number(object.userData.badgeType ?? this.selectedBadgeMaterial.uniforms.uBadgeKind.value) || 0;
         const material = this.createBadgeMaterial(kind, false);
@@ -748,6 +860,9 @@ export class CaseAlbumInfo {
     this.selectedLabelMaterial.dispose();
     this.selectedBadgeMaterial.dispose();
     for (const texture of this.arrayLabelTextures) texture.dispose();
+    this.selectedLabelLease?.release();
+    this.selectedLabelLease = undefined;
+    this.snapshotLabelTextures.clear();
     this.selectedTexture.dispose();
     this.badgeAtlasTexture.dispose();
   }

@@ -265,7 +265,14 @@ export class CardAppearance {
       const mesh = child as THREE.Mesh;
       const mat = mesh.material as THREE.MeshBasicMaterial;
       if (mesh.userData.rhineAlbumInfo) {
-        if (mesh.userData.rhineInfoOwnedTexture) mat.map?.dispose();
+        let managed = mesh.userData.rhineInfoTextureManaged === true;
+        const release = mesh.userData.releaseRhineInfoTexture;
+        if (typeof release === "function") {
+          managed = mesh.userData.rhineInfoTextureManaged = true;
+          delete mesh.userData.releaseRhineInfoTexture;
+          release();
+        }
+        if (mesh.userData.rhineInfoOwnedTexture && !managed) mat.map?.dispose();
         mat.dispose();
         continue;
       }
