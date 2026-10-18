@@ -66,6 +66,7 @@ import { MusicLayoutTransition, shelfEntryFrame, shelfEntryCamera, shelfEntryPos
 import { shelfAssemblySlot, type ShelfSlotFrame } from "./music-shelf-deployment";
 import { MusicMatrixDrag } from "./music-matrix-drag";
 import { MusicInstanceDrawList } from "./music-instance-draw-list";
+import { MusicPartDrawSlots } from "./music-part-draw-slots";
 import { MusicInstanceTransforms } from "./music-instance-transforms";
 import { MusicFrameViewport } from "./music-frame-viewport";
 import { MusicInstanceShadows } from "./music-instance-shadows";
@@ -109,6 +110,7 @@ export class ArchiveScene {
   private ao: SSAOPass;
   private bokeh: MusicSharedDepthBokehPass;
   private readonly instanceDrawList = new MusicInstanceDrawList();
+  private readonly partDrawSlots = new MusicPartDrawSlots();
   private readonly instanceTransforms = new MusicInstanceTransforms();
   private readonly frameViewport = new MusicFrameViewport();
   private readonly instanceShadows = new MusicInstanceShadows();
@@ -2905,7 +2907,10 @@ export class ArchiveScene {
     this.lastShadowDrawCount = this.instanceDrawList.enabled ? shadowSlots.length : this.instances[0]?.count ?? 0;
     // Picking and atlas ownership keep their logical slot numbers. Only the
     // buffers used for these render passes are packed, then restored together.
-    const render = () => this.instanceDrawList.render(meshes, slots, () => this.composer.render());
+    const cullParts = separateShadows && !this.shelfView && !this.displayLayout.grid;
+    if (cullParts) this.partDrawSlots.beginFrame(meshes, slots, this.drawFrustum);
+    const render = () => this.instanceDrawList.render(meshes,
+      cullParts ? this.partDrawSlots.forMesh : slots, () => this.composer.render());
     if (separateShadows && this.renderer.shadowMap.enabled)
       this.instanceShadows.render(this.renderer, this.scene, meshes, shadowSlots, render);
     else render();

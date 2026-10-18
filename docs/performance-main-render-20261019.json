@@ -1833,6 +1833,430 @@
       "runReference": "run-after-1792354073871-45944",
       "measurementOk": false,
       "error": "Error: Incremental program settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792354073871-45944/electron-app/check-archive-motion.mjs:364:103)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792354073871-45944\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 8,
+      "status": "diagnosis-only; prototype failed initialization",
+      "change": "OffscreenCanvas worker with complete ArchiveScene and full effects",
+      "runReference": "run-worker-1792356567879",
+      "error": "Uncaught TypeError: Cannot read properties of undefined (reading isReady); GL_INVALID_VALUE glGetProgramiv during initialization",
+      "measurementOk": false,
+      "validFpsSamples": 0,
+      "conclusion": "Prototype coordinator/renderer program lifecycle remains unresolved; does not establish Worker performance or hardware limitation",
+      "productionChanged": false
+    },
+    {
+      "number": 9,
+      "status": "rejected",
+      "change": "Opaque instance triangle-index cache order: ARRAY regression and max pixel error 5; reverted",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 63.77102686417273,
+          "meanMs": 15.681102362204724,
+          "frames": 381
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 64.37373551590954,
+          "meanMs": 15.534285714285707,
+          "frames": 385
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 63.44753890335926,
+          "meanMs": 15.761052631578979,
+          "frames": 380
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 49.31644720288518,
+          "meanMs": 20.277210884353742,
+          "frames": 294
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 8.84130658436214e-7,
+          "changedPercent": 0.00024112654320987653,
+          "overOnePercent": 0,
+          "feature": "vertex"
+        },
+        "day-array": {
+          "ok": false,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 5,
+          "meanChannelError": 0.000008720743312757202,
+          "changedPercent": 0.0008559992283950617,
+          "overOnePercent": 0.00024112654320987653,
+          "feature": "vertex"
+        }
+      },
+      "runReference": "run-after-1792355855652-45664",
+      "measurementOk": false,
+      "error": "Error: Feature pixel regression {\"ok\":false,\"width\":3840,\"height\":2160,\"maxChannelError\":5,\"meanChannelError\":0.000008720743312757202,\"changedPercent\":0.0008559992283950617,\"overOnePercent\":0.00024112654320987653,\"feature\":\"vertex\"}\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792355855652-45664/electron-app/check-archive-motion.mjs:292:254)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792355855652-45664\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 10,
+      "status": "retained; MATRIX only",
+      "change": "Conservative per-part visible slot lists for stable MATRIX; original shadow list preserved; ARRAY original path",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 63.81802649871855,
+          "meanMs": 15.669553805774294,
+          "frames": 381,
+          "featureStats": {
+            "wholeBoxInstances": 3335,
+            "submittedInstances": 3335,
+            "wholeBoxTriangles": 14223920,
+            "submittedTriangles": 14223920
+          }
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 66.86391521655555,
+          "meanMs": 14.95574999999999,
+          "frames": 400,
+          "featureStats": {
+            "wholeBoxInstances": 3312,
+            "submittedInstances": 2577,
+            "wholeBoxTriangles": 14125824,
+            "submittedTriangles": 8565032
+          }
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 62.68072943654206,
+          "meanMs": 15.95386666666666,
+          "frames": 375,
+          "featureStats": {
+            "wholeBoxInstances": 3312,
+            "submittedInstances": 3312,
+            "wholeBoxTriangles": 14125824,
+            "submittedTriangles": 14125824
+          }
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 65.82244645661412,
+          "meanMs": 15.192385786802001,
+          "frames": 394,
+          "featureStats": {
+            "wholeBoxInstances": 3266,
+            "submittedInstances": 2577,
+            "wholeBoxTriangles": 13929632,
+            "submittedTriangles": 8527676
+          }
+        }
+      ],
+      "comparisonScope": "One valid 6-second per-mode A/B sample before restricting to MATRIX-only; identical MATRIX algorithm; final combined 3-repeat test pending",
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "parts"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "parts"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "parts"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "parts"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 4,
+              "changedPercent": 0.0005907600308641976,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.00000277295524691358
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 2,
+              "changedPercent": 0.0005425347222222222,
+              "overOnePercent": 0.000012056327160493828,
+              "mean": 0.0000020897633744855966
+            },
+            "roundTripDifference": {
+              "max": 2,
+              "changedPercent": 0.0005425347222222222,
+              "overOnePercent": 0.000012056327160493828,
+              "mean": 0.0000020897633744855966
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 5,
+              "changedPercent": 0.0013020833333333335,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.0000051440329218107
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 4,
+              "changedPercent": 0.0008318865740740741,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.000003576710390946502
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2402,
+        "visibleResourceChecks": 12698,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "selectionTransaction": {
+        "ok": true,
+        "initial": "fixture-album-01",
+        "expectedForward": "fixture-album-06",
+        "expectedReverse": "fixture-album-04",
+        "startCell": {
+          "lane": 0,
+          "row": 12,
+          "foobarEntryKey": "fixture-album-01"
+        },
+        "forward": {
+          "app": "fixture-album-06",
+          "scene": "fixture-album-06"
+        },
+        "opened": {
+          "app": "fixture-album-04",
+          "scene": "fixture-album-04",
+          "hasTrack": true,
+          "title": "现场精选 第04辑"
+        },
+        "returned": true
+      },
+      "runReference": "run-after-1792356098907-15644",
+      "qaRunReference": "run-after-1792356798596-10504",
+      "measurementOk": true,
+      "targetReached": false,
+      "limitations": "Initial ARRAY implementation had sparse settings pixel changes and no reliable gain; ARRAY path reverted. GPU triangle figures are submission estimates, not hardware counters."
     }
   ],
   "limitations": [
