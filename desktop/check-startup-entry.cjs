@@ -218,14 +218,15 @@ async function runLauncher() {
   const manualGpuMode = graphicsOnlyMode && process.argv.includes('--gpu-manual');
   const themeFollowMode = process.argv.includes('--theme-follow') || graphicsOnlyMode;
   const caseGlassMode = process.argv.includes('--case-glass');
+  const punkCaseDisplayMode = process.argv.includes('--punk-case-display');
   const futurePanelsMode = process.argv.includes('--future-panels');
   const futureEntryMode = process.argv.includes('--future-entry');
   const archiveMotionMode = process.argv.includes('--archive-motion');
   const expectedSyntheticAlbumCount = archiveMotionMode ? 45 : 36;
-  const syntheticFixtureMode = futurePanelsMode || futureEntryMode || caseGlassMode || archiveMotionMode;
-  if ([themeFollowMode, futurePanelsMode, futureEntryMode, caseGlassMode, archiveMotionMode].filter(Boolean).length > 1)
+  const syntheticFixtureMode = futurePanelsMode || futureEntryMode || caseGlassMode || archiveMotionMode || punkCaseDisplayMode;
+  if ([themeFollowMode, futurePanelsMode, futureEntryMode, caseGlassMode, archiveMotionMode, punkCaseDisplayMode].filter(Boolean).length > 1)
     throw new Error('Choose one isolated checker mode per Electron process.');
-  const toolRoot = path.join(projectRoot, '.tools', archiveMotionMode ? 'archive-motion-2026-10-18' : graphicsOnlyMode ? 'graphics-2026-10-17' : caseGlassMode ? 'case-glass-2026-10-17' : futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
+  const toolRoot = path.join(projectRoot, '.tools', punkCaseDisplayMode ? 'punk-case-display-2026-10-18' : archiveMotionMode ? 'archive-motion-2026-10-18' : graphicsOnlyMode ? 'graphics-2026-10-17' : caseGlassMode ? 'case-glass-2026-10-17' : futureEntryMode ? 'future-entry-2026-10-17' : futurePanelsMode ? 'future-panels-2026-10-17' : themeFollowMode ? 'theme-follow-2026-10-17' : 'startup-recovery-2026-10-17');
   const electronPath = path.join(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
   const distDirectory = path.join(projectRoot, '.tools', 'source-preview-interface');
   const runDirectory = path.join(toolRoot, `desktop-entry-${Date.now()}-${process.pid}`);
@@ -255,7 +256,7 @@ async function runLauncher() {
 
   const report = {
     ok: false,
-    mode: archiveMotionMode ? 'production-electron-archive-motion' : caseGlassMode ? 'production-electron-case-glass' : graphicsOnlyMode ? 'production-electron-graphics' : futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
+    mode: punkCaseDisplayMode ? 'production-electron-punk-case-display' : archiveMotionMode ? 'production-electron-archive-motion' : caseGlassMode ? 'production-electron-case-glass' : graphicsOnlyMode ? 'production-electron-graphics' : futureEntryMode ? 'production-electron-future-entry' : futurePanelsMode ? 'production-electron-future-panels' : themeFollowMode ? 'production-electron-theme-follow' : 'production-hidden-gate-full-electron-entry',
     projectRoot,
     electronPath,
     distDirectory,
@@ -402,14 +403,18 @@ async function runLauncher() {
         volume: 0,
         reduced: false,
         output: { backend: 'browser' },
-        ...(futureEntryMode || caseGlassMode || archiveMotionMode ? {
+        ...(futureEntryMode || caseGlassMode || archiveMotionMode || punkCaseDisplayMode ? {
           entryOnOpen: futureEntryMode,
-          style: { design: 'rhine' },
-          view: { layout: archiveMotionMode ? 'shelf' : 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
+          style: punkCaseDisplayMode ? { design: 'archive', scheme: 'archive', topTitles: false } : { design: 'rhine' },
+          view: { layout: archiveMotionMode || punkCaseDisplayMode ? 'shelf' : 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
           ...(archiveMotionMode ? { caseProfiles: { rhine: { version:1, enabled:true, structure:'rhine' } } } : {}),
+          ...(punkCaseDisplayMode ? { caseProfiles: {
+            archive: { version:1, enabled:true, structure:'punk' },
+            rhine: { version:1, enabled:true, structure:'punk' },
+          } } : {}),
         } : {}),
       },
-      reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode && !caseGlassMode && !archiveMotionMode,
+      reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode && !caseGlassMode && !archiveMotionMode && !punkCaseDisplayMode,
       themeFollow: themeFollowMode,
       graphicsOnly: graphicsOnlyMode,
       gpuStartupPreferenceFile: path.join(runDirectory, 'startup-gpu-preferences.json'),
@@ -417,6 +422,7 @@ async function runLauncher() {
       futureEntry: futureEntryMode,
       caseGlass: caseGlassMode,
       archiveMotion: archiveMotionMode,
+      punkCaseDisplay: punkCaseDisplayMode,
       syntheticPanelAlbumCount: syntheticPanelLibrary?.albums.length ?? 0,
       syntheticPanelGenreCounts: syntheticPanelLibrary?.genres.map(genre => genre.albumCount) ?? [],
       archiveMotionLongGroupProbeAlbumId: archiveMotionMode
@@ -436,6 +442,17 @@ async function runLauncher() {
       } : null,
       archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 45 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
       caseGlassFixtureHiRes: !caseGlassMode || (syntheticPanelLibrary?.albums[0]?.tracks.length > 0 && syntheticPanelLibrary.albums[0].tracks.every(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
+      punkCaseDisplayInitialFixture: !punkCaseDisplayMode || {
+        albumCount: initialLibrary.albums.length,
+        roots: initialLibrary.roots.length,
+        entryOnOpen: false,
+        design: 'archive',
+        scheme: 'archive',
+        legacyTopTitles: false,
+        layout: 'shelf',
+        archiveStructure: 'punk',
+        futureStructure: 'punk',
+      },
       runDirectory,
     };
     if (manualGpuMode) {
@@ -470,6 +487,9 @@ async function runLauncher() {
     if (archiveMotionMode) {
       await fs.copyFile(path.join(projectRoot, 'desktop', 'check-archive-motion.mjs'), path.join(appDirectory, 'check-archive-motion.mjs'));
     }
+    if (punkCaseDisplayMode) {
+      await fs.copyFile(path.join(projectRoot, 'desktop', 'check-punk-case-display.mjs'), path.join(appDirectory, 'check-punk-case-display.mjs'));
+    }
     await fs.writeFile(path.join(appDirectory, 'package.json'), `${JSON.stringify({
       name: 'rhine-isolated-startup-entry-probe',
       version: '1.0.0',
@@ -479,7 +499,7 @@ async function runLauncher() {
     const environment = { ...process.env, RHINE_STARTUP_PROBE_CONFIG: configPath };
     delete environment.ELECTRON_RUN_AS_NODE;
     childResult = await new Promise((resolve, reject) => {
-      const child = spawn(electronPath, [appDirectory, ...((futureEntryMode || themeFollowMode || caseGlassMode || archiveMotionMode) ? ['--capture-probe'] : [])], {
+      const child = spawn(electronPath, [appDirectory, ...((futureEntryMode || themeFollowMode || caseGlassMode || archiveMotionMode || punkCaseDisplayMode) ? ['--capture-probe'] : [])], {
         cwd: projectRoot,
         env: environment,
         // Match launch-source-preview.mjs: SW_HIDE at process creation can
@@ -491,10 +511,10 @@ async function runLauncher() {
       let stderr = '';
       // Entry covers the cinematic, text edits and both themes. Theme-follow
       // covers palette/layout cases and reload. Keep watchdogs mode-specific.
-      const timeout = setTimeout(() => child.kill(), archiveMotionMode ? 300000 : futureEntryMode || caseGlassMode ? 210000 : themeFollowMode ? 150000 : 90000);
+      const timeout = setTimeout(() => child.kill(), archiveMotionMode ? 300000 : punkCaseDisplayMode ? 165000 : futureEntryMode || caseGlassMode ? 210000 : themeFollowMode ? 150000 : 90000);
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
-      child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); if (caseGlassMode || archiveMotionMode) process.stdout.write(chunk); });
+      child.stdout.on('data', chunk => { stdout = (stdout + chunk).slice(-12000); if (caseGlassMode || archiveMotionMode || punkCaseDisplayMode) process.stdout.write(chunk); });
       child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-12000); });
       child.once('error', error => { clearTimeout(timeout); reject(error); });
       child.once('close', (code, signal) => { clearTimeout(timeout); resolve({ code, signal, stdout, stderr }); });
@@ -525,6 +545,7 @@ async function runLauncher() {
       syntheticFutureEntryFixture: futureEntryMode,
       syntheticCaseGlassFixture: caseGlassMode,
       syntheticArchiveMotionFixture: archiveMotionMode,
+      syntheticPunkCaseDisplayFixture: punkCaseDisplayMode,
       genres: syntheticPanelLibrary?.genres.map(genre => ({ id: genre.id, albumCount: genre.albumCount })) ?? [],
       caseGlassHiResAlbum: caseGlassMode ? { trackCount: initialLibrary.albums[0]?.tracks.length ?? 0, hiResTrackCount: initialLibrary.albums[0]?.tracks.filter(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24).length } : null,
     };
@@ -552,6 +573,11 @@ async function runLauncher() {
       archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 45 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
       archiveMotionSyntheticHiResMetadata: !archiveMotionMode || config.archiveMotionFixtureHiRes?.albumId === 'fixture-album-01' &&
         config.archiveMotionFixtureHiRes?.trackCount === 3 && config.archiveMotionFixtureHiRes?.qualifyingTrackCount === 3,
+      punkCaseDisplayFixtureIsIsolated: !punkCaseDisplayMode || config.punkCaseDisplayInitialFixture?.albumCount === 36 &&
+        config.punkCaseDisplayInitialFixture?.roots === 0 && config.punkCaseDisplayInitialFixture?.entryOnOpen === false &&
+        config.punkCaseDisplayInitialFixture?.design === 'archive' && config.punkCaseDisplayInitialFixture?.scheme === 'archive' &&
+        config.punkCaseDisplayInitialFixture?.legacyTopTitles === false && config.punkCaseDisplayInitialFixture?.layout === 'shelf' &&
+        config.punkCaseDisplayInitialFixture?.archiveStructure === 'punk' && config.punkCaseDisplayInitialFixture?.futureStructure === 'punk',
     };
     report.ok = report.isolationChecks.electronChildExitedCleanly
       && report.isolationChecks.electronReportWritten
@@ -586,6 +612,7 @@ async function runLauncher() {
       futurePanels: report.electron?.futurePanels?.summary ?? null,
       futureEntry: report.electron?.futureEntry?.summary ?? null,
       caseGlass: report.electron?.caseGlass?.summary ?? null,
+      punkCaseDisplay: report.electron?.punkCaseDisplay?.summary ?? null,
       archiveMotion: report.electron?.archiveMotion?.summary ?? null,
       graphics: report.electron?.graphics ? { cases: report.electron.graphics.cases.length, screenshots: report.electron.graphics.screenshots.length } : null,
       loadingBackgroundThrottling: report.electron?.throttlingMilestones?.find(item => item.name === 'attached')?.effective ?? null,
@@ -651,6 +678,7 @@ async function runElectronProbe() {
   let futureEntryModule;
   let caseGlassModule;
   let archiveMotionModule;
+  let punkCaseDisplayModule;
   let mockPreferences;
   let selectPreferencesForMock;
   let currentStartedAt = 0;
@@ -836,7 +864,8 @@ async function runElectronProbe() {
     report.syntheticArchiveMotionFixtureCatalog = config.archiveMotion ? config.archiveMotionFixtureCatalog : null;
     report.syntheticArchiveMotionFixtureHiRes = config.archiveMotion ? config.archiveMotionFixtureHiRes : null;
     report.archiveMotionUsesOnlyPngCovers = config.archiveMotionUsesOnlyPngCovers === true;
-    if (config.archiveMotion) report.mode = 'real-electron-archive-motion';
+    if (config.punkCaseDisplay) report.mode = 'real-electron-punk-case-display';
+    else if (config.archiveMotion) report.mode = 'real-electron-archive-motion';
     else if (config.caseGlass) report.mode = 'real-electron-case-glass';
     else if (config.graphicsOnly) report.mode = 'real-electron-graphics';
     else if (config.futureEntry) report.mode = 'real-electron-future-entry';
@@ -851,18 +880,30 @@ async function runElectronProbe() {
     mockPreferences = { ...config.preferences };
     const source = await fs.readFile(path.join(config.projectRoot, 'desktop', 'main.cjs'), 'utf8');
     selectPreferencesForMock = value => value;
-    if (config.themeFollow || config.futureEntry || config.caseGlass || config.archiveMotion) {
+    if (config.themeFollow || config.futureEntry || config.caseGlass || config.archiveMotion || config.punkCaseDisplay) {
       const keysMatch = source.match(/const preferenceKeys=new Set\((\[[\s\S]*?\])\);/);
       const selectMatch = source.match(/const selectPreferences=value=>\{[\s\S]*?\n\};/);
       if (!keysMatch || !selectMatch) throw new Error('Could not extract production preference whitelist and selectPreferences function.');
       const keys = new Set(new Function(`return ${keysMatch[1]};`)());
-      const entryPreferencesModel = config.futureEntry || config.caseGlass || config.archiveMotion
+      const entryPreferencesModel = config.futureEntry || config.caseGlass || config.archiveMotion || config.punkCaseDisplay
         ? await import(pathToFileURL(path.join(config.projectRoot, 'src', 'entry-preferences.mjs')).href)
         : null;
       const gpuSelectionModel = require(path.join(config.projectRoot, 'desktop', 'gpu-selection.cjs'));
       selectPreferencesForMock = new Function('preferenceKeys', 'windowAspectModel', 'entryPreferencesModel', 'gpuSelectionModel', `${selectMatch[0]}\nreturn selectPreferences;`)(keys, null, entryPreferencesModel, gpuSelectionModel);
       if (config.themeFollow) report.productionPreferenceWhitelistHasFollowSystemTheme = keys.has('followSystemTheme');
       if (config.caseGlass) report.productionPreferenceWhitelistHasCaseProfiles = keys.has('caseProfiles');
+      if (config.punkCaseDisplay) {
+        report.productionPreferenceWhitelistHasCaseProfiles = keys.has('caseProfiles');
+        report.punkCaseDisplayInitialPreferences = {
+          entryOnOpen: config.preferences.entryOnOpen,
+          design: config.preferences.style?.design,
+          scheme: config.preferences.style?.scheme,
+          topTitles: config.preferences.style?.topTitles,
+          layout: config.preferences.view?.layout,
+          archiveStructure: config.preferences.caseProfiles?.archive?.structure,
+          futureStructure: config.preferences.caseProfiles?.rhine?.structure,
+        };
+      }
       if (config.archiveMotion) {
         report.productionPreferenceWhitelistHasEntryOnOpen = keys.has('entryOnOpen');
         report.productionPreferenceWhitelistHasEntryWelcome = keys.has('entryWelcome');
@@ -897,7 +938,7 @@ async function runElectronProbe() {
       },
     });
     ipcMain.on('rhine:preferences:get', event => {
-      const value = config.themeFollow || config.futureEntry || config.caseGlass || config.archiveMotion ? mockPreferences : config.preferences;
+      const value = config.themeFollow || config.futureEntry || config.caseGlass || config.archiveMotion || config.punkCaseDisplay ? mockPreferences : config.preferences;
       if (config.themeFollow) report.preferenceReads.push({ theme: value.theme, followSystemTheme: value.followSystemTheme, keys: Object.keys(value).length });
       event.returnValue = value;
     });
@@ -905,7 +946,7 @@ async function runElectronProbe() {
       event.returnValue = { ok: true, exists: false, value: { schemaVersion: 1, activeId: null, presets: [], eqBanks: {} } };
     });
     ipcMain.handle('rhine:preferences:save', async (_event, value) => {
-      if (!config.themeFollow && !config.futureEntry && !config.caseGlass && !config.archiveMotion) return { ok: true };
+      if (!config.themeFollow && !config.futureEntry && !config.caseGlass && !config.archiveMotion && !config.punkCaseDisplay) return { ok: true };
       try {
         mockPreferences = { ...selectPreferencesForMock(value), gpuPreference: mockPreferences.gpuPreference ?? 'auto' };
         report.preferenceSaves.push({
@@ -919,9 +960,10 @@ async function runElectronProbe() {
           allowedEntryWelcome: Object.hasOwn(mockPreferences, 'entryWelcome'),
           entryIdentity: mockPreferences.entryIdentity,
           allowedEntryIdentity: Object.hasOwn(mockPreferences, 'entryIdentity'),
-          ...(config.caseGlass ? {
+          ...(config.caseGlass || config.punkCaseDisplay ? {
             style: structuredClone(mockPreferences.style),
             caseProfiles: mockPreferences.caseProfiles ? structuredClone(mockPreferences.caseProfiles) : null,
+            view: structuredClone(mockPreferences.view),
           } : {}),
         });
         return { ok: true };
@@ -1222,6 +1264,20 @@ async function runElectronProbe() {
         throw error;
       }
     }
+    if (firstResult.ready && config.punkCaseDisplay) {
+      punkCaseDisplayModule = await import(pathToFileURL(path.join(__dirname, 'check-punk-case-display.mjs')).href);
+      try {
+        report.punkCaseDisplay = await punkCaseDisplayModule.checkPunkCaseDisplay({
+          browserWindow,
+          outputDirectory: config.runDirectory,
+          probeReport: report,
+          getPreferences: () => structuredClone(mockPreferences),
+        });
+      } catch (error) {
+        report.punkCaseDisplay = error.punkCaseDisplayResult ?? { ok: false, error: String(error?.stack ?? error) };
+        throw error;
+      }
+    }
 
     report.finishedAtMs = Date.now() - currentStartedAt;
     report.finalRendererState = await captureState();
@@ -1272,6 +1328,7 @@ async function runElectronProbe() {
       productionWhitelistRetainsFollowSystemTheme: !config.themeFollow || report.productionPreferenceWhitelistHasFollowSystemTheme === true,
       productionWhitelistRetainsEntryOnOpen: !config.futureEntry || report.productionPreferenceWhitelistHasEntryOnOpen === true,
       productionWhitelistRetainsCaseProfiles: !config.caseGlass || report.productionPreferenceWhitelistHasCaseProfiles === true,
+      punkCaseDisplayProductionWhitelistRetainsCaseProfiles: !config.punkCaseDisplay || report.productionPreferenceWhitelistHasCaseProfiles === true,
       productionPreferenceSelectorSavedEntryOnOpenFalse: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === false && item.allowedEntryOnOpen),
       productionPreferenceSelectorSavedEntryOnOpenTrue: !config.futureEntry || report.preferenceSaves.some(item => item.entryOnOpen === true && item.allowedEntryOnOpen),
       archiveMotionProductionWhitelistRetainsEntryPreferences: !config.archiveMotion || report.productionPreferenceWhitelistHasEntryOnOpen === true && report.productionPreferenceWhitelistHasEntryWelcome === true && report.productionPreferenceWhitelistHasEntryIdentity === true,
@@ -1282,11 +1339,16 @@ async function runElectronProbe() {
       futureEntryBehaviorPassed: !config.futureEntry || report.futureEntry?.ok === true,
       caseGlassBehaviorPassed: !config.caseGlass || report.caseGlass?.ok === true,
       archiveMotionBehaviorPassed: !config.archiveMotion || report.archiveMotion?.ok === true,
+      punkCaseDisplayBehaviorPassed: !config.punkCaseDisplay || report.punkCaseDisplay?.ok === true,
+      punkCaseDisplayStartsWithRequestedFixture: !config.punkCaseDisplay || report.punkCaseDisplayInitialPreferences?.entryOnOpen === false &&
+        report.punkCaseDisplayInitialPreferences?.design === 'archive' && report.punkCaseDisplayInitialPreferences?.scheme === 'archive' &&
+        report.punkCaseDisplayInitialPreferences?.layout === 'shelf' && report.punkCaseDisplayInitialPreferences?.archiveStructure === 'punk' &&
+        report.punkCaseDisplayInitialPreferences?.futureStructure === 'punk',
       caseGlassSyntheticHiResFixture: !config.caseGlass || config.caseGlassFixtureHiRes === true,
       archiveMotionSyntheticPngCovers: !config.archiveMotion || config.archiveMotionUsesOnlyPngCovers === true,
     };
   } catch (error) {
-    report.startupOutcome = config?.archiveMotion ? 'archive-motion-probe-error' : config?.caseGlass ? 'case-glass-probe-error' : config?.graphicsOnly ? 'graphics-probe-error' : config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
+    report.startupOutcome = config?.punkCaseDisplay ? 'punk-case-display-probe-error' : config?.archiveMotion ? 'archive-motion-probe-error' : config?.caseGlass ? 'case-glass-probe-error' : config?.graphicsOnly ? 'graphics-probe-error' : config?.futureEntry ? 'future-entry-probe-error' : config?.themeFollow ? 'theme-follow-probe-error' : report.startupOutcome === 'pending' ? 'probe-error' : report.startupOutcome;
     report.failureRendererState = await captureState();
     report.failureWindowState = browserWindow && !browserWindow.isDestroyed() ? { fullscreen: browserWindow.isFullScreen(), fullscreenable: browserWindow.isFullScreenable(), visible: browserWindow.isVisible(), bounds: browserWindow.getBounds() } : null;
     report.mainErrors.push({ type: 'probe-error', message: String(error?.stack ?? error).slice(0, 3000) });

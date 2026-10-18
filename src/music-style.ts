@@ -554,7 +554,7 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", follo
             <div class="foobar-display-card"><small>ARRAY</small>${selectMarkup("arrayScale", style.arrayScale, arrayOptions, t("唱片阵列尺寸", "Array size"))}</div>
             <div class="foobar-display-card"><small>INSPECT</small>${selectMarkup("inspectScale", style.inspectScale, inspectOptions, t("细看尺寸", "Inspection size"))}</div>
             <div class="foobar-display-card"><small>FLOOR</small>${selectMarkup("floor", style.floor, [["plain", t("素色地面", "Plain floor")], ["deck", t("实验台", "Lab deck")], ["real", t("木质桌面", "Wood surface")]], t("场景地面", "Scene floor"))}</div>
-            <div class="foobar-display-card foobar-display-details"><small>${escapeHtml(t("外观细节", "APPEARANCE DETAILS"))}</small>${switchMarkup("topTitles", style.topTitles, t("顶部显示专辑名", "Show album titles on top"))}${switchMarkup("grain", style.grain, t("细颗粒质感", "Fine grain"))}</div>
+            <div class="foobar-display-card foobar-display-details"><small>${escapeHtml(t("外观细节", "APPEARANCE DETAILS"))}</small>${switchMarkup("grain", style.grain, t("细颗粒质感", "Fine grain"))}</div>
           </div>
         </section>
       </div>

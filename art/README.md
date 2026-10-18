@@ -1,6 +1,6 @@
 # 当前模型与复现入口
 
-更新：2026-10-14。正常播放不需要安装Blender；运行时模型在public/assets，原PNG在src/assets/style。权限/构建见 [本地开发](../docs/LOCAL-DEVELOPMENT.md)，精度/差异见 [状态](../docs/PROJECT-STATUS.md)。
+更新：2026-10-18。正常播放不需要安装Blender；运行时模型在public/assets，原PNG在src/assets/style。权限/构建见 [本地开发](../docs/LOCAL-DEVELOPMENT.md)，精度/差异见 [状态](../docs/PROJECT-STATUS.md)。
 
 ## 三结构
 
@@ -24,7 +24,7 @@ Rhine右侧动态标签与格式徽标由src/archive-label.ts / rhine-album-info
 
 原始三维源/PBR未取得；用户接受按多视角重建并明确差异。源依据是src/assets/style/case下各皮肤hero-clear、inspect序列及case.json。正式脚本内置必要数据，不依赖忽略目录的审查JSON才能导出。
 
-Blender X水平、Z竖直、Y深度且负向在前。保持整面玻璃、盒内专辑、凹入右内板和前置铭牌；上下横梁包短侧柱。Three由CaseLayout统一等比归一化，不再次拉宽/压薄或重复缩放。
+Blender X水平、Z竖直、Y深度且负向在前。保持整面玻璃、盒内专辑、实体右内板和前置铭牌；上下横梁包短侧柱。前玻璃覆盖四边倒角后各余0.010，并嵌入边框0.010；玻璃厚0.028，右内板厚0.055，与玻璃后面相隔0.025。外轮廓与封面区域不变。Three由CaseLayout统一等比归一化，不再次拉宽/压薄或重复缩放。
 
 小徽记：源细线描8段Bezier，“/”支在前；optics透明软管、accent内部圆芯、emblem间断白包覆。底冠隐藏轴/开口是估算，两道接缝及底冠仍有可见差异。不能将描线误差或渲染色样称为100%网格/原PBR恢复。信号页大环是另一套资产，不随此脚本重建。
 
@@ -32,13 +32,13 @@ Blender X水平、Z竖直、Y深度且负向在前。保持整面玻璃、盒内
 
 Punk右侧实体铭牌保留原GLB几何，运行时另加完整RHINE LAB/INFO/NO/标记纸面，使用与Rhine相同的archive-label.ts绘制。原铭牌源尺寸.54×.32，统一nativeCaseLayout缩放后的.51686×.30629与GLB实测一致，不能把两者差值当成需要二次缩放的误差。新画面覆盖正面96%，字体等比居中，不拉伸；标签板变换/显隐及cover拆解同步，使用无灯光材质并写入深度。主场景模型缓存的铭牌叠加在ArchiveCaseRenderer完成，源GLB/PNG和内容哈希不变。
 
-两个主题的Punk盒体仅增加完整动态铭牌，不添加Hi-Res/DSD徽标；用户已取消环上方与刻度旁的放置方案，格式徽标仅保留在Future精细款。Punk主题不再展示旧CASE SKIN列表和原图预览，使用同一自制可调Punk模型：ARRAY生成缓存帧，FUTURE视图实时三维绘制并沿用Future机位，均保留Punk材质/配色及右侧信息区。源GLB/PNG不改。
+两个主题的Punk盒体均保留完整动态铭牌，不添加Hi-Res/DSD徽标；格式徽标仅保留在Future精细款。Punk主题不再展示旧CASE SKIN列表和原图预览，使用同一自制可调Punk模型。只有Punk主题的ARRAY在上框表面增加动态专辑显示屏，右接顶部方块，左侧强调线随配色变化；MATRIX及Future不显示。显示屏由运行时无光照平面和缓存图集构成，不写入GLB，详见[主题规则](../docs/THEME-PAGE.md)。
 
 ## 导出与缓存版本
 
 只有模型任务获准后才运行建模。复用已有Blender3.6.23，后台factory-startup会话，不保存用户偏好，不因本说明安装/升级工具。
 
-Punk导出生成GLB后自动更新src/punk-case-asset.ts，版本值为GLB SHA-256前12位；case-model引用该URL。当前 `v=f48266d5fa51`，GLB 2,069,864字节。源码清单包含GLB并核对版本，随后仍需必要界面构建和重启。
+Punk导出生成GLB后自动更新src/punk-case-asset.ts，版本值为GLB SHA-256前12位；case-model引用该URL。当前 `v=0812ed10a1b0`，GLB 2,070,552字节。源码清单包含GLB并核对版本，随后仍需必要界面构建和重启。
 
 极简盒已有music-cd-asset.ts同类机制。不要清用户缓存或手动替换模型却保留旧版本地址。
 

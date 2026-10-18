@@ -330,20 +330,8 @@ export function setCaseGlassFrost(root: THREE.Object3D, amount: number) {
   });
 }
 
-function applyTransform(
-  geometry: THREE.BufferGeometry,
-  transform: CaseTransform,
-  pivot: THREE.Vector3,
-) {
-  const base = geometryBase(geometry);
-  const key = JSON.stringify([
-    transform.offset,
-    transform.rotation,
-    transform.scale,
-    pivot.toArray(),
-  ]);
-  if (base.key === key) return;
-  base.key = key;
+/** The same local part transform also mounts attached, unlit surface graphics. */
+export function casePartTransformMatrix(transform: CaseTransform, pivot: THREE.Vector3): THREE.Matrix4 {
   const quaternion = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(
       ...(transform.rotation.map(THREE.MathUtils.degToRad) as [
@@ -372,6 +360,19 @@ function applyTransform(
       pivot.z + transform.offset[2],
     ),
   );
+  return matrix;
+}
+
+function applyTransform(
+  geometry: THREE.BufferGeometry,
+  transform: CaseTransform,
+  pivot: THREE.Vector3,
+) {
+  const base = geometryBase(geometry);
+  const key = JSON.stringify([transform.offset, transform.rotation, transform.scale, pivot.toArray()]);
+  if (base.key === key) return;
+  base.key = key;
+  const matrix = casePartTransformMatrix(transform, pivot);
   const position = geometry.getAttribute("position") as THREE.BufferAttribute;
   const point = new THREE.Vector3();
   for (let i = 0; i < base.position.count; i++) {
