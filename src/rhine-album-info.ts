@@ -7,6 +7,7 @@ import { paintArchiveLabel, rhineSourceBadge } from "./archive-label.ts";
 import { applyCaseMaterials } from "./case-materials";
 import type { CaseAppearance } from "./case-settings";
 import { albumLabelTileSizeForRows, createPaperAtlasLayout, type PaperAtlasLayout } from "./paper-atlas-layout.ts";
+import { LabelAtlasCache } from "./label-atlas-cache.ts";
 
 export type RhineInfoRecord = Pick<ArchiveRecord, "id" | "album">;
 export type RhineSourceBadge = ReturnType<typeof rhineSourceBadge>;
@@ -146,6 +147,8 @@ export class CaseAlbumInfo {
   private readonly labelCanvasHeight: number;
   private readonly tileOffsets: Float32Array;
   private readonly tilePages: Float32Array;
+  private readonly labelPrints: LabelAtlasCache;
+  private readonly slotAtlasIndices: Int32Array;
   private readonly badgeTypes: Float32Array;
   private readonly slotRecords: (RhineInfoRecord | undefined)[];
   private readonly slotIndices: (number | undefined)[];
@@ -183,6 +186,8 @@ export class CaseAlbumInfo {
 
   constructor(count: number, layout: CaseLayout, maxTextureSize = 4096, anisotropy = 1, structure: "rhine" | "punk" = "rhine") {
     this.count = Math.max(0, Number.isFinite(count) ? Math.floor(count) : 0);
+    this.labelPrints = new LabelAtlasCache(this.count);
+    this.slotAtlasIndices = new Int32Array(this.count).fill(-1);
     this.layout = { ...layout, label: { ...layout.label } };
     this.structure = structure;
     this.labelCanvasHeight = structure === "punk" ? Math.max(1, Math.round(LABEL_WIDTH * layout.label.height / layout.label.width)) : LABEL_HEIGHT;
@@ -335,9 +340,9 @@ export class CaseAlbumInfo {
 
   private createArrayLabelGeometry(): THREE.PlaneGeometry {
     const geometry = this.createLabelGeometry();
-    geometry.setAttribute("rhineTile", new THREE.InstancedBufferAttribute(this.tileOffsets, 4).setUsage(THREE.StaticDrawUsage));
+    geometry.setAttribute("rhineTile", new THREE.InstancedBufferAttribute(this.tileOffsets, 4).setUsage(THREE.DynamicDrawUsage));
     if (this.atlasLayout.paged)
-      geometry.setAttribute("rhinePage", new THREE.InstancedBufferAttribute(this.tilePages, 1).setUsage(THREE.StaticDrawUsage));
+      geometry.setAttribute("rhinePage", new THREE.InstancedBufferAttribute(this.tilePages, 1).setUsage(THREE.DynamicDrawUsage));
     return geometry;
   }
 
@@ -523,17 +528,32 @@ export class CaseAlbumInfo {
     this.slotKeys[slot] = key;
     this.slotBadges[slot] = badge;
     this.slotNumberTexts[slot] = formatLabelNumber(index);
-    paintArchiveLabel(this.labelTileCanvas, index, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
-    const location = this.atlasLayout.locate(slot)!;
+    // The printed label contains the display number, not a physical pool-slot
+    // identity. Keep its pixels resident when MATRIX reassigns those slots.
+    const print = this.labelPrints.bind(slot, this.slotNumberTexts[slot]);
+    const location = this.atlasLayout.locate(print.atlasSlot)!;
     const column = location.localSlot % LABEL_COLUMNS;
     const row = Math.floor(location.localSlot / LABEL_COLUMNS);
-    const x = column * this.tileWidth;
-    const y = row * this.tileHeight;
-    const context = this.arrayLabelCanvases[location.page].getContext("2d")!;
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.clearRect(x, y, this.tileWidth, this.tileHeight);
-    context.drawImage(this.labelTileCanvas, x, y, this.tileWidth, this.tileHeight);
-    this.arrayLabelTextures[location.page].needsUpdate = true;
+    if (print.needsPaint) {
+      paintArchiveLabel(this.labelTileCanvas, index, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
+      const x = column * this.tileWidth;
+      const y = row * this.tileHeight;
+      const context = this.arrayLabelCanvases[location.page].getContext("2d")!;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(x, y, this.tileWidth, this.tileHeight);
+      context.drawImage(this.labelTileCanvas, x, y, this.tileWidth, this.tileHeight);
+      this.arrayLabelTextures[location.page].needsUpdate = true;
+    }
+    if (this.slotAtlasIndices[slot] !== print.atlasSlot) {
+      const page = this.atlasLayout.pages[location.page];
+      this.slotAtlasIndices[slot] = print.atlasSlot;
+      this.tileOffsets.set([column / LABEL_COLUMNS, 1 - (row + 1) / page.rows,
+        1 / LABEL_COLUMNS, 1 / page.rows], slot * 4);
+      this.tilePages[slot] = location.page;
+      this.arrayLabel.geometry.getAttribute("rhineTile").needsUpdate = true;
+      const pageAttribute = this.arrayLabel.geometry.getAttribute("rhinePage");
+      if (pageAttribute) pageAttribute.needsUpdate = true;
+    }
     this.badgeTypes[slot] = badgeType(badge);
     this.arrayBadge.geometry.getAttribute("rhineBadgeType").setX(slot, this.badgeTypes[slot]);
     this.arrayBadge.geometry.getAttribute("rhineBadgeType").needsUpdate = true;
@@ -592,8 +612,7 @@ export class CaseAlbumInfo {
     if (this.slotRecords[slot] === record && this.slotIndices[slot] === index) return;
     this.slotRecords[slot] = record;
     this.slotIndices[slot] = index;
-    this.slotKeys[slot] = undefined;
-    this.paintSlot(slot, true);
+    this.paintSlot(slot);
   }
 
   select(record?: RhineInfoRecord, index?: number): void {
@@ -606,6 +625,18 @@ export class CaseAlbumInfo {
   /** Recompute visual keys and repaint after record metadata was edited in place. */
   refresh(): void {
     if (this.disposed) return;
+    this.labelPrints.clear();
+    // Preserve the old atlas's opaque printed margins even in unused cache
+    // tiles, so linear/anisotropic filtering cannot pick up transparent gaps.
+    paintArchiveLabel(this.labelTileCanvas, undefined, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
+    for (const page of this.atlasLayout.pages) {
+      const context = this.arrayLabelCanvases[page.index].getContext("2d")!;
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      for (let slot = 0; slot < page.count; slot++)
+        context.drawImage(this.labelTileCanvas, slot % LABEL_COLUMNS * this.tileWidth,
+          Math.floor(slot / LABEL_COLUMNS) * this.tileHeight);
+      this.arrayLabelTextures[page.index].needsUpdate = true;
+    }
     this.slotKeys.fill(undefined);
     for (let slot = 0; slot < this.count; slot++) this.paintSlot(slot, true);
     this.selectedKey = undefined;
@@ -705,6 +736,7 @@ export class CaseAlbumInfo {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.labelPrints.clear();
     for (const mesh of [this.arrayLabel, this.arrayBadge, this.selectedLabel, this.selectedBadge])
       mesh.removeFromParent();
     this.arrayLabel.geometry.dispose();
