@@ -5,6 +5,7 @@
 ## 当前交付边界
 
 - 2026-10-19 三项结构性性能优化已完成：封面驻留与高分辨率快照共享、主画面/阴影各自裁剪与深度复用、ARRAY 视觉提交与元数据 fit 缓存。相同极致/Punk 的逐项 FPS、P95/P99、GPU 计时及像素/身份检查见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md#三项结构性优化2026-10-19-已完成)；平均 120 FPS 仍未达到。
+- 主场景追加优化已收束：20 个方向评估后保留标签驻留、共享实例变换、同帧视窗测量和 MATRIX 保守部件裁剪；平均 120 FPS 尚未达到。最终三轮累计对照、GPU 分项、有限封面/设置/开返检查见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md#主场景优化最终保留版本2026-10-19)。帧生成暂缓，未降低画质或改变盒体设置表现。
 
 
 - MATRIX 标签缓存已完成隔离前后测量和标签像素检查；剩余性能工作见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。

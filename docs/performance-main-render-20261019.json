@@ -2257,6 +2257,2458 @@
       "measurementOk": true,
       "targetReached": false,
       "limitations": "Initial ARRAY implementation had sparse settings pixel changes and no reliable gain; ARRAY path reverted. GPU triangle figures are submission estimates, not hardware counters."
+    },
+    {
+      "number": 11,
+      "status": "rejected",
+      "change": "Vertex-stage constant origin light field: MATRIX performance regression; ARRAY parity stage incomplete; not shipped",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.29902140877053,
+          "meanMs": 14.859057071960308,
+          "frames": 403
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 53.235121787896546,
+          "meanMs": 18.784591194968552,
+          "frames": 318
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 67.30576524817951,
+          "meanMs": 14.857568238213414,
+          "frames": 403
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 70.40957971668921,
+          "meanMs": 14.202612826603332,
+          "frames": 421
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 2.4112654320987655e-7,
+          "changedPercent": 0.00007233796296296296,
+          "overOnePercent": 0,
+          "feature": "lighting"
+        }
+      },
+      "runReference": "run-after-1792357022774-13744",
+      "measurementOk": false,
+      "error": "Error: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error.\n    at node:electron/js2c/sandbox_bundle:2:98605\n    at IpcRendererInternal.<anonymous> (node:electron/js2c/sandbox_bundle:2:93432)\n    at IpcRendererInternal.emit (node:electron/js2c/sandbox_bundle:2:35958)\n    at Object.onMessage (node:electron/js2c/sandbox_bundle:2:92646)"
+    },
+    {
+      "number": 12,
+      "status": "rejected",
+      "change": "Material constant shader specialization: MATRIX gain but ARRAY regression and settings pixel mismatch; not shipped",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.66352017375324,
+          "meanMs": 14.779012345679012,
+          "frames": 405
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 71.45361358286438,
+          "meanMs": 13.995093457943945,
+          "frames": 428
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 65.2025280570981,
+          "meanMs": 15.33682864450127,
+          "frames": 391
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 63.3387369019169,
+          "meanMs": 15.78812664907651,
+          "frames": 379
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.61087866108787,
+          "meanMs": 15.012562814070352,
+          "frames": 398
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 70.02005347593582,
+          "meanMs": 14.28162291169451,
+          "frames": 419
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 67.4671431672817,
+          "meanMs": 14.822029702970312,
+          "frames": 404
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 64.89281841688214,
+          "meanMs": 15.410025706940875,
+          "frames": 389
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 8.037551440329219e-8,
+          "changedPercent": 0.000024112654320987656,
+          "overOnePercent": 0,
+          "feature": "constants"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "constants"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 4.0187757201646094e-8,
+          "changedPercent": 0.000012056327160493828,
+          "overOnePercent": 0,
+          "feature": "constants"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "constants"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005787037037037037
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.00916280864197531,
+              "overOnePercent": 0.00007233796296296296,
+              "mean": 0.000036852173353909466
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.00000554591049382716
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005787037037037037
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.009476273148148147,
+              "overOnePercent": 0.00007233796296296296,
+              "mean": 0.00003793724279835391
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.0003858024691358025,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000006711355452674897
+            },
+            "controlDifference": {
+              "max": 8,
+              "changedPercent": 0.011127989969135802,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.000039504565329218104
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.000012056327160493828,
+              "overOnePercent": 0,
+              "mean": 4.0187757201646094e-8
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.00000699266975308642
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.010187596450617285,
+              "overOnePercent": 0.00009645061728395063,
+              "mean": 0.00004071019804526749
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00014467592592592592,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.000006028163580246913
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.000012056327160493828,
+              "overOnePercent": 0,
+              "mean": 4.0187757201646094e-8
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005787037037037037
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2595,
+        "visibleResourceChecks": 13259,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792357516876-28072",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792357516876-28072/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792357516876-28072\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 13,
+      "status": "rejected",
+      "change": "Frame-scoped array material preparation cache: ARRAY regression; reverted",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.3530099943176,
+          "meanMs": 14.847146401985116,
+          "frames": 403
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.53255436872102,
+          "meanMs": 14.80767326732674,
+          "frames": 404
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 66.42239287925184,
+          "meanMs": 15.055163727959684,
+          "frames": 397
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 55.761461150622836,
+          "meanMs": 17.9335329341317,
+          "frames": 334
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.36465455274897,
+          "meanMs": 15.06826196473553,
+          "frames": 397
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 66.2828066416712,
+          "meanMs": 15.086868686868673,
+          "frames": 396
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 62.56796319531577,
+          "meanMs": 15.982620320855615,
+          "frames": 374
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 61.20849246985446,
+          "meanMs": 16.337602179836498,
+          "frames": 367
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "appearance"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "appearance"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "appearance"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "appearance"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.00010850694444444444,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.0000058272247942386835
+            },
+            "controlDifference": {
+              "max": 1,
+              "changedPercent": 0.0107421875,
+              "overOnePercent": 0,
+              "mean": 0.00003661104681069959
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.010874807098765432,
+              "overOnePercent": 0.00009645061728395063,
+              "mean": 0.0000447289737654321
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.00010850694444444444,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.000005304783950617284
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00010850694444444444,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.000005304783950617284
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2489,
+        "visibleResourceChecks": 13155,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792357884513-27700",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792357884513-27700/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792357884513-27700\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 14,
+      "status": "rejected",
+      "change": "Reuse per-slot record lookup: no reliable MATRIX gain and ARRAY slower; reverted",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.32150613076739,
+          "meanMs": 14.854094292803982,
+          "frames": 403
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.31187836978002,
+          "meanMs": 14.85621890547263,
+          "frames": 402
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 68.47599164926932,
+          "meanMs": 14.603658536585366,
+          "frames": 410
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 65.06289413099333,
+          "meanMs": 15.369743589743582,
+          "frames": 390
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.47181628392484,
+          "meanMs": 15.043969849246231,
+          "frames": 398
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 66.11570247933884,
+          "meanMs": 15.125,
+          "frames": 396
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 67.93070067096144,
+          "meanMs": 14.720884520884578,
+          "frames": 407
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 65.07737348389794,
+          "meanMs": 15.366323907455012,
+          "frames": 389
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "records"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "records"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "records"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "records"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 29,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000058674125514403295
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 29,
+              "changedPercent": 0.01048900462962963,
+              "overOnePercent": 0.00007233796296296296,
+              "mean": 0.00004155414094650206
+            },
+            "controlDifference": {
+              "max": 1,
+              "changedPercent": 0.0016999421296296296,
+              "overOnePercent": 0,
+              "mean": 0.000005706661522633745
+            },
+            "roundTripDifference": {
+              "max": 29,
+              "changedPercent": 0.00012056327160493826,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000058674125514403295
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 29,
+              "changedPercent": 0.00021701388888888888,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000006108539094650206
+            },
+            "controlDifference": {
+              "max": 4,
+              "changedPercent": 0.009620949074074073,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.00003351658950617284
+            },
+            "roundTripDifference": {
+              "max": 29,
+              "changedPercent": 0.00021701388888888888,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000006108539094650206
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 29,
+              "changedPercent": 0.0001326195987654321,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000007113233024691358
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 26,
+              "changedPercent": 0.010404610339506173,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.000039183063271604936
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2542,
+        "visibleResourceChecks": 13190,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792358231113-16732",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792358231113-16732/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792358231113-16732\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 15,
+      "status": "rejected",
+      "change": "Pure MATRIX frame-field sample memoization: no measurable MATRIX gain; live 873504 exact value comparisons passed; rejected rather than retaining cache complexity",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.49757743843351,
+          "meanMs": 14.815346534653468,
+          "frames": 404
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.61393114759579,
+          "meanMs": 14.78985148514853,
+          "frames": 404
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 66.39751760034703,
+          "meanMs": 15.060804020100495,
+          "frames": 398
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 53.31951594571101,
+          "meanMs": 18.754858934169288,
+          "frames": 319
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.4618261973147,
+          "meanMs": 15.046231155778916,
+          "frames": 398
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 66.3358230153557,
+          "meanMs": 15.074811083123455,
+          "frames": 397
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 65.82784767936005,
+          "meanMs": 15.19113924050633,
+          "frames": 395
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 65.90033200420434,
+          "meanMs": 15.17443037974682,
+          "frames": 395
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "field"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "field"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "field"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "field"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 4,
+              "changedPercent": 0.012405960648148147,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.00004288033693415638
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.0001326195987654321,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000058272247942386835
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.0002290702160493827,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000006108539094650206
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.0001326195987654321,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000058272247942386835
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.010344328703703703,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.00004175507973251029
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.0013744212962962963,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.00001121238425925926
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2514,
+        "visibleResourceChecks": 12718,
+        "fieldValueChecks": 873504,
+        "viewportValueChecks": 1496,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792359899771-40604",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792359899771-40604/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792359899771-40604\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 16,
+      "status": "rejected",
+      "change": "CPU per-instance field attribute prototype: slower and ARRAY pixel regression; private-uniform cache issue also found; not shipped",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.50434433899208,
+          "meanMs": 14.81386138613862,
+          "frames": 404
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 53.40968071391501,
+          "meanMs": 18.723197492163,
+          "frames": 319
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 64.89065341051266,
+          "meanMs": 15.410539845758347,
+          "frames": 389
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 58.91286570203099,
+          "meanMs": 16.97422096317283,
+          "frames": 353
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 5.224408436213991e-7,
+          "changedPercent": 0.00015673225308641974,
+          "overOnePercent": 0,
+          "feature": "cpuLighting"
+        },
+        "day-array": {
+          "ok": false,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 35,
+          "meanChannelError": 0.1566774771733539,
+          "changedPercent": 1.8596281828703702,
+          "overOnePercent": 1.7968629436728396,
+          "feature": "cpuLighting"
+        }
+      },
+      "runReference": "run-after-1792358681568-49540",
+      "measurementOk": false,
+      "error": "Error: Feature pixel regression {\"ok\":false,\"width\":3840,\"height\":2160,\"maxChannelError\":35,\"meanChannelError\":0.1566774771733539,\"changedPercent\":1.8596281828703702,\"overOnePercent\":1.7968629436728396,\"feature\":\"cpuLighting\"}\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792358681568-49540/electron-app/check-archive-motion.mjs:295:330)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792358681568-49540\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 17,
+      "status": "rejected",
+      "change": "Full-resolution R32F SSAO linear-depth prepass: no stable net gain and settings pixel mismatch; not shipped",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.7710843373494,
+          "meanMs": 14.755555555555556,
+          "frames": 405
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.79661016949153,
+          "meanMs": 14.75,
+          "frames": 406
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 64.40173299208773,
+          "meanMs": 15.527532467532483,
+          "frames": 385
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 68.03855518126949,
+          "meanMs": 14.697549019607822,
+          "frames": 408
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.58767377046438,
+          "meanMs": 15.017794486215553,
+          "frames": 399
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 66.7815957286557,
+          "meanMs": 14.974185463659177,
+          "frames": 399
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 63.99331662489557,
+          "meanMs": 15.6266318537859,
+          "frames": 383
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 59.05019266376426,
+          "meanMs": 16.93474576271185,
+          "frames": 354
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "linearAo"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 8.43942901234568e-7,
+          "changedPercent": 0.00024112654320987653,
+          "overOnePercent": 0,
+          "feature": "linearAo"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 1.2056327160493827e-7,
+          "changedPercent": 0.00003616898148148148,
+          "overOnePercent": 0,
+          "feature": "linearAo"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 3.616898148148148e-7,
+          "changedPercent": 0.00010850694444444444,
+          "overOnePercent": 0,
+          "feature": "linearAo"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.00043402777777777775,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.000006952481995884773
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00043402777777777775,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.000006952481995884773
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 28,
+              "changedPercent": 0.00014467592592592592,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005666473765432099
+            },
+            "controlDifference": {
+              "max": 1,
+              "changedPercent": 0.010211709104938271,
+              "overOnePercent": 0,
+              "mean": 0.00003540541409465021
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005465534979423868
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00009645061728395063,
+              "overOnePercent": 0,
+              "mean": 3.2150205761316875e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.00007233796296296296,
+              "overOnePercent": 0,
+              "mean": 2.4112654320987655e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0,
+              "mean": 2.8131430041152265e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.0004701967592592593,
+              "overOnePercent": 0,
+              "mean": 0.0000015673225308641974
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 1,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0,
+              "mean": 2.8131430041152265e-7
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2524,
+        "visibleResourceChecks": 12992,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792359491367-41980",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792359491367-41980/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792359491367-41980\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 18,
+      "status": "rejected",
+      "change": "MATRIX per-cell RGBA32F texture light field: day/night MATRIX slower by about 20%; no production change; frozen settings captured in ARRAY in this run so no active-MATRIX settings acceptance claimed",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.60478742050181,
+          "meanMs": 14.791851851851845,
+          "frames": 405
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 53.36411388805244,
+          "meanMs": 18.739184952978064,
+          "frames": 319
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 65.63745353471086,
+          "meanMs": 15.235204081632645,
+          "frames": 392
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 65.54150962276111,
+          "meanMs": 15.257506361323149,
+          "frames": 393
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.45072962233269,
+          "meanMs": 15.048743718592986,
+          "frames": 398
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 52.9419648840639,
+          "meanMs": 18.888607594936673,
+          "frames": 316
+        },
+        {
+          "name": "night-array",
+          "enabled": false,
+          "fps": 57.08832786446143,
+          "meanMs": 17.516715542521943,
+          "frames": 341
+        },
+        {
+          "name": "night-array",
+          "enabled": true,
+          "fps": 64.46441096897006,
+          "meanMs": 15.512435233160668,
+          "frames": 386
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 1.2056327160493827e-7,
+          "changedPercent": 0.00003616898148148148,
+          "overOnePercent": 0,
+          "feature": "textureLighting"
+        },
+        "day-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "textureLighting"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 1,
+          "meanChannelError": 3.616898148148148e-7,
+          "changedPercent": 0.00010850694444444444,
+          "overOnePercent": 0,
+          "feature": "textureLighting"
+        },
+        "night-array": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "textureLighting"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 2,
+              "changedPercent": 0.004038869598765433,
+              "overOnePercent": 0.000012056327160493828,
+              "mean": 0.000013904963991769547
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.00007233796296296296,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.0000051440329218107
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005787037037037037
+            },
+            "roundTripDifference": {
+              "max": 28,
+              "changedPercent": 0.0000843942901234568,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.000005787037037037037
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 28,
+              "changedPercent": 0.00007233796296296296,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.0000051440329218107
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2428,
+        "visibleResourceChecks": 12646,
+        "fieldValueChecks": 0,
+        "viewportValueChecks": 1408,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792360604791-18544",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792360604791-18544/electron-app/check-archive-motion.mjs:372:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792360604791-18544\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 19,
+      "status": "rejected",
+      "change": "Cull only geometry with >=4096 triangles: MATRIX day/night within 0.3%, no net FPS benefit; preset strict pixel gate also failed, reverted",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.51336898395722,
+          "meanMs": 14.811881188118813,
+          "frames": 404
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.30688935281837,
+          "meanMs": 14.857320099255583,
+          "frames": 403
+        },
+        {
+          "name": "night-matrix",
+          "enabled": false,
+          "fps": 66.64105690377963,
+          "meanMs": 15.005764411027576,
+          "frames": 399
+        },
+        {
+          "name": "night-matrix",
+          "enabled": true,
+          "fps": 66.77265500794913,
+          "meanMs": 14.976190476190476,
+          "frames": 399
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "denseParts"
+        },
+        "night-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "denseParts"
+        }
+      },
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 1,
+              "changedPercent": 0.00019290123456790125,
+              "overOnePercent": 0,
+              "mean": 6.430041152263375e-7
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 4,
+              "changedPercent": 0.0006630979938271605,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000029337062757201647
+            },
+            "roundTripDifference": {
+              "max": 4,
+              "changedPercent": 0.0006630979938271605,
+              "overOnePercent": 0.00004822530864197531,
+              "mean": 0.0000029337062757201647
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 5,
+              "changedPercent": 0.00015673225308641974,
+              "overOnePercent": 0.000024112654320987656,
+              "mean": 0.0000010448816872427983
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 5,
+              "changedPercent": 0.00015673225308641974,
+              "overOnePercent": 0.000024112654320987656,
+              "mean": 0.0000010448816872427983
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2511,
+        "visibleResourceChecks": 12597,
+        "fieldValueChecks": 0,
+        "viewportValueChecks": 1509,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "runReference": "run-after-1792360910065-50168",
+      "measurementOk": false,
+      "error": "Error: Incremental feature settings pixel regression\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792360910065-50168/electron-app/check-archive-motion.mjs:375:128)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792360910065-50168\\electron-app\\main.cjs:1214:32)"
+    },
+    {
+      "number": 20,
+      "status": "rejected",
+      "change": "Cross-frame viewport dimensions cache: day MATRIX neutral and ARRAY +0.8%, strict day ARRAY render parity failed; stopped before night/resize QA, reverted",
+      "comparisons": [
+        {
+          "name": "day-matrix",
+          "enabled": false,
+          "fps": 67.53142551484352,
+          "meanMs": 14.807920792079212,
+          "frames": 404
+        },
+        {
+          "name": "day-matrix",
+          "enabled": true,
+          "fps": 67.21733605323882,
+          "meanMs": 14.877114427860693,
+          "frames": 402
+        },
+        {
+          "name": "day-array",
+          "enabled": false,
+          "fps": 64.90465038474406,
+          "meanMs": 15.407216494845361,
+          "frames": 388
+        },
+        {
+          "name": "day-array",
+          "enabled": true,
+          "fps": 65.43275989022017,
+          "meanMs": 15.282864450127892,
+          "frames": 391
+        }
+      ],
+      "featureParity": {
+        "day-matrix": {
+          "ok": true,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 0,
+          "meanChannelError": 0,
+          "changedPercent": 0,
+          "overOnePercent": 0,
+          "feature": "viewportMeasurements"
+        },
+        "day-array": {
+          "ok": false,
+          "width": 3840,
+          "height": 2160,
+          "maxChannelError": 14,
+          "meanChannelError": 0.000044568222736625514,
+          "changedPercent": 0.012176890432098766,
+          "overOnePercent": 0.00006028163580246913,
+          "feature": "viewportMeasurements"
+        }
+      },
+      "runReference": "run-after-1792361146926-21836",
+      "measurementOk": false,
+      "error": "Error: Feature pixel regression {\"ok\":false,\"width\":3840,\"height\":2160,\"maxChannelError\":14,\"meanChannelError\":0.000044568222736625514,\"changedPercent\":0.012176890432098766,\"overOnePercent\":0.00006028163580246913,\"feature\":\"viewportMeasurements\"}\n    at Module.checkArchiveMotion (file:///D:/CodexLocalWorkContent/PersonalMusicPlayer/source/Rhine-Music-Demo-AudioEnhanced/.tools/performance-main-render-20261019/run-after-1792361146926-21836/electron-app/check-archive-motion.mjs:295:330)\n    at async runElectronProbe (D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\run-after-1792361146926-21836\\electron-app\\main.cjs:1214:32)"
     }
   ],
   "limitations": [
@@ -2264,5 +4716,890 @@
     "Pixel regression is finite and does not replace user visual acceptance",
     "No-render scheduling exceeds 175 FPS; it is not a rendering result"
   ],
-  "stopRule": "Upper bound only; stop after valuable directions are exhausted, continue after 120 FPS to evaluate remaining valuable candidates"
+  "stopRule": "Upper bound only; stop after valuable directions are exhausted, continue after 120 FPS to evaluate remaining valuable candidates",
+  "finalComparison": {
+    "beforeRun": "run-baseline-1792361316811-40884",
+    "afterRun": "run-after-1792361553626-7548",
+    "baselineCommit": "f3fceb9caf2bf80811ad71f86e6f92a9b02b465a",
+    "scope": "Serial isolated processes; each case has three valid 6-second native-input samples after warmup, same harness, 45 synthetic PNG albums. FPS is 1000 / pooled RAF mean, not a GPU completion rate or minimum FPS.",
+    "beforeProvenance": {
+      "phase": "baseline",
+      "manifestPath": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\baseline-dist.manifest.json",
+      "manifestBuiltAt": "2026-10-18T18:22:09.846Z",
+      "distDirectory": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\performance-main-render-20261019\\baseline-dist",
+      "baselineCommit": "f3fceb9caf2bf80811ad71f86e6f92a9b02b465a",
+      "diagnosticTransform": null,
+      "recording": "Task-built artifact with existing build metadata; no extra source hashing."
+    },
+    "afterProvenance": {
+      "phase": "after",
+      "manifestPath": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface.manifest.json",
+      "manifestBuiltAt": "2026-10-18T22:08:26.384Z",
+      "distDirectory": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface",
+      "baselineCommit": null,
+      "diagnosticTransform": null,
+      "recording": "Task-built artifact with existing build metadata; no extra source hashing."
+    },
+    "targetReached": false,
+    "comparison": [
+      {
+        "name": "day-matrix",
+        "before": {
+          "frames": 1148,
+          "meanMs": 15.64459930313589,
+          "fps": 63.919821826280625,
+          "p95Ms": 20.599999999998545,
+          "over50Percent": 0
+        },
+        "after": {
+          "frames": 1210,
+          "meanMs": 14.836942148760329,
+          "fps": 67.39933269090444,
+          "p95Ms": 20.59999999999127,
+          "over50Percent": 0
+        },
+        "improvementPercent": 5.443555324794747
+      },
+      {
+        "name": "day-array",
+        "before": {
+          "frames": 863,
+          "meanMs": 20.761413673232898,
+          "fps": 48.16627690865153,
+          "p95Ms": 34.30000000000291,
+          "over50Percent": 0.34762456546929316
+        },
+        "after": {
+          "frames": 1232,
+          "meanMs": 14.582142857142879,
+          "fps": 68.57702669605672,
+          "p95Ms": 25.69999999999709,
+          "over50Percent": 0
+        },
+        "improvementPercent": 42.37560197171695
+      },
+      {
+        "name": "night-matrix",
+        "before": {
+          "frames": 1133,
+          "meanMs": 15.839541041482773,
+          "fps": 63.13314239226138,
+          "p95Ms": 20.60000000000582,
+          "over50Percent": 0
+        },
+        "after": {
+          "frames": 1191,
+          "meanMs": 15.075818639798504,
+          "fps": 66.33138961755019,
+          "p95Ms": 20.599999999976717,
+          "over50Percent": 0
+        },
+        "improvementPercent": 5.065876818577042
+      },
+      {
+        "name": "night-array",
+        "before": {
+          "frames": 832,
+          "meanMs": 21.513461538461552,
+          "fps": 46.48252435863052,
+          "p95Ms": 40.60000000000582,
+          "over50Percent": 0.4807692307692308
+        },
+        "after": {
+          "frames": 1237,
+          "meanMs": 14.530315278900567,
+          "fps": 68.82163124513185,
+          "p95Ms": 26.300000000017462,
+          "over50Percent": 0
+        },
+        "improvementPercent": 48.059151680632816
+      }
+    ],
+    "profiles": [
+      {
+        "name": "day-matrix",
+        "byMaterial": false,
+        "valid": true,
+        "completeFrames": 37,
+        "gpuMsPerFrame": {
+          "main-transparent": 0.38266897297297303,
+          "main-glass": 1.748187675675675,
+          "main-opaque": 2.4190486486486487,
+          "main-overhead": 0.026834162162162167,
+          "transmission-backfaces": 1.0974927567567567,
+          "transmission-mipmap": 0.11836194594594597,
+          "transmission-resolve": 0.5214356756756757,
+          "transmission-opaque": 3.1118668108108114,
+          "transmission-build": 0.0496812972972973,
+          "shadow": 2.009861189189189
+        }
+      },
+      {
+        "name": "day-matrix",
+        "byMaterial": true,
+        "valid": true,
+        "completeFrames": 37,
+        "gpuMsPerFrame": {
+          "main-transparent::surface=optics|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=Ft": 0.25238918918918923,
+          "main-transparent::surface=optics|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=Ft": 0.05567654054054054,
+          "main-glass::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.3527878918918918,
+          "main-glass::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 1.2497954594594596,
+          "main-glass::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.11607091891891891,
+          "main-glass::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.00828281081081081,
+          "main-glass::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.018976,
+          "main-glass::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.01052021621621622,
+          "main-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.004906378378378381,
+          "main-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Xt|type=Xt": 0.0001401081081081081,
+          "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.0007645405405405406,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.0000017297297297297296,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.000005189189189189189,
+          "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.0018516756756756763,
+          "main-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.0007974054054054056,
+          "main-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.00006054054054054054,
+          "main-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.00011416216216216214,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.00043762162162162154,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0007705945945945946,
+          "main-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.00040129729729729724,
+          "main-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.0032207567567567566,
+          "main-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.11024864864864864,
+          "main-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.010785729729729729,
+          "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.017257513513513515,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.004237837837837838,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.004615783783783785,
+          "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.2940860540540541,
+          "main-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.08873427027027025,
+          "main-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.28494443243243245,
+          "main-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.0010880000000000002,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.020550054054054055,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.012540540540540542,
+          "main-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.00021708108108108108,
+          "main-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.07351437837837839,
+          "main-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.06023956756756757,
+          "main-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 1.0480285405405405,
+          "main-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.006342054054054055,
+          "main-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.1369245405405405,
+          "main-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.012070054054054053,
+          "main-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.004979891891891893,
+          "main-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.3208025945945946,
+          "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.18716972972972973,
+          "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.799532972972973,
+          "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.06853362162162162,
+          "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.008268972972972972,
+          "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.013292108108108108,
+          "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.014163027027027028,
+          "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.00038918918918918934,
+          "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Xt|type=Xt": 0.00021362162162162157,
+          "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.0007576216216216218,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.000004324324324324324,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.0000017297297297297296,
+          "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.006406054054054054,
+          "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.0008622702702702702,
+          "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0001271351351351351,
+          "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.00003891891891891891,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.0008735135135135134,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0013189189189189191,
+          "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0000025945945945945945,
+          "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.003970594594594596,
+          "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.005067243243243242,
+          "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.011429189189189186,
+          "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.03747805405405406,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.06700627027027027,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.0062192432432432426,
+          "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.5056605405405405,
+          "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.16311524324324325,
+          "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.015254486486486486,
+          "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.0014486486486486488,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.10497902702702704,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.28341535135135126,
+          "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0001107027027027027,
+          "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.08310486486486486,
+          "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.09975091891891893,
+          "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 1.1217383783783785,
+          "transmission-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.006604108108108108,
+          "transmission-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.1597673513513513,
+          "transmission-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.012780972972972975,
+          "transmission-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.0066499459459459466,
+          "transmission-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.33233124324324326
+        }
+      },
+      {
+        "name": "day-array",
+        "byMaterial": false,
+        "valid": true,
+        "completeFrames": 38,
+        "gpuMsPerFrame": {
+          "main-transparent": 0.16208252631578943,
+          "main-glass": 0.6941541052631579,
+          "main-opaque": 1.3484749473684214,
+          "main-overhead": 0.022133894736842106,
+          "transmission-backfaces": 0.5271326315789474,
+          "transmission-mipmap": 0.11789305263157895,
+          "transmission-resolve": 0.3169254736842105,
+          "transmission-opaque": 2.4475393684210522,
+          "transmission-build": 0.04725642105263157,
+          "shadow": 0.6491941052631579
+        }
+      },
+      {
+        "name": "day-array",
+        "byMaterial": true,
+        "valid": true,
+        "completeFrames": 37,
+        "gpuMsPerFrame": {
+          "main-transparent::surface=optics|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=Ft": 0.09303091891891893,
+          "main-transparent::surface=optics|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20flexible%20emblem%20tube|type=Ft": 0.07403070270270269,
+          "main-transparent::surface=Music%20shelf%20row%20label%201|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.000608,
+          "main-transparent::surface=Music%20shelf%20row%20label%202|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.0013405405405405408,
+          "main-transparent::surface=Music%20shelf%20row%20label%203|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.0006062702702702704,
+          "main-transparent::surface=Music%20shelf%20contact%20shadows|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Xt|type=Xt": 0.002309189189189189,
+          "main-transparent::surface=Music%20floor%20seams%20and%20locator%20marks|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0024726486486486483,
+          "main-glass::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.019316756756756755,
+          "main-glass::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.17211243243243243,
+          "main-glass::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.2906732972972973,
+          "main-glass::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.043182702702702705,
+          "main-glass::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.07160302702702703,
+          "main-glass::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.10402508108108108,
+          "main-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.013085405405405405,
+          "main-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Xt|type=Xt": 0.006349837837837839,
+          "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.02469362162162162,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.02210940540540541,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.026662054054054057,
+          "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.05790356756756757,
+          "main-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.05619113513513513,
+          "main-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.0223187027027027,
+          "main-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.026598918918918916,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.04878875675675676,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.03741491891891891,
+          "main-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.038065297297297296,
+          "main-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.06960172972972974,
+          "main-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.14295783783783783,
+          "main-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.06456302702702703,
+          "main-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.007065945945945948,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.0037042162162162166,
+          "main-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.00650464864864865,
+          "main-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.16714983783783785,
+          "main-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.04165967567567567,
+          "main-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.00993556756756757,
+          "main-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.009224648648648649,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.012132324324324326,
+          "main-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.006188108108108109,
+          "main-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.004310486486486487,
+          "main-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.06690508108108108,
+          "main-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.028141837837837833,
+          "main-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.22122551351351352,
+          "main-opaque::surface=Record%20shelf%20tick|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.003576216216216216,
+          "main-opaque::surface=Record%20shelf%20recessed%20bed|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.044709189189189195,
+          "main-opaque::surface=Record%20shelf%20tray|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.06028194594594595,
+          "main-opaque::surface=Music%20shelf%20end%20platforms|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.010810810810810811,
+          "main-opaque::surface=Music%20shelf%20end%20safety%20stripes|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.004224,
+          "main-opaque::surface=Music%20shelf%20plate%20markers|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0025297297297297294,
+          "main-opaque::surface=Music%20shelf%20left%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.004876108108108109,
+          "main-opaque::surface=Music%20shelf%20foot%20pins|geometry=SphereGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0038936216216216213,
+          "main-opaque::surface=Music%20shelf%20continuous%20edge%20lines|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0031195675675675673,
+          "main-opaque::surface=Music%20shelf%20front%20number%20plates|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0010404324324324325,
+          "main-opaque::surface=Music%20shelf%20left%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Ft|type=Ft": 0.006363675675675676,
+          "main-opaque::surface=Music%20shelf%20base|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0527610810810811,
+          "main-opaque::surface=Music%20shelf%20right%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.009106162162162161,
+          "main-opaque::surface=Music%20shelf%20end%20caps|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.005090594594594594,
+          "main-opaque::surface=Music%20shelf%20underframe|geometry=CylinderGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.010717405405405406,
+          "main-opaque::surface=Music%20shelf%20support%20feet|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0038330810810810814,
+          "main-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.04196237837837837,
+          "main-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.03024,
+          "main-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.2760345945945947,
+          "main-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.01100454054054054,
+          "main-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.05438789189189189,
+          "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.013892324324324325,
+          "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.09327740540540537,
+          "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.22761945945945944,
+          "transmission-backfaces::surface=clip|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.021843027027027027,
+          "transmission-backfaces::surface=cover|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20clear%20solid%20cover%20glass|type=Ft": 0.043464648648648636,
+          "transmission-backfaces::surface=frame|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.09422875675675674,
+          "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Xt|type=Xt": 0.010793513513513516,
+          "transmission-opaque::surface=label|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Xt|type=Xt": 0.0019796756756756758,
+          "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.08368691891891891,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.00905945945945946,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.020509405405405398,
+          "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.06602724324324324,
+          "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.029585297297297294,
+          "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.010059243243243244,
+          "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.008615783783783785,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.053557621621621615,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.018924972972972975,
+          "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.01619545945945946,
+          "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.014262486486486488,
+          "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.07399264864864866,
+          "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Single|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.14069535135135133,
+          "transmission-opaque::surface=lettering|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.013713297297297295,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.006265945945945946,
+          "transmission-opaque::surface=ruler|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20pale%20neutral%20metal%20trim|type=Ft": 0.003487135135135135,
+          "transmission-opaque::surface=emblem|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20raised%20pearl%20white%20emblem|type=Ft": 0.3939632432432431,
+          "transmission-opaque::surface=accent|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20restrained%20orange%20index%20accent|type=Ft": 0.13099935135135135,
+          "transmission-opaque::surface=ink|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.007305513513513513,
+          "transmission-opaque::surface=label|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.008172108108108107,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20brushed%20fastener%20metal|type=Ft": 0.02218032432432432,
+          "transmission-opaque::surface=fasteners|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.01742702702702702,
+          "transmission-opaque::surface=vents|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20graphite%20ink%20and%20vent%20recess|type=Ft": 0.017198702702702708,
+          "transmission-opaque::surface=spine|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.07247135135135134,
+          "transmission-opaque::surface=trim|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20low%20contrast%20case%20lettering|type=Ft": 0.034206270270270275,
+          "transmission-opaque::surface=back|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Punk%20%7C%20neutral%20warm%20white%20polymer|type=Ft": 0.24420151351351346,
+          "transmission-opaque::surface=Record%20shelf%20tick|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.031756108108108104,
+          "transmission-opaque::surface=Record%20shelf%20recessed%20bed|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.04416518918918919,
+          "transmission-opaque::surface=Record%20shelf%20tray|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.09292454054054056,
+          "transmission-opaque::surface=Music%20shelf%20end%20platforms|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.008780108108108106,
+          "transmission-opaque::surface=Music%20shelf%20end%20safety%20stripes|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.003091891891891891,
+          "transmission-opaque::surface=Music%20shelf%20plate%20markers|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.014868756756756757,
+          "transmission-opaque::surface=Music%20shelf%20left%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.005328432432432432,
+          "transmission-opaque::surface=Music%20shelf%20foot%20pins|geometry=SphereGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0012748108108108108,
+          "transmission-opaque::surface=Music%20shelf%20continuous%20edge%20lines|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.001421837837837838,
+          "transmission-opaque::surface=Music%20shelf%20front%20number%20plates|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.10265945945945945,
+          "transmission-opaque::surface=Music%20shelf%20left%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Ft|type=Ft": 0.003498378378378378,
+          "transmission-opaque::surface=Music%20shelf%20base|geometry=RoundedBoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.05268670270270269,
+          "transmission-opaque::surface=Music%20shelf%20right%20guide|geometry=BufferGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.006297081081081081,
+          "transmission-opaque::surface=Music%20shelf%20end%20caps|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.005561081081081081,
+          "transmission-opaque::surface=Music%20shelf%20underframe|geometry=CylinderGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.01802118918918919,
+          "transmission-opaque::surface=Music%20shelf%20support%20feet|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=Pt|type=Pt": 0.0017781621621621618,
+          "transmission-opaque::surface=Selected%20album%20cover|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.024403891891891894,
+          "transmission-opaque::surface=Album%20cover%20atlas|geometry=PlaneGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.03451156756756757,
+          "transmission-opaque::surface=Pt|geometry=PlaneGeometry|kind=Single|caseSurface=%3F|material=Pt|type=Pt": 0.2939571891891892,
+          "transmission-opaque::surface=Selected%20album%20paper%20insert|geometry=BoxGeometry|kind=Single|caseSurface=%3F|material=ga|type=ga": 0.01176908108108108,
+          "transmission-opaque::surface=Album%20paper%20insert%20atlas|geometry=BoxGeometry|kind=Instanced|caseSurface=%3F|material=ga|type=ga": 0.05463956756756756
+        }
+      }
+    ],
+    "selectionTransaction": {
+      "ok": true,
+      "initial": "fixture-album-01",
+      "expectedForward": "fixture-album-06",
+      "expectedReverse": "fixture-album-04",
+      "startCell": {
+        "lane": 0,
+        "row": 12,
+        "foobarEntryKey": "fixture-album-01"
+      },
+      "forward": {
+        "app": "fixture-album-06",
+        "scene": "fixture-album-06"
+      },
+      "opened": {
+        "app": "fixture-album-04",
+        "scene": "fixture-album-04",
+        "hasTrack": true,
+        "title": "现场精选 第04辑"
+      },
+      "returned": true
+    },
+    "interactionResourceRegression": {
+      "ok": true,
+      "frames": 2552,
+      "visibleResourceChecks": 13290,
+      "fieldValueChecks": 0,
+      "viewportValueChecks": 1510,
+      "watchedTextures": 23,
+      "violations": []
+    },
+    "labelPixelParity": {
+      "ok": true,
+      "results": [
+        {
+          "structure": "punk",
+          "selectedAndOutgoingPixels": "identical",
+          "refreshRetainsOutgoing": true,
+          "qualitySettings": true,
+          "allLiveFallback": true
+        },
+        {
+          "structure": "rhine",
+          "selectedAndOutgoingPixels": "identical",
+          "refreshRetainsOutgoing": true,
+          "qualitySettings": true,
+          "allLiveFallback": true
+        }
+      ],
+      "managedDisposal": {
+        "releases": 1,
+        "disposals": 0
+      }
+    },
+    "caseSettingsRegression": {
+      "ok": true,
+      "width": 3840,
+      "height": 2160,
+      "results": [
+        {
+          "name": "original",
+          "difference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "controlDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "roundTripDifference": {
+            "max": 3,
+            "changedPercent": 0.011140046296296297,
+            "overOnePercent": 0.00003616898148148148,
+            "mean": 0.000039102687757201646
+          }
+        },
+        {
+          "name": "opaque cover",
+          "difference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "controlDifference": {
+            "max": 60,
+            "changedPercent": 0.00028935185185185184,
+            "overOnePercent": 0.00006028163580246913,
+            "mean": 0.000007595486111111111
+          },
+          "roundTripDifference": {
+            "max": 1,
+            "changedPercent": 0.000277295524691358,
+            "overOnePercent": 0,
+            "mean": 9.2431841563786e-7
+          }
+        },
+        {
+          "name": "clear cover",
+          "difference": {
+            "max": 3,
+            "changedPercent": 0.01115210262345679,
+            "overOnePercent": 0.00003616898148148148,
+            "mean": 0.00003914287551440329
+          },
+          "controlDifference": {
+            "max": 60,
+            "changedPercent": 0.0001687885802469136,
+            "overOnePercent": 0.00006028163580246913,
+            "mean": 0.00000719360853909465
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "frosted cover",
+          "difference": {
+            "max": 60,
+            "changedPercent": 0.014202353395061727,
+            "overOnePercent": 0.0001687885802469136,
+            "mean": 0.000056584362139917696
+          },
+          "controlDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "opaque optics",
+          "difference": {
+            "max": 60,
+            "changedPercent": 0.00015673225308641974,
+            "overOnePercent": 0.00006028163580246913,
+            "mean": 0.000007153420781893004
+          },
+          "controlDifference": {
+            "max": 3,
+            "changedPercent": 0.0107421875,
+            "overOnePercent": 0.00003616898148148148,
+            "mean": 0.00003773630401234568
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "clear optics",
+          "difference": {
+            "max": 60,
+            "changedPercent": 0.010814525462962963,
+            "overOnePercent": 0.00009645061728395063,
+            "mean": 0.000044648598251028804
+          },
+          "controlDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "roundTripDifference": {
+            "max": 3,
+            "changedPercent": 0.01068190586419753,
+            "overOnePercent": 0.00003616898148148148,
+            "mean": 0.00003757555298353909
+          }
+        },
+        {
+          "name": "colored marble",
+          "difference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "controlDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "preset",
+          "difference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "controlDifference": {
+            "max": 6,
+            "changedPercent": 0.00960889274691358,
+            "overOnePercent": 0.00006028163580246913,
+            "mean": 0.00003419978137860082
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "hidden parts",
+          "difference": {
+            "max": 60,
+            "changedPercent": 0.00042197145061728393,
+            "overOnePercent": 0.00004822530864197531,
+            "mean": 0.00000771604938271605
+          },
+          "controlDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          },
+          "roundTripDifference": {
+            "max": 0,
+            "changedPercent": 0,
+            "overOnePercent": 0,
+            "mean": 0
+          }
+        },
+        {
+          "name": "label transform",
+          "difference": {
+            "max": 8,
+            "changedPercent": 0.01212866512345679,
+            "overOnePercent": 0.0000843942901234568,
+            "mean": 0.00004328221450617284
+          },
+          "controlDifference": {
+            "max": 60,
+            "changedPercent": 0.0020375192901234567,
+            "overOnePercent": 0.00007233796296296296,
+            "mean": 0.00001378440072016461
+          },
+          "roundTripDifference": {
+            "max": 60,
+            "changedPercent": 0.012297453703703703,
+            "overOnePercent": 0.00014467592592592592,
+            "mean": 0.00005047582304526749
+          }
+        }
+      ]
+    },
+    "rendererShaderErrors": [],
+    "settingsQualification": {
+      "aggregateGatePassed": true,
+      "strictMaxOneGatePassed": false,
+      "maxChannelError": 60,
+      "maxOverOnePixels": 14,
+      "controlMaxChannelError": 60,
+      "interpretation": "Sparse pixel differences also occur between repeated unchanged control frames. Cause is unresolved; do not claim all settings are pixel-identical or attribute all differences to the optimizations."
+    },
+    "partSettingsCheck": {
+      "runReference": "run-after-1792362009118-18192",
+      "measurementOk": true,
+      "strictMaxOneGatePassed": true,
+      "caseSettings": {
+        "ok": true,
+        "width": 3840,
+        "height": 2160,
+        "results": [
+          {
+            "name": "original",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "opaque cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 12,
+              "changedPercent": 0.00048225308641975306,
+              "overOnePercent": 0.00006028163580246913,
+              "mean": 0.0000036168981481481483
+            }
+          },
+          {
+            "name": "frosted cover",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 12,
+              "changedPercent": 0.0007354359567901235,
+              "overOnePercent": 0.00003616898148148148,
+              "mean": 0.000004219714506172839
+            }
+          },
+          {
+            "name": "opaque optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "clear optics",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "colored marble",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 9,
+              "changedPercent": 0.0006510416666666667,
+              "overOnePercent": 0.00010850694444444444,
+              "mean": 0.000004581404320987654
+            }
+          },
+          {
+            "name": "preset",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "hidden parts",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          },
+          {
+            "name": "label transform",
+            "difference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "controlDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            },
+            "roundTripDifference": {
+              "max": 0,
+              "changedPercent": 0,
+              "overOnePercent": 0,
+              "mean": 0
+            }
+          }
+        ]
+      },
+      "interactionResourceRegression": {
+        "ok": true,
+        "frames": 2440,
+        "visibleResourceChecks": 12638,
+        "fieldValueChecks": 0,
+        "viewportValueChecks": 1286,
+        "watchedTextures": 23,
+        "violations": []
+      },
+      "selectionTransaction": {
+        "ok": true,
+        "initial": "fixture-album-01",
+        "expectedForward": "fixture-album-06",
+        "expectedReverse": "fixture-album-04",
+        "startCell": {
+          "lane": 0,
+          "row": 12,
+          "foobarEntryKey": "fixture-album-01"
+        },
+        "forward": {
+          "app": "fixture-album-06",
+          "scene": "fixture-album-06"
+        },
+        "opened": {
+          "app": "fixture-album-04",
+          "scene": "fixture-album-04",
+          "hasTrack": true,
+          "title": "现场精选 第04辑"
+        },
+        "returned": true
+      }
+    }
+  },
+  "delegationAudit": "Native child agents were explicitly requested with model gpt-6-luna and reasoning effort max. Tool responses do not expose the resolved backend model metadata; independently verified runtime model metadata is unavailable.",
+  "evaluationComplete": true
 }
