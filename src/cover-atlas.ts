@@ -117,7 +117,7 @@ export class CoverAtlas {
   private selectedKey?: string;
   private generation = 0;
   private disposed = false;
-  private readonly columns = 16;
+  private readonly columns: number;
   private readonly rows: number;
   private readonly tileWidth: number;
   private readonly tileHeight: number;
@@ -130,6 +130,9 @@ export class CoverAtlas {
     layout: CaseRect = COVER_SIZE,
   ) {
     this.layout = { ...layout };
+    // Keep the extended transition pool square. The normal 432-slot atlas was
+    // 16×27; a 27×27 reserve retains its tile resolution on smaller GPUs.
+    this.columns = count > 432 ? Math.ceil(Math.sqrt(count)) : 16;
     this.rows = Math.ceil(count / this.columns);
     this.tileWidth = Math.min(
       256,

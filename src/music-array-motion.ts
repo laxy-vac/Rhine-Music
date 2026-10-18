@@ -1,6 +1,6 @@
-import { damp, type Spring } from "./motion";
+import { damp, type Spring } from "./motion.ts";
 import type { WaveQuality } from "./quality-motion";
-import { MUSIC_SHELF_VIEW } from "./music-display-layout";
+import { MUSIC_SHELF_VIEW } from "./music-display-layout.ts";
 
 /** Columns ahead of the active shelf fade away; later shelves recede into the page. */
 export function arrayLaneAppearance(lane: number, focus: number) {

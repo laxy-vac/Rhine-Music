@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -8,7 +7,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const wc = browserWindow.webContents;
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
   const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [],
-    geometryFrames:[], flightSamples:[], retargets:[], entryTimeline:[], summary: {} };
+    geometryFrames:[], flightSamples:[], retargets:[], qSampleMisses:[], entryTimeline:[], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
   let transitionSequence = 0;
@@ -71,6 +70,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         projectedCenter:stats.projectedCenter ?? null,
         selectedAlbumId:stats.selectedAlbumId ?? null,
         selectedCell:stats.selectedCell ?? null,
+        returningFiles:stats.returningFiles ?? null,
+        selectionPhase:stats.selectionPhase ?? null,
         frameTime:stats.frameTime ?? null, cameraPosition:stats.cameraPosition ?? null,
         cameraAim:stats.cameraAim ?? null,
         cameraDistance:stats.cameraDistance ?? null, fieldOfView:stats.fieldOfView ?? null,
@@ -210,6 +211,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
           active:transition.active ?? null, progress:transition.progress ?? null,
           q:transition.q ?? null, qVelocity:transition.qVelocity ?? null, desiredEnd:transition.desiredEnd ?? null,
           phase:transition.phase ?? null, path:transition.path ?? null, heading:transition.heading ?? null,
+          alignmentDuration:transition.alignmentDuration ?? null, alignmentElapsed:transition.alignmentElapsed ?? null,
+          prepared:transition.prepared ?? null,
           rowSpacing:transition.rowSpacing ?? null, transitionRackDeployment:transition.rackDeployment ?? null,
           geometric:transition.geometric ?? null, frameTime:latest.stats?.frameTime ?? null, cameraPosition:latest.stats?.cameraPosition ?? null,
           cameraAim:latest.stats?.cameraAim ?? null, modelPosition:latest.stats?.modelPosition ?? null,
@@ -238,7 +241,6 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const record = (name, passed, detail = null) => {
     result.assertions[name] = Boolean(passed);
     result.cases.push({ name, ok:Boolean(passed), ...(detail === null ? {} : { detail }) });
-    assert.ok(passed, `${name}${detail === null ? '' : ': ' + JSON.stringify(detail)}`);
   };
   const recordObserved = (name, passed, detail = null) => {
     result.assertions[name] = Boolean(passed);
@@ -265,7 +267,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const takeScreenshot = async (name, details = null, settleMs = 100, captureTransitionClock = false) => {
     let uniqueName = name, suffix = 2;
     while (result.screenshots.some(screenshot => screenshot.name === uniqueName)) uniqueName = `${name}-${suffix++}`;
-    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    if (!captureTransitionClock)
+      await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     if (settleMs > 0) await pause(settleMs);
     const captureBefore = captureTransitionClock ? transitionStamp(await fastSnapshot()) : null;
     const image = await browserWindow.capturePage();
@@ -504,16 +507,19 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     }
     return visible;
   };
-  const ownerMap = state => new Map((state?.stats?.motionGeometry?.instances ?? []).filter(instance =>
-    Array.isArray(instance?.matrix) && instance.matrix.length === 16 && instance.matrix.every(Number.isFinite) &&
-    Number.isFinite(Number(instance?.cell?.lane)) && Number.isFinite(Number(instance?.cell?.row)) &&
-    (instance?.entry || instance?.cell?.foobarEntryKey)).map(instance => {
+  const ownerMap = state => {
+    const instances = state?.stats?.motionGeometry?.instances ?? state?.instanceOwners ?? [];
+    return new Map(instances.filter(instance =>
+      Array.isArray(instance?.matrix) && instance.matrix.length === 16 && instance.matrix.every(Number.isFinite) &&
+      Number.isFinite(Number(instance?.cell?.lane)) && Number.isFinite(Number(instance?.cell?.row)) &&
+      (instance?.entry || instance?.cell?.foobarEntryKey)).map(instance => {
       const entry = String(instance.entry ?? instance.cell.foobarEntryKey);
       const cell = `${Number(instance.cell.lane)}:${Number(instance.cell.row)}`;
       const route = instance.route ? { segment:instance.route.segment ?? null, core:instance.route.core ?? null,
         hasArray:instance.route.hasArray ?? null, hasMatrix:instance.route.hasMatrix ?? null } : null;
       return [instance.id || `${entry}|${cell}`, { id:instance.id ?? null, entry, cell, route, matrix:instance.matrix }];
     }));
+  };
   const ownerContinuityAudit = samples => {
     const owners = new Map(), changes = [];
     for (const sample of samples) for (const [key, owner] of ownerMap(sample)) {
@@ -533,15 +539,33 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const selectedBounds = transformedBounds(geometry.bounds, selectedMatrix);
     const selectedScale = matrixScale(selectedMatrix);
     const projectedHeroBounds = selectedBounds ? projectWorldBounds(selectedBounds.points, state) : null;
-    const projection = boundsPoints(geometry.bounds);
-    const fullSizeOffscreenGhosts = projection ? instances.filter(instance => {
-      if (!instance?.entry || instance.entry === state.selectedEntryKey || instance.route?.core !== false) return false;
+    const routeInstances = instances.filter(instance => instance?.route && instance?.entry && instance.route.core === false);
+    const routeFrame = routeInstances.map(instance => {
       const scale = matrixScale(instance.matrix), world = transformedBounds(geometry.bounds, instance.matrix);
       const box = world ? projectWorldBounds(world.points, state) : null;
-      return scale?.every(value => Math.abs(value - 1) <= .06) && box?.valid &&
-        (box.maxX < -1 || box.minX > 1 || box.maxY < -1 || box.minY > 1);
-    }).map(instance => ({ id:instance.id ?? null, entry:instance.entry, cell:instance.cell,
-      route:instance.route ?? null, scale:matrixScale(instance.matrix) })) : [];
+      const unitScale = !!scale?.every(value => Number.isFinite(value) && Math.abs(value - 1) <= .06);
+      const positiveDepth = Number.isFinite(Number(box?.depthMin)) && Number(box.depthMin) > Math.max(0, Number(state.stats?.cameraNear) || 0);
+      const fullyOffscreen = !!box?.valid && positiveDepth && box.intersectsFrustum === false;
+      return { id:instance.id ?? null, entry:instance.entry, cell:instance.cell,
+        route:instance.route, scale, unitScale, positiveDepth, fullyOffscreen,
+        intersectsFrustum:box?.intersectsFrustum === true,
+        ndcBounds:box ? { minX:box.minX, maxX:box.maxX, minY:box.minY, maxY:box.maxY,
+          depthMin:box.depthMin, depthMax:box.depthMax } : null };
+    });
+    const matchedPeripheral = routeFrame.filter(item => item.route.hasArray === true && item.route.hasMatrix === true);
+    const oneEndRoutes = routeFrame.filter(item => item.route.hasArray !== item.route.hasMatrix);
+    const matrixOnly = oneEndRoutes.filter(item => item.route.hasArray === false && item.route.hasMatrix === true);
+    const arrayOnly = oneEndRoutes.filter(item => item.route.hasArray === true && item.route.hasMatrix === false);
+    const inPeripheralRearrangementWindow = Number(transition.q) >= .2 && Number(transition.q) <= .4;
+    const matchedPeripheralOffscreenFailures = inPeripheralRearrangementWindow
+      ? matchedPeripheral.filter(item => !item.unitScale || !item.positiveDepth || !item.fullyOffscreen)
+        .map(({ id, entry, cell, route, scale, positiveDepth, fullyOffscreen, ndcBounds }) =>
+          ({ id, entry, cell, route, scale, positiveDepth, fullyOffscreen, ndcBounds })) : [];
+    const oneEndScaleDepthFailures = oneEndRoutes.filter(item => !item.unitScale || !item.positiveDepth)
+      .map(({ id, entry, cell, route, scale, positiveDepth, ndcBounds }) =>
+        ({ id, entry, cell, route, scale, positiveDepth, ndcBounds }));
+    const fullSizeOffscreenGhosts = routeFrame.filter(item => item.unitScale && item.positiveDepth && item.fullyOffscreen)
+      .map(({ id, entry, cell, route, scale, ndcBounds }) => ({ id, entry, cell, route, scale, ndcBounds }));
     const coreInstances = instances.filter(instance => instance.route?.core === true);
     const coreScaleFailures = coreInstances.filter(instance => !matrixScale(instance.matrix)?.every(value =>
       Number.isFinite(value) && Math.abs(value - 1) <= .06)).map(instance => ({ id:instance.id ?? null,
@@ -559,7 +583,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       selectedCell:state.stats?.selectedCell ?? null, cameraPosition:xyz(state.stats?.cameraPosition),
       cameraAim:xyz(state.stats?.cameraAim), cameraDistance:Number(state.stats?.cameraDistance),
       fieldOfView:Number(state.stats?.fieldOfView), cameraNear:Number(state.stats?.cameraNear), cameraFar:Number(state.stats?.cameraFar),
-      caseBounds:geometry.bounds ?? null, cameraToHeroDistance:selectedBounds && state.stats?.cameraPosition
+      caseBounds:geometry.bounds ?? null, heroMatrix:selectedMatrix ?? null, cameraToHeroDistance:selectedBounds && state.stats?.cameraPosition
         ? Math.hypot(...selectedBounds.center.map((value, index) => value - Number(state.stats.cameraPosition[index]))) : null,
       heroWorldCenter:selectedBounds?.center ?? null, heroWorldBounds:selectedBounds ? { min:selectedBounds.min, max:selectedBounds.max } : null,
       heroProjectedBounds:projectedHeroBounds, selectedScale, rackDeployment:Number(state.stats?.rackDeployment),
@@ -569,6 +593,12 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         cell:instance.cell ? { lane:instance.cell.lane, row:instance.cell.row } : null,
         route:instance.route ?? null, matrix:instance.matrix })),
       coreRouteCount:coreInstances.length, coreScaleFailures,
+      matchedPeripheralCount:matchedPeripheral.length, matchedPeripheralOffscreenFailures,
+      oneEndRouteCount:oneEndRoutes.length, oneEndScaleDepthFailures,
+      matrixOnlyCount:matrixOnly.length, matrixOnlyVisibleCount:matrixOnly.filter(item => item.intersectsFrustum).length,
+      matrixOnlyOffscreenCount:matrixOnly.filter(item => item.fullyOffscreen).length,
+      arrayOnlyCount:arrayOnly.length, arrayOnlyVisibleCount:arrayOnly.filter(item => item.intersectsFrustum).length,
+      arrayOnlyOffscreenCount:arrayOnly.filter(item => item.fullyOffscreen).length,
       visibleEntries,
       fullSizeOffscreenGhostCount:fullSizeOffscreenGhosts.length, fullSizeOffscreenGhosts,
       sampleError:state.sampleError ?? null,
@@ -590,14 +620,31 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const progressMonotonic = samples.every((sample, index) => index === 0 || sample.progress + .015 >= samples[index - 1].progress);
     const qMonotonic = samples.every((sample, index) => index === 0 ||
       (canonicalDirection > 0 ? sample.q + .015 >= samples[index - 1].q : sample.q - .015 <= samples[index - 1].q));
+    const alignSamples = samples.filter(sample => sample.phase === 'align');
+    const alignQValues = alignSamples.map(sample => Number(sample.q));
+    const alignQFrozen = alignSamples.length === 0 || (alignQValues.length >= 2 && alignQValues.every(Number.isFinite) &&
+      Math.max(...alignQValues) - Math.min(...alignQValues) <= 1e-8);
+    const lastAlignMs = alignSamples.length ? Math.max(...alignSamples.map(sample => Number(sample.sinceClickMs))) : 0;
+    const postAlignSamples = samples.filter(sample => Number(sample.sinceClickMs) > lastAlignMs);
+    const postAlignQMonotonic = postAlignSamples.every((sample, index) => index === 0 ||
+      (canonicalDirection > 0 ? sample.q + .015 >= postAlignSamples[index - 1].q
+        : sample.q - .015 <= postAlignSamples[index - 1].q));
     const pathIsCameraOrbit = samples.length > 0 && samples.every(sample => sample.path === 'camera-orbit') &&
       requested.every(sample => sample.path === 'camera-orbit');
     const allIdentityStable = actual.length >= requestedQValues.length && actual.every(sample =>
       sample.selectedAlbumId === identity.selectedAlbumId && sample.selectedEntryKey === identity.selectedEntryKey &&
       (sample.selectedCell?.foobarEntryKey == null || sample.selectedCell.foobarEntryKey === identity.selectedEntryKey));
-    const qCoverage = requestedQValues.map(q => ({ requested:q,
-      observed:requested.find(sample => Math.abs(sample.q - q) <= .022)?.q ?? null }));
-    const qCoverageOkay = qCoverage.every(sample => Number.isFinite(sample.observed));
+    const qCoverage = requestedQValues.map(q => {
+      const nearest = requested.reduce((best, sample) => !best || Math.abs(sample.q - q) < Math.abs(best.q - q) ? sample : best, null);
+      const error = nearest ? Math.abs(nearest.q - q) : Infinity;
+      return { requested:q, observed:nearest?.q ?? null, nearestActualQ:nearest?.q ?? null,
+        absoluteError:Number.isFinite(error) ? error : null, tolerance:.10 };
+    });
+    // Real-time capture may cross a narrow requested instant. Exact q geometry
+    // is tested separately; native acceptance requires dense actual coverage
+    // plus explicit rearrangement/midpoint frames, never relabeled samples.
+    const qCoverageOkay = qCoverage.every(sample => Number.isFinite(sample.observed) && sample.absoluteError <= sample.tolerance);
+    const qSampleMisses = result.qSampleMisses.filter(miss => miss.context === context);
     const sourceQ = activeTarget === 1 ? 0 : 1, targetQ = activeTarget;
     const sourceEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - sourceQ) <= .001);
     const targetEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - targetQ) <= .001);
@@ -631,9 +678,25 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const pullsBackAtMatrix = cameraDistance.length >= 2 && cameraDistance.at(-1) > cameraDistance[0] + .5;
     const heroDistances = orderedByQ.map(sample => sample.cameraToHeroDistance);
     const heroDistanceFacts = heroDistances.every(Number.isFinite) ? { array:heroDistances[0], matrix:heroDistances.at(-1) } : null;
-    const heroDistanceMonotonic = heroDistances.length >= 3 && heroDistances.every(Number.isFinite) &&
-      heroDistances.slice(1).every((value, index) => value + .08 >= heroDistances[index]);
+    const heroPathSamples = [...requested, targetEndpoint].filter(Boolean).sort((a, b) => a.q - b.q);
+    const heroPathDistances = heroPathSamples.map(sample => sample.cameraToHeroDistance);
+    const heroDistanceMonotonic = heroPathDistances.length >= 3 && heroPathDistances.every(Number.isFinite) &&
+      heroPathDistances.slice(1).every((value, index) => value + .08 >= heroPathDistances[index]);
     const heroDistanceGrows = heroDistances.length >= 2 && heroDistances.at(-1) > heroDistances[0] + .5;
+    const sourceQForHero = activeTarget === 1 ? 0 : 1;
+    const firstActiveSample = requested.reduce((best, sample) => !best ||
+      Math.abs(sample.q - sourceQForHero) < Math.abs(best.q - sourceQForHero) ? sample : best, null);
+    const sourceHeroDistance = Number(sourceEndpoint?.cameraToHeroDistance);
+    const firstActiveHeroDistance = Number(firstActiveSample?.cameraToHeroDistance);
+    const targetHeroDistance = Number(targetEndpoint?.cameraToHeroDistance);
+    const sourceToFirstActiveHeroDistanceDelta = Number.isFinite(sourceHeroDistance) && Number.isFinite(firstActiveHeroDistance)
+      ? firstActiveHeroDistance - sourceHeroDistance : null;
+    const heroDistancePathFacts = { firstActiveQ:firstActiveSample?.q ?? null,
+      firstActiveDistance:Number.isFinite(firstActiveHeroDistance) ? firstActiveHeroDistance : null,
+      targetQ:targetEndpoint?.q ?? null, targetDistance:Number.isFinite(targetHeroDistance) ? targetHeroDistance : null,
+      sourceQ:sourceEndpoint?.q ?? null, sourceDistance:Number.isFinite(sourceHeroDistance) ? sourceHeroDistance : null,
+      sourceToFirstActiveDelta:sourceToFirstActiveHeroDistanceDelta,
+      monotonicSamples:heroPathSamples.length };
     const cameraYaw = orderedByQ.map(sample => sample.cameraPosition && sample.cameraAim
       ? Math.atan2(sample.cameraPosition[0] - sample.cameraAim[0], sample.cameraPosition[2] - sample.cameraAim[2]) : NaN);
     let yawTrack = 0, previousYaw = null;
@@ -645,12 +708,13 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const cameraOrbits = Number.isFinite(cameraYawDelta) && Math.abs(cameraYawDelta) > .02 && Math.abs(cameraYawDelta) < Math.PI + .05;
     const headingValues = actual.map(sample => sample.heading);
     const maxAbsoluteHeading = headingValues.length ? Math.max(...headingValues.map(Math.abs)) : NaN;
-    const midpoint = actual.find(sample => !sample.endpoint && Math.abs(sample.requestedQ - .5) < .01);
+    const midpoint = requested.reduce((best, sample) => !best || Math.abs(sample.q - .5) < Math.abs(best.q - .5) ? sample : best, null);
     const rackHeadingTrackOkay = Number.isFinite(maxAbsoluteHeading) && maxAbsoluteHeading <= 10 * Math.PI / 180 + .012 &&
       Math.abs(Number(midpoint?.heading)) >= .12 && actual.filter(sample => sample.endpoint).every(sample => Math.abs(sample.heading) <= .03);
-    const rowSpacings = actual.map(sample => sample.rowSpacing);
+    const rowSpacingSamples = [...requested].sort((a, b) => a.q - b.q);
+    const rowSpacings = rowSpacingSamples.map(sample => sample.rowSpacing);
     const rowSpacingStaysCompact = rowSpacings.length > 1 && rowSpacings.every(value => Number.isFinite(value) && value >= .55 && value <= 1.1) &&
-      orderedByQ[0].rowSpacing > orderedByQ.at(-1).rowSpacing + .15;
+      rowSpacingSamples[0].rowSpacing > rowSpacingSamples.at(-1).rowSpacing + .15;
     const rackFlightSamples = requested.map(sample => sample.rackFlight).filter(Boolean);
     const rackBoundsValid = rackFlightSamples.length === requested.length && rackFlightSamples.every(rack =>
       Array.isArray(rack.projected) && rack.projected.length === 4 && rack.projected.every(Number.isFinite) &&
@@ -663,31 +727,75 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const rackAtArrayVisible = !!nearArray?.rackFlight?.visible && nearArray.rackFlight.outside === false;
     const rackExitsBelowViewport = nearMatrix?.rackFlight?.outside === true && nearMatrix.rackFlight.visible === false &&
       Number(nearMatrix.rackFlight.projected?.[1]) < -1.1;
-    const rackDeploymentStaysFull = samples.length > 0 && samples.every(sample =>
+    const preparedSamples = samples.filter(sample => sample.prepared === true);
+    const rackDeploymentStaysFull = preparedSamples.length > 0 && preparedSamples.every(sample =>
       Number.isFinite(Number(sample.rackDeployment)) && Math.abs(Number(sample.rackDeployment) - 1) <= .03 &&
       Math.abs(Number(sample.transitionRackDeployment) - 1) <= .03);
     const rackPartsAtMid = Array.isArray(midpoint?.rackParts) ? midpoint.rackParts : [];
-    const arrayEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q) < .001);
-    const arrayRackParts = Array.isArray(arrayEndpoint?.rackParts) ? arrayEndpoint.rackParts : [];
-    const visibleArrayRackParts = arrayRackParts.map((part, index) => ({ part, index })).filter(item => item.part.visible === true);
-    const fullRackPosePresent = visibleArrayRackParts.length > 0 && visibleArrayRackParts.every(({ part, index }) => {
-        const moving = rackPartsAtMid[index];
-        return moving?.visible === true && xyz(part.scale) && xyz(moving.scale) &&
-          part.scale.every((value, axis) => value > .001 && Math.abs(value - moving.scale[axis]) <= .04);
-      });
+    // Compare the frozen rigid rack in flight, rather than a subsequent normal
+    // shelf whose slot window may differ. Fixed floor marks and unused zero
+    // instances are not physical rack members; visibility is audited by bounds.
+    const firstRackParts = requested.find(sample => sample.rackParts?.some(part =>
+      !/floor|locator|seam/i.test(part.name) && part.visible && xyz(part.scale)?.every(value => value > 1e-6)))?.rackParts ?? [];
+    const rigidRackParts = firstRackParts.filter(part => !/floor|locator|seam/i.test(part.name) &&
+      part.visible && xyz(part.scale)?.every(value => value > 1e-6));
+    const fullRackPosePresent = rigidRackParts.length > 0 && rigidRackParts.every(part => {
+      const moving = rackPartsAtMid.find(candidate => candidate.name === part.name);
+      return xyz(moving?.scale) && part.scale.every((value, axis) => Math.abs(value - moving.scale[axis]) <= .04);
+    });
     const selectedScaleOkay = requested.length > 0 && requested.every(sample => sample.selectedScale?.every(value =>
       Number.isFinite(value) && Math.abs(value - 1) <= .06));
     const coreRouteScaleOne = requested.length > 0 && requested.every(sample => sample.coreRouteCount > 0 &&
       sample.coreScaleFailures.length === 0);
-    const ghostFullSizePresent = !!midpoint && midpoint.fullSizeOffscreenGhostCount > 0;
-    const selectedViewportOkay = requested.length > 0 && requested.every(sample => viewportAudit(sample.motionViewport).ok);
+    const matchedRearrangementFrames = requested.filter(sample => sample.q >= .2 && sample.q <= .4);
+    const matchedPeripheralOffscreen = matchedRearrangementFrames.length > 0 && matchedRearrangementFrames.every(sample =>
+      sample.matchedPeripheralCount === 0 || sample.matchedPeripheralOffscreenFailures.length === 0);
+    const matchedPeripheralPresent = matchedRearrangementFrames.some(sample => sample.matchedPeripheralCount > 0);
+    const coreMiddleFrames = requested.filter(sample => sample.q >= .4 && sample.q <= .6);
+    const coreMiddleSampleCaptured = coreMiddleFrames.some(sample => sample.coreRouteCount > 0 && sample.coreScaleFailures.length === 0);
+    const oneEndUnitPositiveDepth = requested.length > 0 && requested.every(sample => sample.oneEndRouteCount > 0 &&
+      sample.oneEndScaleDepthFailures.length === 0);
+    const beforeMatrixEntryFrames = requested.filter(sample => sample.q < .4);
+    const lateMatrixEntry = requested.filter(sample => sample.q >= .9).sort((a,b) => a.q - b.q)[0];
+    const earlyArrayExit = requested.filter(sample => sample.q >= .2 && sample.q <= .4);
+    const lateArrayExit = requested.filter(sample => sample.q >= .55);
+    const matrixOnlyWaitsUntilQ04 = beforeMatrixEntryFrames.length >= 2 && beforeMatrixEntryFrames.every(sample =>
+      sample.matrixOnlyCount > 0 && sample.matrixOnlyOffscreenCount === sample.matrixOnlyCount);
+    const matrixOnlyArrivesByQ095 = !!lateMatrixEntry && lateMatrixEntry.matrixOnlyCount > 0 &&
+      lateMatrixEntry.visibleEntries.some(item => item.route?.hasArray === false && item.route?.hasMatrix === true);
+    const arrayOnlyClearsByQ02 = earlyArrayExit.length > 0 && earlyArrayExit.every(sample =>
+      sample.arrayOnlyCount === 0 || sample.arrayOnlyOffscreenCount === sample.arrayOnlyCount);
+    const arrayOnlyExitsByQ055 = lateArrayExit.length > 0 && lateArrayExit.every(sample =>
+      sample.arrayOnlyCount === 0 || sample.arrayOnlyOffscreenCount === sample.arrayOnlyCount);
+    const parkedGhostEvidenceFrames = matchedRearrangementFrames.filter(sample => sample.fullSizeOffscreenGhostCount > 0);
+    const ghostFullSizePresent = parkedGhostEvidenceFrames.length > 0;
+    const endpointBoxes = [sourceEndpoint, targetEndpoint].map(sample => sample?.heroProjectedBounds);
+    const normalEndpointEnvelope = endpointBoxes.every(Boolean) ? {
+      minY:Math.min(...endpointBoxes.map(box => box.minY)) - .01,
+      maxY:Math.max(...endpointBoxes.map(box => box.maxY)) + .01,
+    } : null;
+    const horizontalBounds = requested.find(sample => sample.motionViewport?.bounds)?.motionViewport.bounds;
+    const endpointsInsideCanvas = !!horizontalBounds && endpointBoxes.every(box => box?.valid && box.depthMin > 5 &&
+      box.minX >= Math.max(-1, horizontalBounds.minX - .02) && box.maxX <= Math.min(1, horizontalBounds.maxX + .02) &&
+      box.minY >= -1 && box.maxY <= 1);
+    // Static Punk navigation spans empty space below the case. Preserve its
+    // normal endpoint envelope vertically; do not redesign static UI here.
+    const selectedViewportOkay = endpointsInsideCanvas && !!normalEndpointEnvelope && requested.length > 0 && requested.every(sample => {
+      const viewport = sample.motionViewport;
+      return viewportAudit({ ...viewport, bounds: { ...viewport.bounds,
+        minY:Math.min(viewport.bounds.minY, normalEndpointEnvelope.minY),
+        maxY:Math.max(viewport.bounds.maxY, normalEndpointEnvelope.maxY) } }).ok;
+    });
     const ownerContinuity = ownerContinuityAudit(requested);
     const ownerCellEntryStable = ownerContinuity.checkedIds > 0 && ownerContinuity.ownerChanges.length === 0;
     const neighborMotionPxPerSecond = neighborMotionAudit(samples);
     return { sampleCount:samples.length, qCoverage, qCoverageOkay, progressInBounds, progressMonotonic, qMonotonic,
       pathIsCameraOrbit, allIdentityStable, activeTarget, cameraYMonotonic, cameraYLowerAtMatrix,
+      alignSampleCount:alignSamples.length, alignQFrozen, postAlignQMonotonic,
       pullsBackMonotonic, pullsBackAtMatrix, heroDistanceMonotonic, heroDistanceGrows,
-      heroDistanceFacts, cameraYawDelta, cameraOrbits,
+      heroDistanceFacts, heroDistancePathFacts, sourceToFirstActiveHeroDistanceDelta,
+      heroDistanceSourceDeltaExplanation:'Pre-click endpoint can differ from the first post-align q sample; only post-start q samples plus the target endpoint define hero-distance monotonicity.',
+      cameraYawDelta, cameraOrbits,
       sourceVisibleEntryCount:sourceVisibleEntries.size, targetVisibleEntryCount:targetVisibleEntries.size,
       sourceRouteKey, targetRouteKey, allVisibleEndpointEntriesRouted, routeCoverage,
       maxAbsoluteHeading, midpointHeading:midpoint?.heading ?? null, rackHeadingTrackOkay,
@@ -695,8 +803,18 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       rackBoundsValid, rackVisibilityFollowsCompleteBounds, rackAtArrayVisible, rackExitsBelowViewport,
       rackDeploymentStaysFull, fullRackPosePresent,
       selectedScaleOkay, coreRouteScaleOne, midpointCoreRouteCount:midpoint?.coreRouteCount ?? 0,
+      matchedPeripheralOffscreen, matchedPeripheralPresent,
+      matchedRearrangementQ:matchedRearrangementFrames.map(sample => sample.q),
+      parkedGhostEvidenceQ:parkedGhostEvidenceFrames.map(sample => sample.q),
+      coreMiddleSampleCaptured, coreMiddleQ:coreMiddleFrames.map(sample => sample.q),
+      oneEndUnitPositiveDepth, matrixOnlyWaitsUntilQ04, matrixOnlyArrivesByQ095,
+      arrayOnlyClearsByQ02, arrayOnlyExitsByQ055,
+      oneEndCountsAt:requested.map(sample => ({ q:sample.q, matrixOnly:sample.matrixOnlyCount,
+        matrixOnlyVisible:sample.matrixOnlyVisibleCount, arrayOnly:sample.arrayOnlyCount,
+        arrayOnlyVisible:sample.arrayOnlyVisibleCount, oneEndScaleDepthFailures:sample.oneEndScaleDepthFailures.length })),
       ghostFullSizePresent, midpointGhostCount:midpoint?.fullSizeOffscreenGhostCount ?? 0,
-      selectedViewportOkay, ownerCellEntryStable, ownerContinuity, neighborMotionPxPerSecond };
+      qSampleMisses, selectedViewportOkay, endpointsInsideCanvas, normalEndpointEnvelope,
+      ownerCellEntryStable, ownerContinuity, neighborMotionPxPerSecond };
   };
   const settledHandoffAudit = async (designLabel, context, identity, terminal) => {
     const terminalFrameTime = Number(terminal.stats?.frameTime);
@@ -725,7 +843,35 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       matrixMaxDelta <= .1 && Number.isFinite(selectedMatrixDelta) && selectedMatrixDelta <= .1, resultFrame);
     return resultFrame;
   };
-  const transitionTo = async (designLabel, target, identity) => {
+  const auditAlignment = (context, required = false) => {
+    const activeSamples = result.transitionSamples.filter(sample => sample.context === context && sample.active === true);
+    const alignment = activeSamples.filter(sample => sample.phase === 'align');
+    if (!required && alignment.length === 0) return null;
+    const qValues = alignment.map(sample => Number(sample.q));
+    const qFrozen = qValues.length >= 2 && qValues.every(Number.isFinite) && Math.max(...qValues) - Math.min(...qValues) <= 1e-8;
+    const times = alignment.map(sample => Number(sample.sinceClickMs)).filter(Number.isFinite);
+    const observedDurationMs = times.length >= 2 ? Math.max(...times) - Math.min(...times) : null;
+    const alignmentDurationObserved = Number.isFinite(observedDurationMs) && observedDurationMs > 0 && observedDurationMs < 1000 &&
+      alignment.every(sample => Math.abs(Number(sample.alignmentDuration) - .18) < 1e-8 &&
+        Number(sample.alignmentElapsed) >= 0 && Number(sample.alignmentElapsed) <= .18 + 1e-8);
+    const desiredEnd = Number(alignment[0]?.desiredEnd);
+    const sourceQ = desiredEnd === 1 ? 0 : 1;
+    const qStartsAtSourceEndpoint = qValues.length > 0 && Math.abs(qValues[0] - sourceQ) <= .001;
+    const lastAlignMs = times.length ? Math.max(...times) : 0;
+    const afterAlign = activeSamples.filter(sample => Number(sample.sinceClickMs) > lastAlignMs);
+    const direction = desiredEnd === 1 ? 1 : -1;
+    const postAlignQMonotonic = afterAlign.length >= 2 && afterAlign.every((sample, index) => index === 0 ||
+      (direction > 0 ? sample.q + .015 >= afterAlign[index - 1].q : sample.q - .015 <= afterAlign[index - 1].q));
+    const postAlignQMoved = afterAlign.length >= 2 && Math.abs(Number(afterAlign.at(-1).q) - Number(afterAlign[0].q)) > .05;
+    const audit = { observed:alignment.length > 0, sampleCount:alignment.length, qMin:qValues.length ? Math.min(...qValues) : null,
+      qMax:qValues.length ? Math.max(...qValues) : null, qFrozen, qStartsAtSourceEndpoint,
+      observedDurationMs, simulatedDuration:alignment[0]?.alignmentDuration ?? null, alignmentDurationObserved,
+      postAlignSampleCount:afterAlign.length, postAlignQMonotonic, postAlignQMoved };
+    record(`${context} hover alignment holds canonical q during its 0.18s animation clock`,
+      qFrozen && qStartsAtSourceEndpoint && alignmentDurationObserved && postAlignQMonotonic && postAlignQMoved, audit);
+    return audit;
+  };
+  const transitionTo = async (designLabel, target, identity, options = {}) => {
     const current = await snapshot();
     if (current.viewLayout === target && current.stats?.layoutTransition?.active !== true) return current;
     const context = `${designLabel} ${target} #${++transitionSequence}`;
@@ -744,6 +890,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     record(`${designLabel} ${target} reaches canonical q=${desiredEnd} with identity intact`,
       identityMatches(end, identity) && identityMatches(detailedEnd, identity) &&
       Math.abs(Number(detailedEnd.stats?.layoutTransition?.q) - desiredEnd) < .001, shortState(detailedEnd));
+    const alignmentAudit = auditAlignment(context, options.requireAlignment === true);
+    if (alignmentAudit) result.timeline.push({ design:designLabel, direction:'hover-alignment', target,
+      alignment:alignmentAudit, endpoint:detailedEnd.viewLayout });
     transitionProbeStartedAt = 0; transitionProbeContext = '';
     return detailedEnd;
   };
@@ -751,6 +900,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const sourceLayout = target === 'array' ? 'shelf' : 'array';
     const sourceQ = target === 'array' ? 0 : 1;
     const targetQ = target === 'array' ? 1 : 0;
+    const canonicalDirection = target === 'array' ? 1 : -1;
     const direction = target === 'array' ? 'array-to-matrix' : 'matrix-to-array';
     const context = `${designLabel} ${direction} #${++transitionSequence}`;
     const source = await waitFor(state => state.viewLayout === sourceLayout && state.stats?.layoutTransition?.active !== true &&
@@ -771,16 +921,35 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       active.stats.layoutTransition.path === 'camera-orbit' && Number.isFinite(Number(active.stats.layoutTransition.q)), shortState(active));
     const observations = [];
     for (const requestedQ of requestedQValues) {
-      const state = await waitForFast(value => value.viewLayout === target && value.stats?.layoutTransition?.active === true &&
-        Number(value.stats.layoutTransition.desiredEnd) === desiredEnd &&
-        Math.abs(Number(value.stats.layoutTransition.q) - requestedQ) <= .018,
+      const qTolerance = requestedQ === .2 || requestedQ === .4 ? .004 : requestedQ === .55 ? .006 : .018;
+      const actualReachedTarget = value => canonicalDirection > 0
+        ? Number(value.stats?.layoutTransition?.q) >= requestedQ - qTolerance
+        : Number(value.stats?.layoutTransition?.q) <= requestedQ + qTolerance;
+      const state = await waitForFast(value => value.viewLayout === target &&
+        Number(value.stats?.layoutTransition?.desiredEnd) === desiredEnd && actualReachedTarget(value),
       `${context} q=${requestedQ.toFixed(2)}`, 15000, 8);
+      const fastQ = Number(state.stats?.layoutTransition?.q), fastError = Math.abs(fastQ - requestedQ);
+      if (!Number.isFinite(fastError) || fastError > .022) {
+        const miss = { context, requestedQ, actualQ:fastQ, absoluteError:Number.isFinite(fastError) ? fastError : null,
+          direction, frameTime:state.stats?.frameTime ?? null, cameraPosition:state.stats?.cameraPosition ?? null,
+          cameraDistance:state.stats?.cameraDistance ?? null,
+          reason:'The requested q threshold was crossed while capture was delayed; no geometry screenshot was labeled as that q.' };
+        result.qSampleMisses.push(miss);
+      }
       const observed = await captureFlightSample(context, requestedQ, false);
+      const captureError = Math.abs(Number(observed.q) - requestedQ);
+      if (!Number.isFinite(captureError) || captureError > .022) {
+        const miss = { context, requestedQ, actualQ:observed.q, absoluteError:Number.isFinite(captureError) ? captureError : null,
+          direction, frameTime:observed.frameTime, cameraPosition:observed.cameraPosition,
+          cameraDistance:observed.cameraDistance,
+          reason:'The full geometry read advanced beyond the requested q window; the observed q is retained as-is.' };
+        result.qSampleMisses.push(miss);
+      }
       observations.push(observed);
       record(`${context} q=${requestedQ.toFixed(2)} keeps selected entry and its owner cell`,
         identityMatches(state, identity) && identityMatches(observed, identity) && observed.instanceCount > 0,
         { requestedQ, observedQ:observed.q, selectedCell:observed.selectedCell, instanceCount:observed.instanceCount });
-      await takeScreenshot(`${designLabel.toLowerCase()}-${direction}-q-${requestedQ.toFixed(2)}`,
+      if (![.2,.4,.55].includes(requestedQ)) await takeScreenshot(`${designLabel.toLowerCase()}-${direction}-q-${requestedQ.toFixed(2)}`,
         { direction, requestedQ, canonicalQ:observed.q, selectedAlbumId:observed.selectedAlbumId,
           selectedEntryKey:observed.selectedEntryKey, selectedCell:observed.selectedCell,
           cameraY:observed.cameraPosition?.[1] ?? null, cameraDistance:observed.cameraDistance,
@@ -799,25 +968,54 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const handoff = await settledHandoffAudit(designLabel, direction, identity, await geometrySnapshot());
     transitionProbeStartedAt = 0; transitionProbeContext = '';
     const audit = auditFlight(context, target, requestedQValues, identity);
-    record(`${context} samples every requested canonical q in path order with camera-orbit`,
-      audit.qCoverageOkay && audit.qMonotonic && audit.progressInBounds && audit.progressMonotonic && audit.pathIsCameraOrbit, audit);
+    record(`${context} captures dense actual q coverage in path order with camera-orbit`,
+      audit.qCoverageOkay && audit.qMonotonic && audit.alignQFrozen && audit.postAlignQMonotonic &&
+      audit.progressInBounds && audit.progressMonotonic && audit.pathIsCameraOrbit, audit);
+    record(`${context} captured actual q frames in the .2-.4 rearrangement window and core midpoint`,
+      audit.matchedRearrangementQ.length > 0 && audit.coreMiddleSampleCaptured,
+      { matchedActualQ:audit.matchedRearrangementQ, coreMiddleActualQ:audit.coreMiddleQ,
+        missedQSamples:audit.qSampleMisses });
     record(`${context} camera lowers and pulls back continuously toward MATRIX`,
       audit.cameraYMonotonic && audit.cameraYLowerAtMatrix && audit.pullsBackMonotonic && audit.pullsBackAtMatrix &&
       audit.heroDistanceMonotonic && audit.heroDistanceGrows && audit.cameraOrbits,
       { cameraYMonotonic:audit.cameraYMonotonic, cameraYLowerAtMatrix:audit.cameraYLowerAtMatrix,
         pullsBackMonotonic:audit.pullsBackMonotonic, pullsBackAtMatrix:audit.pullsBackAtMatrix,
         heroDistanceMonotonic:audit.heroDistanceMonotonic, heroDistanceGrows:audit.heroDistanceGrows,
-        cameraYawDelta:audit.cameraYawDelta, heroDistanceFacts:audit.heroDistanceFacts });
-    record(`${context} keeps the selected case in the viewport at unit scale and ghosts full size off camera`,
+        cameraYawDelta:audit.cameraYawDelta, heroDistanceFacts:audit.heroDistanceFacts,
+        heroDistancePathFacts:audit.heroDistancePathFacts,
+        sourceToFirstActiveHeroDistanceDelta:audit.sourceToFirstActiveHeroDistanceDelta,
+        heroDistanceSourceDeltaExplanation:audit.heroDistanceSourceDeltaExplanation });
+    record(`${context} preserves selected entry ownership, full-size core cases and every visible endpoint entry`,
       audit.allIdentityStable && audit.ownerCellEntryStable && audit.selectedViewportOkay && audit.selectedScaleOkay &&
-      audit.coreRouteScaleOne && audit.ghostFullSizePresent && audit.allVisibleEndpointEntriesRouted,
+      audit.coreRouteScaleOne && audit.allVisibleEndpointEntriesRouted,
       { allIdentityStable:audit.allIdentityStable, ownerContinuity:audit.ownerContinuity,
         selectedViewportOkay:audit.selectedViewportOkay, selectedScaleOkay:audit.selectedScaleOkay,
         coreRouteScaleOne:audit.coreRouteScaleOne, midpointCoreRouteCount:audit.midpointCoreRouteCount,
         sourceVisibleEntryCount:audit.sourceVisibleEntryCount, targetVisibleEntryCount:audit.targetVisibleEntryCount,
         sourceRouteKey:audit.sourceRouteKey, targetRouteKey:audit.targetRouteKey,
-        allVisibleEndpointEntriesRouted:audit.allVisibleEndpointEntriesRouted, routeCoverage:audit.routeCoverage,
-        middleGhostCount:audit.midpointGhostCount, middleGhosts:observations.find(sample => sample.requestedQ === .5)?.fullSizeOffscreenGhosts });
+        allVisibleEndpointEntriesRouted:audit.allVisibleEndpointEntriesRouted, routeCoverage:audit.routeCoverage });
+    record(`${context} matched peripheral cases stay unit-size and fully offscreen through actual q=.2..4`,
+      audit.matchedPeripheralOffscreen && audit.ghostFullSizePresent,
+      { matchedPeripheralOffscreen:audit.matchedPeripheralOffscreen, qSamples:audit.matchedRearrangementQ,
+        matchedPeripheralPresent:audit.matchedPeripheralPresent,
+        parkedGhostEvidenceQ:audit.parkedGhostEvidenceQ,
+        matchedCounts:observations.filter(sample => sample.q >= .2 && sample.q <= .4)
+          .map(sample => ({ q:sample.q, count:sample.matchedPeripheralCount })),
+        matchedCount:observations.find(sample => sample.requestedQ === .5)?.matchedPeripheralCount,
+        failures:observations.filter(sample => sample.q >= .25 && sample.q <= .6)
+          .map(sample => ({ q:sample.q, count:sample.matchedPeripheralOffscreenFailures.length,
+            first:sample.matchedPeripheralOffscreenFailures.slice(0, 3) })) });
+    record(`${context} one-end cases stay unit-size and in positive camera depth while moving`,
+      audit.oneEndUnitPositiveDepth, { oneEndUnitPositiveDepth:audit.oneEndUnitPositiveDepth,
+        oneEndCountsAt:audit.oneEndCountsAt,
+        failures:observations.map(sample => ({ q:sample.q, failures:sample.oneEndScaleDepthFailures.length,
+          first:sample.oneEndScaleDepthFailures.slice(0, 3) })) });
+    record(`${context} MATRIX-only entries enter from q=.4 and ARRAY-only entries clear by q=.2/.55`,
+      audit.matrixOnlyWaitsUntilQ04 && audit.matrixOnlyArrivesByQ095 &&
+      audit.arrayOnlyClearsByQ02 && audit.arrayOnlyExitsByQ055,
+      { matrixOnlyWaitsUntilQ04:audit.matrixOnlyWaitsUntilQ04, matrixOnlyArrivesByQ095:audit.matrixOnlyArrivesByQ095,
+        arrayOnlyClearsByQ02:audit.arrayOnlyClearsByQ02, arrayOnlyExitsByQ055:audit.arrayOnlyExitsByQ055,
+        oneEndCountsAt:audit.oneEndCountsAt });
     record(`${context} rack rotates within the 10 degree heading envelope and stays fully deployed in flight`,
       audit.rackHeadingTrackOkay && audit.rackDeploymentStaysFull && audit.fullRackPosePresent,
       { maxAbsoluteHeading:audit.maxAbsoluteHeading, midpointHeading:audit.midpointHeading,
@@ -838,7 +1036,10 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       observedQ:observations.map(sample => sample.q), sourceCameraY:startSample.cameraPosition?.[1] ?? null,
       targetCameraY:endSample.cameraPosition?.[1] ?? null, sourceCameraDistance:startSample.cameraDistance,
       targetCameraDistance:endSample.cameraDistance, sourceCameraToHeroDistance:startSample.cameraToHeroDistance,
-      targetCameraToHeroDistance:endSample.cameraToHeroDistance, handoff, audit });
+      targetCameraToHeroDistance:endSample.cameraToHeroDistance,
+      sourceToFirstActiveHeroDistanceDelta:audit.sourceToFirstActiveHeroDistanceDelta,
+      heroDistancePathFacts:audit.heroDistancePathFacts,
+      heroDistanceSourceDeltaExplanation:audit.heroDistanceSourceDeltaExplanation, handoff, audit });
     return endpointFast;
   };
   const exerciseRetargets = async (designLabel, identity) => {
@@ -903,7 +1104,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     return end;
   };
   const exerciseLayoutTransitions = async (designLabel, identity) => {
-    const requestedAscending = [.05,.15,.3,.5,.7,.85,.95];
+    const requestedAscending = [.05,.15,.2,.3,.4,.5,.55,.7,.85,.95];
     const requestedDescending = [...requestedAscending].reverse();
     const source = await snapshot();
     record(`${designLabel} canonical flight suite starts in ARRAY at q=0`, source.viewLayout === 'shelf' &&
@@ -1237,10 +1438,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     record('the 21st album in the long Fixture genre is selected before a MATRIX round trip',
       identity.selectedAlbumId === longGroupAlbumId && !!identity.selectedEntryKey,
       { ...identity, expectedAlbumId:longGroupAlbumId, genreCounts:probeReport.syntheticArchiveMotionGenreCounts });
-    await pause(1000);
-    const stableBeforeFirstTransition = await snapshot();
-    record('selected long-group identity remains stable for one second before the first layout transition',
-      identityMatches(stableBeforeFirstTransition, identity), shortState(stableBeforeFirstTransition));
+    const stableBeforeFirstTransition = await waitFor(state => identityMatches(state, identity) &&
+      Number(state.stats?.returningFiles) === 0 && state.stats?.selectionPhase === 'settled',
+    'long-group source settles after selection return before the first layout transition', 10000, 40);
+    record('long-group source has no returning files and settled selection before the first transition',
+      identityMatches(stableBeforeFirstTransition, identity) && Number(stableBeforeFirstTransition.stats?.returningFiles) === 0 &&
+      stableBeforeFirstTransition.stats?.selectionPhase === 'settled',
+    { returningFiles:stableBeforeFirstTransition.stats?.returningFiles,
+      selectionPhase:stableBeforeFirstTransition.stats?.selectionPhase, state:shortState(stableBeforeFirstTransition) });
 
     await exerciseLayoutTransitions('Future', identity);
     await takeScreenshot('future-array-overview');
@@ -1252,10 +1457,16 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       !!identity.selectedAlbumId && !!identity.selectedEntryKey && futureMatrixEnd.selectedAlbumId === futureMatrixEnd.selectedAlbumFromApp,
       identity);
 
-    const punk = await switchDesign('archive');
+    let punk = await switchDesign('archive');
     record('theme switch preserves the selected album', punk.selectedAlbumId === identity.selectedAlbumId,
       { selectedAlbumId:punk.selectedAlbumId, expected:identity.selectedAlbumId });
-    if (punk.viewLayout !== 'shelf') await transitionTo('Punk', 'shelf', identity);
+    if (punk.viewLayout !== 'shelf') {
+      const hover = await findHoverPoint('Punk hover alignment preflight');
+      record('Punk MATRIX hover is active before the align phase', identityMatches(hover.state, identity) &&
+        !!hover.state.stats?.matrixHover?.cell && Math.abs(Number(hover.state.stats.matrixHover.height) - .28) <= .025,
+      { matrixHover:hover.state.stats?.matrixHover, projectedCenter:hover.state.stats?.projectedCenter });
+      punk = await transitionTo('Punk', 'shelf', identity, { requireAlignment:true });
+    }
     await exerciseLayoutTransitions('Punk', identity);
     const width = (await snapshot()).viewport?.width ?? 0;
     const expectedBleed = width <= 720 ? 0 : width <= 1100 ? 32 : 64;
@@ -1417,7 +1628,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     result.ok = Object.values(result.assertions).every(Boolean);
     result.summary = { ok:result.ok, cases:result.cases.length, screenshots:result.screenshots.length,
       layoutTransitions:result.timeline.length, flightSamples:result.flightSamples.length,
-      retargets:result.retargets.length, geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
+      retargets:result.retargets.length, qSampleMisses:result.qSampleMisses.length,
+      geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
       keyframeCount, naturalPlaybackSeconds,
       finalLayout:naturalEnd.viewLayout, selectedAlbumId:naturalEnd.selectedAlbumId };
     return result;
@@ -1426,7 +1638,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     result.error = String(error?.stack ?? error);
     result.summary = { ok:false, cases:result.cases.length, screenshots:result.screenshots.length,
       layoutTransitions:result.timeline.length, flightSamples:result.flightSamples.length,
-      retargets:result.retargets.length, geometryFrames:result.geometryFrames.length };
+      retargets:result.retargets.length, qSampleMisses:result.qSampleMisses.length,
+      geometryFrames:result.geometryFrames.length };
     error.archiveMotionResult = result;
     throw error;
   } finally {

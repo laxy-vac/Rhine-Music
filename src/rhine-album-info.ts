@@ -6,6 +6,7 @@ import type { CaseLayout } from "./case-layout.ts";
 import { paintArchiveLabel, rhineSourceBadge } from "./archive-label.ts";
 import { applyCaseMaterials } from "./case-materials";
 import type { CaseAppearance } from "./case-settings";
+import { albumLabelTileSizeForRows, createPaperAtlasLayout, type PaperAtlasLayout } from "./paper-atlas-layout.ts";
 
 export type RhineInfoRecord = Pick<ArchiveRecord, "id" | "album">;
 export type RhineSourceBadge = ReturnType<typeof rhineSourceBadge>;
@@ -129,13 +130,14 @@ export class CaseAlbumInfo {
   readonly ready: Promise<void>;
 
   private readonly count: number;
-  private readonly rows: number;
+  private readonly atlasLayout: PaperAtlasLayout;
   private readonly tileWidth: number;
   private readonly tileHeight: number;
   private readonly anisotropy: number;
   private readonly structure: "rhine" | "punk";
   private readonly labelCanvasHeight: number;
   private readonly tileOffsets: Float32Array;
+  private readonly tilePages: Float32Array;
   private readonly badgeTypes: Float32Array;
   private readonly slotRecords: (RhineInfoRecord | undefined)[];
   private readonly slotIndices: (number | undefined)[];
@@ -143,10 +145,10 @@ export class CaseAlbumInfo {
   private readonly slotNumberTexts: string[];
   private readonly slotBadges: RhineSourceBadge[];
   private readonly labelTileCanvas: HTMLCanvasElement;
-  private readonly arrayLabelCanvas: HTMLCanvasElement;
+  private readonly arrayLabelCanvases: HTMLCanvasElement[];
   private readonly selectedCanvas: HTMLCanvasElement;
   private readonly badgeAtlasCanvas: HTMLCanvasElement;
-  private readonly arrayLabelTexture: THREE.CanvasTexture;
+  private readonly arrayLabelTextures: THREE.CanvasTexture[];
   private readonly selectedTexture: THREE.CanvasTexture;
   private readonly badgeAtlasTexture: THREE.CanvasTexture;
   private readonly arrayLabelMaterial: THREE.MeshBasicMaterial;
@@ -177,16 +179,14 @@ export class CaseAlbumInfo {
     this.structure = structure;
     this.labelCanvasHeight = structure === "punk" ? Math.max(1, Math.round(LABEL_WIDTH * layout.label.height / layout.label.width)) : LABEL_HEIGHT;
     this.anisotropy = Math.max(1, Math.floor(Number.isFinite(anisotropy) ? anisotropy : 1));
-    this.rows = Math.max(1, Math.ceil(this.count / LABEL_COLUMNS));
     const maxSize = Math.max(LABEL_COLUMNS, Math.floor(Number.isFinite(maxTextureSize) ? maxTextureSize : 4096));
-    this.tileWidth = Math.max(1, Math.min(
-      LABEL_TILE_WIDTH,
-      Math.floor(maxSize / LABEL_COLUMNS),
-      Math.floor(maxSize * LABEL_WIDTH / (this.rows * this.labelCanvasHeight)),
-    ));
-    this.tileHeight = Math.max(1, Math.floor(this.tileWidth * this.labelCanvasHeight / LABEL_WIDTH));
+    this.atlasLayout = createPaperAtlasLayout(this.count, maxSize, LABEL_COLUMNS,
+      (rows, limit) => albumLabelTileSizeForRows(rows, limit, this.labelCanvasHeight));
+    this.tileWidth = this.atlasLayout.tileWidth;
+    this.tileHeight = this.atlasLayout.tileHeight;
 
     this.tileOffsets = new Float32Array(this.count * 4);
+    this.tilePages = new Float32Array(this.count);
     this.badgeTypes = new Float32Array(this.count);
     this.slotRecords = Array(this.count);
     this.slotIndices = Array(this.count);
@@ -194,20 +194,28 @@ export class CaseAlbumInfo {
     this.slotNumberTexts = Array.from({ length: this.count }, () => "NO.---");
     this.slotBadges = Array.from({ length: this.count }, () => undefined);
     for (let slot = 0; slot < this.count; slot++) {
+      const location = this.atlasLayout.locate(slot)!;
+      const page = this.atlasLayout.pages[location.page];
+      const column = location.localSlot % LABEL_COLUMNS;
+      const row = Math.floor(location.localSlot / LABEL_COLUMNS);
       this.tileOffsets.set([
-        (slot % LABEL_COLUMNS) / LABEL_COLUMNS,
-        1 - (Math.floor(slot / LABEL_COLUMNS) + 1) / this.rows,
+        column / LABEL_COLUMNS,
+        1 - (row + 1) / page.rows,
         1 / LABEL_COLUMNS,
-        1 / this.rows,
+        1 / page.rows,
       ], slot * 4);
+      this.tilePages[slot] = location.page;
     }
 
     this.labelTileCanvas = document.createElement("canvas");
     this.labelTileCanvas.width = this.tileWidth;
     this.labelTileCanvas.height = this.tileHeight;
-    this.arrayLabelCanvas = document.createElement("canvas");
-    this.arrayLabelCanvas.width = LABEL_COLUMNS * this.tileWidth;
-    this.arrayLabelCanvas.height = this.rows * this.tileHeight;
+    this.arrayLabelCanvases = this.atlasLayout.pages.map(page => {
+      const canvas = document.createElement("canvas");
+      canvas.width = page.width;
+      canvas.height = page.height;
+      return canvas;
+    });
     this.selectedCanvas = document.createElement("canvas");
     this.selectedCanvas.width = LABEL_WIDTH;
     this.selectedCanvas.height = this.labelCanvasHeight;
@@ -215,14 +223,14 @@ export class CaseAlbumInfo {
     this.badgeAtlasCanvas.width = BADGE_ATLAS_WIDTH;
     this.badgeAtlasCanvas.height = BADGE_ATLAS_HEIGHT;
 
-    this.arrayLabelTexture = new THREE.CanvasTexture(this.arrayLabelCanvas);
+    this.arrayLabelTextures = this.arrayLabelCanvases.map(canvas => new THREE.CanvasTexture(canvas));
     this.selectedTexture = new THREE.CanvasTexture(this.selectedCanvas);
     this.badgeAtlasTexture = new THREE.CanvasTexture(this.badgeAtlasCanvas);
-    configureCanvasTexture(this.arrayLabelTexture, this.anisotropy);
+    for (const texture of this.arrayLabelTextures) configureCanvasTexture(texture, this.anisotropy);
     configureCanvasTexture(this.selectedTexture, this.anisotropy);
     configureCanvasTexture(this.badgeAtlasTexture, this.anisotropy);
 
-    this.arrayLabelMaterial = this.createLabelMaterial(this.arrayLabelTexture, true);
+    this.arrayLabelMaterial = this.createLabelMaterial(this.arrayLabelTextures[0], true, this.arrayLabelTextures[1]);
     this.selectedLabelMaterial = this.createLabelMaterial(this.selectedTexture, false);
     this.arrayBadgeMaterial = this.createBadgeMaterial(0, true);
     this.selectedBadgeMaterial = this.createBadgeMaterial(0, false);
@@ -320,6 +328,8 @@ export class CaseAlbumInfo {
   private createArrayLabelGeometry(): THREE.PlaneGeometry {
     const geometry = this.createLabelGeometry();
     geometry.setAttribute("rhineTile", new THREE.InstancedBufferAttribute(this.tileOffsets, 4).setUsage(THREE.StaticDrawUsage));
+    if (this.atlasLayout.paged)
+      geometry.setAttribute("rhinePage", new THREE.InstancedBufferAttribute(this.tilePages, 1).setUsage(THREE.StaticDrawUsage));
     return geometry;
   }
 
@@ -329,7 +339,7 @@ export class CaseAlbumInfo {
     return geometry;
   }
 
-  private createLabelMaterial(texture: THREE.CanvasTexture, instanced: boolean): THREE.MeshBasicMaterial {
+  private createLabelMaterial(texture: THREE.CanvasTexture, instanced: boolean, page1Texture?: THREE.CanvasTexture): THREE.MeshBasicMaterial {
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       toneMapped: false,
@@ -345,12 +355,28 @@ export class CaseAlbumInfo {
       material.onBeforeCompile = (shader, renderer) => {
         compile.call(material, shader, renderer);
         shader.vertexShader = `attribute vec4 rhineTile;\n${shader.vertexShader}`;
-        shader.vertexShader = shader.vertexShader.replace(
-          "#include <uv_vertex>",
-          "#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = rhineTile.xy + uv * rhineTile.zw;\n#endif",
-        );
+        const pageVarying = page1Texture ? "attribute float rhinePage;\nvarying float vRhinePage;\n" : "";
+        if (pageVarying) shader.vertexShader = pageVarying + shader.vertexShader;
+        const uvPatch = `#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = rhineTile.xy + uv * rhineTile.zw;\n${page1Texture ? " vRhinePage = rhinePage;\n" : ""}#endif`;
+        shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", uvPatch);
+        if (page1Texture) {
+          shader.uniforms.uRhinePage1Map = { value: page1Texture };
+          shader.fragmentShader = shader.fragmentShader.replace("#include <common>",
+            "#include <common>\nuniform sampler2D uRhinePage1Map;\nvarying float vRhinePage;");
+          shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>", `
+            #ifdef USE_MAP
+              vec4 sampledDiffuseColor;
+              if ( vRhinePage < 0.5 ) sampledDiffuseColor = texture2D( map, vMapUv );
+              else sampledDiffuseColor = texture2D( uRhinePage1Map, vMapUv );
+              #ifdef DECODE_VIDEO_TEXTURE
+                sampledDiffuseColor = sRGBTransferEOTF( sampledDiffuseColor );
+              #endif
+              diffuseColor *= sampledDiffuseColor;
+            #endif
+          `);
+        }
       };
-      material.customProgramCacheKey = () => "rhine-album-label-atlas-v1";
+      material.customProgramCacheKey = () => `rhine-album-label-atlas-v2-${Number(!!page1Texture)}`;
     }
     return material;
   }
@@ -489,15 +515,16 @@ export class CaseAlbumInfo {
     this.slotBadges[slot] = badge;
     this.slotNumberTexts[slot] = formatLabelNumber(index);
     paintArchiveLabel(this.labelTileCanvas, index, this.labelMarkImage, { fit: this.structure === "punk" ? "contain" : "stretch" });
-    const column = slot % LABEL_COLUMNS;
-    const row = Math.floor(slot / LABEL_COLUMNS);
+    const location = this.atlasLayout.locate(slot)!;
+    const column = location.localSlot % LABEL_COLUMNS;
+    const row = Math.floor(location.localSlot / LABEL_COLUMNS);
     const x = column * this.tileWidth;
     const y = row * this.tileHeight;
-    const context = this.arrayLabelCanvas.getContext("2d")!;
+    const context = this.arrayLabelCanvases[location.page].getContext("2d")!;
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(x, y, this.tileWidth, this.tileHeight);
     context.drawImage(this.labelTileCanvas, x, y, this.tileWidth, this.tileHeight);
-    this.arrayLabelTexture.needsUpdate = true;
+    this.arrayLabelTextures[location.page].needsUpdate = true;
     this.badgeTypes[slot] = badgeType(badge);
     this.arrayBadge.geometry.getAttribute("rhineBadgeType").setX(slot, this.badgeTypes[slot]);
     this.arrayBadge.geometry.getAttribute("rhineBadgeType").needsUpdate = true;
@@ -679,7 +706,7 @@ export class CaseAlbumInfo {
     this.arrayBadgeMaterial.dispose();
     this.selectedLabelMaterial.dispose();
     this.selectedBadgeMaterial.dispose();
-    this.arrayLabelTexture.dispose();
+    for (const texture of this.arrayLabelTextures) texture.dispose();
     this.selectedTexture.dispose();
     this.badgeAtlasTexture.dispose();
   }

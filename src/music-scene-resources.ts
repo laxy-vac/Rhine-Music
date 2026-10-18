@@ -135,6 +135,9 @@ export class MusicSceneResources {
   private plateEnvironmentFactor = 1;
   private visibleDeployment = 0;
   private lastShelfFrame?: Omit<MusicSceneResourceUpdate, "deployment">;
+  private readonly flightRig = new THREE.Group();
+  private cachedFlightSlots?: readonly MusicSceneSlot[];
+  private readonly cachedFlightBounds = new THREE.Box3();
 
   constructor(count: number, appearance?: MusicArrayAppearance) {
     this.capacity = Math.max(1, Math.floor(count));
@@ -211,11 +214,48 @@ export class MusicSceneResources {
     this.group.add(this.floorGuide);
     this.createRowLabels();
     this.group.add(this.trays.group);
+    // The ground's guide, floor panels and ticks remain fixed in world space.
+    // Only the rack, its labels and contact shadows join the rigid flight.
+    const fixed = new Set<THREE.Object3D>([this.floorGuide, this.floorPanels, this.floorTicks]);
+    for (const child of [...this.group.children]) if (!fixed.has(child)) this.flightRig.add(child);
+    this.flightRig.name = "Rigid music rack flight";
+    this.flightRig.matrixAutoUpdate = false;
+    this.group.add(this.flightRig);
     this.group.name = "Music shelf and floor resources";
     this.group.visible = false;
   }
 
   get deployment() { return this.group.visible ? this.visibleDeployment : 0; }
+
+  get flightBounds() {
+    if (this.cachedFlightSlots === this.lastShelfFrame?.slots && !this.cachedFlightBounds.isEmpty()) return this.cachedFlightBounds;
+    this.cachedFlightSlots = this.lastShelfFrame?.slots;
+    this.cachedFlightBounds.makeEmpty();
+    const visit = (object: THREE.Object3D, parent: THREE.Matrix4) => {
+      if (!object.visible) return;
+      if (object.matrixAutoUpdate) object.updateMatrix();
+      const transform = parent.clone().multiply(object.matrix);
+      if (object instanceof THREE.Mesh) {
+        if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+        const box = object.geometry.boundingBox;
+        if (box && object instanceof THREE.InstancedMesh) {
+          for (let index = 0; index < object.count; index++) {
+            const matrix = new THREE.Matrix4(); object.getMatrixAt(index, matrix); matrix.premultiply(transform);
+            if (Math.abs(matrix.determinant()) > 1e-12) this.cachedFlightBounds.union(box.clone().applyMatrix4(matrix));
+          }
+        } else if (box) this.cachedFlightBounds.union(box.clone().applyMatrix4(transform));
+      }
+      for (const child of object.children) visit(child, transform);
+    };
+    for (const child of this.flightRig.children) visit(child, new THREE.Matrix4());
+    return this.cachedFlightBounds;
+  }
+  setFlightTransform(matrix: THREE.Matrix4, visible: boolean) {
+    this.flightRig.matrix.copy(matrix); this.flightRig.visible = visible; this.flightRig.matrixWorldNeedsUpdate = true;
+  }
+  resetFlightTransform() {
+    this.flightRig.matrix.identity(); this.flightRig.visible = true; this.flightRig.matrixWorldNeedsUpdate = true;
+  }
 
   captureShelfFrame(): MusicSceneResourceUpdate | undefined {
     const frame = this.lastShelfFrame;

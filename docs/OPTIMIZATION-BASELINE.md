@@ -18,7 +18,7 @@
 | 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
 | 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
 | Future MATRIX/ARRAY 入场 | 共用终端前导；ARRAY 在 22–25 秒连续展开共同槽位上的结构与专辑，镜头跟随生成中心后归回总览，保留跳过/重播；Punk 入场暂缓 |
-| 空间排列与浏览 | 两主题通过实际拆列、转向、调间距和归并完成 MATRIX/ARRAY 切换；连续反向保留路径与速度，恢复原物理端点坐标与实例所有权；MATRIX 拖动/悬停及 Punk 紧凑工具区保持 |
+| 空间排列与浏览 | 两主题沿同一 q 路径完成镜头拉远、降低与转向，核心组收紧行距，外围组离镜重排，完整货架移出画面；反向倒走同一路径并保留速度，恢复物理端点与实例所有权；MATRIX 拖动/悬停及 Punk 紧凑工具区保持 |
 | STYLE、Settings 与入场个性化 | 两主题 STYLE 只管理主题、日夜配色、文字字号、盒体与场景外观预览；Settings 七类各自拥有唯一控件，界面与交互默认打开；Future 欢迎文案与 ID 可改并受字母/空格/24 字符边界保护，Punk 入场入口预留且禁用 |
 | 显示与性能、全屏与物理显卡 | Settings 中管理比例、全屏、渲染画质、优先显卡与性能检测；原生全屏往返与状态同步；显卡按稳定物理 PnP 身份归并 DXGI 逻辑别名，缺失身份不猜卡，保存后重启生效 |
 
@@ -66,7 +66,7 @@
 | Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
 | EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
 | Future 简单款玻璃与预览 | `node desktop/check-startup-entry.cjs --case-glass`，合成专辑与 mock 音频，检查透光/磨砂保存、结构往返及局部重置 |
-| 两主题布局切换、拖动与 ARRAY 入场 | `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；`node scripts/check-archive-geometry.mjs`；`node desktop/check-startup-entry.cjs --archive-motion` |
+| 两主题布局切换、拖动与 ARRAY 入场 | `node --experimental-strip-types --test scripts/check-layout-flight.mjs scripts/check-music-layout-motion.mjs`；`node scripts/check-archive-geometry.mjs`；`node desktop/check-startup-entry.cjs --archive-motion` |
 | 三维资源/盒体专项 | `scripts/check-case-system.mjs`，按相关模式运行 |
 
 只运行与当前改动相关的必要检查，命令索引不要求逐次补跑全部旧矩阵。环境与边界见[本地开发](LOCAL-DEVELOPMENT.md)。

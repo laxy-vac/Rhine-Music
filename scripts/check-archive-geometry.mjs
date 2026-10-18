@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as THREE from "three";
+import { musicArrayCompositionFrame, musicMatrixOverviewSpan } from "../src/music-layout-framing.ts";
 
 const useRound2Snapshot = process.argv.includes("--round-2");
 const transitionModule = useRound2Snapshot
@@ -25,6 +26,10 @@ const MATRIX_CAPACITY = MATRIX_LANES * MATRIX_ROWS;
 const CASE_SIZE = new THREE.Vector3(4.45, 3.35, .14);
 const BASE_Y = -4.6;
 const INSPECTION_Z = -2.17;
+const CASE_BOUNDS = { min: [-2.225, .175, -.07], max: [2.225, 3.525, .07] };
+const CASE_CENTER = { x: 0, y: 1.85, z: 0 };
+const ARRAY_OVERVIEW_SPAN = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1, CASE_BOUNDS, CASE_CENTER, false).effectiveSpan;
+const MATRIX_OVERVIEW_SPAN = musicMatrixOverviewSpan(ARRAY_OVERVIEW_SPAN);
 const SOURCE_SELECTED_LIFT = .9;
 const ARRAY_SELECTED_LIFT = 1.35 + .748;
 const AABB_EPSILON = 1e-6;
@@ -577,7 +582,237 @@ async function runDirection(scenario, sourceMode, targetMode) {
   };
 }
 
+function flightMode(name) {
+  return name === "array" ? {
+    selected: { lane: 2, row: 16, foobarEntryKey: "hero" },
+    spacing: { column: -4.95, row: -1 }, anchor: new THREE.Vector3(0, -2.502, 0),
+    aim: new THREE.Vector3(0, -4.425, -2.17), yaw: -38, elevation: 35, distance: 140, span: ARRAY_OVERVIEW_SPAN,
+    offsets: [["hero", 0, 0], ["core-1", 0, 1], ["core-2", 0, 2], ["screen-left", -1, 0], ["screen-right", 1, 0]],
+  } : {
+    selected: { lane: 2, row: 15, foobarEntryKey: "hero" },
+    spacing: { column: -5.2, row: -.62 }, anchor: new THREE.Vector3(0, -3.25, 0),
+    aim: new THREE.Vector3(-1.091, -.045, .481), yaw: 59, elevation: 25, distance: 170, span: MATRIX_OVERVIEW_SPAN,
+    offsets: [["hero", 0, 0], ["core-1", 0, 1], ["core-2", 0, 2], ["screen-left", -1, 0], ["screen-right", 1, 0]],
+  };
+}
+
+function flightOutward(mode) {
+  const yaw = THREE.MathUtils.degToRad(mode.yaw), elevation = THREE.MathUtils.degToRad(mode.elevation);
+  return new THREE.Vector3(-Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation), Math.cos(yaw) * Math.cos(elevation));
+}
+
+function flightCamera(mode) {
+  const camera = new THREE.PerspectiveCamera(34, 16 / 10, 5, 300);
+  const position = mode.aim.clone().addScaledVector(flightOutward(mode), mode.distance);
+  camera.position.copy(position);
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(mode.span / (2 * mode.distance)));
+  camera.lookAt(mode.aim); camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+  return { camera, position, aim: mode.aim.clone(), span: mode.span };
+}
+
+function flightCell(mode, key, laneOffset, rowOffset) {
+  return { lane: mode.selected.lane + laneOffset, row: mode.selected.row + rowOffset, foobarEntryKey: key };
+}
+
+function flightMatrix(mode, cell, selected = false) {
+  const position = mode.anchor.clone().add(new THREE.Vector3(
+    (cell.lane - mode.selected.lane) * mode.spacing.column, 0,
+    (cell.row - mode.selected.row) * mode.spacing.row));
+  if (!selected) position.y = -4.55;
+  return matrixAt(position);
+}
+
+function flightCorners(matrix) {
+  const bounds = new THREE.Box3(new THREE.Vector3(-2.225, .175, -.07), new THREE.Vector3(2.225, 3.525, .07));
+  const points = [];
+  for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y])
+    for (const z of [bounds.min.z, bounds.max.z]) points.push(new THREE.Vector3(x, y, z).applyMatrix4(matrix));
+  return points;
+}
+
+function makeFlightObb(matrix, cell) {
+  const e = matrix.elements;
+  const columns = [new THREE.Vector3(e[0], e[1], e[2]), new THREE.Vector3(e[4], e[5], e[6]), new THREE.Vector3(e[8], e[9], e[10])];
+  const scales = columns.map(column => column.length());
+  if (scales.some(scale => scale <= 1e-7)) return undefined;
+  const axes = columns.map((column, index) => column.clone().divideScalar(scales[index]));
+  const half = [CASE_SIZE.x * scales[0] / 2, CASE_SIZE.y * scales[1] / 2, CASE_SIZE.z * scales[2] / 2];
+  const local = new THREE.Box3(new THREE.Vector3(-2.225, .175, -.07), new THREE.Vector3(2.225, 3.525, .07));
+  const aabb = local.clone().applyMatrix4(matrix);
+  const center = new THREE.Vector3(0, 1.85, 0).applyMatrix4(matrix);
+  return { id: cell.motionId, key: cell.foobarEntryKey, cell: { lane: cell.lane, row: cell.row }, matrix: matrix.clone(),
+    axes, half, center, aabb, dimensions: scales.map((scale, index) => scale * CASE_SIZE.getComponent(index)) };
+}
+
+function projectFlightBox(matrix, camera) {
+  const points = flightCorners(matrix);
+  const view = points.map(point => point.clone().applyMatrix4(camera.matrixWorldInverse));
+  const projected = points.map(point => point.clone().project(camera));
+  const depth = view.map(point => -point.z);
+  const minX = Math.min(...projected.map(point => point.x)), maxX = Math.max(...projected.map(point => point.x));
+  const minY = Math.min(...projected.map(point => point.y)), maxY = Math.max(...projected.map(point => point.y));
+  const minZ = Math.min(...projected.map(point => point.z)), maxZ = Math.max(...projected.map(point => point.z));
+  return { visible: depth.some(value => value > 0) && maxX >= -1 && minX <= 1 && maxY >= -1 && minY <= 1 && maxZ > -1 && minZ < 1,
+    positiveDepth: depth.every(value => value > 0), projected };
+}
+
+function makeCurrentGeometryFlight(sourceName, targetName) {
+  const sourceMode = flightMode(sourceName), targetMode = flightMode(targetName);
+  const sourceSelected = { ...sourceMode.selected }, targetSelected = { ...targetMode.selected };
+  const sourceCells = sourceMode.offsets.map(([key, lane, row]) => flightCell(sourceMode, key, lane, row));
+  const targetCells = [...targetMode.offsets.map(([key, lane, row]) => flightCell(targetMode, key, lane, row)),
+    { lane: -10000, row: -10000 }, { lane: -10001, row: -10001 }, { lane: -10002, row: -10002 }];
+  const catalogFor = (cells) => new Map(cells.filter(cell => cell.foobarEntryKey).map((cell, order) =>
+    [cell.foobarEntryKey, { lane: cell.lane, row: cell.row, order }]));
+  const sourceCatalog = catalogFor(sourceCells), targetCatalog = catalogFor(targetCells);
+  const sourceSelectedMatrix = flightMatrix(sourceMode, sourceSelected, true);
+  const sourceCamera = flightCamera(sourceMode);
+  const sourceSamples = sourceCells.map(cell => {
+    const selected = cell.lane === sourceSelected.lane && cell.row === sourceSelected.row && cell.foobarEntryKey === "hero";
+    const matrix = selected ? sourceSelectedMatrix.clone() : flightMatrix(sourceMode, cell);
+    return { cell: { ...cell, motionId: `${sourceName}:${cell.foobarEntryKey}:${cell.lane}:${cell.row}` },
+      matrix, restMatrix: matrix.clone(), alpha: 1, tint: 0 };
+  });
+  const targetBySignature = new Map(targetCells.filter(cell => cell.foobarEntryKey)
+    .map(cell => [`${cell.foobarEntryKey}|${cell.lane}|${cell.row}`, cell]));
+  const transition = new MusicLayoutTransition();
+  transition.begin(sourceSamples, sourceSelected, sourceSelectedMatrix, sourceCamera.camera, sourceCamera.aim,
+    sourceMode.spacing, targetName === "array", CASE_SIZE.x, BASE_Y, Number(sourceName === "array"), sourceCatalog,
+    new THREE.Vector3(0, 1.85, 0), sourceSelectedMatrix,
+    { min: [-2.225, .175, -.07], max: [2.225, 3.525, .07] });
+  const plan = transition.bindCells(targetCells, targetSelected, targetMode.spacing.row,
+    cell => targetBySignature.has(`${cell.foobarEntryKey}|${cell.lane}|${cell.row}`), targetCatalog);
+  const selectedTarget = flightMatrix(targetMode, targetSelected, true);
+  transition.prepareTarget(new THREE.Vector3().setFromMatrixPosition(selectedTarget));
+  const targetMatrices = new Map();
+  for (const cell of plan) {
+    const key = `${cell.foobarEntryKey}|${cell.lane}|${cell.row}`;
+    const targetCell = targetBySignature.get(key);
+    const matrix = targetCell ? flightMatrix(targetMode, targetCell, cell.foobarEntryKey === "hero")
+      : flightMatrix(targetMode, cell, false);
+    if (targetCell) targetMatrices.set(key, matrix.clone());
+    transition.primeTarget(cell, matrix, transition.isSelected(cell));
+  }
+  if (!transition.targetsReady) throw new Error(`${sourceName}->${targetName} target priming is incomplete`);
+  const targetCamera = flightCamera(targetMode), camera = sourceCamera.camera.clone(), aim = sourceCamera.aim.clone();
+  transition.applyCamera(camera, aim, targetCamera.position, targetCamera.aim, targetCamera.span);
+  return { transition, sourceName, targetName, sourceMode, targetMode, sourceSelected, targetSelected,
+    sourceCells, sourceCamera, targetCamera, targetCells, targetBySignature, targetMatrices, plan };
+}
+
+function sampleCurrentFlight(flight) {
+  const camera = flight.sourceCamera.camera.clone(), aim = flight.sourceCamera.aim.clone();
+  flight.transition.applyCamera(camera, aim, flight.targetCamera.position, flight.targetCamera.aim, flight.targetCamera.span);
+  camera.updateMatrixWorld(true);
+  const boxes = [], endpointErrors = [];
+  let visibleCore = 0, visibleCount = 0;
+  for (const cell of flight.plan) {
+    if (!cell.foobarEntryKey || !flight.transition.occurrenceId(cell)) continue;
+    const key = `${cell.foobarEntryKey}|${cell.lane}|${cell.row}`;
+    const matrix = flight.targetMatrices.get(key)?.clone() ?? flightMatrix(flight.targetMode, cell);
+    flight.transition.apply(matrix, cell, flight.transition.isSelected(cell));
+    const scale = basisLengths(matrix);
+    if (scale.some(value => Math.abs(value - 1) > 1e-7)) endpointErrors.push({ reason: "non-unit case scale", key: cell.foobarEntryKey, q: flight.transition.frame.q, scale });
+    const projection = projectFlightBox(matrix, camera);
+    if (projection.visible) {
+      visibleCount++;
+      if (flight.transition.routeFor(cell)?.core) visibleCore++;
+      const box = makeFlightObb(matrix, cell);
+      if (box) boxes.push(box);
+    }
+    if (projection.visible && !projection.positiveDepth)
+      endpointErrors.push({ reason: "visible case lacks positive camera depth", key: cell.foobarEntryKey, q: flight.transition.frame.q });
+    if (flight.transition.settled) {
+      const owner = flight.transition.endpointCell(cell), expected = flight.targetBySignature.get(key);
+      if (expected && JSON.stringify(owner) !== JSON.stringify(expected))
+        endpointErrors.push({ reason: "terminal owner mismatch", key: cell.foobarEntryKey, owner, expected });
+    }
+  }
+  const collisions = broadphaseAndSat(boxes).overlaps;
+  const asinArgument = flight.transition.frame.cameraAsinArgument;
+  if (!Number.isFinite(asinArgument) || Math.abs(asinArgument) > 1 + 1e-7)
+    endpointErrors.push({ reason: "camera height solve is infeasible", q: flight.transition.frame.q, asinArgument });
+  return { q: flight.transition.frame.q, camera, aim, visibleCount, visibleCore, boxes: boxes.length,
+    collisions: collisions.map(item => ({ a: item.a.key, b: item.b.key, penetration: item.penetration })),
+    endpointErrors, asinArgument };
+}
+
+async function runCurrentGeometry() {
+  const scenarios = [];
+  for (const [sourceName, targetName] of [["array", "matrix"], ["matrix", "array"]]) {
+    const flight = makeCurrentGeometryFlight(sourceName, targetName);
+    const endpointErrors = [];
+    const collisions = new Map();
+    let frames = 0, visibleCasePeak = 0, visibleCorePeak = 0, onscreenBoxPeak = 0;
+    const initialQ = flight.transition.frame.q;
+    const sample = () => {
+      const current = sampleCurrentFlight(flight);
+      endpointErrors.push(...current.endpointErrors);
+      visibleCasePeak = Math.max(visibleCasePeak, current.visibleCount);
+      visibleCorePeak = Math.max(visibleCorePeak, current.visibleCore);
+      onscreenBoxPeak = Math.max(onscreenBoxPeak, current.boxes);
+      for (const pair of current.collisions) {
+        const key = [pair.a, pair.b].sort().join("|");
+        const value = collisions.get(key) ?? { samples: 0, maximumPenetration: 0 };
+        value.samples++;
+        value.maximumPenetration = Math.max(value.maximumPenetration, pair.penetration);
+        collisions.set(key, value);
+      }
+      frames++;
+      if (current.visibleCore === 0) endpointErrors.push({ reason: "no visible core case", q: current.q });
+    };
+    sample();
+    while (!flight.transition.settled && frames < MAX_PHASE_FRAMES) {
+      flight.transition.advance(STEP);
+      sample();
+    }
+    if (!flight.transition.settled) endpointErrors.push({ reason: "flight did not settle", q: flight.transition.frame.q });
+    if (flight.transition.frame.rackDeployment !== 1)
+      endpointErrors.push({ reason: "rack lost full deployment", rackDeployment: flight.transition.frame.rackDeployment });
+    scenarios.push({ direction: `${sourceName}->${targetName}`, startQ: initialQ, endQ: flight.transition.frame.q,
+      selected: flight.transition.endpointSelection, frames, visibleCasePeak, visibleCorePeak, onscreenBoxPeak,
+      matchedCoreCases: flight.transition.frame.coreCases, endpointErrors,
+      onscreenCollisionPairs: [...collisions.entries()].map(([key, value]) => ({ key, ...value })) });
+  }
+  const report = {
+    generatedAt: new Date().toISOString(),
+    contract: {
+      modeAxes: {
+        array: { column: [-4.95, 0, 0], row: [0, 0, -1] },
+        matrix: { column: [-5.2, 0, 0], row: [0, 0, -.62] },
+      },
+      phaseWindows: { arrayOnlyExit: [0, .2], matchedPeripheralMorphAndParking: [.2, .4], matrixOnlyEntry: [.4, 1] },
+      peripheralMotion: "shared ARRAY/MATRIX endpoint half-field translation on rig-local +/-X or +/-Z; front/back cohorts clear the current core envelope by 0.06",
+      priming: "bind pool, prepare selected anchor, prime every normal target and selected pose, cache target camera, then advance",
+      collisionScope: "synthetic five-case core and neighboring screen boxes; only boxes projected into the viewport are tested",
+      coverageNote: "Mirror-side segment parking is exercised by check-layout-flight.mjs. This checker covers the visible synthetic core/onscreen cases only; it does not claim collision-free physical motion for every record in the full library.",
+      caseDimensions: CASE_SIZE.toArray(),
+    },
+    scenarios,
+    summary: {
+      directions: scenarios.length,
+      sampleFrames: scenarios.reduce((sum, scenario) => sum + scenario.frames, 0),
+      onscreenCollisionPairs: scenarios.reduce((sum, scenario) => sum + scenario.onscreenCollisionPairs.length, 0),
+      endpointErrors: scenarios.reduce((sum, scenario) => sum + scenario.endpointErrors.length, 0),
+      minimumVisibleCorePeak: Math.min(...scenarios.map(scenario => scenario.visibleCorePeak)),
+    },
+  };
+  return report;
+}
+
 async function main() {
+  if (!useRound2Snapshot) {
+    const report = await runCurrentGeometry();
+    const outputPath = path.join(process.cwd(), ".tools", "animation-refinement-2026-10-18", "check-archive-geometry.json");
+    await writeFile(outputPath, JSON.stringify(report, null, 2), "utf8");
+    console.log(JSON.stringify({ outputPath, summary: report.summary,
+      scenarios: report.scenarios.map(({ direction, startQ, endQ, frames, visibleCorePeak, onscreenBoxPeak,
+        matchedCoreCases, endpointErrors, onscreenCollisionPairs }) => ({ direction, startQ, endQ, frames,
+        visibleCorePeak, onscreenBoxPeak, matchedCoreCases, endpointErrors: endpointErrors.length,
+        onscreenCollisionPairs: onscreenCollisionPairs.length })) }, null, 2));
+    if (report.summary.endpointErrors > 0 || report.summary.onscreenCollisionPairs > 0) process.exitCode = 1;
+    return;
+  }
   const report = { generatedAt: new Date().toISOString(), contract: {
     caseSize: CASE_SIZE.toArray(), broadphase: "sorted-by-x current-frame AABB candidate pruning",
     narrowphase: "15-axis OBB separating-axis test", sampleRateHz: 120,
