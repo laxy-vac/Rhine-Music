@@ -361,10 +361,11 @@ async function main() {
     { idleArray, idleMatrix, reducedArray, reducedMatrix });
   const whiteBase = titlesSource.includes('ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 512, 64);');
   const accentBar = titlesSource.includes("ctx.fillStyle = this.accent; ctx.fillRect(0, 0, 6, 64);");
-  const leftToRightScan = titlesSource.includes("float titleRevealed = step(vTitleUv.x, uPunkDisplayScan);");
-  check("title atlas paints a white base, accent bar, then reveals the title left-to-right",
-    whiteBase && accentBar && leftToRightScan && titlesSource.includes("ctx.fillText(text + (text === title ? \"\" : \"…\"), 20, 33);"),
-    { whiteBase, accentBar, leftToRightScan, titleDraw: titlesSource.includes("ctx.fillText(text + (text === title ? \"\" : \"…\"), 20, 33);") });
+  const rasterScan = titlesSource.includes("float rasterAddress = (floor(rasterY * 16.0) + vTitleUv.x) / 16.0;") &&
+    titlesSource.includes("float titleRevealed = 1.0 - smoothstep(titleBeam - 0.015625, titleBeam + 0.015625, rasterAddress);");
+  check("title atlas paints a white base and accent bar, with a row-by-row raster reveal",
+    whiteBase && accentBar && rasterScan && titlesSource.includes("ctx.fillText(text + (text === title ? \"\" : \"…\"), 20, 33);"),
+    { whiteBase, accentBar, rasterScan, titleDraw: titlesSource.includes("ctx.fillText(text + (text === title ? \"\" : \"…\"), 20, 33);") });
   const configureDisplayMaterial = executeClassMethod(titlesSource, TITLES_PATH, "MusicCaseTitles", "configureDisplayMaterial", { THREE });
   const materialProbe = Object.create(Object.getPrototypeOf(new THREE.MeshBasicMaterial()));
   materialProbe.atlasLayout = { paged: false };

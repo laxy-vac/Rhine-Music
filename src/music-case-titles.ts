@@ -219,19 +219,30 @@ export class MusicCaseTitles {
         : "#include <map_fragment>";
       shader.fragmentShader = shader.fragmentShader.replace("#include <map_fragment>",
         `${mapSample}\nif ( uPunkDisplayPower <= 0.0001 ) discard;\n` +
-        "float titleRevealed = step(vTitleUv.x, uPunkDisplayScan);\n" +
+        // A raster refresh charges the whole fixed panel; no edge changes its size.
+        "float rasterY = clamp(1.0 - vTitleUv.y, 0.0, 0.99999);\n" +
+        "float rasterAddress = (floor(rasterY * 16.0) + vTitleUv.x) / 16.0;\n" +
+        "float titleBeam = mix(-0.015625, 1.015625, uPunkDisplayScan);\n" +
+        "float titleRevealed = 1.0 - smoothstep(titleBeam - 0.015625, titleBeam + 0.015625, rasterAddress);\n" +
         "float titleAccent = 1.0 - step(0.018, vTitleUv.x);\n" +
         "diffuseColor.rgb = mix(vec3(1.0), diffuseColor.rgb, max(titleRevealed, titleAccent));\n" +
-        // Extend the backing along the rail instead of flashing the whole strip.
-        // The feather travels beyond both ends so hiding never cuts a visible edge.
-        "float displayFeather = 0.075;\n" +
-        "float displayEdge = mix(-displayFeather, 1.0 + displayFeather, uPunkDisplayPower);\n" +
-        "float displayCoverage = 1.0 - smoothstep(displayEdge - displayFeather, displayEdge + displayFeather, vTitleUv.x);\n" +
-        "if (displayCoverage <= 0.0001) discard;\n" +
+        "float powerActivity = 4.0 * uPunkDisplayPower * (1.0 - uPunkDisplayPower);\n" +
+        "float titleActivity = 4.0 * uPunkDisplayScan * (1.0 - uPunkDisplayScan);\n" +
+        "float powerRaster = uPunkDisplayPower * 6.0;\n" +
+        "float rowCharged = 1.0 - smoothstep(fract(powerRaster) - 0.055, fract(powerRaster) + 0.055, rasterY);\n" +
+        "float phosphorCharge = clamp((floor(powerRaster) + rowCharged) / 6.0, 0.0, 1.0);\n" +
+        "float displayCoverage = mix(uPunkDisplayPower, phosphorCharge, 0.55 * powerActivity);\n" +
+        "float beamY = mix(fract(powerRaster), uPunkDisplayScan, step(0.9999, uPunkDisplayPower));\n" +
+        "float beam = 1.0 - smoothstep(0.008, 0.065, abs(rasterY - beamY));\n" +
+        "displayCoverage = clamp(displayCoverage + 0.06 * beam * powerActivity, 0.0, 1.0);\n" +
+        "float lineDetail = 1.0 - smoothstep(0.35, 0.9, fwidth(vTitleUv.y * 16.0));\n" +
+        "float scanlines = 0.5 + 0.5 * cos(vTitleUv.y * 100.530965);\n" +
+        "diffuseColor.rgb *= 1.0 - 0.035 * scanlines * lineDetail * max(powerActivity, titleActivity);\n" +
+        "diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), 0.12 * beam * max(powerActivity, titleActivity));\n" +
         "diffuseColor.a *= displayCoverage;");
     };
     material.customProgramCacheKey = () =>
-      `music-case-title-display-v5-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
+      `music-case-title-display-v6-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
   }
   private updateDisplayVisibility() {
     const visible = this.displayEnabled && Boolean(this.mount) && this.displayPower.value > 0.0001;
