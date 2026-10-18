@@ -9,12 +9,27 @@ export function createArchiveLighting(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   look: LightingLook = "baseline",
+  softWindow = false,
 ) {
   const refined = look === "refined";
   renderer.toneMappingExposure = refined ? 1.0 : 1.05;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
-  scene.environment = pmrem.fromScene(room, 0.04).texture;
+  if (softWindow) {
+    // Bake broader, lower-radiance cards once, preserving integrated energy.
+    room.traverse(child => {
+      if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshLambertMaterial) || child.material.emissiveIntensity <= 0) return;
+      const axes = (["x", "y", "z"] as const).filter(axis => child.scale[axis] > 0.2);
+      let areaGain = 1;
+      for (const axis of axes) {
+        const before = child.scale[axis];
+        child.scale[axis] = Math.min(16, before * 2.4);
+        areaGain *= child.scale[axis] / before;
+      }
+      child.material.emissiveIntensity /= areaGain;
+    });
+  }
+  scene.environment = pmrem.fromScene(room, softWindow ? 0.12 : 0.04).texture;
   room.dispose();
   pmrem.dispose();
   scene.environmentIntensity = refined ? 0.52 : 0.48;

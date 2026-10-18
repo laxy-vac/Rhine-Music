@@ -1,6 +1,6 @@
 # 本地开发
 
-更新：2026-10-18。功能见 [PROJECT-STATUS](PROJECT-STATUS.md)，下一阶段见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)，权限和保护点见 [AGENTS](../AGENTS.md)。
+更新：2026-10-19。功能见 [PROJECT-STATUS](PROJECT-STATUS.md)，下一阶段见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)，权限和保护点见 [AGENTS](../AGENTS.md)。
 
 ## 源码与启动
 
@@ -18,7 +18,7 @@ node scripts/build-source-preview.mjs --interface-only
 - 启动器不会自动构建、准备工具或扫描曲库；前端优先使用源码预览，并检查指纹。
 - `.tools/source-preview-interface` 缺失时可能回退旧 `dist`，不能把它当成新版。
 - 磁盘修改不替换旧窗口内存；必要构建后完整退出并重开。
-- 当前源码预览已构建并包含 MATRIX 标签内容缓存优化；完整安装包尚未重打，性能条件与对照见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
+- 当前源码预览已构建并包含 MATRIX 标签缓存、原方向固定照明及 MATRIX 固定对焦；完整安装包尚未重打，性能条件与对照见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
 - 窗口首次显示受初始化/首帧门控制；已显示窗口重载保持可见。Future 入场可跳过，Punk 不播放入场。
 - `启动音乐播放器.bat`、`.command` 与旧 launcher 仅保留兼容引用，不是日常开发入口。
 
@@ -56,6 +56,8 @@ node scripts/build-source-preview.mjs --interface-only
 ## 必要检查与排查
 
 `--interface-only` 包含类型检查和前端构建；其它检查按 [优化基线](OPTIMIZATION-BASELINE.md) 选择。只做与改动直接相关的有限验证，视觉效果交用户，不默认多轮自动审查或大截图矩阵。
+
+浏览照明的有限回归为 `node --experimental-strip-types scripts/check-music-lighting.mjs`，覆盖两种布局旧版光线方向、固定光场/补光、缓存幂等、布局桥接和既有阴影设置；镜头纯检查为 `node scripts/check-music-camera.mjs`。隔离逐帧灯位、对焦点及性能对照在本机忽略目录 `.tools/performance-window-lighting-20261018/`。
 
 既有整窗探针使用独立 profile、合成目录和 mock 音频，不能代替个人曲库、设备或硬件性能测量。音频原生检查先在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only`；不带此设置的既有套件可能访问真实设备，不能默认运行。
 

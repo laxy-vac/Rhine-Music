@@ -71,6 +71,10 @@ export function createCaseIllumination(scene: THREE.Scene) {
         quality.lighting === "full" ? 4 : quality.lighting === "high" ? 1 : 0;
     },
     update(model: THREE.Object3D, visible = true) {
+      if (!visible || count === 0) {
+        for (const entry of entries) entry.light.visible = false;
+        return;
+      }
       if (currentModel !== model) {
         currentModel = model;
         resolve(model);

@@ -195,6 +195,8 @@ export class ArchiveScene {
   private rhineInfo?: CaseAlbumInfo;
   private caseTitles?: MusicCaseTitles;
   private selectionLighting?: MusicSelectionLighting;
+  private readonly windowLightAnchor = new THREE.Vector3();
+  private readonly focusPoint = new THREE.Vector3();
   private theme: "day" | "night" | "dusk" = "day";
   private themeWarmth = { value: 1 };
   private themeTransition?: ThemeTransition;
@@ -259,7 +261,7 @@ export class ArchiveScene {
     container.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color("#eae5e1");
     this.scene.fog = new THREE.Fog("#eae5e1", 22, 47);
-    this.light = createArchiveLighting(this.renderer, this.scene, lightingLook);
+    this.light = createArchiveLighting(this.renderer, this.scene, lightingLook, musicLibrary);
     this.light.castShadow = true;
     Object.assign(this.light.shadow.camera, {
       left: -16,
@@ -2704,22 +2706,35 @@ export class ArchiveScene {
           : this.targetDetail
             ? "lifting"
             : "preview";
-    const focalPoint = this.model.position
-      .clone()
-      .add(new THREE.Vector3(0, 2, 0))
-      .applyMatrix4(this.camera.matrixWorldInverse);
+    const windowProgress = this.layoutTransition.active ? this.layoutTransition.frame.q : Number(!this.shelfView);
+    this.windowLightAnchor.set(0, MUSIC_ARRAY_VIEW.floorY +
+        THREE.MathUtils.lerp(localArrayBase + ARRAY_SELECTED_EXTRA_LIFT + ARRAY_SELECTED_BELL_LIFT,
+          settlingWave(0, 26.56) + MUSIC_PREVIEW_LIFT, windowProgress),
+      MUSIC_ARRAY_VIEW.inspectionZ);
+    this.focusPoint.copy(this.model.position).y += 2;
+    if (musicLibrary && !cinematic && !this.shelfView) {
+      // Browsing holds a fixed sharp plane. Detail/film retains extraction focus.
+      const follow = Math.max(detail, this.layoutTransition.active ? 1 - windowProgress : 0);
+      this.focusPoint.set(THREE.MathUtils.lerp(0, this.focusPoint.x, follow),
+        THREE.MathUtils.lerp(MUSIC_ARRAY_VIEW.floorY + settlingWave(0, 26.56) + MUSIC_PREVIEW_LIFT + 2, this.focusPoint.y, follow),
+        THREE.MathUtils.lerp(MUSIC_ARRAY_VIEW.inspectionZ, this.focusPoint.z, follow));
+    }
+    const inverseView = this.camera.matrixWorldInverse.elements;
+    const focalDepth = this.focusPoint.x * inverseView[2] + this.focusPoint.y * inverseView[6] +
+      this.focusPoint.z * inverseView[10] + inverseView[14];
     const bokehUniforms = this.bokeh.uniforms as Record<
       string,
       { value: number }
     >;
-    bokehUniforms.focus.value = -focalPoint.z;
+    bokehUniforms.focus.value = -focalDepth;
     bokehUniforms.aperture.value =
       (THREE.MathUtils.lerp(0.0003, 0.0008, detail) *
         this.quality.depthOfField) /
       100;
     this.renderer.info.reset();
-    this.selectionLighting?.update(this.model, this.camera, dt, musicLibrary && records.length > 0 && this.model.visible, this.reduced, Boolean(cinematic));
-    this.caseIllumination.update(this.model, !!this.caseGeometryKey && records.length > 0 && this.model.visible);
+    this.selectionLighting?.setWindow(windowProgress, this.windowLightAnchor, this.caseLayout);
+    this.selectionLighting?.update(musicLibrary && records.length > 0);
+    this.caseIllumination.update(this.model, !musicLibrary && !!this.caseGeometryKey && records.length > 0 && this.model.visible);
     const shelfBottom = MUSIC_ARRAY_VIEW.floorY + this.caseLayout.bounds.min[1];
     this.floor.position.y = this.shelfView ? shelfBottom - MUSIC_SHELF_VIEW.floorDrop : -4.63;
     if (this.layoutTransition.active) this.floor.position.y = this.layoutTransition.groundY;
@@ -2933,11 +2948,9 @@ export class ArchiveScene {
       caseStructure: this.model.userData.caseStructure ?? null,
       punkDisplay: this.caseTitles?.state ?? null,
       renderPipeline: this.composer.passes.map(pass => ({ type: pass.constructor.name, enabled: pass.enabled })),
-      selectionLight: this.selectionLighting ? {
-        visible: this.selectionLighting.spot.visible,
-        position: this.selectionLighting.spot.position.toArray(),
-        target: this.selectionLighting.spot.target.position.toArray(),
-      } : null,
+      selectionLight: this.selectionLighting?.state ?? null,
+      focus: { point: this.focusPoint.toArray(), distance: (this.bokeh.uniforms as Record<string, { value: number }>).focus.value,
+        fixedTo: musicLibrary && !this.shelfView && this.detail === 0 ? "selection-window" : "presentation" },
       selectedCell: { ...this.selectedCell },
       layoutTransition: { active: this.layoutTransition.active, progress: this.layoutTransition.progress,
         ...this.layoutTransition.frame, ...(!this.layoutTransition.active ? {

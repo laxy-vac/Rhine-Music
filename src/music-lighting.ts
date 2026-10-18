@@ -1,19 +1,14 @@
 import * as THREE from "three";
 import { MUSIC_MODEL } from "./music-model.ts";
-import { getCaseLayout } from "./case-layout";
+import type { CaseLayout } from "./case-layout";
 import { ThemeTransition } from "./theme-transition.ts";
 
-/** Side key plus a bounded approximation of light scattered inside the CD shell. */
+/** The original side key, fixed to each layout's window instead of its album. */
 export class MusicSelectionLighting {
+  readonly source = new THREE.SpotLight("#ffe3b2", 180 * 64 * 0.7, 0, 0.32, 0.95, 2);
   private quality: "basic" | "high" | "full" = "high";
-  private readonly bounce = new THREE.PointLight("#ffe3b2", 0, 5, 2);
-  readonly spot = new THREE.SpotLight("#ffe3b2", 180 * 64, 0, 0.32, 0.95, 2);
-  private readonly aim = new THREE.Vector3();
-  private readonly anchor = new THREE.Vector3();
-  private readonly offset = new THREE.Vector3();
-  private readonly anchorVelocity = new THREE.Vector3();
-  private readonly columnVelocity = new THREE.Vector3();
-  private initialized = false;
+  private readonly bounce = new THREE.PointLight("#ffe3b2", .24, 5, 2);
+  private layout?: CaseLayout;
   private readonly column = { value: new THREE.Vector3() };
   private readonly scatterColor = { value: new THREE.Color("#ffdba3") };
   private readonly scatterStrength = { value: 1 };
@@ -26,44 +21,74 @@ export class MusicSelectionLighting {
   ) };
   private readonly edgeFalloff = { value: new THREE.Vector2(1.7, 24) };
 
+  private readonly aim = new THREE.Vector3();
+  private readonly arrayOffset = this.windowOffset(-38, 35);
+  private readonly matrixOffset = this.windowOffset(59, 25);
+  private readonly arrayBounce = this.windowOffset(-38, 35, new THREE.Vector3(0, -.25, .28));
+  private readonly matrixBounce = this.windowOffset(59, 25, new THREE.Vector3(0, -.25, .28));
+  private progress = -1;
+  private transformUpdates = 0;
+
   constructor(private readonly scene: THREE.Scene) {
-    this.spot.name = "Selected album soft key";
-    // Existing soft contact shadows are sufficient; the local key adds no
-    // second shadow-map render across the entire glass array.
-    this.spot.castShadow = false;
-    this.spot.visible = false;
-    scene.add(this.spot, this.spot.target);
-    this.bounce.name = "Case local reflected fill";
+    this.source.name = "Fixed selection window key";
+    this.source.castShadow = false;
+    this.source.visible = false;
+    // Preserve the original independent directional/contact-shadow rig.
+    this.bounce.name = "Fixed window reflected fill";
     this.bounce.visible = false;
-    scene.add(this.bounce);
+    scene.add(this.source, this.source.target, this.bounce);
   }
 
-  setQuality(quality: "basic" | "high" | "full") {
-    this.quality = quality;
-    // Keep source direction/exposure; full adds a bounded local fill, while
-    // basic skips the small grazing-scatter contribution in the shell shader.
-    this.bounce.visible = false;
+  private windowOffset(yawDegrees: number, elevationDegrees: number, local = new THREE.Vector3(-48, -17.6, 36)) {
+    const yaw = THREE.MathUtils.degToRad(yawDegrees);
+    const elevation = THREE.MathUtils.degToRad(elevationDegrees);
+    const view = new THREE.Vector3(-Math.sin(yaw) * Math.cos(elevation), Math.sin(elevation), Math.cos(yaw) * Math.cos(elevation));
+    const right = new THREE.Vector3().crossVectors(THREE.Object3D.DEFAULT_UP, view).normalize();
+    const up = new THREE.Vector3().crossVectors(view, right).normalize();
+    // Original camera-local (-6, -2.2, 4.5) * 8, evaluated against the
+    // authored resting view once. Never rotate with navigation/parallax.
+    return view.multiplyScalar(local.z).addScaledVector(up, local.y).addScaledVector(right, local.x);
   }
+
+  /** q changes only during ARRAY/MATRIX conversion. Never pass a live model or camera. */
+  setWindow(q: number, origin: THREE.Vector3, layout: CaseLayout) {
+    const progress = THREE.MathUtils.clamp(q, 0, 1);
+    if (progress === this.progress && this.column.value.equals(origin) && this.layout === layout) return;
+    this.progress = progress;
+    this.layout = layout;
+    this.column.value.copy(origin);
+    this.aim.set(layout.bounds.min[0] + .14, layout.center.y + layout.height * .12, layout.center.z).add(origin);
+    this.shellBounds.value.set(layout.bounds.min[0], layout.bounds.min[1], layout.bounds.max[1], 1 / Math.max(.01, layout.height));
+    this.source.position.copy(this.arrayOffset).lerp(this.matrixOffset, progress)
+      .setLength(this.arrayOffset.length()).add(this.aim);
+    this.source.target.position.copy(this.aim);
+    this.bounce.position.copy(this.arrayBounce).lerp(this.matrixBounce, progress)
+      .setLength(this.arrayBounce.length()).add(this.aim);
+    this.transformUpdates++;
+  }
+
+  // All quality levels share the same source; no moving local fill is added.
+  setQuality(quality: "basic" | "high" | "full") { this.quality = quality; }
 
   setTheme(theme: "day" | "night" | "dusk", key: THREE.DirectionalLight, transition?: ThemeTransition) {
     const night = theme === "night";
     const targets = transition ?? new ThemeTransition();
-    targets.number(this.scene, "environmentIntensity", night ? 0.16 : 0.25);
+    targets.number(this.scene, "environmentIntensity", night ? 0.20 : 0.28);
     targets.number(key, "intensity", night ? 0.30 : 0.45);
     for (const child of this.scene.children) {
-      if (child instanceof THREE.HemisphereLight) targets.number(child, "intensity", night ? 0.21 : 0.32);
-      if (child instanceof THREE.DirectionalLight && child !== key) targets.number(child, "intensity", 0.045);
+      if (child instanceof THREE.HemisphereLight) targets.number(child, "intensity", night ? 0.30 : 0.45);
+      if (child instanceof THREE.DirectionalLight && child !== key) targets.number(child, "intensity", night ? 0.04 : 0.06);
     }
-    targets.color(this.spot.color, night ? "#dbe9ff" : "#ffe3b2");
+    targets.color(this.source.color, night ? "#dbe9ff" : "#ffe3b2");
+    targets.number(this.source, "intensity", (night ? 130 : 180) * 64 * 0.7);
     targets.color(this.bounce.color, night ? "#dbe9ff" : "#ffe3b2");
-    targets.number(this.spot, "intensity", (night ? 130 : 180) * 64);
     targets.color(this.scatterColor.value, night ? "#cee5ff" : "#ffdba3");
-    targets.number(this.scatterStrength, "value", night ? 0.72 : 1);
-    targets.number(this.printAmbient, "value", night ? 0.12 : theme === "dusk" ? 0.38 : 0.5);
+    targets.number(this.scatterStrength, "value", night ? .72 : 1);
+    targets.number(this.printAmbient, "value", night ? .12 : theme === "dusk" ? .38 : .5);
     if (!transition) targets.finish();
   }
 
-  /** Diffuse printed art shares the moving light field, never the shell's glow.
+  /** Diffuse printed art shares the fixed window field, never the shell's glow.
    * All ownership states use world transforms, so changing instance/mesh cannot
    * change the exposure; extraction and return pass continuously through it.
    */
@@ -109,9 +134,9 @@ export class MusicSelectionLighting {
     const optical = { value: 1 };
     if (material) Object.defineProperty(optical, "value", { get: () => material.transmission });
     shader.uniforms.musicOpticalScatter = optical;
-    const fidelity = { value: this.quality === "basic" ? 0 : 1 };
+    const fidelity = { value: this.quality === "basic" ? 0 : 0.25 };
     // Read the chosen fidelity without replacing compiled materials.
-    Object.defineProperty(fidelity, "value", { get: () => this.quality === "basic" ? 0 : 1 });
+    Object.defineProperty(fidelity, "value", { get: () => this.quality === "basic" ? 0 : 0.25 });
     shader.uniforms.musicScatterFidelity = fidelity;
     shader.uniforms.musicShellBounds = this.shellBounds;
     shader.uniforms.musicEdgeFalloff = this.edgeFalloff;
@@ -178,59 +203,19 @@ export class MusicSelectionLighting {
     `);
   }
 
-  private follow(value: THREE.Vector3, velocity: THREE.Vector3, target: THREE.Vector3, dt: number) {
-    const rate = 5.0;
-    const decay = Math.exp(-rate * dt);
-    for (const axis of ["x", "y", "z"] as const) {
-      const delta = value[axis] - target[axis];
-      const impulse = velocity[axis] + rate * delta;
-      value[axis] = target[axis] + (delta + impulse * dt) * decay;
-      velocity[axis] = (velocity[axis] - rate * impulse * dt) * decay;
-    }
+  update(visible: boolean) {
+    this.source.visible = visible;
+    this.bounce.visible = visible && this.quality === "full";
   }
 
-  update(model: THREE.Object3D, camera: THREE.Camera, dt: number, visible: boolean, reduced: boolean, cinematic = false) {
-    this.spot.visible = visible;
-    this.bounce.visible = visible && this.quality === "full";
-    if (!visible) {
-      this.initialized = false;
-      return;
-    }
-    // Use the rendered world position, never a library row/index: the array
-    // scrolls and periodically rebases its coordinates during infinite browsing.
-    model.updateWorldMatrix(true, false);
-    const layout = getCaseLayout(model);
-    this.shellBounds.value.set(layout.bounds.min[0], layout.bounds.min[1], layout.bounds.max[1], 1 / Math.max(.01, layout.height));
-    this.aim.set(
-      layout.bounds.min[0] + 0.14,
-      layout.center.y + layout.height * 0.12,
-      layout.center.z,
-    ).applyMatrix4(model.matrixWorld);
-    if (!this.initialized || reduced || cinematic) {
-      // Opening choreography already eases its track/camera: another spring
-      // would leave the light behind during the large initial array translation.
-      this.anchor.copy(this.aim);
-      this.column.value.copy(model.position);
-      this.anchorVelocity.set(0, 0, 0);
-      this.columnVelocity.set(0, 0, 0);
-    } else {
-      // Preserve velocity on repeated input. A critically damped start follows
-      // the soft lift; the wider lane footprint crossfades neighboring columns
-      // while travelling between them instead of extinguishing both midway.
-      this.follow(this.anchor, this.anchorVelocity, this.aim, dt);
-      this.follow(this.column.value, this.columnVelocity, model.position, dt);
-    }
-    this.initialized = true;
-    this.spot.target.position.copy(this.anchor);
-    // Camera-local -X/-Y: light enters from the lower-left of the picture and
-    // grazes the spine, rather than illuminating the album face from above.
-    // The old near-field source sat inside a neighboring lane and burned a
-    // white spot into its nearest corner. Move it eight times farther away,
-    // outside the pool, and compensate intensity by distance squared above.
-    this.offset.set(-6, -2.2, 4.5).multiplyScalar(8).applyQuaternion(camera.quaternion);
-    this.spot.position.copy(this.anchor).add(this.offset);
-    this.offset.set(0, -.25, .28).applyQuaternion(camera.quaternion);
-    this.bounce.position.copy(this.anchor).add(this.offset);
-    this.bounce.intensity = this.quality === "full" ? .24 : 0;
+  get state() {
+    return {
+      visible: this.source.visible, type: this.source.type,
+      position: this.source.position.toArray(), target: this.aim.toArray(),
+      layoutProgress: this.progress, transformUpdates: this.transformUpdates,
+      fixedTo: "selection-window",
+      reflection: "prefiltered-softbox",
+      fillVisible: this.bounce.visible, fillPosition: this.bounce.position.toArray(),
+    };
   }
 }
