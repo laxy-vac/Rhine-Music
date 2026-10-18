@@ -183,6 +183,7 @@ export class MusicCaseTitles {
   private configureDisplayMaterial(material: THREE.MeshBasicMaterial, instanced: boolean) {
     material.fog = false;
     material.toneMapped = false;
+    material.transparent = true;
     material.depthTest = true;
     material.depthWrite = true;
     material.envMap = null;
@@ -220,10 +221,11 @@ export class MusicCaseTitles {
         `${mapSample}\nif ( uPunkDisplayPower <= 0.0001 ) discard;\n` +
         "float titleRevealed = step(vTitleUv.x, uPunkDisplayScan);\n" +
         "float titleAccent = 1.0 - step(0.018, vTitleUv.x);\n" +
-        "diffuseColor.rgb = mix(vec3(1.0), diffuseColor.rgb, max(titleRevealed, titleAccent));");
+        "diffuseColor.rgb = mix(vec3(1.0), diffuseColor.rgb, max(titleRevealed, titleAccent));\n" +
+        "diffuseColor.a *= uPunkDisplayPower;");
     };
     material.customProgramCacheKey = () =>
-      `music-case-title-display-v3-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
+      `music-case-title-display-v4-${Number(instanced)}-${Number(instanced && this.atlasLayout.paged)}`;
   }
   private updateDisplayVisibility() {
     const visible = this.displayEnabled && Boolean(this.mount) && this.displayPower.value > 0.0001;
