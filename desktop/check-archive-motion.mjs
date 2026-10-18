@@ -8,7 +8,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const wc = browserWindow.webContents;
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
   const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [],
-    geometryFrames:[], entryTimeline:[], summary: {} };
+    geometryFrames:[], flightSamples:[], retargets:[], entryTimeline:[], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
   let transitionSequence = 0;
@@ -73,12 +73,15 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         selectedCell:stats.selectedCell ?? null,
         frameTime:stats.frameTime ?? null, cameraPosition:stats.cameraPosition ?? null,
         cameraAim:stats.cameraAim ?? null,
+        cameraDistance:stats.cameraDistance ?? null, fieldOfView:stats.fieldOfView ?? null,
+        cameraNear:stats.cameraNear ?? null, cameraFar:stats.cameraFar ?? null,
         modelPosition:stats.modelPosition ?? null,
         layoutTransition:stats.layoutTransition ?? null,
         shelfEntry:stats.shelfEntry ?? null,
         motionGeometrySamples:stats.motionGeometrySamples ?? [],
         motionViewport:stats.motionViewport ?? null,
         rackDeployment:stats.rackDeployment ?? null,
+        rackParts:stats.rackParts ?? [], shelfResources:stats.shelfResources ?? null,
         matrixDrag:stats.matrixDrag ?? null,
         matrixHover:stats.matrixHover ?? null,
         caseStructure:stats.caseStructure ?? null,
@@ -142,8 +145,11 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       stats:stats ? { layoutTransition:stats.layoutTransition, shelfEntry:stats.shelfEntry ?? null,
         selectedCell:stats.selectedCell ?? null, frameTime:stats.frameTime ?? null, motionViewport:stats.motionViewport ?? null,
         cameraPosition:stats.cameraPosition ?? null, cameraAim:stats.cameraAim ?? null,
+        cameraDistance:stats.cameraDistance ?? null, fieldOfView:stats.fieldOfView ?? null,
+        cameraNear:stats.cameraNear ?? null, cameraFar:stats.cameraFar ?? null,
         modelPosition:stats.modelPosition ?? null, motionGeometrySamples:stats.motionGeometrySamples ?? [],
-        rackDeployment:stats.rackDeployment ?? null, musicPresentationPhase:stats.musicPresentationPhase } : null,
+        rackDeployment:stats.rackDeployment ?? null, rackParts:stats.rackParts ?? [], shelfResources:stats.shelfResources ?? null,
+        musicPresentationPhase:stats.musicPresentationPhase } : null,
     };
   })()`;
   const geometryStateScript = String.raw`(() => {
@@ -162,8 +168,11 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         selectedCell:stats.selectedCell ?? null,
         motionGeometry:stats.motionGeometry ?? null, motionGeometrySamples:stats.motionGeometrySamples ?? [],
         motionViewport:stats.motionViewport ?? null, cameraPosition:stats.cameraPosition ?? null,
-        cameraAim:stats.cameraAim ?? null, modelPosition:stats.modelPosition ?? null,
-        rackDeployment:stats.rackDeployment ?? null } : null,
+        cameraAim:stats.cameraAim ?? null, cameraDistance:stats.cameraDistance ?? null,
+        fieldOfView:stats.fieldOfView ?? null, cameraNear:stats.cameraNear ?? null, cameraFar:stats.cameraFar ?? null,
+        modelPosition:stats.modelPosition ?? null,
+        rackDeployment:stats.rackDeployment ?? null, rackParts:stats.rackParts ?? [],
+        shelfResources:stats.shelfResources ?? null } : null,
     };
   })()`;
   const snapshot = async () => {
@@ -200,11 +209,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
           sinceClickMs:Date.now() - transitionProbeStartedAt, sampleMs:Date.now() - sampleStartedAt,
           active:transition.active ?? null, progress:transition.progress ?? null,
           q:transition.q ?? null, qVelocity:transition.qVelocity ?? null, desiredEnd:transition.desiredEnd ?? null,
-          phase:transition.phase ?? null, heading:transition.heading ?? null,
+          phase:transition.phase ?? null, path:transition.path ?? null, heading:transition.heading ?? null,
           rowSpacing:transition.rowSpacing ?? null, transitionRackDeployment:transition.rackDeployment ?? null,
           geometric:transition.geometric ?? null, frameTime:latest.stats?.frameTime ?? null, cameraPosition:latest.stats?.cameraPosition ?? null,
           cameraAim:latest.stats?.cameraAim ?? null, modelPosition:latest.stats?.modelPosition ?? null,
+          cameraDistance:latest.stats?.cameraDistance ?? null, fieldOfView:latest.stats?.fieldOfView ?? null,
+          cameraNear:latest.stats?.cameraNear ?? null, cameraFar:latest.stats?.cameraFar ?? null,
           rackDeployment:latest.stats?.rackDeployment ?? null,
+          rackFlight:transition.rackFlight ?? null,
           motionGeometrySamples:latest.stats?.motionGeometrySamples ?? [],
           motionViewport:latest.stats?.motionViewport ?? null, layout:latest.viewLayout ?? null });
       }
@@ -241,9 +253,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   });
   const transitionStamp = state => {
     const transition = state?.stats?.layoutTransition ?? {};
-    return { frameTime:state?.stats?.frameTime ?? null, active:transition.active ?? null,
+    return { wallClockMs:Date.now(), frameTime:state?.stats?.frameTime ?? null, active:transition.active ?? null,
       q:transition.q ?? null, progress:transition.progress ?? null, phase:transition.phase ?? null,
-      desiredEnd:transition.desiredEnd ?? null, viewLayout:state?.viewLayout ?? null };
+      desiredEnd:transition.desiredEnd ?? null, path:transition.path ?? null,
+      cameraPosition:state?.stats?.cameraPosition ?? null, cameraAim:state?.stats?.cameraAim ?? null,
+      cameraDistance:state?.stats?.cameraDistance ?? null, fieldOfView:state?.stats?.fieldOfView ?? null,
+      cameraNear:state?.stats?.cameraNear ?? null, cameraFar:state?.stats?.cameraFar ?? null,
+      rackFlight:transition.rackFlight ?? null, rackDeployment:state?.stats?.rackDeployment ?? null,
+      viewLayout:state?.viewLayout ?? null };
   };
   const takeScreenshot = async (name, details = null, settleMs = 100, captureTransitionClock = false) => {
     let uniqueName = name, suffix = 2;
@@ -399,365 +416,501 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const a = xyz(left), b = xyz(right);
     return a && b ? Math.hypot(...a.map((value, index) => value - b[index])) : null;
   };
-  const auditTransition = (context, target) => {
+  const transformPoint = (point, matrix) => [
+    matrix[0] * point[0] + matrix[4] * point[1] + matrix[8] * point[2] + matrix[12],
+    matrix[1] * point[0] + matrix[5] * point[1] + matrix[9] * point[2] + matrix[13],
+    matrix[2] * point[0] + matrix[6] * point[1] + matrix[10] * point[2] + matrix[14],
+  ];
+  const matrixScale = matrix => Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite)
+    ? [Math.hypot(matrix[0], matrix[1], matrix[2]), Math.hypot(matrix[4], matrix[5], matrix[6]),
+      Math.hypot(matrix[8], matrix[9], matrix[10])] : null;
+  const boundsPoints = bounds => {
+    const min = xyz(bounds?.min), max = xyz(bounds?.max);
+    if (!min || !max) return null;
+    return [min[0], max[0]].flatMap(x => [min[1], max[1]].flatMap(y => [min[2], max[2]].map(z => [x, y, z])));
+  };
+  const projectWorldBounds = (points, state) => {
+    const stats = state?.stats ?? state;
+    const viewport = stats?.motionViewport ?? state?.viewport;
+    const position = xyz(stats?.cameraPosition), aim = xyz(stats?.cameraAim);
+    const width = Number(viewport?.width), height = Number(viewport?.height);
+    const fov = Number(stats?.fieldOfView), near = Math.max(1e-4, Number(stats?.cameraNear) || .1);
+    const far = Number(stats?.cameraFar) > near ? Number(stats.cameraFar) : Infinity;
+    if (!position || !aim || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 ||
+        !Number.isFinite(fov) || fov <= 0 || !Array.isArray(points) || points.length !== 8) return null;
+    const norm = vector => Math.hypot(...vector);
+    const unit = vector => { const length = norm(vector); return length > 1e-8 ? vector.map(value => value / length) : null; };
+    const forward = unit(aim.map((value, index) => value - position[index]));
+    if (!forward) return null;
+    const right = unit([-forward[2], 0, forward[0]]);
+    if (!right) return null;
+    const up = unit([right[1] * forward[2] - right[2] * forward[1],
+      right[2] * forward[0] - right[0] * forward[2], right[0] * forward[1] - right[1] * forward[0]]);
+    if (!up) return null;
+    const tangent = Math.tan(fov * Math.PI / 360), aspect = width / height;
+    const cameraPoints = points.map(point => {
+      const relative = point.map((value, index) => value - position[index]);
+      const depth = relative.reduce((sum, value, index) => sum + value * forward[index], 0);
+      return { x:relative.reduce((sum, value, index) => sum + value * right[index], 0),
+        y:relative.reduce((sum, value, index) => sum + value * up[index], 0), depth };
+    });
+    const depthMin = Math.min(...cameraPoints.map(point => point.depth)), depthMax = Math.max(...cameraPoints.map(point => point.depth));
+    const clipped = cameraPoints.filter(point => point.depth >= near && point.depth <= far);
+    const edges = [[0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7]];
+    for (const [leftIndex, rightIndex] of edges) {
+      const left = cameraPoints[leftIndex], rightPoint = cameraPoints[rightIndex];
+      for (const plane of [near, far]) {
+        if (!Number.isFinite(plane) || (left.depth - plane) * (rightPoint.depth - plane) >= 0 ||
+            Math.abs(rightPoint.depth - left.depth) < 1e-9) continue;
+        const t = (plane - left.depth) / (rightPoint.depth - left.depth);
+        clipped.push({ x:left.x + (rightPoint.x - left.x) * t, y:left.y + (rightPoint.y - left.y) * t, depth:plane });
+      }
+    }
+    if (!clipped.length) return { valid:true, intersectsFrustum:false, depthMin, depthMax,
+      allInFront:depthMin >= near };
+    const projected = clipped.map(point => [point.x / (point.depth * tangent * aspect), point.y / (point.depth * tangent)]);
+    const minX = Math.min(...projected.map(point => point[0])), maxX = Math.max(...projected.map(point => point[0]));
+    const minY = Math.min(...projected.map(point => point[1])), maxY = Math.max(...projected.map(point => point[1]));
+    return { valid:true, intersectsFrustum:depthMax >= near && depthMin <= far && maxX >= -1 && minX <= 1 && maxY >= -1 && minY <= 1,
+      allInFront:depthMin >= near, depthMin, depthMax, minX, maxX, minY, maxY };
+  };
+  const transformedBounds = (bounds, matrix) => {
+    const points = boundsPoints(bounds);
+    if (!points || !Array.isArray(matrix) || matrix.length !== 16 || !matrix.every(Number.isFinite)) return null;
+    const worldPoints = points.map(point => transformPoint(point, matrix));
+    const center = worldPoints.reduce((sum, point) => sum.map((value, index) => value + point[index] / worldPoints.length), [0, 0, 0]);
+    return { points:worldPoints, center,
+      min:center.map((_, axis) => Math.min(...worldPoints.map(point => point[axis]))),
+      max:center.map((_, axis) => Math.max(...worldPoints.map(point => point[axis]))) };
+  };
+  const visibleEntryOwners = state => {
+    const stats = state?.stats ?? state;
+    const geometry = stats?.motionGeometry ?? {};
+    const bounds = geometry.bounds ?? state?.caseBounds;
+    const instances = Array.isArray(geometry.instances) ? geometry.instances
+      : Array.isArray(state?.instanceOwners) ? state.instanceOwners : [];
+    const visible = new Map();
+    for (const instance of instances) {
+      const cell = instance?.cell, entry = String(instance?.entry ?? cell?.foobarEntryKey ?? '');
+      const lane = Number(cell?.lane), row = Number(cell?.row);
+      if (!entry || !Number.isFinite(lane) || !Number.isFinite(row)) continue;
+      const world = transformedBounds(bounds, instance.matrix);
+      const projected = world ? projectWorldBounds(world.points, state) : null;
+      if (!projected?.intersectsFrustum) continue;
+      const cellKey = `${lane}:${row}`, key = `${cellKey}|${entry}`;
+      visible.set(key, { key, cellKey, entry, id:instance.id ?? null, route:instance.route ?? null,
+        matrix:instance.matrix, projectedBounds:{ minX:projected.minX, maxX:projected.maxX,
+          minY:projected.minY, maxY:projected.maxY, depthMin:projected.depthMin, depthMax:projected.depthMax } });
+    }
+    return visible;
+  };
+  const ownerMap = state => new Map((state?.stats?.motionGeometry?.instances ?? []).filter(instance =>
+    Array.isArray(instance?.matrix) && instance.matrix.length === 16 && instance.matrix.every(Number.isFinite) &&
+    Number.isFinite(Number(instance?.cell?.lane)) && Number.isFinite(Number(instance?.cell?.row)) &&
+    (instance?.entry || instance?.cell?.foobarEntryKey)).map(instance => {
+      const entry = String(instance.entry ?? instance.cell.foobarEntryKey);
+      const cell = `${Number(instance.cell.lane)}:${Number(instance.cell.row)}`;
+      const route = instance.route ? { segment:instance.route.segment ?? null, core:instance.route.core ?? null,
+        hasArray:instance.route.hasArray ?? null, hasMatrix:instance.route.hasMatrix ?? null } : null;
+      return [instance.id || `${entry}|${cell}`, { id:instance.id ?? null, entry, cell, route, matrix:instance.matrix }];
+    }));
+  const ownerContinuityAudit = samples => {
+    const owners = new Map(), changes = [];
+    for (const sample of samples) for (const [key, owner] of ownerMap(sample)) {
+      const previous = owners.get(key);
+      if (previous && (previous.entry !== owner.entry || previous.cell !== owner.cell ||
+          JSON.stringify(previous.route) !== JSON.stringify(owner.route)))
+        changes.push({ id:key, before:{ entry:previous.entry, cell:previous.cell, route:previous.route },
+          after:{ entry:owner.entry, cell:owner.cell, route:owner.route }, q:sample.q });
+      else owners.set(key, owner);
+    }
+    return { checkedIds:owners.size, ownerChanges:changes };
+  };
+  const captureFlightSample = async (context, requestedQ, endpoint = false) => {
+    const state = await geometrySnapshot(), transition = state.stats?.layoutTransition ?? {}, geometry = state.stats?.motionGeometry ?? {};
+    const instances = Array.isArray(geometry.instances) ? geometry.instances : [];
+    const selectedMatrix = geometry.selectedMatrix;
+    const selectedBounds = transformedBounds(geometry.bounds, selectedMatrix);
+    const selectedScale = matrixScale(selectedMatrix);
+    const projectedHeroBounds = selectedBounds ? projectWorldBounds(selectedBounds.points, state) : null;
+    const projection = boundsPoints(geometry.bounds);
+    const fullSizeOffscreenGhosts = projection ? instances.filter(instance => {
+      if (!instance?.entry || instance.entry === state.selectedEntryKey || instance.route?.core !== false) return false;
+      const scale = matrixScale(instance.matrix), world = transformedBounds(geometry.bounds, instance.matrix);
+      const box = world ? projectWorldBounds(world.points, state) : null;
+      return scale?.every(value => Math.abs(value - 1) <= .06) && box?.valid &&
+        (box.maxX < -1 || box.minX > 1 || box.maxY < -1 || box.minY > 1);
+    }).map(instance => ({ id:instance.id ?? null, entry:instance.entry, cell:instance.cell,
+      route:instance.route ?? null, scale:matrixScale(instance.matrix) })) : [];
+    const coreInstances = instances.filter(instance => instance.route?.core === true);
+    const coreScaleFailures = coreInstances.filter(instance => !matrixScale(instance.matrix)?.every(value =>
+      Number.isFinite(value) && Math.abs(value - 1) <= .06)).map(instance => ({ id:instance.id ?? null,
+        entry:instance.entry ?? instance.cell?.foobarEntryKey ?? null, cell:instance.cell ?? null,
+        scale:matrixScale(instance.matrix) }));
+    const visibleEntries = [...visibleEntryOwners(state).values()].map(owner => ({
+      key:owner.key, cellKey:owner.cellKey, entry:owner.entry, id:owner.id, route:owner.route,
+      projectedBounds:owner.projectedBounds }));
+    const rackFlight = transition.rackFlight ?? null;
+    const sample = {
+      context, requestedQ, endpoint, q:Number(transition.q), progress:Number(transition.progress), desiredEnd:Number(transition.desiredEnd),
+      phase:transition.phase ?? null, path:transition.path ?? null, heading:Number(transition.heading),
+      rowSpacing:Number(transition.rowSpacing), frameTime:state.stats?.frameTime ?? null,
+      selectedAlbumId:state.selectedAlbumId, selectedEntryKey:state.selectedEntryKey,
+      selectedCell:state.stats?.selectedCell ?? null, cameraPosition:xyz(state.stats?.cameraPosition),
+      cameraAim:xyz(state.stats?.cameraAim), cameraDistance:Number(state.stats?.cameraDistance),
+      fieldOfView:Number(state.stats?.fieldOfView), cameraNear:Number(state.stats?.cameraNear), cameraFar:Number(state.stats?.cameraFar),
+      caseBounds:geometry.bounds ?? null, cameraToHeroDistance:selectedBounds && state.stats?.cameraPosition
+        ? Math.hypot(...selectedBounds.center.map((value, index) => value - Number(state.stats.cameraPosition[index]))) : null,
+      heroWorldCenter:selectedBounds?.center ?? null, heroWorldBounds:selectedBounds ? { min:selectedBounds.min, max:selectedBounds.max } : null,
+      heroProjectedBounds:projectedHeroBounds, selectedScale, rackDeployment:Number(state.stats?.rackDeployment),
+      rackResources:state.stats?.shelfResources ?? null, rackParts:state.stats?.rackParts ?? [], rackFlight,
+      motionViewport:state.stats?.motionViewport ?? null, instanceCount:instances.length,
+      instanceOwners:instances.map(instance => ({ id:instance.id ?? null, entry:instance.entry ?? instance.cell?.foobarEntryKey ?? null,
+        cell:instance.cell ? { lane:instance.cell.lane, row:instance.cell.row } : null,
+        route:instance.route ?? null, matrix:instance.matrix })),
+      coreRouteCount:coreInstances.length, coreScaleFailures,
+      visibleEntries,
+      fullSizeOffscreenGhostCount:fullSizeOffscreenGhosts.length, fullSizeOffscreenGhosts,
+      sampleError:state.sampleError ?? null,
+    };
+    result.flightSamples.push(sample);
+    result.geometryFrames.push({ context, q:sample.q, requestedQ, endpoint, frameTime:sample.frameTime,
+      selectedAlbumId:sample.selectedAlbumId, selectedEntryKey:sample.selectedEntryKey,
+      heroWorldBounds:sample.heroWorldBounds, instanceCount:sample.instanceCount, rackFlight });
+    return sample;
+  };
+  const auditFlight = (context, target, requestedQValues, identity) => {
     const samples = result.transitionSamples.filter(sample => sample.context === context && sample.active === true &&
       Number.isFinite(sample.progress));
-    const phaseSequence = [];
-    let previousPhase = null;
-    for (const sample of samples) {
-      if (sample.phase !== previousPhase) phaseSequence.push(sample.phase);
-      previousPhase = sample.phase;
-    }
-    const findFrame = (phase, predicate) => samples.find(sample => sample.phase === phase && predicate(sample)) ?? null;
-    const release = findFrame('release', sample => sample.progress > 0.04 && sample.progress < 0.16);
-    const reconfigure = findFrame('reconfigure', sample => Number(sample.q) > 0.48 && Number(sample.q) < 0.54);
-    const dock = findFrame('dock', sample => Number(sample.q) > 0.93 && Number(sample.q) < 0.97);
-    const midpointViewport = viewportAudit(reconfigure?.motionViewport);
-    const neighborMotionPxPerSecond = neighborMotionAudit(samples);
+    const actual = result.flightSamples.filter(sample => sample.context === context);
+    const requested = actual.filter(sample => !sample.endpoint);
+    const activeTarget = target === 'array' ? 1 : 0;
+    const canonicalDirection = target === 'array' ? 1 : -1;
     const progressInBounds = samples.length > 0 && samples.every(sample => sample.progress >= 0 && sample.progress <= 1);
-    const progressMonotonic = samples.every((sample, index) => index === 0 || sample.progress + 0.01 >= samples[index - 1].progress);
-    const geometricFlag = samples.length > 0 && samples.every(sample => sample.geometric === true);
-    const rackTrackConsistent = samples.length > 0 && samples.every(sample =>
-      Number.isFinite(Number(sample.rackDeployment)) && Number.isFinite(Number(sample.transitionRackDeployment)) &&
-      Math.abs(Number(sample.rackDeployment) - Number(sample.transitionRackDeployment)) < 0.08);
-    const geometricFrames = [release, reconfigure, dock].filter(Boolean);
-    const matricesPresent = geometricFrames.length === 3 && geometricFrames.every(sample => {
-      const poses = sample.motionGeometrySamples;
-      return Array.isArray(poses) && poses.length > 0 && poses.length <= 8 && poses.every(pose =>
-        xyz(pose.position) && xyz(pose.scale));
+    const progressMonotonic = samples.every((sample, index) => index === 0 || sample.progress + .015 >= samples[index - 1].progress);
+    const qMonotonic = samples.every((sample, index) => index === 0 ||
+      (canonicalDirection > 0 ? sample.q + .015 >= samples[index - 1].q : sample.q - .015 <= samples[index - 1].q));
+    const pathIsCameraOrbit = samples.length > 0 && samples.every(sample => sample.path === 'camera-orbit') &&
+      requested.every(sample => sample.path === 'camera-orbit');
+    const allIdentityStable = actual.length >= requestedQValues.length && actual.every(sample =>
+      sample.selectedAlbumId === identity.selectedAlbumId && sample.selectedEntryKey === identity.selectedEntryKey &&
+      (sample.selectedCell?.foobarEntryKey == null || sample.selectedCell.foobarEntryKey === identity.selectedEntryKey));
+    const qCoverage = requestedQValues.map(q => ({ requested:q,
+      observed:requested.find(sample => Math.abs(sample.q - q) <= .022)?.q ?? null }));
+    const qCoverageOkay = qCoverage.every(sample => Number.isFinite(sample.observed));
+    const sourceQ = activeTarget === 1 ? 0 : 1, targetQ = activeTarget;
+    const sourceEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - sourceQ) <= .001);
+    const targetEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - targetQ) <= .001);
+    const sourceVisible = sourceEndpoint ? visibleEntryOwners(sourceEndpoint) : new Map();
+    const targetVisible = targetEndpoint ? visibleEntryOwners(targetEndpoint) : new Map();
+    const sourceVisibleEntries = new Set([...sourceVisible.values()].map(owner => owner.entry));
+    const targetVisibleEntries = new Set([...targetVisible.values()].map(owner => owner.entry));
+    const sourceRouteKey = sourceQ === 0 ? 'hasArray' : 'hasMatrix';
+    const targetRouteKey = targetQ === 0 ? 'hasArray' : 'hasMatrix';
+    const routeCoverage = requested.map(sample => {
+      const routesByEntry = new Map();
+      for (const owner of sample.instanceOwners ?? []) {
+        const entry = String(owner.entry ?? '');
+        if (!entry || !owner.route) continue;
+        const list = routesByEntry.get(entry) ?? [];
+        list.push(owner.route); routesByEntry.set(entry, list);
+      }
+      return { q:sample.q,
+        missingSource: [...sourceVisibleEntries].filter(entry => !routesByEntry.get(entry)?.some(route => route[sourceRouteKey] === true)),
+        missingTarget: [...targetVisibleEntries].filter(entry => !routesByEntry.get(entry)?.some(route => route[targetRouteKey] === true)) };
     });
-    const releaseToReconfigure = compareGeometry(release, reconfigure);
-    const reconfigureToDock = compareGeometry(reconfigure, dock);
-    const geometryMovesThroughMiddle = matricesPresent && releaseToReconfigure.matchedCount > 0 &&
-      reconfigureToDock.matchedCount > 0 && releaseToReconfigure.changedCount > 0 && reconfigureToDock.changedCount > 0;
-    const releaseSpacing = Number(release?.rowSpacing), middleSpacing = Math.max(...samples.filter(sample =>
-      sample.phase === 'reconfigure').map(sample => Number(sample.rowSpacing))), dockSpacing = Number(dock?.rowSpacing);
-    const rowSpacingExpands = [releaseSpacing, middleSpacing, dockSpacing].every(Number.isFinite) &&
-      middleSpacing > Math.max(releaseSpacing, dockSpacing) + 0.05;
-    const headingValues = samples.map(sample => Number(sample.heading));
-    const headingFinite = headingValues.length > 1 && headingValues.every(Number.isFinite);
-    const headingDelta = release && dock ? Number(dock.heading) - Number(release.heading) : NaN;
-    const targetHeadingDirection = target === 'shelf' ? 1 : -1;
-    const headingMovesTowardTarget = Number.isFinite(headingDelta) && Math.sign(headingDelta) === targetHeadingDirection &&
-      Math.abs(headingDelta) > 0.15;
-    const maxHeadingStep = headingValues.slice(1).reduce((maximum, heading, index) =>
-      Math.max(maximum, Math.abs(heading - headingValues[index])), 0);
-    const headingContinuous = headingFinite && samples.slice(1).every((sample, index) =>
-      Math.abs(Number(sample.heading) - Number(samples[index].heading)) <=
-        8 * Math.max(.016, sample.frameTime - samples[index].frameTime));
-    const cameraSamples = samples.map(sample => ({ position:xyz(sample.cameraPosition), aim:xyz(sample.cameraAim), time:sample.frameTime }))
-      .filter(sample => sample.position && sample.aim);
-    const cameraStepSizes = cameraSamples.slice(1).map((sample, index) =>
-      distance3(sample.position, cameraSamples[index].position));
-    const aimStepSizes = cameraSamples.slice(1).map((sample, index) =>
-      distance3(sample.aim, cameraSamples[index].aim));
-    const cameraContinuous = cameraSamples.length > 1 && cameraSamples.slice(1).every((sample, index) => {
-      const seconds = Math.max(.016, sample.time - cameraSamples[index].time);
-      return cameraStepSizes[index] < 450 * seconds && aimStepSizes[index] < 80 * seconds;
+    const allVisibleEndpointEntriesRouted = sourceVisibleEntries.size > 0 && targetVisibleEntries.size > 0 &&
+      routeCoverage.every(sample => sample.missingSource.length === 0 && sample.missingTarget.length === 0);
+    const orderedByQ = [...actual].sort((a, b) => a.q - b.q);
+    const cameraY = orderedByQ.map(sample => sample.cameraPosition?.[1]);
+    const cameraYMonotonic = cameraY.length >= 3 && cameraY.every(Number.isFinite) && cameraY.slice(1).every((value, index) => value <= cameraY[index] + .08);
+    const cameraYLowerAtMatrix = orderedByQ.length >= 2 && orderedByQ.at(-1).cameraPosition?.[1] < orderedByQ[0].cameraPosition?.[1] - .05;
+    const cameraDistance = orderedByQ.map(sample => sample.cameraDistance);
+    const pullsBackMonotonic = cameraDistance.length >= 3 && cameraDistance.every(Number.isFinite) &&
+      cameraDistance.slice(1).every((value, index) => value + .08 >= cameraDistance[index]);
+    const pullsBackAtMatrix = cameraDistance.length >= 2 && cameraDistance.at(-1) > cameraDistance[0] + .5;
+    const heroDistances = orderedByQ.map(sample => sample.cameraToHeroDistance);
+    const heroDistanceFacts = heroDistances.every(Number.isFinite) ? { array:heroDistances[0], matrix:heroDistances.at(-1) } : null;
+    const heroDistanceMonotonic = heroDistances.length >= 3 && heroDistances.every(Number.isFinite) &&
+      heroDistances.slice(1).every((value, index) => value + .08 >= heroDistances[index]);
+    const heroDistanceGrows = heroDistances.length >= 2 && heroDistances.at(-1) > heroDistances[0] + .5;
+    const cameraYaw = orderedByQ.map(sample => sample.cameraPosition && sample.cameraAim
+      ? Math.atan2(sample.cameraPosition[0] - sample.cameraAim[0], sample.cameraPosition[2] - sample.cameraAim[2]) : NaN);
+    let yawTrack = 0, previousYaw = null;
+    const unwrappedYaw = cameraYaw.map(yaw => {
+      if (previousYaw !== null) yawTrack += Math.atan2(Math.sin(yaw - previousYaw), Math.cos(yaw - previousYaw));
+      previousYaw = yaw; return yawTrack;
     });
-    const cameraYaws = cameraSamples.map(sample => Math.atan2(sample.position[0] - sample.aim[0],
-      sample.position[2] - sample.aim[2]));
-    let unwrappedCameraYaw = 0, previousCameraYaw = null;
-    const cameraYawTrack = cameraYaws.map(yaw => {
-      if (previousCameraYaw !== null) unwrappedCameraYaw += Math.atan2(Math.sin(yaw - previousCameraYaw), Math.cos(yaw - previousCameraYaw));
-      previousCameraYaw = yaw;
-      return unwrappedCameraYaw;
-    });
-    const cameraYawDelta = cameraYawTrack.length > 1 ? cameraYawTrack.at(-1) - cameraYawTrack[0] : NaN;
-    const cameraMovesWithHeading = Number.isFinite(cameraYawDelta) && Math.abs(cameraYawDelta) <= 97 * Math.PI / 180 + 0.04 &&
-      Math.abs(cameraYawDelta) > 0.02 && Math.sign(cameraYawDelta) === Math.sign(headingDelta);
-    const phaseOrderOkay = ['release','reconfigure','dock'].every((phase, index) =>
-      phaseSequence.indexOf(phase) >= 0 && (index === 0 || phaseSequence.indexOf(phase) > phaseSequence.indexOf(['release','reconfigure','dock'][index - 1])));
-    return { sampleCount:samples.length, phaseSequence, phaseOrderOkay, progressInBounds, progressMonotonic,
-      geometricFlag, rackTrackConsistent,
-      releaseProgress:release?.progress ?? null, reconfigureProgress:reconfigure?.progress ?? null, dockProgress:dock?.progress ?? null,
-      matricesPresent, releaseToReconfigure, reconfigureToDock, geometryMovesThroughMiddle,
-      releaseSpacing, middleSpacing, dockSpacing, rowSpacingExpands,
-      headingFinite, headingDelta, headingMovesTowardTarget, maxHeadingStep, headingContinuous,
-      cameraSampleCount:cameraSamples.length, cameraContinuous, cameraYawDelta, cameraMovesWithHeading,
-      midpointViewport, neighborMotionPxPerSecond };
+    const cameraYawDelta = unwrappedYaw.length > 1 ? unwrappedYaw.at(-1) - unwrappedYaw[0] : NaN;
+    const cameraOrbits = Number.isFinite(cameraYawDelta) && Math.abs(cameraYawDelta) > .02 && Math.abs(cameraYawDelta) < Math.PI + .05;
+    const headingValues = actual.map(sample => sample.heading);
+    const maxAbsoluteHeading = headingValues.length ? Math.max(...headingValues.map(Math.abs)) : NaN;
+    const midpoint = actual.find(sample => !sample.endpoint && Math.abs(sample.requestedQ - .5) < .01);
+    const rackHeadingTrackOkay = Number.isFinite(maxAbsoluteHeading) && maxAbsoluteHeading <= 10 * Math.PI / 180 + .012 &&
+      Math.abs(Number(midpoint?.heading)) >= .12 && actual.filter(sample => sample.endpoint).every(sample => Math.abs(sample.heading) <= .03);
+    const rowSpacings = actual.map(sample => sample.rowSpacing);
+    const rowSpacingStaysCompact = rowSpacings.length > 1 && rowSpacings.every(value => Number.isFinite(value) && value >= .55 && value <= 1.1) &&
+      orderedByQ[0].rowSpacing > orderedByQ.at(-1).rowSpacing + .15;
+    const rackFlightSamples = requested.map(sample => sample.rackFlight).filter(Boolean);
+    const rackBoundsValid = rackFlightSamples.length === requested.length && rackFlightSamples.every(rack =>
+      Array.isArray(rack.projected) && rack.projected.length === 4 && rack.projected.every(Number.isFinite) &&
+      rack.projected[0] <= rack.projected[2] && rack.projected[3] <= rack.projected[1] &&
+      Array.isArray(rack.translation) && rack.translation.length === 3 && rack.translation.every(Number.isFinite));
+    const rackVisibilityFollowsCompleteBounds = rackFlightSamples.length === requested.length && rackFlightSamples.every(rack =>
+      rack.visible === !rack.outside && (!rack.outside || Number(rack.projected?.[1]) < -1.1));
+    const nearArray = requested.find(sample => Math.abs(sample.requestedQ - .05) < .01);
+    const nearMatrix = requested.find(sample => Math.abs(sample.requestedQ - .95) < .01);
+    const rackAtArrayVisible = !!nearArray?.rackFlight?.visible && nearArray.rackFlight.outside === false;
+    const rackExitsBelowViewport = nearMatrix?.rackFlight?.outside === true && nearMatrix.rackFlight.visible === false &&
+      Number(nearMatrix.rackFlight.projected?.[1]) < -1.1;
+    const rackDeploymentStaysFull = samples.length > 0 && samples.every(sample =>
+      Number.isFinite(Number(sample.rackDeployment)) && Math.abs(Number(sample.rackDeployment) - 1) <= .03 &&
+      Math.abs(Number(sample.transitionRackDeployment) - 1) <= .03);
+    const rackPartsAtMid = Array.isArray(midpoint?.rackParts) ? midpoint.rackParts : [];
+    const arrayEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q) < .001);
+    const arrayRackParts = Array.isArray(arrayEndpoint?.rackParts) ? arrayEndpoint.rackParts : [];
+    const visibleArrayRackParts = arrayRackParts.map((part, index) => ({ part, index })).filter(item => item.part.visible === true);
+    const fullRackPosePresent = visibleArrayRackParts.length > 0 && visibleArrayRackParts.every(({ part, index }) => {
+        const moving = rackPartsAtMid[index];
+        return moving?.visible === true && xyz(part.scale) && xyz(moving.scale) &&
+          part.scale.every((value, axis) => value > .001 && Math.abs(value - moving.scale[axis]) <= .04);
+      });
+    const selectedScaleOkay = requested.length > 0 && requested.every(sample => sample.selectedScale?.every(value =>
+      Number.isFinite(value) && Math.abs(value - 1) <= .06));
+    const coreRouteScaleOne = requested.length > 0 && requested.every(sample => sample.coreRouteCount > 0 &&
+      sample.coreScaleFailures.length === 0);
+    const ghostFullSizePresent = !!midpoint && midpoint.fullSizeOffscreenGhostCount > 0;
+    const selectedViewportOkay = requested.length > 0 && requested.every(sample => viewportAudit(sample.motionViewport).ok);
+    const ownerContinuity = ownerContinuityAudit(requested);
+    const ownerCellEntryStable = ownerContinuity.checkedIds > 0 && ownerContinuity.ownerChanges.length === 0;
+    const neighborMotionPxPerSecond = neighborMotionAudit(samples);
+    return { sampleCount:samples.length, qCoverage, qCoverageOkay, progressInBounds, progressMonotonic, qMonotonic,
+      pathIsCameraOrbit, allIdentityStable, activeTarget, cameraYMonotonic, cameraYLowerAtMatrix,
+      pullsBackMonotonic, pullsBackAtMatrix, heroDistanceMonotonic, heroDistanceGrows,
+      heroDistanceFacts, cameraYawDelta, cameraOrbits,
+      sourceVisibleEntryCount:sourceVisibleEntries.size, targetVisibleEntryCount:targetVisibleEntries.size,
+      sourceRouteKey, targetRouteKey, allVisibleEndpointEntriesRouted, routeCoverage,
+      maxAbsoluteHeading, midpointHeading:midpoint?.heading ?? null, rackHeadingTrackOkay,
+      rowSpacingRange:rowSpacings.length ? [Math.min(...rowSpacings), Math.max(...rowSpacings)] : [], rowSpacingStaysCompact,
+      rackBoundsValid, rackVisibilityFollowsCompleteBounds, rackAtArrayVisible, rackExitsBelowViewport,
+      rackDeploymentStaysFull, fullRackPosePresent,
+      selectedScaleOkay, coreRouteScaleOne, midpointCoreRouteCount:midpoint?.coreRouteCount ?? 0,
+      ghostFullSizePresent, midpointGhostCount:midpoint?.fullSizeOffscreenGhostCount ?? 0,
+      selectedViewportOkay, ownerCellEntryStable, ownerContinuity, neighborMotionPxPerSecond };
   };
-  const captureGeometryFrame = async (context, target, phase, sample) => {
-    const detailed = await geometrySnapshot();
-    const geometry = detailed.stats?.motionGeometry ?? null;
-    const transition = detailed.stats?.layoutTransition ?? null;
-    const instances = geometry?.instances ?? [];
-    const matricesValid = Array.isArray(instances) && instances.length > 0 && instances.every(instance =>
-      instance?.id && Array.isArray(instance.matrix) && instance.matrix.length === 16 && instance.matrix.every(Number.isFinite));
-    const boundsValid = xyz(geometry?.bounds?.min) && xyz(geometry?.bounds?.max);
-    const selectedValid = Array.isArray(geometry?.selectedMatrix) && geometry.selectedMatrix.length === 16 &&
-      geometry.selectedMatrix.every(Number.isFinite);
-    const frame = { context, target, phase, q:transition?.q ?? null, progress:transition?.progress ?? null,
-      waitObservedProgress:sample.stats?.layoutTransition?.progress ?? null,
-      frameTime:detailed.stats?.frameTime ?? null, selectedAlbumId:detailed.selectedAlbumId,
-      selectedEntryKey:detailed.selectedEntryKey, motionGeometry:geometry,
-      layoutTransition:transition,
-      motionViewport:detailed.stats?.motionViewport ?? null };
-    result.geometryFrames.push(frame);
-    record(`${context} ${phase} captures actual bounds and occurrence matrices`,
-      matricesValid && boundsValid && selectedValid,
-      { phase, instanceCount:instances.length, bounds:geometry?.bounds ?? null,
-        selectedMatrixLength:geometry?.selectedMatrix?.length ?? null });
-    return frame;
+  const settledHandoffAudit = async (designLabel, context, identity, terminal) => {
+    const terminalFrameTime = Number(terminal.stats?.frameTime);
+    const nextFast = await waitForFast(state => state.stats?.layoutTransition?.active === false &&
+      Number(state.stats?.frameTime) > terminalFrameTime, `${designLabel} ordinary frame after ${context}`, 5000, 4);
+    const next = await geometrySnapshot();
+    const before = visibleEntryOwners(terminal), after = visibleEntryOwners(next);
+    const missing = [...before.keys()].filter(key => !after.has(key));
+    const added = [...after.keys()].filter(key => !before.has(key));
+    const beforeCellOwners = new Map([...before.values()].map(owner => [owner.cellKey, owner.entry]));
+    const afterCellOwners = new Map([...after.values()].map(owner => [owner.cellKey, owner.entry]));
+    const ownerChanges = [...beforeCellOwners.entries()].filter(([cell, entry]) => afterCellOwners.has(cell) && afterCellOwners.get(cell) !== entry)
+      .map(([cell, entry]) => ({ cell, before:entry, after:afterCellOwners.get(cell) }));
+    const shared = [...before.keys()].filter(key => after.has(key));
+    const matrixMaxDelta = shared.reduce((maximum, key) => Math.max(maximum,
+      Math.max(...before.get(key).matrix.map((value, index) => Math.abs(value - after.get(key).matrix[index])))), 0);
+    const selectedMatrixDelta = compareActualMatrices(terminal, next).selectedMatrixDelta;
+    const resultFrame = { terminalFrameTime, nextFrameTime:next.stats?.frameTime,
+      endpoint:terminal.viewLayout, terminalSelectedCell:terminal.stats?.selectedCell ?? null,
+      nextSelectedCell:next.stats?.selectedCell ?? null, terminalVisibleEntries:before.size, nextVisibleEntries:after.size,
+      sharedVisibleEntries:shared.length, missing, added, ownerChanges, matrixMaxDelta, selectedMatrixDelta,
+      identityStable:identityMatches(terminal, identity) && identityMatches(next, identity),
+      nextFrameFastTime:nextFast.stats?.frameTime ?? null };
+    record(`${designLabel} ${context} normal-frame handoff keeps cell owners and matrices continuous`,
+      resultFrame.identityStable && shared.length > 0 && missing.length === 0 && added.length === 0 && ownerChanges.length === 0 &&
+      matrixMaxDelta <= .1 && Number.isFinite(selectedMatrixDelta) && selectedMatrixDelta <= .1, resultFrame);
+    return resultFrame;
   };
   const transitionTo = async (designLabel, target, identity) => {
-    let current = await snapshot();
-    if (current.viewLayout === target) return current;
+    const current = await snapshot();
+    if (current.viewLayout === target && current.stats?.layoutTransition?.active !== true) return current;
     const context = `${designLabel} ${target} #${++transitionSequence}`;
-    transitionProbeContext = context;
-    transitionProbeStartedAt = Date.now();
+    const desiredEnd = target === 'array' ? 1 : 0;
+    transitionProbeContext = context; transitionProbeStartedAt = Date.now();
     await clickLayout(target);
-    const active = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.progress) > 0 && state.viewLayout === target,
-    `${designLabel} ${target} transition active`, 7000, 12);
-    record(`${designLabel} ${target} has an active intermediate frame`,
-      active.stats.layoutTransition.progress > 0 && active.stats.layoutTransition.progress < 1 && identityMatches(active, identity), shortState(active));
-    const release = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'release' && Number(state.stats.layoutTransition.progress) > 0.04 &&
-      Number(state.stats.layoutTransition.progress) < 0.16,
-    `${designLabel} ${target} release phase`, 7000, 12);
-    record(`${designLabel} ${target} release frame preserves selection identity`, identityMatches(release, identity), shortState(release));
-    await captureGeometryFrame(context, target, 'release', release);
-    const releaseGeometry = result.geometryFrames.at(-1);
-    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-release`,
-      { phase:'release', geometryReadQ:releaseGeometry.q }, 0, true);
-    const reconfigure = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'reconfigure' && Number(state.stats.layoutTransition.q) > 0.49 &&
-      Number(state.stats.layoutTransition.q) < 0.52,
-    `${designLabel} ${target} geometric reconfiguration`, 7000, 12);
-    record(`${designLabel} ${target} reconfiguration frame preserves selection identity`, identityMatches(reconfigure, identity), shortState(reconfigure));
-    const middleGeometry = await captureGeometryFrame(context, target, 'middle', reconfigure);
-    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-middle`,
-      { phase:'reconfigure', geometryReadQ:middleGeometry.q }, 0, true);
-    const dock = await waitForFast(state => state.stats?.layoutTransition?.active === true &&
-      state.stats.layoutTransition.phase === 'dock' && Number(state.stats.layoutTransition.q) > 0.94 &&
-      Number(state.stats.layoutTransition.q) < 0.955,
-    `${designLabel} ${target} dock phase`, 7000, 12);
-    record(`${designLabel} ${target} dock frame preserves selection identity`, identityMatches(dock, identity), shortState(dock));
-    const dockGeometry = await captureGeometryFrame(context, target, 'dock', dock);
-    await takeScreenshot(`${designLabel.toLowerCase()}-${target}-geometry-dock`,
-      { phase:'dock', geometryReadQ:dockGeometry.q }, 0, true);
-    if (designLabel === 'Future' && target === 'shelf' && context === 'Future shelf #1' &&
-        identity.selectedAlbumId === 'fixture-album-28') {
-      const handoffFrames = [middleGeometry, dockGeometry];
-      const completeLongGroupHandoff = handoffFrames.every(frame =>
-        (frame.motionGeometry?.instances?.length ?? 0) >= 17 &&
-        Number(frame.layoutTransition?.matched) === 18 && Number(frame.layoutTransition?.arriving) === 0);
-      record('Future long-group shelf handoff retains 18 matched occurrences without arrivals', completeLongGroupHandoff,
-        handoffFrames.map(frame => ({ phase:frame.phase, q:frame.q, matched:frame.layoutTransition?.matched,
-          arriving:frame.layoutTransition?.arriving, nonzeroInstances:frame.motionGeometry?.instances?.length ?? 0 })));
+    const active = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === true &&
+      Number(state.stats.layoutTransition.desiredEnd) === desiredEnd,
+    `${designLabel} ${target} camera-orbit active`, 10000, 12);
+    record(`${designLabel} ${target} starts the shared canonical camera-orbit path`,
+      active.stats.layoutTransition.path === 'camera-orbit' && identityMatches(active, identity), shortState(active));
+    const end = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false &&
+      Math.abs(Number(state.stats.layoutTransition.q) - desiredEnd) < .001,
+    `${designLabel} ${target} canonical endpoint`, 15000, 12);
+    const detailedEnd = await geometrySnapshot();
+    record(`${designLabel} ${target} reaches canonical q=${desiredEnd} with identity intact`,
+      identityMatches(end, identity) && identityMatches(detailedEnd, identity) &&
+      Math.abs(Number(detailedEnd.stats?.layoutTransition?.q) - desiredEnd) < .001, shortState(detailedEnd));
+    transitionProbeStartedAt = 0; transitionProbeContext = '';
+    return detailedEnd;
+  };
+  const runFlightLeg = async (designLabel, target, identity, requestedQValues) => {
+    const sourceLayout = target === 'array' ? 'shelf' : 'array';
+    const sourceQ = target === 'array' ? 0 : 1;
+    const targetQ = target === 'array' ? 1 : 0;
+    const direction = target === 'array' ? 'array-to-matrix' : 'matrix-to-array';
+    const context = `${designLabel} ${direction} #${++transitionSequence}`;
+    const source = await waitFor(state => state.viewLayout === sourceLayout && state.stats?.layoutTransition?.active !== true &&
+      identityMatches(state, identity), `${designLabel} ${direction} source endpoint`, 10000, 30);
+    const startSample = await captureFlightSample(context, sourceQ, true);
+    record(`${context} starts at canonical q=${sourceQ} with selected entry ownership intact`,
+      Math.abs(startSample.q - sourceQ) < .001 && identityMatches(source, identity) && startSample.instanceCount > 0,
+      { state:shortState(source), q:startSample.q, cell:startSample.selectedCell, instanceCount:startSample.instanceCount });
+    await takeScreenshot(`${designLabel.toLowerCase()}-${direction}-q-${sourceQ.toFixed(2)}-endpoint`,
+      { direction, canonicalQ:sourceQ, endpoint:'source', layout:sourceLayout }, 0, true);
+    const desiredEnd = targetQ;
+    transitionProbeContext = context; transitionProbeStartedAt = Date.now();
+    await clickLayout(target);
+    const active = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === true &&
+      Number(state.stats.layoutTransition.desiredEnd) === desiredEnd,
+    `${context} active camera-orbit`, 10000, 12);
+    record(`${context} activates with canonical q moving toward ${targetQ}`, identityMatches(active, identity) &&
+      active.stats.layoutTransition.path === 'camera-orbit' && Number.isFinite(Number(active.stats.layoutTransition.q)), shortState(active));
+    const observations = [];
+    for (const requestedQ of requestedQValues) {
+      const state = await waitForFast(value => value.viewLayout === target && value.stats?.layoutTransition?.active === true &&
+        Number(value.stats.layoutTransition.desiredEnd) === desiredEnd &&
+        Math.abs(Number(value.stats.layoutTransition.q) - requestedQ) <= .018,
+      `${context} q=${requestedQ.toFixed(2)}`, 15000, 8);
+      const observed = await captureFlightSample(context, requestedQ, false);
+      observations.push(observed);
+      record(`${context} q=${requestedQ.toFixed(2)} keeps selected entry and its owner cell`,
+        identityMatches(state, identity) && identityMatches(observed, identity) && observed.instanceCount > 0,
+        { requestedQ, observedQ:observed.q, selectedCell:observed.selectedCell, instanceCount:observed.instanceCount });
+      await takeScreenshot(`${designLabel.toLowerCase()}-${direction}-q-${requestedQ.toFixed(2)}`,
+        { direction, requestedQ, canonicalQ:observed.q, selectedAlbumId:observed.selectedAlbumId,
+          selectedEntryKey:observed.selectedEntryKey, selectedCell:observed.selectedCell,
+          cameraY:observed.cameraPosition?.[1] ?? null, cameraDistance:observed.cameraDistance,
+          cameraToHeroDistance:observed.cameraToHeroDistance, rackFlight:observed.rackFlight }, 0, true);
     }
-    const end = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false,
-      `${designLabel} ${target} endpoint`, 10000, 12);
-    record(`${designLabel} ${target} reaches its endpoint with identity intact`, identityMatches(end, identity), shortState(end));
-    const audit = auditTransition(context, target);
-    record(`${designLabel} ${target} reports bounded progress and release, reconfigure, dock in order`,
-      audit.progressInBounds && audit.progressMonotonic && audit.geometricFlag && audit.phaseOrderOkay, audit);
-    record(`${designLabel} ${target} changes actual sampled mesh matrices through an intermediate pose`,
-      audit.geometryMovesThroughMiddle, audit);
-    record(`${designLabel} ${target} expands row spacing during reconfiguration`, audit.rowSpacingExpands, audit);
-    record(`${designLabel} ${target} keeps all selected-case corners inside the available scene viewport at midpoint`,
-      audit.midpointViewport.ok, audit.midpointViewport);
-    record(`${designLabel} ${target} heading and camera move continuously in the same direction`,
-      audit.headingMovesTowardTarget && audit.headingContinuous && audit.cameraContinuous && audit.cameraMovesWithHeading, audit);
-    const expectedRackDeployment = target === 'shelf' ? 1 : 0;
-    const actualRackDeployment = Number(end.stats?.rackDeployment);
-    const transitionRackDeployment = Number(end.stats?.layoutTransition?.rackDeployment);
-    const rackEndpointOkay = Number.isFinite(actualRackDeployment) && Number.isFinite(transitionRackDeployment) &&
-      Math.abs(actualRackDeployment - expectedRackDeployment) < 0.06 &&
-      Math.abs(transitionRackDeployment - expectedRackDeployment) < 0.06;
-    record(`${designLabel} ${target} rack deployment reaches its endpoint`, rackEndpointOkay,
-      { expectedRackDeployment, actualRackDeployment:end.stats?.rackDeployment,
-        transitionRackDeployment:end.stats?.layoutTransition?.rackDeployment });
-    record(`${designLabel} ${target} rack resources follow the reported deployment while moving`, audit.rackTrackConsistent, audit);
-    record(`${designLabel} ${target} has a static target layout and identity after reveal`,
-      end.viewLayout === target && end.stats?.layoutTransition?.active === false && identityMatches(end, identity), shortState(end));
-    result.timeline.push({ design:designLabel, target, activeProgress:active.stats.layoutTransition.progress,
-      releaseProgress:release.stats.layoutTransition.progress, reconfigureProgress:reconfigure.stats.layoutTransition.progress,
-      dockProgress:dock.stats.layoutTransition.progress, phaseSequence:audit.phaseSequence,
-      midpointViewport:audit.midpointViewport, neighborMotionPxPerSecond:audit.neighborMotionPxPerSecond,
-      rackDeployment:end.stats?.rackDeployment, endpoint:end.viewLayout,
-      selectedAlbumId:end.selectedAlbumId, entryKey:end.selectedEntryKey });
-    transitionProbeStartedAt = 0;
-    transitionProbeContext = '';
+    const endpointFast = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false &&
+      Math.abs(Number(state.stats.layoutTransition.q) - targetQ) < .001,
+    `${context} endpoint q=${targetQ}`, 18000, 12);
+    const endSample = await captureFlightSample(context, targetQ, true);
+    await takeScreenshot(`${designLabel.toLowerCase()}-${direction}-q-${targetQ.toFixed(2)}-endpoint`,
+      { direction, canonicalQ:targetQ, endpoint:'target', layout:target,
+        selectedAlbumId:endSample.selectedAlbumId, selectedEntryKey:endSample.selectedEntryKey }, 0, true);
+    record(`${context} settles at the target q and keeps entry ownership`,
+      identityMatches(endpointFast, identity) && identityMatches(endSample, identity) && endSample.instanceCount > 0,
+      { q:endSample.q, layout:endSample.selectedAlbumId, selectedCell:endSample.selectedCell });
+    const handoff = await settledHandoffAudit(designLabel, direction, identity, await geometrySnapshot());
+    transitionProbeStartedAt = 0; transitionProbeContext = '';
+    const audit = auditFlight(context, target, requestedQValues, identity);
+    record(`${context} samples every requested canonical q in path order with camera-orbit`,
+      audit.qCoverageOkay && audit.qMonotonic && audit.progressInBounds && audit.progressMonotonic && audit.pathIsCameraOrbit, audit);
+    record(`${context} camera lowers and pulls back continuously toward MATRIX`,
+      audit.cameraYMonotonic && audit.cameraYLowerAtMatrix && audit.pullsBackMonotonic && audit.pullsBackAtMatrix &&
+      audit.heroDistanceMonotonic && audit.heroDistanceGrows && audit.cameraOrbits,
+      { cameraYMonotonic:audit.cameraYMonotonic, cameraYLowerAtMatrix:audit.cameraYLowerAtMatrix,
+        pullsBackMonotonic:audit.pullsBackMonotonic, pullsBackAtMatrix:audit.pullsBackAtMatrix,
+        heroDistanceMonotonic:audit.heroDistanceMonotonic, heroDistanceGrows:audit.heroDistanceGrows,
+        cameraYawDelta:audit.cameraYawDelta, heroDistanceFacts:audit.heroDistanceFacts });
+    record(`${context} keeps the selected case in the viewport at unit scale and ghosts full size off camera`,
+      audit.allIdentityStable && audit.ownerCellEntryStable && audit.selectedViewportOkay && audit.selectedScaleOkay &&
+      audit.coreRouteScaleOne && audit.ghostFullSizePresent && audit.allVisibleEndpointEntriesRouted,
+      { allIdentityStable:audit.allIdentityStable, ownerContinuity:audit.ownerContinuity,
+        selectedViewportOkay:audit.selectedViewportOkay, selectedScaleOkay:audit.selectedScaleOkay,
+        coreRouteScaleOne:audit.coreRouteScaleOne, midpointCoreRouteCount:audit.midpointCoreRouteCount,
+        sourceVisibleEntryCount:audit.sourceVisibleEntryCount, targetVisibleEntryCount:audit.targetVisibleEntryCount,
+        sourceRouteKey:audit.sourceRouteKey, targetRouteKey:audit.targetRouteKey,
+        allVisibleEndpointEntriesRouted:audit.allVisibleEndpointEntriesRouted, routeCoverage:audit.routeCoverage,
+        middleGhostCount:audit.midpointGhostCount, middleGhosts:observations.find(sample => sample.requestedQ === .5)?.fullSizeOffscreenGhosts });
+    record(`${context} rack rotates within the 10 degree heading envelope and stays fully deployed in flight`,
+      audit.rackHeadingTrackOkay && audit.rackDeploymentStaysFull && audit.fullRackPosePresent,
+      { maxAbsoluteHeading:audit.maxAbsoluteHeading, midpointHeading:audit.midpointHeading,
+        rackDeploymentStaysFull:audit.rackDeploymentStaysFull, fullRackPosePresent:audit.fullRackPosePresent });
+    record(`${context} uses full projected rack bounds and exits only after the bounds pass below view`,
+      audit.rackBoundsValid && audit.rackVisibilityFollowsCompleteBounds && audit.rackAtArrayVisible && audit.rackExitsBelowViewport,
+      { rackBoundsValid:audit.rackBoundsValid, rackAtArrayVisible:audit.rackAtArrayVisible,
+        rackVisibilityFollowsCompleteBounds:audit.rackVisibilityFollowsCompleteBounds,
+        rackExitsBelowViewport:audit.rackExitsBelowViewport, nearArray:observations.find(sample => sample.requestedQ === .05)?.rackFlight,
+        nearMatrix:observations.find(sample => sample.requestedQ === .95)?.rackFlight });
+    record(`${context} keeps row spacing compact and narrows it toward MATRIX`, audit.rowSpacingStaysCompact,
+      { range:audit.rowSpacingRange });
+    record(`${context} hands off the settled owner cells and matrices without a normal-frame jump`,
+      handoff.sharedVisibleEntries > 0 && handoff.missing.length === 0 && handoff.added.length === 0 && handoff.ownerChanges.length === 0 &&
+      handoff.matrixMaxDelta <= .1 && Number.isFinite(handoff.selectedMatrixDelta) && handoff.selectedMatrixDelta <= .1,
+      handoff);
+    result.timeline.push({ design:designLabel, direction, sourceQ, targetQ, requestedQValues,
+      observedQ:observations.map(sample => sample.q), sourceCameraY:startSample.cameraPosition?.[1] ?? null,
+      targetCameraY:endSample.cameraPosition?.[1] ?? null, sourceCameraDistance:startSample.cameraDistance,
+      targetCameraDistance:endSample.cameraDistance, sourceCameraToHeroDistance:startSample.cameraToHeroDistance,
+      targetCameraToHeroDistance:endSample.cameraToHeroDistance, handoff, audit });
+    return endpointFast;
+  };
+  const exerciseRetargets = async (designLabel, identity) => {
+    const context = `${designLabel} canonical q retargets #${++transitionSequence}`;
+    const source = await waitFor(state => state.viewLayout === 'shelf' && state.stats?.layoutTransition?.active !== true &&
+      identityMatches(state, identity), `${designLabel} ARRAY source for retarget`, 10000, 30);
+    transitionProbeContext = context; transitionProbeStartedAt = Date.now();
+    await clickLayout('array');
+    const qWindow = (minimum, maximum, desiredEnd, label) => waitForFast(state =>
+      state.stats?.layoutTransition?.active === true && Number(state.stats.layoutTransition.desiredEnd) === desiredEnd &&
+      Number(state.stats.layoutTransition.q) >= minimum && Number(state.stats.layoutTransition.q) <= maximum,
+    `${designLabel} retarget ${label}`, 18000, 8);
+    const retargetAndCheck = async (layout, desiredEnd, flip) => {
+      const atomic = await retargetLayoutAtomically(layout), before = atomic.before, after = atomic.after;
+      const a = before.stats?.layoutTransition ?? {}, b = after.stats?.layoutTransition ?? {};
+      const geometry = compareGeometry(before, after), matrices = compareActualMatrices(before, after);
+      const qDelta = Math.abs(Number(b.q) - Number(a.q));
+      const velocityDelta = Math.abs(Number(b.qVelocity) - Number(a.qVelocity));
+      const cameraDelta = distance3(before.stats?.cameraPosition, after.stats?.cameraPosition);
+      const aimDelta = distance3(before.stats?.cameraAim, after.stats?.cameraAim);
+      const samePlan = Number(a.desiredEnd) !== desiredEnd && Number(b.desiredEnd) === desiredEnd &&
+        Number.isFinite(Number(a.q)) && Number.isFinite(Number(b.q));
+      const continuous = qDelta <= .025 && velocityDelta <= .35 && geometry.matchedCount > 0 && geometry.maxDelta <= .5 &&
+        matrices.matchedCount > 0 && matrices.maxElementDelta <= .5 && Number(matrices.selectedMatrixDelta) <= .5 &&
+        Number.isFinite(cameraDelta) && cameraDelta <= 1.5 && Number.isFinite(aimDelta) && aimDelta <= 1.5;
+      const observation = { flip, layout, desiredEnd, beforeQ:a.q, afterQ:b.q, qDelta,
+        beforeVelocity:a.qVelocity, afterVelocity:b.qVelocity, velocityDelta, geometry, matrices, cameraDelta, aimDelta,
+        identityStable:identityMatches(before, identity) && identityMatches(after, identity) };
+      result.retargets.push({ context, ...observation });
+      record(`${designLabel} flip ${flip} reverses toward canonical q=${desiredEnd} without a pose jump`,
+        samePlan && continuous && observation.identityStable, observation);
+      await waitForFast(state => state.viewLayout === layout && state.stats?.layoutTransition?.active === true &&
+        Number(state.stats.layoutTransition.desiredEnd) === desiredEnd, `${designLabel} retarget ${flip} target applied`, 5000, 8);
+    };
+    const q02 = await qWindow(.16, .24, 1, 'q near .20 while entering MATRIX');
+    record(`${designLabel} canonical retarget starts on the ARRAY to MATRIX q path`, source.viewLayout === 'shelf' &&
+      Number(q02.stats.layoutTransition.q) > 0 && identityMatches(q02, identity), shortState(q02));
+    const qSamples = [{ requested:.2, q:Number(q02.stats.layoutTransition.q), desiredEnd:1 }];
+    await retargetAndCheck('shelf', 0, 1);
+    const q03 = await qWindow(.01, .06, 0, 'q near .03 while returning to ARRAY');
+    qSamples.push({ requested:.03, q:Number(q03.stats.layoutTransition.q), desiredEnd:0 });
+    await retargetAndCheck('array', 1, 2);
+    const q05 = await qWindow(.44, .56, 1, 'q near .50 while re-entering MATRIX');
+    qSamples.push({ requested:.5, q:Number(q05.stats.layoutTransition.q), desiredEnd:1 });
+    const q08 = await qWindow(.75, .85, 1, 'q near .80 while re-entering MATRIX');
+    qSamples.push({ requested:.8, q:Number(q08.stats.layoutTransition.q), desiredEnd:1 });
+    const q097 = await qWindow(.93, .99, 1, 'q near .97 before the third reversal');
+    qSamples.push({ requested:.97, q:Number(q097.stats.layoutTransition.q), desiredEnd:1 });
+    await retargetAndCheck('shelf', 0, 3);
+    const end = await waitForFast(state => state.viewLayout === 'shelf' && state.stats?.layoutTransition?.active === false &&
+      Math.abs(Number(state.stats.layoutTransition.q)) < .001, `${designLabel} three reversals settle at ARRAY`, 20000, 12);
+    record(`${designLabel} three canonical q reversals settle back at ARRAY with identity intact`,
+      identityMatches(end, identity) && qSamples.length === 5 && qSamples.every(sample => Number.isFinite(sample.q)),
+      { qSamples, selectedCell:end.stats?.selectedCell, selectedEntryKey:end.selectedEntryKey });
+    const settled = await geometrySnapshot();
+    const handoff = await settledHandoffAudit(designLabel, 'three reversals', identity, settled);
+    record(`${designLabel} three reversals retain the settled owner and matrix seam`,
+      handoff.sharedVisibleEntries > 0 && handoff.missing.length === 0 && handoff.added.length === 0 && handoff.ownerChanges.length === 0 &&
+      handoff.matrixMaxDelta <= .1 && Number.isFinite(handoff.selectedMatrixDelta) && handoff.selectedMatrixDelta <= .1, handoff);
+    transitionProbeStartedAt = 0; transitionProbeContext = '';
+    result.timeline.push({ design:designLabel, direction:'three-reversal-continuity', qSamples, handoff, endpoint:end.viewLayout });
     return end;
   };
   const exerciseLayoutTransitions = async (designLabel, identity) => {
-    const sourceState = await snapshot();
-    const sourceSelectedCell = { lane:Number(sourceState.stats?.selectedCell?.lane), row:Number(sourceState.stats?.selectedCell?.row) };
-    record(`${designLabel} fixed-plan retarget starts at the current MATRIX source coordinates`,
-      sourceState.viewLayout === 'array' && Number.isFinite(sourceSelectedCell.lane) && Number.isFinite(sourceSelectedCell.row) &&
-      identityMatches(sourceState, identity), { sourceSelectedCell, identity, state:shortState(sourceState) });
-    const retargetContext = `${designLabel} fixed-plan retargets`;
-    transitionProbeContext = retargetContext;
-    transitionProbeStartedAt = Date.now();
-    await clickLayout('shelf');
-    const qWindow = (minimum, maximum, desiredEnd, label) => waitForFast(state =>
-      state.stats?.layoutTransition?.active === true &&
-      Number(state.stats.layoutTransition.desiredEnd) === desiredEnd &&
-      Number(state.stats.layoutTransition.q) >= minimum && Number(state.stats.layoutTransition.q) <= maximum,
-    `${designLabel} ${label}`, 20000, 8);
-    const q02 = await qWindow(0.16, 0.24, 1, 'retarget q near 0.2');
-    record(`${designLabel} retarget starts on a stable MATRIX identity`, identityMatches(q02, identity), shortState(q02));
-    const qSamples = [{ target:0.2, observed:Number(q02.stats.layoutTransition.q), desiredEnd:q02.stats.layoutTransition.desiredEnd }];
-    const retargetAndCheck = async (targetLayout, nextDesiredEnd, flipNumber) => {
-      const requestStartedAt = Date.now();
-      const atomic = await retargetLayoutAtomically(targetLayout);
-      const before = atomic.before;
-      const atomicAfter = atomic.after;
-      const beforeTransition = before.stats?.layoutTransition ?? {};
-      const confirmation = await waitForFast(state => state.viewLayout === targetLayout &&
-        state.stats?.layoutTransition?.active === true &&
-        Number(state.stats.layoutTransition.desiredEnd) === nextDesiredEnd,
-      `${designLabel} retarget ${flipNumber} to ${targetLayout}`, 10000, 8);
-      const atomicRetargeted = Number(atomicAfter.stats?.layoutTransition?.desiredEnd) === nextDesiredEnd;
-      const after = atomicRetargeted ? atomicAfter : await geometrySnapshot();
-      const elapsedWallSeconds = (Date.now() - requestStartedAt) / 1000;
-      const frameDelta = Number(after.stats?.frameTime) - Number(before.stats?.frameTime);
-      const elapsedSeconds = Number.isFinite(frameDelta) && frameDelta > 0
-        ? Math.min(0.8, frameDelta) : Math.min(0.8, elapsedWallSeconds);
-      const afterTransition = after.stats?.layoutTransition ?? {};
-      const qBefore = Number(beforeTransition.q), qAfter = Number(afterTransition.q);
-      const velocityBefore = Number(beforeTransition.qVelocity), velocityAfter = Number(afterTransition.qVelocity);
-      const qDelta = Math.abs(qAfter - qBefore), velocityDelta = Math.abs(velocityAfter - velocityBefore);
-      const geometryContinuity = compareGeometry(before, after);
-      const actualMatrixContinuity = compareActualMatrices(before, after);
-      const cameraContinuity = distance3(before.stats?.cameraPosition, after.stats?.cameraPosition);
-      const aimContinuity = distance3(before.stats?.cameraAim, after.stats?.cameraAim);
-      const modelContinuity = distance3(before.stats?.modelPosition, after.stats?.modelPosition);
-      const headingContinuity = Math.abs(Number(beforeTransition.heading) - Number(afterTransition.heading));
-      const rowContinuity = Math.abs(Number(beforeTransition.rowSpacing) - Number(afterTransition.rowSpacing));
-      const qLimit = atomicRetargeted ? 0.001 : 0.13 + elapsedSeconds * 0.5;
-      const velocityLimit = atomicRetargeted ? 0.001 : 0.28 + elapsedSeconds * 1.2;
-      const matrixLimit = atomicRetargeted ? 0.001 : 1.25 + elapsedSeconds * 8;
-      const poseLimit = atomicRetargeted ? 0.001 : 2.5 + elapsedSeconds * 16;
-      const qContinuous = Number.isFinite(qBefore) && Number.isFinite(qAfter) && qDelta <= qLimit;
-      const qVelocityContinuous = Number.isFinite(velocityBefore) && Number.isFinite(velocityAfter) &&
-        velocityDelta <= velocityLimit && (atomicRetargeted || Math.abs(velocityBefore) < 0.12 ||
-          Math.sign(velocityBefore) === Math.sign(velocityAfter) || elapsedSeconds > 0.25);
-      const poseContinuous = geometryContinuity.matchedCount > 0 && geometryContinuity.maxDelta <= matrixLimit &&
-        actualMatrixContinuity.matchedCount > 0 && actualMatrixContinuity.maxElementDelta <= matrixLimit &&
-        Number.isFinite(actualMatrixContinuity.selectedMatrixDelta) && actualMatrixContinuity.selectedMatrixDelta <= matrixLimit &&
-        Number.isFinite(cameraContinuity) && cameraContinuity <= poseLimit &&
-        Number.isFinite(aimContinuity) && aimContinuity <= poseLimit &&
-        Number.isFinite(modelContinuity) && modelContinuity <= poseLimit &&
-        headingContinuity <= (atomicRetargeted ? 0.001 : 0.35 + elapsedSeconds) &&
-        rowContinuity <= (atomicRetargeted ? 0.001 : 0.35 + elapsedSeconds * 2);
-      const retargetedInPlace = Number(beforeTransition.desiredEnd) === 1 - nextDesiredEnd &&
-        Number(afterTransition.desiredEnd) === nextDesiredEnd;
-      record(`${designLabel} flip ${flipNumber} retargets the same plan with q, velocity and matrices continuous`,
-        retargetedInPlace && qContinuous && qVelocityContinuous && poseContinuous,
-        { targetLayout, qBefore, qAfter, qDelta, velocityBefore, velocityAfter, velocityDelta,
-          atomicRetargeted, elapsedSeconds, qLimit, velocityLimit, matrixLimit, geometryContinuity,
-          actualMatrixContinuity, cameraContinuity, aimContinuity, modelContinuity,
-          headingContinuity, rowContinuity, desiredEndBefore:beforeTransition.desiredEnd,
-          desiredEndAfter:afterTransition.desiredEnd,
-          timingSource:Number.isFinite(frameDelta) && frameDelta > 0 ? 'scene frameTime' : 'wall-clock fallback' });
-      record(`${designLabel} flip ${flipNumber} preserves selected identity`, identityMatches(confirmation, identity), shortState(confirmation));
-      return confirmation;
-    };
-    await retargetAndCheck('array', 0, 1);
-    const q03 = await qWindow(0.01, 0.06, 0, 'retarget q near 0.03');
-    qSamples.push({ target:0.03, observed:Number(q03.stats.layoutTransition.q), desiredEnd:q03.stats.layoutTransition.desiredEnd });
-    await retargetAndCheck('shelf', 1, 2);
-    const q05 = await qWindow(0.44, 0.56, 1, 'retarget q near 0.5');
-    qSamples.push({ target:0.5, observed:Number(q05.stats.layoutTransition.q), desiredEnd:q05.stats.layoutTransition.desiredEnd });
-    const q08 = await qWindow(0.75, 0.85, 1, 'retarget q near 0.8');
-    qSamples.push({ target:0.8, observed:Number(q08.stats.layoutTransition.q), desiredEnd:q08.stats.layoutTransition.desiredEnd });
-    const q097 = await qWindow(0.93, 0.99, 1, 'retarget q near 0.97');
-    qSamples.push({ target:0.97, observed:Number(q097.stats.layoutTransition.q), desiredEnd:q097.stats.layoutTransition.desiredEnd });
-    const afterFlip3 = await retargetAndCheck('array', 0, 3);
-    record(`${designLabel} fixed-plan retarget probe samples q near 0.03/0.2/0.5/0.8/0.97`,
-      qSamples.length === 5 && qSamples.every(sample => Number.isFinite(sample.observed)), qSamples);
-    const end = await waitForFast(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === false,
-      `${designLabel} fixed-plan retarget endpoint`, 30000, 12);
-    record(`${designLabel} three retarget flips settle at a static MATRIX layout`, identityMatches(end, identity) &&
-      end.stats?.layoutTransition?.active === false, shortState(end));
-    const finalSelectedCell = end.stats?.selectedCell ?? null;
-    const sourceCoordinatesRestored = Number(finalSelectedCell?.lane) === sourceSelectedCell.lane &&
-      Number(finalSelectedCell?.row) === sourceSelectedCell.row;
-    record(`${designLabel} three retarget flips restore the original MATRIX lane and row with identity intact`,
-      sourceCoordinatesRestored && identityMatches(end, identity),
-      { sourceSelectedCell, finalSelectedCell, selectedAlbumId:end.selectedAlbumId, selectedEntryKey:end.selectedEntryKey });
-    const reverseRackOkay = Number.isFinite(Number(end.stats?.rackDeployment)) &&
-      Math.abs(Number(end.stats.rackDeployment)) < 0.06 &&
-      Math.abs(Number(end.stats?.layoutTransition?.rackDeployment)) < 0.06;
-    record(`${designLabel} retargeted plan docks with the rack retracted`, reverseRackOkay,
-      { rackDeployment:end.stats?.rackDeployment, transitionRackDeployment:end.stats?.layoutTransition?.rackDeployment });
-    const retargetSamples = result.transitionSamples.filter(sample => sample.context === retargetContext);
-    const activeRetargetSamples = retargetSamples.filter(sample => sample.active === true);
-    const rackTrackConsistent = activeRetargetSamples.length > 0 && activeRetargetSamples.every(sample =>
-      Number.isFinite(Number(sample.rackDeployment)) && Number.isFinite(Number(sample.transitionRackDeployment)) &&
-      Math.abs(Number(sample.rackDeployment) - Number(sample.transitionRackDeployment)) < 0.08);
-    record(`${designLabel} retargeted rack resources follow the reported deployment`, rackTrackConsistent,
-      { sampleCount:activeRetargetSamples.length });
-    transitionProbeStartedAt = 0;
-    transitionProbeContext = '';
-    let settledFrameHandoff = null;
-    if (designLabel === 'Future' && identity.selectedAlbumId === 'fixture-album-28') {
-      const terminal = await geometrySnapshot();
-      const terminalFrameTime = Number(terminal.stats?.frameTime);
-      const nextFrameFast = await waitForFast(state => state.stats?.layoutTransition?.active === false &&
-        Number(state.stats?.frameTime) > terminalFrameTime,
-      'Future MATRIX ordinary frame after settled retarget endpoint', 5000, 4);
-      const nextFrame = await geometrySnapshot();
-      const entriesAroundSource = state => {
-        const instances = state.stats?.motionGeometry?.instances ?? [];
-        const byKey = new Map(), byCell = new Map(), lanes = new Set();
-        for (const instance of instances) {
-          const cell = instance?.cell;
-          const lane = Number(cell?.lane), row = Number(cell?.row);
-          const entry = String(instance?.entry ?? cell?.foobarEntryKey ?? '');
-          const matrix = instance?.matrix;
-          if (!entry || !Number.isFinite(lane) || !Number.isFinite(row) ||
-              Math.abs(lane - sourceSelectedCell.lane) > 2 || Math.abs(row - sourceSelectedCell.row) > 8 ||
-              !Array.isArray(matrix) || matrix.length !== 16 || !matrix.every(Number.isFinite)) continue;
-          const cellKey = `${lane}:${row}`;
-          byKey.set(`${entry}|${cellKey}`, { entry, lane, row, matrix });
-          byCell.set(cellKey, entry);
-          lanes.add(lane);
-        }
-        return { byKey, byCell, lanes:[...lanes].sort((left, right) => left - right) };
-      };
-      const terminalNeighborhood = entriesAroundSource(terminal), nextNeighborhood = entriesAroundSource(nextFrame);
-      const sharedKeys = [...terminalNeighborhood.byKey.keys()].filter(key => nextNeighborhood.byKey.has(key));
-      const missingKeys = [...terminalNeighborhood.byKey.keys()].filter(key => !nextNeighborhood.byKey.has(key));
-      const cellEntryChanges = [...terminalNeighborhood.byCell.entries()]
-        .filter(([cell, entry]) => nextNeighborhood.byCell.has(cell) && nextNeighborhood.byCell.get(cell) !== entry)
-        .map(([cell, before]) => ({ cell, before, after:nextNeighborhood.byCell.get(cell) }));
-      const matrixMaxDelta = sharedKeys.reduce((maximum, key) => {
-        const before = terminalNeighborhood.byKey.get(key).matrix, after = nextNeighborhood.byKey.get(key).matrix;
-        return Math.max(maximum, Math.max(...before.map((value, index) => Math.abs(value - after[index]))));
-      }, 0);
-      const terminalSelectedMatrix = terminal.stats?.motionGeometry?.selectedMatrix;
-      const nextSelectedMatrix = nextFrame.stats?.motionGeometry?.selectedMatrix;
-      const selectedMatrixDelta = Array.isArray(terminalSelectedMatrix) && terminalSelectedMatrix.length === 16 &&
-        Array.isArray(nextSelectedMatrix) && nextSelectedMatrix.length === 16
-        ? Math.max(...terminalSelectedMatrix.map((value, index) => Math.abs(value - nextSelectedMatrix[index]))) : Infinity;
-      const frameTimeDelta = Number(nextFrame.stats?.frameTime) - terminalFrameTime;
-      const laneCoverage = terminalNeighborhood.lanes.length >= 3;
-      const handoffOkay = frameTimeDelta > 0 && identityMatches(terminal, identity) && identityMatches(nextFrame, identity) &&
-        Number(terminal.stats?.selectedCell?.lane) === sourceSelectedCell.lane &&
-        Number(terminal.stats?.selectedCell?.row) === sourceSelectedCell.row &&
-        Number(nextFrame.stats?.selectedCell?.lane) === sourceSelectedCell.lane &&
-        Number(nextFrame.stats?.selectedCell?.row) === sourceSelectedCell.row &&
-        terminalNeighborhood.byKey.size > 0 && laneCoverage && missingKeys.length === 0 &&
-        cellEntryChanges.length === 0 && matrixMaxDelta <= 0.1 && selectedMatrixDelta <= 0.1;
-      settledFrameHandoff = { terminalFrameTime, nextFrameTime:nextFrame.stats?.frameTime, frameTimeDelta,
-        sourceSelectedCell, terminalSelectedCell:terminal.stats?.selectedCell ?? null,
-        nextSelectedCell:nextFrame.stats?.selectedCell ?? null,
-        terminalNeighborhoodKeys:terminalNeighborhood.byKey.size, nextNeighborhoodKeys:nextNeighborhood.byKey.size,
-        sharedKeys:sharedKeys.length, missingKeys, cellEntryChanges, laneCoverage:terminalNeighborhood.lanes,
-        matrixMaxDelta, selectedMatrixDelta, identityStable:identityMatches(terminal, identity) && identityMatches(nextFrame, identity),
-        nextFrameFastTime:nextFrameFast.stats?.frameTime ?? null };
-      record('Future settled retarget preserves entry/cell matrices through the next ordinary frame', handoffOkay,
-        settledFrameHandoff);
-    }
-    result.timeline.push({ design:designLabel, target:'array', retargetFlips:3, qSamples, sourceSelectedCell, finalSelectedCell,
-      finalDesiredEnd:0, rackDeployment:end.stats?.rackDeployment, settledFrameHandoff,
-      endpoint:end.viewLayout });
-    await transitionTo(designLabel, 'shelf', identity);
-    return transitionTo(designLabel, 'array', identity);
+    const requestedAscending = [.05,.15,.3,.5,.7,.85,.95];
+    const requestedDescending = [...requestedAscending].reverse();
+    const source = await snapshot();
+    record(`${designLabel} canonical flight suite starts in ARRAY at q=0`, source.viewLayout === 'shelf' &&
+      source.stats?.layoutTransition?.active !== true && identityMatches(source, identity), shortState(source));
+    await runFlightLeg(designLabel, 'array', identity, requestedAscending);
+    await runFlightLeg(designLabel, 'shelf', identity, requestedDescending);
+    return exerciseRetargets(designLabel, identity);
   };
   const enterInterfaceSettings = async label => {
     await click('[data-action="settings"]');
@@ -946,12 +1099,27 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     if (typeof browserWindow.getSize !== 'function' || typeof browserWindow.setSize !== 'function' ||
         browserWindow.isFullScreen?.() === true) return;
     const originalSize = browserWindow.getSize();
-    const originalViewportWidth = (await snapshot()).viewport?.width;
+    const originalState = await snapshot();
+    const originalViewportWidth = originalState.viewport?.width;
+    const identity = { selectedAlbumId:originalState.selectedAlbumId, selectedEntryKey:originalState.selectedEntryKey };
     try {
+      await clickLayout('array');
+      const inFlight = await waitFor(state => state.viewLayout === 'array' && state.stats?.layoutTransition?.active === true &&
+        Number(state.stats.layoutTransition.q) >= .18 && Number(state.stats.layoutTransition.q) <= .38,
+      'Punk MATRIX camera-orbit before 800px resize', 10000, 12);
+      record('Punk narrow-window probe resizes an active canonical camera flight', identityMatches(inFlight, identity) &&
+        inFlight.stats.layoutTransition.path === 'camera-orbit', shortState(inFlight));
       browserWindow.setSize(800, originalSize[1]);
       const narrow = await waitFor(state => state.design === 'archive' && state.page === 'music' &&
         state.mode === 'archive' && state.controls.layout?.visible && state.viewport?.width >= 720 &&
-        state.viewport.width <= 800, '800px Punk tools viewport', 5000, 30);
+        state.viewport.width <= 800 && state.viewLayout === 'array' && state.stats?.layoutTransition?.active === false &&
+        Math.abs(Number(state.stats?.layoutTransition?.q) - 1) < .001,
+      '800px resize settles into its requested MATRIX endpoint', 8000, 30);
+      record('800px resize adopts MATRIX and releases the frozen camera flight', identityMatches(narrow, identity) &&
+        narrow.stats?.layoutTransition?.path === 'camera-orbit' && narrow.stats?.layoutTransition?.active === false &&
+        Math.abs(Number(narrow.stats?.layoutTransition?.q) - 1) < .001,
+      { viewport:narrow.viewport, layout:narrow.viewLayout, transition:narrow.stats?.layoutTransition,
+        cameraPosition:narrow.stats?.cameraPosition, cameraDistance:narrow.stats?.cameraDistance });
       verifyPunkCompactTools(narrow, '800px');
       const expectedBleed = narrow.viewport.width <= 720 ? 0 : 32;
       await verifyPunkChrome('punk-tools-800px', expectedBleed);
@@ -959,6 +1127,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       browserWindow.setSize(originalSize[0], originalSize[1]);
       if (Number.isFinite(originalViewportWidth)) await waitFor(state => Math.abs(state.viewport?.width - originalViewportWidth) <= 2,
         'restore archive motion viewport size', 5000, 30);
+      const current = await snapshot();
+      if (current.viewLayout !== 'shelf' || current.stats?.layoutTransition?.active === true)
+        await transitionTo('Punk', 'shelf', identity);
     }
   };
   const replayFutureArrayEntry = async label => {
@@ -1025,8 +1196,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     browserWindow.focus();
     const initial = await waitFor(state => state.page === 'music' && state.mode === 'archive' &&
       state.stats?.loaded === true && state.design === 'rhine', 'Future MATRIX production frontend ready', 45000, 70);
-    record('probe starts Future MATRIX with automatic entry disabled',
-      initial.viewLayout === 'array' && initial.entry?.active === false && !initial.overlayPresent &&
+    record('probe starts Future ARRAY with automatic entry disabled',
+      initial.viewLayout === 'shelf' && initial.entry?.active === false && !initial.overlayPresent &&
       getPreferences()?.entryOnOpen === false && (getReadyCount?.() ?? 1) >= 1,
       { viewLayout:initial.viewLayout, entry:initial.entry, entryOnOpen:getPreferences()?.entryOnOpen, readyCount:getReadyCount?.() ?? null });
     record('production renderer uses the isolated 38 album fixture with 7/28/3 genre groups',
@@ -1072,6 +1243,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       identityMatches(stableBeforeFirstTransition, identity), shortState(stableBeforeFirstTransition));
 
     await exerciseLayoutTransitions('Future', identity);
+    await takeScreenshot('future-array-overview');
+    await transitionTo('Future', 'array', identity);
     await takeScreenshot('future-matrix-overview');
     const futureMatrixEnd = await exerciseMatrixInteraction('Future');
     identity = { selectedAlbumId:futureMatrixEnd.selectedAlbumId, selectedEntryKey:futureMatrixEnd.selectedEntryKey };
@@ -1082,9 +1255,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const punk = await switchDesign('archive');
     record('theme switch preserves the selected album', punk.selectedAlbumId === identity.selectedAlbumId,
       { selectedAlbumId:punk.selectedAlbumId, expected:identity.selectedAlbumId });
-    if (punk.viewLayout !== 'array') await transitionTo('Punk', 'array', identity);
+    if (punk.viewLayout !== 'shelf') await transitionTo('Punk', 'shelf', identity);
     await exerciseLayoutTransitions('Punk', identity);
-    await transitionTo('Punk', 'shelf', identity);
     const width = (await snapshot()).viewport?.width ?? 0;
     const expectedBleed = width <= 720 ? 0 : width <= 1100 ? 32 : 64;
     await verifyPunkChrome('punk-array-controls', expectedBleed);
@@ -1244,7 +1416,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
 
     result.ok = Object.values(result.assertions).every(Boolean);
     result.summary = { ok:result.ok, cases:result.cases.length, screenshots:result.screenshots.length,
-      layoutTransitions:result.timeline.length, geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
+      layoutTransitions:result.timeline.length, flightSamples:result.flightSamples.length,
+      retargets:result.retargets.length, geometryFrames:result.geometryFrames.length, entryPhaseSequence:observedEntryPhases,
       keyframeCount, naturalPlaybackSeconds,
       finalLayout:naturalEnd.viewLayout, selectedAlbumId:naturalEnd.selectedAlbumId };
     return result;
@@ -1252,7 +1425,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     result.ok = false;
     result.error = String(error?.stack ?? error);
     result.summary = { ok:false, cases:result.cases.length, screenshots:result.screenshots.length,
-      layoutTransitions:result.timeline.length, geometryFrames:result.geometryFrames.length };
+      layoutTransitions:result.timeline.length, flightSamples:result.flightSamples.length,
+      retargets:result.retargets.length, geometryFrames:result.geometryFrames.length };
     error.archiveMotionResult = result;
     throw error;
   } finally {

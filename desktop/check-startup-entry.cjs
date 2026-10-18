@@ -401,7 +401,7 @@ async function runLauncher() {
         ...(futureEntryMode || caseGlassMode || archiveMotionMode ? {
           entryOnOpen: futureEntryMode,
           style: { design: 'rhine' },
-          view: { layout: 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
+          view: { layout: archiveMotionMode ? 'shelf' : 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
         } : {}),
       },
       reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode && !caseGlassMode && !archiveMotionMode,
