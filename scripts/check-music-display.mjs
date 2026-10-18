@@ -145,6 +145,14 @@ assert.strictEqual(musicShelves.getMusicCatalogShelves(), rebuiltShelfReference,
 musicCatalog.configureMusicCatalog({ layout: "array", show: "tracks", group: "none", sort: "added" }, "");
 const shelves = musicShelves.getMusicCatalogShelves();
 assert.deepEqual(Array.from(shelves, shelf => shelf.entryKeys.length), [20, 9]);
+const firstRow = displayLayout.MUSIC_ARRAY_VIEW.firstRow;
+for (let slot = 0; slot < 20; slot++) {
+  const expectedKey = shelves[1].entryKeys[slot % shelves[1].entryKeys.length];
+  assert.equal(arrayLayout.musicArrayEntry({ lane: 1, row: firstRow + slot }).key, expectedKey,
+    `MATRIX fills every row of a nine-entry shelf by repeating its canonical entries (slot ${slot}).`);
+  assert.equal(arrayLayout.musicArrayEntry({ lane: 1, row: firstRow + slot + shelves[1].entryKeys.length }).key, expectedKey,
+    `MATRIX repeats the short shelf at its actual nine-row period (slot ${slot}).`);
+}
 const firstEntry = musicCatalog.getMusicEntryByKey(shelves[0].entryKeys[0]);
 const firstShelfLastEntry = musicCatalog.getMusicEntryByKey(shelves[0].entryKeys.at(-1));
 const lastShelfFirstEntry = musicCatalog.getMusicEntryByKey(shelves[1].entryKeys[0]);
@@ -162,6 +170,18 @@ const wrappedLane = musicShelves.navigateMusicEntry(lastShelfFirstEntry.recordIn
 assert.strictEqual(wrappedLane, firstShelfLastEntry, "ARRAY lane navigation wraps and reuses the target shelf's remembered slot.");
 assert.equal(musicApplication.catalogFocus.entryKey, lastShelfFirstEntry.key,
   "Lane navigation also leaves focus changes to its caller.");
+
+const partialShelfLastEntry = musicCatalog.getMusicEntryByKey(shelves[1].entryKeys.at(-1));
+const partialShelfFirstEntry = musicCatalog.getMusicEntryByKey(shelves[1].entryKeys[0]);
+musicCatalog.focusMusicEntry(partialShelfLastEntry.key);
+const partialShelfNext = musicShelves.navigateMusicEntry(partialShelfLastEntry.recordIndex, "row", 1);
+musicCatalog.focusMusicEntry(partialShelfNext.key);
+const partialShelfWrapCell = arrayLayout.musicArraySelectionCell(partialShelfNext.recordIndex,
+  { lane: 1, row: firstRow + shelves[1].entryKeys.length - 1, foobarEntryKey: partialShelfLastEntry.key },
+  { axis: "row", direction: 1 });
+assert.equal(partialShelfWrapCell.row, firstRow + shelves[1].entryKeys.length,
+  "MATRIX row navigation wraps to the next physical row on a partial shelf.");
+assert.equal(arrayLayout.musicArrayEntry(partialShelfWrapCell).key, partialShelfFirstEntry.key);
 
 musicCatalog.configureMusicCatalog({ layout: "shelf" }, "");
 musicCatalog.focusMusicEntry(firstEntry.key);

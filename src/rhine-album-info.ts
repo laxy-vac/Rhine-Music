@@ -21,8 +21,12 @@ const BADGE_CELL_SIZE = 256;
 const BADGE_SIZE = 0.60;
 const BADGE_GAP = 0.08;
 const BADGE_ROW_WIDTH = BADGE_SIZE * 2 + BADGE_GAP;
+const BADGE_SHADER_CACHE_VERSION = "rhine-album-badge-submersion-v2";
 
 const badgeVertexShader = `
+#include <common>
+#include <batching_pars_vertex>
+#include <clipping_planes_pars_vertex>
 #ifdef USE_INSTANCING
 attribute float rhineBadgeType;
 #else
@@ -34,22 +38,26 @@ void main() {
   vLocalUv = uv;
 #ifdef USE_INSTANCING
   vBadgeKind = rhineBadgeType;
-  vec4 modelViewPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
 #else
   vBadgeKind = uBadgeKind;
-  vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
 #endif
-  gl_Position = projectionMatrix * modelViewPosition;
+  #include <batching_vertex>
+  #include <begin_vertex>
+  #include <project_vertex>
+  #include <clipping_planes_vertex>
 }
 `;
 
 const badgeFragmentShader = `
+#include <common>
+#include <clipping_planes_pars_fragment>
 uniform sampler2D uBadgeAtlas;
 uniform float uTime;
 uniform float uReduced;
 varying vec2 vLocalUv;
 varying float vBadgeKind;
 void main() {
+  #include <clipping_planes_fragment>
   if (vBadgeKind < 0.5) discard;
   float paired = step(2.5, vBadgeKind);
   float rightMark = step(0.5, vLocalUv.x);
@@ -399,6 +407,7 @@ export class CaseAlbumInfo {
     });
     material.userData.rhineInfoOwnedTexture = false;
     material.userData.rhineInfoInstanced = instanced;
+    material.customProgramCacheKey = () => `${BADGE_SHADER_CACHE_VERSION}-${Number(instanced)}`;
     return material;
   }
 

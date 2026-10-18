@@ -9,11 +9,12 @@ type MaterialWrapper = {
   originalCacheKeyMethod: THREE.Material["customProgramCacheKey"];
 };
 
-const VERSION = "music-array-appearance-v3";
-const VERTEX_DECLARATION_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_DECLARATION_V3";
-const VERTEX_VALUE_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_VALUE_V3";
-const VERTEX_COLOR_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_COLOR_V3";
-const FRAGMENT_MARKER = "MUSIC_ARRAY_APPEARANCE_FRAGMENT_V3";
+const VERSION = "music-array-appearance-v4";
+const VERTEX_DECLARATION_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_DECLARATION_V4";
+const VERTEX_VALUE_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_VALUE_V4";
+const VERTEX_COLOR_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_COLOR_V4";
+const VERTEX_WORLD_MARKER = "MUSIC_ARRAY_APPEARANCE_VERTEX_WORLD_V4";
+const FRAGMENT_MARKER = "MUSIC_ARRAY_APPEARANCE_FRAGMENT_V4";
 
 /**
  * Carries per-instance row styling and shares ordered alpha discard with depth
@@ -21,6 +22,8 @@ const FRAGMENT_MARKER = "MUSIC_ARRAY_APPEARANCE_FRAGMENT_V3";
  */
 export class MusicArrayAppearance {
   private readonly pageColor = new THREE.Color();
+  private readonly submersionEnabledUniform = { value: 0 };
+  private readonly submersionGroundYUniform = { value: 0 };
   private readonly wrappers = new WeakMap<THREE.Material, MaterialWrapper>();
   private readonly instanceAttributes = new WeakMap<THREE.InstancedMesh, THREE.InstancedBufferAttribute>();
   private readonly assignedDepthMeshes = new Set<THREE.InstancedMesh>();
@@ -34,9 +37,14 @@ export class MusicArrayAppearance {
     this.pageColor.copy(color);
   }
 
+  setSubmersion(enabled: boolean, groundY: number): void {
+    this.submersionEnabledUniform.value = enabled ? 1 : 0;
+    this.submersionGroundYUniform.value = Number.isFinite(groundY) ? groundY : 0;
+  }
+
   get backgroundColor() { return this.pageColor; }
 
-  write(mesh: THREE.InstancedMesh, index: number, alpha: number, tint: number): void {
+  write(mesh: THREE.InstancedMesh, index: number, alpha: number, tint: number, extra = false): void {
     const capacity = mesh.instanceMatrix.count;
     if (!Number.isInteger(index) || index < 0 || index >= capacity) return;
 
@@ -44,7 +52,7 @@ export class MusicArrayAppearance {
     const offset = index * 3;
     instanceColor.array[offset] = 1 + THREE.MathUtils.clamp(alpha, 0, 1);
     instanceColor.array[offset + 1] = 1 + THREE.MathUtils.clamp(tint, 0, 1);
-    instanceColor.array[offset + 2] = 1;
+    instanceColor.array[offset + 2] = 1 + Number(extra);
 
     if (mesh.castShadow && !mesh.customDepthMaterial) {
       const depthMaterial = this.getDepthMaterial();
@@ -159,20 +167,31 @@ export class MusicArrayAppearance {
   }
 
   private patchShader(shader: AppearanceShader): void {
-    if (!shader.vertexShader.includes(`#include <common>`) || !shader.vertexShader.includes(`#include <begin_vertex>`)) {
+    shader.uniforms.uMusicArraySubmersionEnabled = this.submersionEnabledUniform;
+    shader.uniforms.uMusicArrayGroundY = this.submersionGroundYUniform;
+
+    if (!shader.vertexShader.includes(`#include <common>`) ||
+      !shader.vertexShader.includes(`#include <begin_vertex>`) ||
+      !shader.vertexShader.includes(`#include <project_vertex>`)) {
       return;
     }
 
     if (!shader.vertexShader.includes(VERTEX_DECLARATION_MARKER)) {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <common>",
-        `#include <common>\n// ${VERTEX_DECLARATION_MARKER}\nvarying vec2 vMusicArrayAlphaTint;`,
+        `#include <common>\n// ${VERTEX_DECLARATION_MARKER}\nvarying vec2 vMusicArrayAlphaTint;\nvarying float vMusicArrayExtra;\nvarying float vMusicArrayWorldY;`,
       );
     }
     if (!shader.vertexShader.includes(VERTEX_VALUE_MARKER)) {
       shader.vertexShader = shader.vertexShader.replace(
         "#include <begin_vertex>",
-        `#include <begin_vertex>\n// ${VERTEX_VALUE_MARKER}\nvMusicArrayAlphaTint = vec2(1.0, 0.0);\n#ifdef USE_INSTANCING_COLOR\nvMusicArrayAlphaTint = instanceColor.rg - vec2(1.0);\n#endif`,
+        `#include <begin_vertex>\n// ${VERTEX_VALUE_MARKER}\nvMusicArrayAlphaTint = vec2(1.0, 0.0);\nvMusicArrayExtra = 0.0;\n#ifdef USE_INSTANCING_COLOR\nvMusicArrayAlphaTint = instanceColor.rg - vec2(1.0);\nvMusicArrayExtra = max(instanceColor.b - 1.0, 0.0);\n#endif`,
+      );
+    }
+    if (!shader.vertexShader.includes(VERTEX_WORLD_MARKER)) {
+      shader.vertexShader = shader.vertexShader.replace(
+        `#include <project_vertex>`,
+        `#include <project_vertex>\n// ${VERTEX_WORLD_MARKER}\nvec4 musicArrayWorldPosition = vec4(transformed, 1.0);\n#ifdef USE_BATCHING\nmusicArrayWorldPosition = batchingMatrix * musicArrayWorldPosition;\n#endif\n#ifdef USE_INSTANCING\nmusicArrayWorldPosition = instanceMatrix * musicArrayWorldPosition;\n#endif\nmusicArrayWorldPosition = modelMatrix * musicArrayWorldPosition;\nvMusicArrayWorldY = musicArrayWorldPosition.y;`,
       );
     }
     if (
@@ -188,19 +207,21 @@ export class MusicArrayAppearance {
     const fragmentShader = shader.fragmentShader;
     if (
       fragmentShader.includes(FRAGMENT_MARKER) ||
-      !fragmentShader.includes(`#include <common>`) ||
       !fragmentShader.includes(`#include <clipping_planes_fragment>`)
     ) {
       return;
     }
 
-    shader.fragmentShader = fragmentShader.replace(
-      "#include <common>",
-      "#include <common>\nvarying vec2 vMusicArrayAlphaTint;",
-    );
+    const fragmentDeclarations = "uniform float uMusicArraySubmersionEnabled;\nuniform float uMusicArrayGroundY;\nvarying vec2 vMusicArrayAlphaTint;\nvarying float vMusicArrayExtra;\nvarying float vMusicArrayWorldY;";
+    if (fragmentShader.includes(`#include <common>`)) {
+      shader.fragmentShader = fragmentShader.replace("#include <common>", `#include <common>\n${fragmentDeclarations}`);
+    } else {
+      shader.fragmentShader = fragmentShader.replace(/\bvoid main\s*\(\s*\)\s*\{/, `${fragmentDeclarations}\nvoid main() {`);
+      if (shader.fragmentShader === fragmentShader) return;
+    }
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <clipping_planes_fragment>",
-      `#include <clipping_planes_fragment>\n// ${FRAGMENT_MARKER}\nfloat musicArrayAlpha = clamp(vMusicArrayAlphaTint.x, 0.0, 1.0);\nvec2 musicArrayPixel = mod(floor(gl_FragCoord.xy), 4.0);\nvec2 musicArrayHalfPixel = floor(musicArrayPixel * 0.5);\nfloat musicArrayLowX = mod(musicArrayPixel.x, 2.0);\nfloat musicArrayLowY = mod(musicArrayPixel.y, 2.0);\nfloat musicArrayHighX = mod(musicArrayHalfPixel.x, 2.0);\nfloat musicArrayHighY = mod(musicArrayHalfPixel.y, 2.0);\nfloat musicArrayLowBayer = mod(2.0 * musicArrayLowX + 3.0 * musicArrayLowY - 4.0 * musicArrayLowX * musicArrayLowY, 4.0);\nfloat musicArrayHighBayer = mod(2.0 * musicArrayHighX + 3.0 * musicArrayHighY - 4.0 * musicArrayHighX * musicArrayHighY, 4.0);\nfloat musicArrayBayer = 4.0 * musicArrayLowBayer + musicArrayHighBayer;\nif (musicArrayAlpha <= (musicArrayBayer + 0.5) / 16.0) discard;`,
+      `#include <clipping_planes_fragment>\n// ${FRAGMENT_MARKER}\nif (uMusicArraySubmersionEnabled > 0.5 && vMusicArrayExtra > 0.5 && vMusicArrayWorldY < uMusicArrayGroundY) discard;\nfloat musicArrayAlpha = clamp(vMusicArrayAlphaTint.x, 0.0, 1.0);\nvec2 musicArrayPixel = mod(floor(gl_FragCoord.xy), 4.0);\nvec2 musicArrayHalfPixel = floor(musicArrayPixel * 0.5);\nfloat musicArrayLowX = mod(musicArrayPixel.x, 2.0);\nfloat musicArrayLowY = mod(musicArrayPixel.y, 2.0);\nfloat musicArrayHighX = mod(musicArrayHalfPixel.x, 2.0);\nfloat musicArrayHighY = mod(musicArrayHalfPixel.y, 2.0);\nfloat musicArrayLowBayer = mod(2.0 * musicArrayLowX + 3.0 * musicArrayLowY - 4.0 * musicArrayLowX * musicArrayLowY, 4.0);\nfloat musicArrayHighBayer = mod(2.0 * musicArrayHighX + 3.0 * musicArrayHighY - 4.0 * musicArrayHighX * musicArrayHighY, 4.0);\nfloat musicArrayBayer = 4.0 * musicArrayLowBayer + musicArrayHighBayer;\nif (musicArrayAlpha <= (musicArrayBayer + 0.5) / 16.0) discard;`,
     );
   }
 }

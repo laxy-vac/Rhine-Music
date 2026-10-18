@@ -86,6 +86,14 @@ export function createGridPaginationRecords() {
   ];
 }
 
+export function createFortyFiveAlbumRecords() {
+  return Array.from({ length: 45 }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    return makeRecord({ id: `matrix-album-${number}`, title: `Matrix Album ${number}`, artist: "Matrix Artist",
+      category: "Matrix", year: 1980 + index, trackCount: 1 });
+  });
+}
+
 export async function createTrackFixture(seedRecords) {
   const records = seedRecords || [
     makeRecord({ id: "album-rock", title: "Rock Album", artist: "Alpha Artist", category: "Alternative", year: 2002, trackCount: 24, needle: true }),
@@ -202,6 +210,19 @@ export async function runChecks() {
     "the public shelf renderer fills twenty entries before continuing the next group");
   assert.strictEqual(records, originalRecords, "TRACKS never replaces the album-based canonical records array");
   assert.equal(records.length, 2);
+
+  const fortyFiveFixture = await createTrackFixture(createFortyFiveAlbumRecords());
+  const { musicCatalog: fortyFiveCatalog, musicShelves: fortyFiveShelves } = fortyFiveFixture;
+  fortyFiveCatalog.configureMusicCatalog({ layout: "array", show: "albums", group: "none", sort: "added" }, "");
+  const fortyFiveEntries = fortyFiveCatalog.getMusicDisplayEntries();
+  const fortyFiveCanonicalShelves = fortyFiveShelves.getMusicCatalogShelves();
+  const fortyFiveKeys = Array.from(fortyFiveCanonicalShelves, shelf => Array.from(shelf.entryKeys)).flat();
+  assert.equal(fortyFiveEntries.length, 45, "The MATRIX regression fixture has forty-five canonical album entries.");
+  assert.deepEqual(Array.from(fortyFiveCanonicalShelves, shelf => shelf.entryKeys.length), [20, 20, 5],
+    "Forty-five canonical entries occupy two full twenty-slot shelves and one five-entry shelf.");
+  assert.equal(new Set(fortyFiveKeys).size, 45, "Canonical shelves never pad or duplicate entry identities.");
+  assert.deepEqual(fortyFiveKeys, Array.from(fortyFiveEntries, entry => entry.key),
+    "Packing preserves the complete catalog order and every real entry exactly once.");
 
   configure(catalog, { layout: "array", group: "genre", sort: "added" });
   const matrixShelfKeys = Array.from(shelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys));

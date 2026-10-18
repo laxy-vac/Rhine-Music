@@ -2,6 +2,8 @@ import * as THREE from "three";
 import type { ArchiveCell } from "./archive-loop";
 import { deploymentStep as ease } from "./music-shelf-deployment.ts";
 import { musicGeometryPose, type GeometryPose, type CanonicalSlot, type LayoutSample } from "./music-layout-transition.ts";
+import { musicLayoutAddresses } from "./music-layout-addresses.ts";
+import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout.ts";
 
 type MotionCell = ArchiveCell & { motionId?: string };
 type Source = GeometryPose & { actual: GeometryPose; id: string; cell: ArchiveCell; alpha: number; tint: number; canonical?: CanonicalSlot };
@@ -40,7 +42,8 @@ export class MusicLayoutTransition {
   private arraySelection: ArchiveCell = { lane: 0, row: 12 };
   private arrayColumn = -4.7;
   private arrayRow = -1;
-  private arrayLaneRange: [number, number] = [0, 0];
+  private catalog = new Map<string, CanonicalSlot>();
+  private addresses?: ReturnType<typeof musicLayoutAddresses>;
   private epoch = 0;
   private sourceCamera = new THREE.PerspectiveCamera();
   private sourceAim = new THREE.Vector3();
@@ -61,6 +64,9 @@ export class MusicLayoutTransition {
   get heading() { return THREE.MathUtils.degToRad(10) * Math.sin(Math.PI * ease(this.q)); }
   get rowSpacing() { return THREE.MathUtils.lerp(this.fromShelf ? this.sourceRow : this.targetRow, this.fromShelf ? this.targetRow : this.sourceRow, ease(this.q)); }
   get floorAmount() { return 1 - ease(this.q, .65, .95); }
+  get groundY() { return THREE.MathUtils.lerp(-4.63,
+    MUSIC_ARRAY_VIEW.floorY + this.bounds.min.y - MUSIC_SHELF_VIEW.floorDrop, this.floorAmount); }
+  get extraRise() { return ease(this.q, .2, 1); }
   get rackDeployment() { return this.active ? 1 : Number(this.q === 0); }
   get titleAmount() { return 1 - ease(this.q, .15, .7); }
   private get blend() { return this.fromShelf ? ease(this.q) : 1 - ease(this.q); }
@@ -77,6 +83,8 @@ export class MusicLayoutTransition {
     arriving: [...this.items.values()].filter(item => !item.source && item.target).length,
     coreCases: [...this.items.values()].filter(item => item.resident).length,
     residentCases: [...this.items.values()].filter(item => item.resident).length,
+    groundY: this.groundY, extraRise: this.extraRise,
+    rowOffsets: this.addresses ? Object.fromEntries(this.addresses.rowOffsets) : {},
     rackFlight: this.rackFrame ? { visible: this.rackFrame.visible, outside: this.rackFrame.outside,
       translation: this.rackFrame.translation, projected: this.rackFrame.projected } : null,
     cameraAsinArgument: this.cameraCache?.asinArgument ?? null,
@@ -90,7 +98,7 @@ export class MusicLayoutTransition {
     this.q = this.fromShelf ? 0 : 1; this.desiredEnd = toShelf ? 0 : 1; this.qVelocity = this.elapsed = 0;
     this.sourceCell = { ...selected }; this.sourceRow = Math.abs(spacing.row);
     this.sourceSelected = musicGeometryPose(restSelected ?? matrix); this.sourceSelectedActual = musicGeometryPose(matrix);
-    this.caseCenter.copy(center); this.epoch++;
+    this.caseCenter.copy(center); this.catalog = catalog; this.addresses = undefined; this.epoch++;
     this.bounds = bounds ? new THREE.Box3(new THREE.Vector3().fromArray(bounds.min), new THREE.Vector3().fromArray(bounds.max))
       : new THREE.Box3(new THREE.Vector3(-width / 2, center.y - 1.675, center.z - .07), new THREE.Vector3(width / 2, center.y + 1.675, center.z + .07));
     this.source = samples.filter(sample => sample.cell.foobarEntryKey).map((sample, index) => ({
@@ -129,30 +137,29 @@ export class MusicLayoutTransition {
   }
   clear() {
     this.active = false; this.q = this.desiredEnd; this.qVelocity = 0;
-    this.plan = undefined; this.source = []; this.items.clear(); this.cameraCache = undefined;
+    this.plan = undefined; this.source = []; this.items.clear(); this.cameraCache = undefined; this.addresses = undefined;
   }
 
   bindCells(target: ArchiveCell[], selected: ArchiveCell, rowSpacing: number, present: (cell: ArchiveCell) => boolean,
     catalog = new Map<string, CanonicalSlot>()) {
     if (this.plan) return this.plan;
     this.targetCell = { ...selected }; this.targetRow = Math.abs(rowSpacing);
-    // Physical addresses, rather than entry keys alone, identify loop copies.
-    // Both modes use the same 20-slot lattice. One selected-cell translation
-    // therefore pairs every resident column without dissolving the field.
+    // Each MATRIX column repeats its valid entries. Freeze one complete cycle
+    // per finite ARRAY column; its small rail-phase adjustment preserves all
+    // residents while keeping a short last column densely filled in MATRIX.
     const arrayOrigin = this.fromShelf ? this.sourceCell : selected;
     const matrixOrigin = this.fromShelf ? selected : this.sourceCell;
+    const matrixCells = this.fromShelf ? target : this.source.map(source => source.cell);
+    this.addresses = musicLayoutAddresses(catalog.size ? catalog : this.catalog, arrayOrigin, matrixOrigin, matrixCells);
     this.arraySelection = { ...arrayOrigin };
     this.arrayColumn = -Math.max(4.7, this.bounds.max.x - this.bounds.min.x + .5);
     this.arrayRow = -(this.fromShelf ? this.sourceRow : this.targetRow);
-    const toArray = (cell: ArchiveCell, shelf: boolean): ArchiveCell => ({ ...cell,
-      lane: cell.lane + (shelf ? 0 : arrayOrigin.lane - matrixOrigin.lane),
-      row: cell.row + (shelf ? 0 : arrayOrigin.row - matrixOrigin.row) });
+    const toArray = (cell: ArchiveCell, shelf: boolean): ArchiveCell => shelf ? { ...cell } : this.addresses!.toArray(cell);
     const key = (cell: ArchiveCell) => `${cell.lane}:${cell.row}:${cell.foobarEntryKey}`;
     const paired = new Map<string, Item>();
     for (const source of this.source) {
       const address = toArray(source.cell, this.fromShelf);
-      const destinationCell = { ...source.cell, lane: selected.lane + source.cell.lane - this.sourceCell.lane,
-        row: selected.row + source.cell.row - this.sourceCell.row };
+      const destinationCell = this.fromShelf ? this.addresses.toMatrix(source.cell) : this.addresses.toArray(source.cell);
       const item: Item = { id: source.id, cell: { ...destinationCell, motionId: source.id }, arrayCell: address,
         source, resident: this.fromShelf, selected: same(source.cell, this.sourceCell) && source.cell.foobarEntryKey === this.sourceCell.foobarEntryKey };
       paired.set(key(address), item);
@@ -171,8 +178,6 @@ export class MusicLayoutTransition {
     }
     const kept = [...paired.values()].sort((a, b) => Number(b.selected) - Number(a.selected) ||
       Number(b.resident) - Number(a.resident) || a.arrayCell.lane - b.arrayCell.lane || a.arrayCell.row - b.arrayCell.row);
-    const lanes = kept.filter(item => item.resident).map(item => item.arrayCell.lane);
-    this.arrayLaneRange = lanes.length ? [Math.min(...lanes), Math.max(...lanes)] : [arrayOrigin.lane, arrayOrigin.lane];
     for (const item of kept) this.items.set(item.id, item);
     this.plan = kept.map(item => item.cell);
     while (this.plan.length < target.length) this.plan.push({ lane: -10000, row: -10000 });
@@ -187,6 +192,8 @@ export class MusicLayoutTransition {
       hasArray: item.resident, hasMatrix: this.fromShelf ? !!item.target : !!item.source } : undefined;
   }
   isSelected(cell: ArchiveCell) { return this.item(cell)?.selected ?? false; }
+  isExtra(cell: ArchiveCell) { const item = this.item(cell); return !!item && !item.resident; }
+  matrixCellForArray(cell: ArchiveCell) { return this.addresses?.toMatrix(cell); }
   get endpointSelection(): ArchiveCell | undefined { return this.settled ? { ...(this.desiredEnd === (this.fromShelf ? 0 : 1) ? this.sourceCell : this.targetCell) } : undefined; }
   endpointCell(cell: ArchiveCell): ArchiveCell | undefined {
     if (!this.settled) return undefined;
@@ -197,7 +204,7 @@ export class MusicLayoutTransition {
     const item = this.item(cell);
     if (item?.target && !item.targetAppearance) item.targetAppearance = { ...target };
     if (!item) return target;
-    // Extra loop copies leave through geometry, never through an opacity fade.
+    // Extra loop copies rise through the opaque floor, never through a fade.
     if (!item.resident) return { alpha: 1, tint: 0 };
     const source = item.source ?? item.targetAppearance ?? target;
     const destination = item.targetAppearance ?? source;
@@ -213,9 +220,8 @@ export class MusicLayoutTransition {
   }
   private virtualArrayPose(item: Item): GeometryPose {
     if (item.virtualArray) return item.virtualArray;
-    // Extend the finite ARRAY lattice beyond its outer rows/columns. Every
-    // extra on a side shares the same endpoint gap; there is no q-dependent
-    // parking leg and no per-case screen-space displacement.
+    // Continue ARRAY's ordinary lattice below the opaque scene floor. Extra
+    // MATRIX copies emerge vertically as the camera opens the field.
     const residents = [...this.items.values()].filter(candidate => candidate.resident &&
       (this.fromShelf ? candidate.source : candidate.targetPose));
     const nearest = residents.sort((a, b) =>
@@ -226,11 +232,9 @@ export class MusicLayoutTransition {
     const address = nearest?.arrayCell ?? this.arraySelection, pose = clonePose(reference);
     pose.position.x += (item.arrayCell.lane - address.lane) * this.arrayColumn;
     pose.position.z += (item.arrayCell.row - address.row) * this.arrayRow;
-    const [firstLane, lastLane] = this.arrayLaneRange;
-    if (item.arrayCell.lane < firstLane) pose.position.x += 40;
-    if (item.arrayCell.lane > lastLane) pose.position.x -= 40;
-    if (item.arrayCell.row < 12) pose.position.z += 32;
-    if (item.arrayCell.row > 31) pose.position.z -= 64;
+    const arrayGround = MUSIC_ARRAY_VIEW.floorY + this.bounds.min.y - MUSIC_SHELF_VIEW.floorDrop;
+    pose.position.y = arrayGround - this.bounds.max.y - .24;
+    pose.rotation.identity();
     pose.scale.setScalar(1);
     return item.virtualArray = pose;
   }
@@ -243,10 +247,13 @@ export class MusicLayoutTransition {
   private baseline(item?: Item, selected = false): GeometryPose {
     const endpoints = this.endpointPoses(item, selected);
     const pose = mixPose(endpoints.array, endpoints.matrix, ease(this.q));
+    if (item && !item.resident) pose.position.y = THREE.MathUtils.lerp(endpoints.array.position.y,
+      endpoints.matrix.position.y, this.extraRise);
     const anchors = this.endpointPoses(undefined, true);
     const pivot = anchors.array.position.clone().lerp(anchors.matrix.position, ease(this.q));
     const rotation = yawQuaternion(this.heading);
-    pose.position.sub(pivot).applyQuaternion(rotation).add(pivot); pose.position.y += this.lift;
+    pose.position.sub(pivot).applyQuaternion(rotation).add(pivot);
+    if (!item || item.resident) pose.position.y += this.lift;
     pose.rotation.premultiply(rotation);
     if (this.residual > 0) {
       const source = selected ? this.sourceSelected : item?.source;

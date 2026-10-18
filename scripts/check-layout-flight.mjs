@@ -4,11 +4,13 @@ import * as THREE from "three";
 import { MusicLayoutTransition } from "../src/music-layout-transition.ts";
 import { deploymentStep } from "../src/music-shelf-deployment.ts";
 import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "../src/music-layout-framing.ts";
-import { MUSIC_MATRIX_VIEW } from "../src/music-display-layout.ts";
+import { MUSIC_ARRAY_VIEW, MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW } from "../src/music-display-layout.ts";
 
 const CENTER = new THREE.Vector3(0, 1.85, 0);
 const CASE_BOUNDS = new THREE.Box3(new THREE.Vector3(-2.225, .175, -.07), new THREE.Vector3(2.225, 3.525, .07));
 const CASE_BOUND_ARRAYS = { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() };
+const ARRAY_EXTRA_GROUND = MUSIC_ARRAY_VIEW.floorY + CASE_BOUNDS.min.y - MUSIC_SHELF_VIEW.floorDrop;
+const ARRAY_EXTRA_Y = ARRAY_EXTRA_GROUND - CASE_BOUNDS.max.y - .24;
 const ARRAY_OVERVIEW_SPAN = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1, CASE_BOUND_ARRAYS, CENTER, false).effectiveSpan;
 const MATRIX_OVERVIEW_SPAN = musicMatrixOverviewSpan(ARRAY_OVERVIEW_SPAN);
 const RACK_BOUNDS = new THREE.Box3(new THREE.Vector3(-12, -4.425, -18), new THREE.Vector3(12, -.425, 18));
@@ -293,13 +295,8 @@ function arrayEndpointPose(flight, cell, cache = new Map()) {
   const arrayRow = -1;
   pose.position.x += (route.arrayCell.lane - address.lane) * arrayColumn;
   pose.position.z += (route.arrayCell.row - address.row) * arrayRow;
-  const lanes = residents.map(candidate => flight.transition.routeFor(candidate).arrayCell.lane);
-  const firstLane = lanes.length ? Math.min(...lanes) : flight.sourceSelected.lane;
-  const lastLane = lanes.length ? Math.max(...lanes) : flight.sourceSelected.lane;
-  if (route.arrayCell.lane < firstLane) pose.position.x += 40;
-  if (route.arrayCell.lane > lastLane) pose.position.x -= 40;
-  if (route.arrayCell.row < 12) pose.position.z += 32;
-  if (route.arrayCell.row > 31) pose.position.z -= 64;
+  pose.position.y = ARRAY_EXTRA_Y;
+  pose.rotation.identity();
   pose.scale.setScalar(1);
   cache.set(id, pose);
   return pose;
@@ -321,9 +318,15 @@ function expectedRelativePosition(flight, cell, q, heading, arrayPoseCache = new
   const arrayHero = arrayEndpointPose(flight, hero, arrayPoseCache);
   const matrixHero = matrixEndpointPose(flight, hero);
   const blend = deploymentStep(q);
-  return arrayPose.position.clone().sub(arrayHero.position)
+  const expected = arrayPose.position.clone().sub(arrayHero.position)
     .lerp(matrixPose.position.clone().sub(matrixHero.position), blend)
-    .applyQuaternion(yawQuaternion(heading));
+  if (!flight.transition.routeFor(cell).resident) {
+    const rise = deploymentStep(q, .2, 1);
+    const rootLift = .28 * deploymentStep(q, 0, .06) * (1 - deploymentStep(q, .65, .9));
+    expected.y = THREE.MathUtils.lerp(arrayPose.position.y, matrixPose.position.y, rise) -
+      THREE.MathUtils.lerp(arrayHero.position.y, matrixHero.position.y, blend) - rootLift;
+  }
+  return expected.applyQuaternion(yawQuaternion(heading));
 }
 
 function vectorNear(actual, expected, epsilon, label) {
@@ -486,7 +489,7 @@ test("ARRAY/MATRIX share one 3x20 lattice and the camera path is direction-symme
   assertCameraEndpoint(matrixEnd.camera, matrixEnd.aim, matrixToArray.targetCamera);
 });
 
-test("MATRIX loop copies use unique physical occurrences and monotonic ARRAY extensions", () => {
+test("MATRIX loop copies retain unique physical occurrences and submerged ARRAY endpoints", () => {
   const forward = makeFlight("array", "matrix");
   const reverse = makeFlight("matrix", "array");
   const laneOffset = MATRIX.selected.lane - ARRAY.selected.lane;
@@ -535,6 +538,75 @@ test("MATRIX loop copies use unique physical occurrences and monotonic ARRAY ext
     assert.ok(basisLengths(start.matricesById.get(id)).every(value => Math.abs(value - 1) < 1e-7));
     assert.ok(basisLengths(end.matricesById.get(id)).every(value => Math.abs(value - 1) < 1e-7));
   }
+
+  const forwardFlight = makeFlight("array", "matrix"), reverseFlight = makeFlight("matrix", "array");
+  const qSamples = [0, .1, .2, .35, .5, .65, .8, .9, 1];
+  const previousY = new Map();
+  const forwardStates = new Map(), reverseStates = new Map();
+  const expectedGround = q => THREE.MathUtils.lerp(-4.63, ARRAY_EXTRA_GROUND,
+    1 - deploymentStep(q, .65, .95));
+  for (const q of qSamples) {
+    const forwardState = advanceToQ(forwardFlight, q, .0000001);
+    forwardStates.set(q, forwardState);
+    close(forwardState.frame.extraRise, deploymentStep(q, .2, 1), .000001);
+    close(forwardState.frame.groundY, expectedGround(q), .000001);
+    for (const cell of forwardFlight.plan) {
+      const route = forwardFlight.transition.routeFor(cell);
+      if (!route || route.resident) continue;
+      const id = forwardFlight.transition.occurrenceId(cell);
+      const address = `${cell.foobarEntryKey}|${route.arrayCell.lane}|${route.arrayCell.row}`;
+      assert.equal(forwardFlight.transition.isExtra(cell), true, `${id} is an extra physical occurrence`);
+      const matrix = forwardState.matricesById.get(id);
+      const position = matrixPosition(matrix);
+      const arrayY = arrayEndpointPose(forwardFlight, cell).position.y;
+      const matrixY = matrixEndpointPose(forwardFlight, cell).position.y;
+      close(position.y, THREE.MathUtils.lerp(arrayY, matrixY, deploymentStep(q, .2, 1)), .015);
+      assert.ok(basisLengths(matrix).every(value => Math.abs(value - 1) < 1e-7), `${id} stays full size at q=${q}`);
+      assert.equal(forwardState.appearances.get(id).alpha, 1, `${id} stays opaque at q=${q}`);
+      const previous = previousY.get(address);
+      if (previous != null) assert.ok(position.y >= previous - .015, `${id} rises monotonically as q increases`);
+      previousY.set(address, position.y);
+      if (q === 0) {
+        const top = Math.max(...transformedCorners(matrix).map(point => point.y));
+        assert.ok(top < forwardState.frame.groundY - .239, `${id} begins completely below the opaque floor`);
+      }
+    }
+  }
+  for (const q of [...qSamples].reverse()) {
+    const reverseState = advanceToQ(reverseFlight, q, .0000001);
+    reverseStates.set(q, reverseState);
+    close(reverseState.frame.extraRise, deploymentStep(q, .2, 1), .000001);
+    close(reverseState.frame.groundY, expectedGround(q), .000001);
+    for (const cell of reverseFlight.plan) {
+      const route = reverseFlight.transition.routeFor(cell);
+      if (!route || route.resident) continue;
+      const id = reverseFlight.transition.occurrenceId(cell);
+      const matrix = reverseState.matricesById.get(id);
+      const expectedY = THREE.MathUtils.lerp(arrayEndpointPose(reverseFlight, cell).position.y,
+        matrixEndpointPose(reverseFlight, cell).position.y, deploymentStep(q, .2, 1));
+      close(matrixPosition(matrix).y, expectedY, .015);
+      assert.ok(basisLengths(matrix).every(value => Math.abs(value - 1) < 1e-7), `${id} stays full size in reverse at q=${q}`);
+      assert.equal(reverseState.appearances.get(id).alpha, 1, `${id} stays opaque in reverse at q=${q}`);
+    }
+  }
+  for (const q of qSamples) {
+    const forwardState = forwardStates.get(q), reverseState = reverseStates.get(q);
+    const reverseByAddress = new Map();
+    for (const cell of reverseFlight.plan) {
+      const route = reverseFlight.transition.routeFor(cell);
+      if (route && !route.resident) reverseByAddress.set(`${cell.foobarEntryKey}|${route.arrayCell.lane}|${route.arrayCell.row}`, cell);
+    }
+    for (const cell of forwardFlight.plan) {
+      const route = forwardFlight.transition.routeFor(cell);
+      if (!route || route.resident) continue;
+      const address = `${cell.foobarEntryKey}|${route.arrayCell.lane}|${route.arrayCell.row}`;
+      const reverseCell = reverseByAddress.get(address);
+      assert.ok(reverseCell, `${address} retains its paired reverse occurrence`);
+      const id = forwardFlight.transition.occurrenceId(cell), reverseId = reverseFlight.transition.occurrenceId(reverseCell);
+      assertMatrixNear(forwardState.matricesById.get(id), reverseState.matricesById.get(reverseId), .015,
+        `${address} has the same pose in both directions at q=${q}`);
+    }
+  }
 });
 
 test("retarget at five canonical q points preserves velocity and plan identity", () => {
@@ -559,7 +631,7 @@ test("retarget at five canonical q points preserves velocity and plan identity",
   }
 });
 
-test("resident boxes never leave and every shared/loop actor follows the same deploymentStep", () => {
+test("resident boxes remain visible while loop copies follow their reversible rise path", () => {
   const flights = [makeFlight("array", "matrix"), makeFlight("matrix", "array")];
   const qSamples = Array.from({ length: 21 }, (_, index) => index / 20);
   for (const flight of flights) {

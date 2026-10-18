@@ -47,6 +47,7 @@ import { MUSIC_ARRAY_VIEW, MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW, musicArrayPositi
 import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "./music-layout-framing";
 import { musicSpatialCell, musicSpatialEntry, musicSpatialSelectionCell, musicShelfPoolCell } from "./music-spatial-layout";
 import { musicArraySnapCell } from "./music-array-layout";
+import { musicLayoutAddresses } from "./music-layout-addresses";
 import { MusicSceneResources, type MusicSceneResourceUpdate } from "./music-scene-resources";
 import { musicLabFloorColor } from "./music-surface-textures";
 import { MusicCaseTitles } from "./music-case-titles";
@@ -135,6 +136,7 @@ export class ArchiveScene {
   private matrixHover = new Map<string, number>();
   private matrixDrag = new MusicMatrixDrag();
   private layoutTransition = new MusicLayoutTransition();
+  private matrixPhysicalSelection?: { cell: ArchiveCell; fingerprint: string; version: number };
   private layoutWarmFrame = false;
   private layoutRackFrame?: MusicSceneResourceUpdate;
   private motionGeometrySamples: { id?: string; cell: string; offset: number[]; entry?: string; position: number[]; scale: number[]; worldCenter: number[] }[] = [];
@@ -710,8 +712,11 @@ export class ArchiveScene {
   private syncDisplayCatalog() {
     this.displayCatalogVersion = getMusicCatalogVersion();
     const index = fileAtSlot(this.selectedSlot);
+    const matrixReference = !this.shelfView && !this.displayLayout.grid &&
+      this.matrixPhysicalSelection?.fingerprint === this.catalogMotionFingerprint()
+      ? this.matrixPhysicalSelection.cell : this.selectedCell;
     this.selectedCell = this.catalogView
-      ? musicSpatialSelectionCell(index, this.selectedCell, this.shelfView)
+      ? musicSpatialSelectionCell(index, matrixReference, this.shelfView)
       : { lane: fileLocation(index).lane, row: fileLocation(index).row };
     this.coordinateOrigin = { lane: 0, row: 0 };
     for (const old of this.outgoing) { this.scene.remove(old.group); this.appearance.dispose(old.group); }
@@ -1345,7 +1350,7 @@ export class ArchiveScene {
     const columnLengths = this.catalogView
       ? getMusicCatalogShelves().map(shelf => shelf.entryKeys.length)
       : archiveColumns.map((_, lane) => columnFiles(lane).length);
-    const rowPeriod = (this.catalogView ? [MUSIC_SHELF_VIEW.slots, this.poolRows] : columnLengths).reduce((period, length) => {
+    const rowPeriod = (this.catalogView ? [...columnLengths, this.poolRows] : columnLengths).reduce((period, length) => {
       const count = length || 1;
       const next = period / gcd(period, count) * count;
       return next > 1e6 ? Infinity : next;
@@ -2236,6 +2241,7 @@ export class ArchiveScene {
     hidden.add(cellKey(this.selectedCell));
     this.motionGeometrySamples = [];
     const titleAmount = this.layoutTransition.active ? this.layoutTransition.titleAmount : Number(this.shelfView);
+    this.arrayAppearance.setSubmersion(this.layoutTransition.active, this.layoutTransition.groundY);
     const titleMatrix = new THREE.Matrix4(), titleScale = new THREE.Vector3(1, titleAmount, 1);
     if (this.layoutTransition.active) this.layoutTransition.prepareTarget(new THREE.Vector3(chosen.x - trackX,
       chosen.y + field(selectedRow, selectedLane) + this.lift.value, chosen.z + entryZ + railAt(selectedLane)));
@@ -2259,6 +2265,7 @@ export class ArchiveScene {
       const { row, lane } = this.cells[i];
       const rowAppearance = this.layoutTransition.active
         ? this.layoutTransition.appearance(this.cells[i], laneAppearance(lane)) : laneAppearance(lane);
+      const emerging = this.layoutTransition.active && this.layoutTransition.isExtra(this.cells[i]);
       if (this.recordAtCell(this.cells[i]) >= 0) lastRenderable = i;
       const slope = localArray ? 0 : (field(row + 0.5, lane) - field(row - 0.5, lane)) * Math.sign(spacing.row);
       this.dummy.position.set(
@@ -2291,7 +2298,7 @@ export class ArchiveScene {
       this.caseHitProxy?.setMatrixAt(i, this.dummy.matrix);
       for (const inst of this.instances) {
         inst.setMatrixAt(i, this.dummy.matrix);
-        this.arrayAppearance.write(inst, i, rowAppearance.alpha, rowAppearance.tint);
+        this.arrayAppearance.write(inst, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         if (inst.userData.hiResRail) {
           const flags = inst.geometry.getAttribute("hiResAlbum") as THREE.InstancedBufferAttribute;
           const hiRes = this.hiResAlbums[this.recordAtCell(this.cells[i])] ? 1 : 0;
@@ -2301,20 +2308,20 @@ export class ArchiveScene {
       if (musicLibrary && this.covers) {
         this.covers.array.setMatrixAt(i, this.dummy.matrix);
         this.covers.arrayInsert.setMatrixAt(i, this.dummy.matrix);
-        this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint);
-        this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint);
+        this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
+        this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         this.covers.setSlot(i, records[this.recordAtCell(this.cells[i])]);
         if (this.caseTitles && this.caseSettings.structure !== "minimal" && (this.shelfView || this.layoutTransition.active) && this.musicStyle.topTitles) {
           this.caseTitles.array.setMatrixAt(i, titleMatrix.copy(this.dummy.matrix).scale(titleScale));
-          this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint);
+          this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
           this.caseTitles.setSlot(i, (this.layoutTransition.active && this.cells[i].foobarEntryKey
             ? getMusicEntryByKey(this.cells[i].foobarEntryKey!) : musicSpatialEntry(this.cells[i], this.shelfView))?.record.title ?? "");
         }
         if (this.rhineInfo) {
           const index = this.recordAtCell(this.cells[i]);
           this.rhineInfo.arrayLabel.setMatrixAt(i, this.dummy.matrix);
-          this.arrayAppearance.write(this.rhineInfo.arrayLabel, i, rowAppearance.alpha, rowAppearance.tint);
-          this.arrayAppearance.write(this.rhineInfo.arrayBadge, i, rowAppearance.alpha, rowAppearance.tint);
+          this.arrayAppearance.write(this.rhineInfo.arrayLabel, i, rowAppearance.alpha, rowAppearance.tint, emerging);
+          this.arrayAppearance.write(this.rhineInfo.arrayBadge, i, rowAppearance.alpha, rowAppearance.tint, emerging);
           if (this.rhineInfo.arrayBadge.visible) this.rhineInfo.arrayBadge.setMatrixAt(i, this.dummy.matrix);
           this.rhineInfo.setSlot(i, records[index], index >= 0 ? index : undefined);
         }
@@ -2617,12 +2624,17 @@ export class ArchiveScene {
     }
     if ((matrixOverview || matrixMusicIntro) && matrixNormalSpan !== undefined && matrixArrayFrame) {
       const selectedSlot = canonicalCatalog.get(this.selectedCell.foobarEntryKey ?? ""), points: THREE.Vector3[] = [];
+      const addresses = selectedSlot && !this.layoutTransition.active ? musicLayoutAddresses(canonicalCatalog,
+        { ...this.selectedCell, lane: selectedSlot.lane, row: selectedSlot.row }, this.selectedCell, caseMotionCells) : undefined;
       const residentShelves = selectedSlot ? getMusicCatalogShelves().slice(selectedSlot.lane, selectedSlot.lane + 4) : [];
       for (const shelf of residentShelves) for (const key of shelf.entryKeys) {
         const slot = canonicalCatalog.get(key)!;
         if (!selectedSlot) continue;
-        const x = (slot.lane - selectedSlot.lane) * spacing.column;
-        const z = MUSIC_ARRAY_VIEW.inspectionZ + (slot.row - selectedSlot.row) * spacing.row;
+        const arrayCell = { lane: slot.lane, row: slot.row, foobarEntryKey: key };
+        const matrixCell = (this.layoutTransition.active ? this.layoutTransition.matrixCellForArray(arrayCell) : undefined)
+          ?? addresses?.toMatrix(arrayCell) ?? arrayCell;
+        const x = (matrixCell.lane - this.selectedCell.lane) * spacing.column;
+        const z = MUSIC_ARRAY_VIEW.inspectionZ + (matrixCell.row - this.selectedCell.row) * spacing.row;
         // A fixed vertical envelope avoids breathing with hover/idle springs.
         for (const bx of [this.caseLayout.bounds.min[0], this.caseLayout.bounds.max[0]])
           for (const by of [this.caseLayout.bounds.min[1], this.caseLayout.bounds.max[1] + 2.5])
@@ -2764,8 +2776,7 @@ export class ArchiveScene {
     this.caseIllumination.update(this.model, !!this.caseGeometryKey && records.length > 0 && this.model.visible);
     const shelfBottom = MUSIC_ARRAY_VIEW.floorY + this.caseLayout.bounds.min[1];
     this.floor.position.y = this.shelfView ? shelfBottom - MUSIC_SHELF_VIEW.floorDrop : -4.63;
-    if (this.layoutTransition.active) this.floor.position.y = THREE.MathUtils.lerp(-4.63,
-      shelfBottom - MUSIC_SHELF_VIEW.floorDrop, this.layoutTransition.floorAmount);
+    if (this.layoutTransition.active) this.floor.position.y = this.layoutTransition.groundY;
     const shelfFrame: MusicSceneResourceUpdate = {
       shelf: this.shelfView,
       slots: this.shelfView ? rackCells.map(cell => {
@@ -2839,6 +2850,11 @@ export class ArchiveScene {
       this.clearLayoutTransition();
     }
     this.renderedSelection = { cell: { ...this.selectedCell }, matrix: this.model.matrix.clone() };
+    if (musicLibrary && !this.shelfView && !this.displayLayout.grid && !cinematic && !this.layoutTransition.active &&
+      (!this.matrixPhysicalSelection || this.matrixPhysicalSelection.version !== this.displayCatalogVersion ||
+        !sameCell(this.matrixPhysicalSelection.cell, this.selectedCell) ||
+        this.matrixPhysicalSelection.cell.foobarEntryKey !== this.selectedCell.foobarEntryKey))
+      this.matrixPhysicalSelection = { cell: { ...this.selectedCell }, fingerprint: this.catalogMotionFingerprint(), version: this.displayCatalogVersion };
   }
   projectCard(x: number, y: number) {
     this.model.updateMatrixWorld(true);
@@ -2919,6 +2935,8 @@ export class ArchiveScene {
       if (pose.scale.x * pose.scale.y * pose.scale.z < 1e-9) return [];
       return [{ id: this.layoutTransition.occurrenceId(cell), cell: { ...cell }, entry: cell.foobarEntryKey,
         alpha: (this.instances[0].instanceColor?.getX(index) ?? 2) - 1,
+        extraClip: (this.instances[0].instanceColor?.getZ(index) ?? 1) > 1.5,
+        badgeKind: this.rhineInfo?.arrayBadge.geometry.getAttribute("rhineBadgeType")?.getX(index) ?? 0,
         route: this.layoutTransition.active ? this.layoutTransition.routeFor(cell) : undefined, matrix: matrix.toArray() }];
     }) : undefined;
     return {
@@ -2976,6 +2994,7 @@ export class ArchiveScene {
       layoutTransition: { active: this.layoutTransition.active, progress: this.layoutTransition.progress,
         ...this.layoutTransition.frame, ...(!this.layoutTransition.active ? {
           q:Number(!this.shelfView), qVelocity:0, desiredEnd:Number(!this.shelfView), heading:0,
+          groundY:this.floor.position.y, extraRise:Number(!this.shelfView),
           rowSpacing:Math.abs(this.spatialSpacing.row), rackDeployment:Number(this.shelfView),
         } : {}) },
       shelfEntry: { phase: this.shelfEntryPhase, deployment: this.shelfEntryDeployment, caseScaleY: this.model.scale.y,
@@ -3017,6 +3036,10 @@ export class ArchiveScene {
       cameraDistance: this.camera.position.distanceTo(this.cameraAim),
       cameraNear: this.camera.near,
       cameraFar: this.camera.far,
+      floorY: this.floor.position.y,
+      archiveBadge: { visible: this.rhineInfo?.arrayBadge.visible ?? false,
+        hiResSlots: geometry?.filter(item => item.badgeKind === 1 || item.badgeKind === 3).length ?? null,
+        dsdSlots: geometry?.filter(item => item.badgeKind === 2 || item.badgeKind === 3).length ?? null },
       fogNear: (this.scene.fog as THREE.Fog).near,
       fogFar: (this.scene.fog as THREE.Fog).far,
       returningAppearance: this.outgoing.map((o) => ({

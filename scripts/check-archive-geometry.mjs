@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as THREE from "three";
+import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "../src/music-display-layout.ts";
 import { musicArrayCompositionFrame, musicMatrixOverviewSpan } from "../src/music-layout-framing.ts";
 import { MusicLayoutTransition } from "../src/music-layout-flight.ts";
 import { deploymentStep } from "../src/music-shelf-deployment.ts";
@@ -14,7 +15,7 @@ const MATRIX_LANES = 9;
 const LOOP_COLUMNS = 9;
 const POOL_LANES = [0, 1, 2, 3, 4, -2, -1, 5, 6];
 const MATRIX_ROWS = 48;
-const MATRIX_WINDOW_ROWS = 16;
+const MATRIX_WINDOW_ROWS = MATRIX_ROWS;
 const ARRAY_ROWS = 20;
 const ARRAY_CAPACITY = MATRIX_LANES * ARRAY_ROWS;
 const MATRIX_CAPACITY = MATRIX_LANES * MATRIX_ROWS;
@@ -33,12 +34,14 @@ const AABB_EPSILON = 1e-6;
 const SAT_EPSILON = 1e-6;
 const DIRECT_POSE_TOLERANCE = 2e-4;
 const MATRIX_CONTINUITY_TOLERANCE = 2e-5;
-const OUTPUT_PATH = path.join(process.cwd(), ".tools", "resident-field-2026-10-18", "check-archive-geometry.json");
+const ARRAY_GROUND_Y = MUSIC_ARRAY_VIEW.floorY + CASE_BOUNDS.min.y - MUSIC_SHELF_VIEW.floorDrop;
+const OUTPUT_PATH = path.join(process.cwd(), ".tools", "emergence-motion-2026-10-18", "check-archive-geometry.json");
 
 const scenariosToRun = [
-  { name: "[7,28,3]", groupLengths: [7, 28, 3], selectedOrder: 1 },
-  { name: "[65]", groupLengths: [65], selectedOrder: 1 },
-  { name: "[38]", groupLengths: [38], selectedOrder: 1 },
+  { name: "[20,20,5]", groupLengths: [20, 20, 5], selectedOrder: 1 },
+  { name: "[20,19]-selected-row-211", groupLengths: [20, 19], selectedOrder: 19, matrixSelectedRow: 211 },
+  { name: "[20,18]", groupLengths: [20, 18], selectedOrder: 1 },
+  { name: "[20,20,20,5]", groupLengths: [20, 20, 20, 5], selectedOrder: 1 },
 ];
 
 const round = value => Math.round(Number(value) * 1e5) / 1e5;
@@ -79,7 +82,7 @@ function makeCatalog(groupLengths) {
     for (let row = 0; row < groups[lane].length; row++) {
       const key = `record-${order}`;
       groups[lane][row] = key;
-      catalog.set(key, { lane, row, order });
+      catalog.set(key, { lane, row: 12 + row, order });
       order++;
     }
   }
@@ -87,9 +90,7 @@ function makeCatalog(groupLengths) {
 }
 
 function packCatalog(matrixLayout) {
-  return new Map([...matrixLayout.catalog.entries()].map(([key, slot]) => [key, {
-    lane: Math.floor(slot.order / ARRAY_ROWS), row: 12 + slot.order % ARRAY_ROWS, order: slot.order,
-  }]));
+  return new Map(matrixLayout.catalog);
 }
 
 function makeArrayCells(arrayCatalog, selectedCell) {
@@ -103,7 +104,13 @@ function makeArrayCells(arrayCatalog, selectedCell) {
 function makeMatrixCells(matrixLayout, selectedCell) {
   const arrayCatalog = packCatalog(matrixLayout);
   const arrayColumns = Math.max(1, Math.ceil(matrixLayout.count / ARRAY_ROWS));
-  const byAddress = new Map([...arrayCatalog.entries()].map(([key, slot]) => [cellKey(slot), key]));
+  const slotsByLane = new Map();
+  for (const [foobarEntryKey, slot] of arrayCatalog) {
+    const slots = slotsByLane.get(slot.lane) ?? [];
+    slots.push({ ...slot, foobarEntryKey });
+    slotsByLane.set(slot.lane, slots);
+  }
+  for (const slots of slotsByLane.values()) slots.sort((a, b) => a.row - b.row);
   const selected = selectedCell;
   const nearestOccurrence = (value, center, period) =>
     value + Math.floor((center - value + period / 2) / period) * period;
@@ -114,9 +121,9 @@ function makeMatrixCells(matrixLayout, selectedCell) {
     const lane = nearestOccurrence(baseLane, selected.lane, LOOP_COLUMNS);
     const row = nearestOccurrence(baseRow, selected.row, MATRIX_ROWS);
     const shelf = mod(lane, arrayColumns);
-    const slotRow = 12 + mod(row - 12, ARRAY_ROWS);
-    const foobarEntryKey = byAddress.get(`${shelf}:${slotRow}`);
-    cells.push({ lane, row, ...(foobarEntryKey ? { foobarEntryKey } : {}) });
+    const shelfSlots = slotsByLane.get(shelf) ?? [];
+    const slot = shelfSlots[mod(row - 12, shelfSlots.length)];
+    cells.push({ lane, row, ...(slot ? { foobarEntryKey: slot.foobarEntryKey } : {}) });
   }
   return cells;
 }
@@ -135,17 +142,17 @@ function makeScenario(spec) {
     throw new Error(`${spec.name} has no selected fixture item ${selectedKey}`);
   const selectedCell = { lane: arrayCatalog.get(selectedKey).lane,
     row: arrayCatalog.get(selectedKey).row, foobarEntryKey: selectedKey };
+  const matrixSelected = { ...selectedCell, row: spec.matrixSelectedRow ?? selectedCell.row };
   const arrayCells = [...arrayCatalog.entries()].map(([foobarEntryKey, slot]) => ({
     lane: slot.lane, row: slot.row, foobarEntryKey,
   }));
   return { ...spec, count: matrixLayout.count, matrixLayout, matrixCatalog: matrixLayout.catalog, arrayCatalog, selectedKey,
-    selectedCell, arrayCells, visibleArrayCells: makeArrayCells(arrayCatalog, selectedCell),
-    matrixCells: makeMatrixCells(matrixLayout, selectedCell) };
+    selectedCell, matrixSelected, arrayCells, visibleArrayCells: makeArrayCells(arrayCatalog, selectedCell),
+    matrixCells: makeMatrixCells(matrixLayout, matrixSelected) };
 }
 
-function modeSelected(_mode, scenario) {
-  const slot = scenario.arrayCatalog.get(scenario.selectedKey);
-  return { lane: slot.lane, row: slot.row, foobarEntryKey: scenario.selectedKey };
+function modeSelected(mode, scenario) {
+  return { ...(mode === "array" ? scenario.selectedCell : scenario.matrixSelected) };
 }
 
 function modeAnchor(mode) {
@@ -229,7 +236,8 @@ function makeFlight(scenario, sourceMode, targetMode) {
   return { scenario, sourceMode, targetMode, sourceSelected, targetSelected, sourceAnchor, targetAnchor,
     sourceCamera, targetCamera, sourceCells, targetActiveCells, targetBySignature, plan, transition,
     fixedIds, errors: [], collisions: new Map(), routeById: new Map(), bootstrapFrames: [], endpointSnapshots: new Map(),
-    directPose: { samples: 0, maxError: 0, worst: null, headingMaxError: 0, rowSpacingMaxError: 0 },
+    directPose: { samples: 0, extraSamples: 0, maxError: 0, extraMaxError: 0, worst: null,
+      headingMaxError: 0, rowSpacingMaxError: 0 },
     qRange: { min: Infinity, max: -Infinity, maxAbsVelocity: 0 },
     counts: { samples: 0, satChecks: 0, aabbCandidates: 0, visiblePeak: 0, residentPeak: 0, mOnlyPeak: 0,
       positiveDepthFailures: 0, scaleFailures: 0, alphaFailures: 0 },
@@ -341,6 +349,8 @@ function makePoseSnapshot(flight, context) {
   camera.updateMatrixWorld(true);
   const frame = transition.frame;
   const q = Number(frame.q), qVelocity = Number(frame.qVelocity);
+  const expectedRise = deploymentStep(q, .2, 1);
+  const expectedGroundY = THREE.MathUtils.lerp(-4.63, ARRAY_GROUND_Y, 1 - deploymentStep(q, .65, .95));
   flight.counts.samples++;
   flight.qRange.min = Math.min(flight.qRange.min, q);
   flight.qRange.max = Math.max(flight.qRange.max, q);
@@ -349,6 +359,12 @@ function makePoseSnapshot(flight, context) {
     addError(flight.errors, { context, reason: "q outside canonical bounds", q: round(q), bound: Q_BOUND });
   if (!Number.isFinite(qVelocity) || Math.abs(qVelocity) > VELOCITY_LIMIT + 1e-7)
     addError(flight.errors, { context, reason: "q velocity exceeds .44", q: round(q), qVelocity: round(qVelocity) });
+  if (Math.abs(Number(frame.extraRise) - expectedRise) > 1e-8)
+    addError(flight.errors, { context, reason: "extraRise is not the independent .2-to-1 vertical phase",
+      q: round(q), actual: round(frame.extraRise), expected: round(expectedRise) });
+  if (Math.abs(Number(frame.groundY) - expectedGroundY) > 1e-8)
+    addError(flight.errors, { context, reason: "groundY does not follow the floor phase",
+      q: round(q), actual: round(frame.groundY), expected: round(expectedGroundY) });
 
   const instances = [], boxes = [];
   let visibleCount = 0, residentCount = 0, mOnlyCount = 0, mOnlyOffscreenCount = 0;
@@ -432,6 +448,7 @@ function makePoseSnapshot(flight, context) {
   }
   const snapshot = { context, q, qVelocity, progress: Number(frame.progress), desiredEnd: Number(frame.desiredEnd),
     heading: Number(frame.heading), rowSpacing: Number(frame.rowSpacing), path: frame.path, prepared: frame.prepared,
+    extraRise: Number(frame.extraRise), groundY: Number(frame.groundY), rowOffsets: frame.rowOffsets,
     settled: transition.settled, visibleCount, residentCount, mOnlyCount, mOnlyOffscreenCount,
     boxCount: boxes.length, collisions: checks.overlaps.length, instances };
   if (Math.abs(q) <= 1e-7) flight.endpointSnapshots.set(0, snapshot);
@@ -451,17 +468,18 @@ function decompose(matrixArray) {
   return { position, rotation, scale };
 }
 
-function directPoseMatrix(q0Array, q1Array, selectedQ0Array, selectedQ1Array, q, heading) {
+function directPoseMatrix(q0Array, q1Array, selectedQ0Array, selectedQ1Array, q, heading, extra = false) {
   const amount = deploymentStep(q);
   const a = decompose(q0Array), b = decompose(q1Array);
   const selectedA = decompose(selectedQ0Array), selectedB = decompose(selectedQ1Array);
   const position = a.position.clone().lerp(b.position, amount);
+  if (extra) position.y = THREE.MathUtils.lerp(a.position.y, b.position.y, deploymentStep(q, .2, 1));
   const rotation = a.rotation.clone().slerp(b.rotation, amount);
   const scale = a.scale.clone().lerp(b.scale, amount);
   const pivot = selectedA.position.clone().lerp(selectedB.position, amount);
   const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), heading);
   position.sub(pivot).applyQuaternion(yaw).add(pivot);
-  position.y += .28 * deploymentStep(q, 0, .06) * (1 - deploymentStep(q, .65, .9));
+  if (!extra) position.y += .28 * deploymentStep(q, 0, .06) * (1 - deploymentStep(q, .65, .9));
   rotation.premultiply(yaw);
   return new THREE.Matrix4().compose(position, rotation, scale);
 }
@@ -486,16 +504,23 @@ function checkDirectPose(flight, snapshot) {
       addError(flight.errors, { context: snapshot.context, reason: "fixed motion id is missing an endpoint pose", id: instance.id });
       continue;
     }
-    const expected = directPoseMatrix(pair.q0, pair.q1, endpoint.selectedQ0, endpoint.selectedQ1, snapshot.q, snapshot.heading);
+    const extra = instance.route?.resident === false;
+    const expected = directPoseMatrix(pair.q0, pair.q1, endpoint.selectedQ0, endpoint.selectedQ1,
+      snapshot.q, snapshot.heading, extra);
     const actual = new THREE.Matrix4().fromArray(instance.matrix);
     const error = matrixError(actual, expected);
     flight.directPose.samples++;
+    if (extra) {
+      flight.directPose.extraSamples++;
+      flight.directPose.extraMaxError = Math.max(flight.directPose.extraMaxError, error);
+    }
     if (error > flight.directPose.maxError) {
       flight.directPose.maxError = error;
       flight.directPose.worst = { q: round(snapshot.q), id: instance.id, entry: instance.entry, error: round(error) };
     }
     if (error > DIRECT_POSE_TOLERANCE)
-      addError(flight.errors, { context: snapshot.context, reason: "case matrix differs from ease(q)+heading+lift path",
+      addError(flight.errors, { context: snapshot.context,
+        reason: extra ? "extra matrix differs from eased XZ and independent vertical-rise path" : "resident matrix differs from ease(q)+heading+lift path",
         q: round(snapshot.q), id: instance.id, entry: instance.entry, error: round(error) });
   }
 }
@@ -553,12 +578,6 @@ function recordArrayEndpointAudit(flight) {
   }
   const residents = endpoint.instances.filter(item => item.route?.resident === true);
   const lanes = [...new Set(residents.map(item => Number(item.route?.arrayCell?.lane)).filter(Number.isFinite))].sort((a, b) => a - b);
-  const residentBounds = new THREE.Box3();
-  residentBounds.makeEmpty();
-  for (const resident of residents) {
-    if (resident.aabb) residentBounds.union(new THREE.Box3(new THREE.Vector3().fromArray(resident.aabb.min),
-      new THREE.Vector3().fromArray(resident.aabb.max)));
-  }
   const extras = endpoint.instances.filter(item => item.route?.resident === false &&
     item.route?.hasArray === false && item.route?.hasMatrix === true);
   const extraFacts = extras.map(item => {
@@ -566,20 +585,21 @@ function recordArrayEndpointAudit(flight) {
       new THREE.Vector3().fromArray(item.aabb.max)) : new THREE.Box3();
     return { id: item.id, entry: item.entry, arrayCell: item.route.arrayCell, alpha: item.alpha,
       unitScale: item.scale.every(value => Math.abs(value - 1) <= 1e-6),
-      positiveDepth: item.projection.positiveDepth, offscreen: !item.projection.visible,
-      outsideResidentEnvelope: !residentBounds.intersectsBox(bounds),
+      positiveDepth: item.projection.positiveDepth,
+      belowGround: bounds.max.y < endpoint.groundY - .239,
+      verticalClearance: round(endpoint.groundY - bounds.max.y),
       bounds: { min: roundVector(bounds.min), max: roundVector(bounds.max) } };
   });
   const ok = residents.length === flight.scenario.count && lanes.length >= 2 && extras.length > 0 &&
     extraFacts.every(item => item.alpha != null && Math.abs(item.alpha - 1) <= 1e-6 && item.unitScale &&
-      item.positiveDepth && item.offscreen && item.outsideResidentEnvelope);
-  if (!ok) addError(flight.errors, { reason: "ARRAY endpoint does not keep canonical residents and M-only copies at outer geometric endpoints",
+      item.positiveDepth && item.belowGround);
+  if (!ok) addError(flight.errors, { reason: "ARRAY endpoint does not keep canonical residents and fully buried M-only copies",
     residentCount: residents.length, expectedResidents: flight.scenario.count, residentLanes: lanes,
     mOnlyCount: extras.length, mOnlyFailures: extraFacts.filter(item => !(item.alpha != null && Math.abs(item.alpha - 1) <= 1e-6 &&
-      item.unitScale && item.positiveDepth && item.offscreen && item.outsideResidentEnvelope)).slice(0, 10) });
+      item.unitScale && item.positiveDepth && item.belowGround)).slice(0, 10) });
   return { ok, residentCount: residents.length, expectedResidents: flight.scenario.count, residentLanes: lanes,
-    mOnlyCount: extras.length, mOnlyOffscreenCount: extraFacts.filter(item => item.offscreen).length,
-    mOnlyOutsideEnvelopeCount: extraFacts.filter(item => item.outsideResidentEnvelope).length,
+    mOnlyCount: extras.length, mOnlyBelowGroundCount: extraFacts.filter(item => item.belowGround).length,
+    minimumVerticalClearance: extraFacts.length ? Math.min(...extraFacts.map(item => item.verticalClearance)) : null,
     mOnlySamples: extraFacts.slice(0, 24) };
 }
 
@@ -696,6 +716,7 @@ function runFlightScenario(scenario, sourceMode, targetMode) {
       scaleFailures: flight.counts.scaleFailures, alphaFailures: flight.counts.alphaFailures },
     resident: { lanes: residentLanes, expectedAtLeastTwoColumns: residentLanes.length >= 2,
       directPoseSamples: flight.directPose.samples, maximumDirectPoseError: round(flight.directPose.maxError),
+      extraDirectPoseSamples: flight.directPose.extraSamples, maximumExtraDirectPoseError: round(flight.directPose.extraMaxError),
       worstDirectPose: flight.directPose.worst, maximumHeadingError: flight.directPose.headingMaxError,
       maximumRowSpacingError: flight.directPose.rowSpacingMaxError },
     arrayLoopEndpoint: arrayEndpointAudit,
@@ -728,7 +749,7 @@ async function main() {
       caseBounds: { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray(), dimensions: CASE_SIZE.toArray() },
       collisionMethod: "current-frame AABB broadphase followed by 15-axis OBB separating-axis test on the full transformed CASE_BOUNDS",
       cameraDepth: "production flight camera endpoints; every sampled case bbox is checked against camera near/far depth",
-      loopCopies: "M-only copies remain unit-scale and alpha one; their ARRAY endpoint must lie outside the resident envelope and frustum by geometry",
+      loopCopies: "M-only copies remain unit-scale and alpha one; their ARRAY endpoint is a standard ARRAY lattice position with the full case bbox below the floor, then rises by extraRise",
     },
     scenarios,
     summary: {
@@ -753,7 +774,8 @@ async function main() {
       maxAbsVelocity: item.sampling.maximumAbsoluteQVelocity,
       maxDirectPoseError: item.resident.maximumDirectPoseError,
       arrayEndpoint: { residents: item.arrayLoopEndpoint.residentCount, mOnly: item.arrayLoopEndpoint.mOnlyCount,
-        offscreen: item.arrayLoopEndpoint.mOnlyOffscreenCount, outer: item.arrayLoopEndpoint.mOnlyOutsideEnvelopeCount },
+        belowGround: item.arrayLoopEndpoint.mOnlyBelowGroundCount,
+        minimumVerticalClearance: item.arrayLoopEndpoint.minimumVerticalClearance },
       geometryErrors: item.geometryErrors.length, collisions: item.collisions.uniquePairs })) }, null, 2));
   if (report.summary.geometryErrors > 0 || report.summary.uniqueCollisionPairs > 0 || report.summary.retargetErrors > 0)
     process.exitCode = 1;

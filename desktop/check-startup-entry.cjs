@@ -126,7 +126,7 @@ function makeSyntheticPanelLibrary({ archiveMotion = false } = {}) {
     { id: 'fixture-cinematic', name: 'Fixture Cinematic' },
   ];
   const colors = ['#d96f32', '#2e6f89', '#648755', '#745785', '#bb8539', '#446c72'];
-  const genreSizes = archiveMotion ? [7, 28, 3] : [12, 12, 12];
+  const genreSizes = archiveMotion ? [7, 28, 10] : [12, 12, 12];
   const albumCount = genreSizes.reduce((total, count) => total + count, 0);
   const genreIndexForAlbum = albumIndex => {
     let firstIndex = 0;
@@ -142,13 +142,17 @@ function makeSyntheticPanelLibrary({ archiveMotion = false } = {}) {
       ? 'Needlemark Fixture Album — An Exceptionally Long Synthetic Title for Search and Ellipsis Checks'
       : `Synthetic Long-Title Catalog Album ${number} — The Quiet Geometry of Several Imaginary Listening Rooms`;
     const genre = genres[archiveMotion ? genreIndexForAlbum(albumIndex) : albumIndex % genres.length];
+    const archiveMotionHiResAlbum = archiveMotion && albumIndex === 0;
     const tracks = Array.from({ length: 3 }, (_, trackIndex) => ({
       id: `fixture-track-${number}-${trackIndex + 1}`, albumId: `fixture-album-${number}`,
       title: albumIndex === 0 && trackIndex === 0
         ? 'Needlemark Search Track — A Long Fixture Song Name for Filtering'
         : `Synthetic Track ${String(trackIndex + 1).padStart(2, '0')} — A Long Fixture Song Title`,
       artist: `Synthetic Artist ${number}`, trackNumber: trackIndex + 1, discNumber: 1,
-      duration: 186 + trackIndex * 29, format: 'MP3', codec: 'MP3', lossless: false,
+      duration: 186 + trackIndex * 29,
+      format: archiveMotionHiResAlbum ? 'FLAC' : 'MP3', codec: archiveMotionHiResAlbum ? 'FLAC' : 'MP3',
+      lossless: archiveMotionHiResAlbum,
+      ...(archiveMotionHiResAlbum ? { sampleRate:192000, bitsPerSample:24 } : {}),
       browserPlayable: true, audioUrl: `/api/audio/fixture-track-${number}-${trackIndex + 1}`,
       relativePath: `fixture-only/${number}/${trackIndex + 1}.mp3`,
     }));
@@ -217,7 +221,7 @@ async function runLauncher() {
   const futurePanelsMode = process.argv.includes('--future-panels');
   const futureEntryMode = process.argv.includes('--future-entry');
   const archiveMotionMode = process.argv.includes('--archive-motion');
-  const expectedSyntheticAlbumCount = archiveMotionMode ? 38 : 36;
+  const expectedSyntheticAlbumCount = archiveMotionMode ? 45 : 36;
   const syntheticFixtureMode = futurePanelsMode || futureEntryMode || caseGlassMode || archiveMotionMode;
   if ([themeFollowMode, futurePanelsMode, futureEntryMode, caseGlassMode, archiveMotionMode].filter(Boolean).length > 1)
     throw new Error('Choose one isolated checker mode per Electron process.');
@@ -333,7 +337,7 @@ async function runLauncher() {
     if (!syntheticFixtureMode && (initialLibrary.albums.length !== 0 || initialLibrary.roots.length !== 0)) {
       throw new Error('Isolated library must start empty and without music roots.');
     }
-    const expectedGenreCounts = archiveMotionMode ? [7, 28, 3] : [12, 12, 12];
+    const expectedGenreCounts = archiveMotionMode ? [7, 28, 10] : [12, 12, 12];
     const actualGenreCounts = syntheticPanelLibrary?.genres.map(genre => genre.albumCount) ?? [];
     if (syntheticFixtureMode && (initialLibrary.albums.length !== expectedSyntheticAlbumCount || initialLibrary.roots.length !== 0 ||
         !initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')) ||
@@ -402,6 +406,7 @@ async function runLauncher() {
           entryOnOpen: futureEntryMode,
           style: { design: 'rhine' },
           view: { layout: archiveMotionMode ? 'shelf' : 'array', show: 'albums', group: 'genre', sort: 'artist', gridPageSize: 36 },
+          ...(archiveMotionMode ? { caseProfiles: { rhine: { version:1, enabled:true, structure:'rhine' } } } : {}),
         } : {}),
       },
       reloadOnce: !themeFollowMode && !futurePanelsMode && !futureEntryMode && !caseGlassMode && !archiveMotionMode,
@@ -416,7 +421,20 @@ async function runLauncher() {
       syntheticPanelGenreCounts: syntheticPanelLibrary?.genres.map(genre => genre.albumCount) ?? [],
       archiveMotionLongGroupProbeAlbumId: archiveMotionMode
         ? `fixture-album-${String((syntheticPanelLibrary?.genres[0]?.albumCount ?? 0) + 21).padStart(2, '0')}` : null,
-      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 38 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
+      archiveMotionFixtureCatalog: archiveMotionMode ? {
+        groups: syntheticPanelLibrary.genres.map(genre => ({
+          id: genre.id,
+          name: genre.name,
+          entryKeys: syntheticPanelLibrary.albums.filter(album => album.genreId === genre.id).map(album => album.id),
+        })),
+      } : null,
+      archiveMotionFixtureHiRes: archiveMotionMode ? {
+        albumId:'fixture-album-01',
+        trackCount:syntheticPanelLibrary.albums.find(album => album.id === 'fixture-album-01')?.tracks.length ?? 0,
+        qualifyingTrackCount:syntheticPanelLibrary.albums.find(album => album.id === 'fixture-album-01')?.tracks.filter(track =>
+          track.lossless === true && track.sampleRate >= 192000 && track.bitsPerSample >= 24).length ?? 0,
+      } : null,
+      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 45 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
       caseGlassFixtureHiRes: !caseGlassMode || (syntheticPanelLibrary?.albums[0]?.tracks.length > 0 && syntheticPanelLibrary.albums[0].tracks.every(track => track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
       runDirectory,
     };
@@ -519,7 +537,7 @@ async function runLauncher() {
       libraryContainsOnlyAuthorizedSyntheticFixture: syntheticFixtureMode
         ? initialLibrary.albums.length === expectedSyntheticAlbumCount && initialLibrary.roots.length === 0 &&
           initialLibrary.albums.every(album => album.id.startsWith('fixture-album-')) &&
-          (!archiveMotionMode || syntheticPanelLibrary?.genres.map(genre => genre.albumCount).join(',') === '7,28,3')
+          (!archiveMotionMode || syntheticPanelLibrary?.genres.map(genre => genre.albumCount).join(',') === '7,28,10')
         : initialLibrary.albums.length === 0 && initialLibrary.roots.length === 0,
       libraryScanWasNotRequested: scanCalls === 0,
       noNativeAudioOperations: !unsafeNativeCalls,
@@ -531,7 +549,9 @@ async function runLauncher() {
       onlineSearchUsedLocalRoute: !futurePanelsMode || serviceRequests.filter(entry => entry.path.startsWith('/api/online/search')).length >= 4,
       serviceDataInsideRunDirectory: path.resolve(serviceDataDirectory).startsWith(path.resolve(runDirectory)),
       caseGlassFixtureIsHiRes: !caseGlassMode || (initialLibrary.albums[0]?.tracks.length > 0 && initialLibrary.albums[0].tracks.every(track => track.format === 'FLAC' && track.lossless === true && track.sampleRate === 96000 && track.bitsPerSample === 24)),
-      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 38 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
+      archiveMotionUsesOnlyPngCovers: !archiveMotionMode || initialLibrary.albums.length === 45 && initialLibrary.albums.every(album => album.coverUrl.startsWith('data:image/png;base64,')),
+      archiveMotionSyntheticHiResMetadata: !archiveMotionMode || config.archiveMotionFixtureHiRes?.albumId === 'fixture-album-01' &&
+        config.archiveMotionFixtureHiRes?.trackCount === 3 && config.archiveMotionFixtureHiRes?.qualifyingTrackCount === 3,
     };
     report.ok = report.isolationChecks.electronChildExitedCleanly
       && report.isolationChecks.electronReportWritten
@@ -811,6 +831,8 @@ async function runElectronProbe() {
     report.syntheticArchiveMotionAlbumCount = config.archiveMotion ? config.syntheticPanelAlbumCount : null;
     report.syntheticArchiveMotionGenreCounts = config.archiveMotion ? config.syntheticPanelGenreCounts : null;
     report.syntheticArchiveMotionLongGroupProbeAlbumId = config.archiveMotion ? config.archiveMotionLongGroupProbeAlbumId : null;
+    report.syntheticArchiveMotionFixtureCatalog = config.archiveMotion ? config.archiveMotionFixtureCatalog : null;
+    report.syntheticArchiveMotionFixtureHiRes = config.archiveMotion ? config.archiveMotionFixtureHiRes : null;
     report.archiveMotionUsesOnlyPngCovers = config.archiveMotionUsesOnlyPngCovers === true;
     if (config.archiveMotion) report.mode = 'real-electron-archive-motion';
     else if (config.caseGlass) report.mode = 'real-electron-case-glass';
@@ -1067,6 +1089,7 @@ async function runElectronProbe() {
     }
 
     currentStartedAt = Date.now();
+    report.navigationStartedAt = currentStartedAt;
     report.startupTimeoutMs = 45000;
     report.startupOutcome = 'pending';
     await browserWindow.loadURL(config.serviceOrigin);
@@ -1206,6 +1229,16 @@ async function runElectronProbe() {
     report.finalGeneration = generation;
     report.readyIpcEvents = report.ipcEvents.filter(event => event.channel === 'rhine:frontend-ready');
     report.failedIpcEvents = report.ipcEvents.filter(event => event.channel === 'rhine:frontend-failed');
+    const unmatchedRestores = config.archiveMotion ? [...(report.archiveMotion?.windowRestores ?? [])] : [];
+    const unaccountedNativeShows = report.showEvents.slice(1).filter(show => {
+      const absoluteAt = currentStartedAt + Number(show.atMs);
+      const match = unmatchedRestores.findIndex(restore => absoluteAt >= restore.at - 25 && absoluteAt <= restore.at + 1000);
+      if (match < 0 || show.gateReady !== true || show.generation !== 1 || show.actualVisibleAtEvent !== true) return true;
+      unmatchedRestores.splice(match, 1);
+      return false;
+    });
+    report.probeRestoreShowAudit = { nativeShows:report.showEvents.length,
+      controlledRestores:report.archiveMotion?.windowRestores?.length ?? 0, unaccountedNativeShows };
     report.assertions = {
       productionGateFactoryExtracted: Boolean(report.gateFactorySha256),
       realElectronAndPreloadPathUsed: Boolean(process.versions.electron) && report.readyIpcEvents.length >= 1 && report.readyIpcEvents.every(event => event.senderIsTargetWebContents),
@@ -1216,7 +1249,9 @@ async function runElectronProbe() {
       gateRestoresThrottlingAfterRelease: report.readyIpcEvents.length >= 1 && report.readyIpcEvents.every(event => event.effectiveBackgroundThrottlingAfterListener === true),
       readyMessagesAreFromMainFrameAndExpectedOrigin: report.readyIpcEvents.length >= 1 && report.readyIpcEvents.every(event => event.senderFrameIsMainFrame && event.senderFrameOrigin === config.serviceOrigin),
       oneReadyPerGeneration: report.readyIpcEvents.length === generation && report.readyIpcEvents.every((event, index) => event.generation === index + 1),
-      firstNativeShowOnlyAfterFirstReady: report.showReturns.length === 1 && report.showEvents.length === 1 && report.showReturns[0]?.gateReady === true && report.showReturns[0]?.generation === 1 && report.showReturns[0]?.visibleAfterNativeTurn === true,
+      firstNativeShowOnlyAfterFirstReady: report.showReturns.length === 1 && report.showEvents.length >= 1 &&
+        report.showEvents[0]?.gateReady === true && unaccountedNativeShows.length === 0 &&
+        report.showReturns[0]?.gateReady === true && report.showReturns[0]?.generation === 1 && report.showReturns[0]?.visibleAfterNativeTurn === true,
       visibleAfterBothReadyMessages: report.readyIpcEvents.length === generation && report.readyIpcEvents.every(event => event.windowVisibleAfterListener === true),
       ordinaryThrottlingRestoredAfterEachRelease: report.readyIpcEvents.length === generation && report.readyIpcEvents.every(event => event.effectiveBackgroundThrottlingAfterListener === true),
       reloadKeepsExistingWindowVisible: !config.reloadOnce || (report.reloadNavigationObserved && report.reloadActualWindowVisibleAfterGateNavigation === true && report.reloadHideCallsAfterNavigation === 0 && report.reloadStartupState?.visibilityState === 'visible'),
