@@ -32,6 +32,7 @@ const cellAt = (lane, slot) => ({ lane, row: firstRow + slot });
 
 catalog.configureMusicCatalog({ layout: "shelf", show: "tracks", group: "genre", sort: "added" }, "");
 assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9]);
+const canonicalShelfKeys = Array.from(shelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys));
 assert.equal(catalog.getMusicDisplayEntries().length, 29);
 assert.equal(records.length, 2, "TRACKS never changes the canonical album records.");
 const secondTrack = spatial.musicSpatialEntry(cellAt(0, 1), true);
@@ -84,6 +85,35 @@ assert.equal(spatial.musicSpatialSelectionCell(0, cellAt(300, 300), true).foobar
   "Clearing the query restores the focused track identity.");
 
 catalog.configureMusicCatalog({ layout: "array" }, "");
+const arrayShelfKeys = Array.from(shelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys));
+assert.deepEqual(arrayShelfKeys, canonicalShelfKeys,
+  "Switching between MATRIX and ARRAY keeps every entry at the same canonical shelf address.");
+assert.deepEqual(arrayShelfKeys.map(keys => keys.length), [20, 9]);
+assert.equal(arrayLayout.musicArrayEntry(cellAt(1, 8)).key, jazzEntry.key,
+  "A split group keeps its ARRAY entry at the same MATRIX lattice address.");
+assert.equal(arrayLayout.musicArrayEntry(cellAt(1, 8 + 20)).key, jazzEntry.key,
+  "MATRIX repeats the same canonical slot after exactly twenty rows, including a partial shelf.");
+assert.equal(arrayLayout.musicArrayEntry(cellAt(1, 9)), undefined,
+  "Unused slots in a partial shelf stay empty instead of wrapping by the group's length.");
+assert.equal(arrayLayout.musicArrayEntry(cellAt(1, 9 + 20)), undefined,
+  "A partial shelf's empty slots remain empty in every twenty-row copy.");
+assert.equal(arrayLayout.musicArrayEntry(cellAt(1 + arrayShelfKeys.length, 8)).key, jazzEntry.key,
+  "Horizontal looping repeats shelves while retaining the physical lane coordinate.");
+
+const snappedLaterHole = arrayLayout.musicArraySnapCell({ lane: 3, row: firstRow + 17 });
+const firstLaterShelfEntry = catalog.getMusicEntryByKey(arrayShelfKeys[1][0]);
+assert.deepEqual({ ...snappedLaterHole }, {
+  lane: 3, row: firstRow + 20, foobarEntryKey: arrayShelfKeys[1][0], foobarTrackId: firstLaterShelfEntry.trackId,
+}, "Snapping from a later partial-shelf hole chooses the nearest valid row copy and preserves physical lane.");
+const snappedEarlierHole = arrayLayout.musicArraySnapCell({ lane: -1, row: firstRow + 10 });
+assert.deepEqual({ ...snappedEarlierHole }, {
+  lane: -1, row: firstRow + 8, foobarEntryKey: arrayShelfKeys[1][8], foobarTrackId: jazzEntry.trackId,
+}, "Snapping from an earlier partial-shelf hole chooses the nearest occupied slot in the prior copy.");
+const occupiedCell = arrayLayout.musicArraySnapCell({ lane: 1, row: firstRow + 8 });
+assert.deepEqual({ ...occupiedCell }, {
+  lane: 1, row: firstRow + 8, foobarEntryKey: arrayShelfKeys[1][8], foobarTrackId: jazzEntry.trackId,
+}, "Snapping preserves an already occupied physical occurrence.");
+
 for (const cell of [cellAt(-10, -100), cellAt(0, 0), cellAt(20, 200)]) {
   assert.strictEqual(spatial.musicSpatialEntry(cell, false), arrayLayout.musicArrayEntry(cell));
   assert.deepEqual({ ...spatial.musicSpatialCell(cell, false) }, { ...arrayLayout.musicArrayCell(cell) });
@@ -93,4 +123,31 @@ for (const navigation of [undefined, { axis: "row", direction: 1 }, { cell: requ
   assert.deepEqual({ ...spatial.musicSpatialSelectionCell(0, current, false, navigation) },
     { ...arrayLayout.musicArraySelectionCell(0, current, navigation) }, "Array selection delegates without changing its looping behavior.");
 }
-console.log("Finite music shelf projection: 20/9 TRACKS pages, identity, bounds, unique pool, query recovery and unchanged array delegation passed with synthetic records.");
+
+catalog.configureMusicCatalog({ group: "none", sort: "added", show: "tracks" }, "");
+const shortShelf = shelves.getMusicCatalogShelves()[1];
+assert.equal(shortShelf.entryKeys.length, 9);
+const lastShortShelfEntry = catalog.getMusicEntryByKey(shortShelf.entryKeys[8]);
+catalog.focusMusicEntry(lastShortShelfEntry.key);
+const forwardEntry = shelves.navigateMusicEntry(lastShortShelfEntry.recordIndex, "row", 1);
+catalog.focusMusicEntry(forwardEntry.key);
+const forwardWrap = arrayLayout.musicArraySelectionCell(forwardEntry.recordIndex,
+  { lane: 1, row: firstRow + 8, foobarEntryKey: lastShortShelfEntry.key }, { axis: "row", direction: 1 });
+assert.deepEqual({ ...forwardWrap }, {
+  lane: 1, row: firstRow + 20, foobarEntryKey: shortShelf.entryKeys[0], foobarTrackId: forwardEntry.trackId,
+}, "Forward row navigation across a partial shelf chooses the next twenty-row copy.");
+
+const firstShortShelfEntry = catalog.getMusicEntryByKey(shortShelf.entryKeys[0]);
+catalog.focusMusicEntry(firstShortShelfEntry.key);
+const backwardEntry = shelves.navigateMusicEntry(firstShortShelfEntry.recordIndex, "row", -1);
+catalog.focusMusicEntry(backwardEntry.key);
+const backwardWrap = arrayLayout.musicArraySelectionCell(backwardEntry.recordIndex,
+  { lane: 1, row: firstRow, foobarEntryKey: firstShortShelfEntry.key }, { axis: "row", direction: -1 });
+assert.deepEqual({ ...backwardWrap }, {
+  lane: 1, row: firstRow + 8 - 20, foobarEntryKey: shortShelf.entryKeys[8], foobarTrackId: backwardEntry.trackId,
+}, "Backward row navigation across a partial shelf chooses the prior twenty-row copy.");
+
+catalog.configureMusicCatalog({}, "no-synthetic-match");
+assert.deepEqual({ ...arrayLayout.musicArraySnapCell({ lane: 3, row: firstRow + 17 }) },
+  { lane: 3, row: firstRow + 17 }, "An empty filtered catalog preserves drag coordinates and has no selected entry.");
+console.log("Shared ARRAY/MATRIX lattice: canonical slots, twenty-row loop copies, partial-shelf holes, directional wrap and blank-row snap passed with synthetic records.");

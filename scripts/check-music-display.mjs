@@ -63,19 +63,23 @@ for (const entry of trackEntries) {
 assert.deepEqual(Array.from(musicCatalog.getMusicCatalogGroups(), group => group.name), ["Alternative", "Jazz"]);
 assert.deepEqual(Array.from(musicCatalog.getMusicCatalogGroups(), group => group.entryKeys.length), [24, 5]);
 musicCatalog.configureMusicCatalog({ layout: "array", group: "genre", sort: "added" }, "");
-assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [24, 5],
-  "Grouped ARRAY keeps one column per catalog group, even when a group exceeds twenty entries.");
+assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9],
+  "Groups split at the shared twenty-slot shelf boundary.");
+const sharedGenreShelves = Array.from(musicShelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys));
+musicCatalog.configureMusicCatalog({ layout: "shelf" }, "");
+assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys)), sharedGenreShelves,
+  "MATRIX and ARRAY share the same packed canonical entry slots.");
 musicCatalog.configureMusicCatalog({ group: "artist" }, "");
 assert.deepEqual(Array.from(musicCatalog.getMusicCatalogGroups(), group => group.name), ["Alpha Artist", "Beta Artist", "Guest Artist"]);
-assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [23, 5, 1],
-  "Artist groups also map to one ARRAY column each.");
+assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9],
+  "Artist groups use the same twenty-slot packing and may share a shelf.");
 musicCatalog.configureMusicCatalog({ group: "none" }, "");
 assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9],
-  "Ungrouped ARRAY uses twenty-entry shelf pages.");
-for (const layout of ["shelf", "grid"]) {
+  "Ungrouped catalog also uses twenty-entry shelf pages.");
+for (const layout of ["shelf", "array", "grid"]) {
   musicCatalog.configureMusicCatalog({ layout, group: "genre" }, "");
   assert.deepEqual(Array.from(musicShelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [20, 9],
-    `${layout.toUpperCase()} uses twenty-entry shelf pages.`);
+    `${layout.toUpperCase()} uses the shared twenty-entry shelf pages.`);
 }
 musicCatalog.configureMusicCatalog({ layout: "shelf", group: "artist", sort: "added" }, "");
 assert.deepEqual(Array.from(musicCatalog.getMusicCatalogGroups(), group => group.name), ["Alpha Artist", "Beta Artist", "Guest Artist"]);

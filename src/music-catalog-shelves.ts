@@ -54,14 +54,7 @@ function rebuildShelves(source: ArchiveRecord[], catalogVersion: number) {
     building.push(current);
   };
 
-  const view = getMusicCatalogOptions();
-  const groupedArray = view.layout === "array" && view.group !== "none";
   getMusicCatalogGroups().forEach(({ key, name, entryKeys }) => {
-    if (groupedArray) {
-      building.push({ entryKeys: [...entryKeys], used: entryKeys.length,
-        segments: [{ key, name, part: 1, parts: 1 }] });
-      return;
-    }
     for (let offset = 0; offset < entryKeys.length;) {
       if (!current || current.used >= SHELF_SLOTS) openShelf();
       const shelf = current!;

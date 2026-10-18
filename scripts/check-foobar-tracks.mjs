@@ -144,8 +144,16 @@ export async function createTrackFixture(seedRecords) {
     throw new Error(`Unexpected public array layout import: ${specifier}`);
   });
   const markupSource = await readFile(path.join(project, "src/music-catalog-markup.ts"), "utf8");
+  const interfaceLabelsSource = await readFile(path.join(project, "src/music-interface-labels.ts"), "utf8");
+  const interfaceLabels = runModule(interfaceLabelsSource, "music-interface-labels.js", specifier => {
+    throw new Error(`Unexpected music interface labels import: ${specifier}`);
+  });
   const catalogMarkup = runModule(markupSource, "music-catalog-markup.js", specifier => {
     if (specifier === "./music-application-state") return applicationState;
+    if (specifier === "./i18n") return { trUi: key => ({
+      "显示": "SHOW", "布局": "LAYOUT", "分组": "GROUP", "排序": "SORT", "每页数量": "PER PAGE",
+    })[key] ?? key };
+    if (specifier === "./music-interface-labels") return interfaceLabels;
     if (specifier === "./music-view-settings") return viewSettings;
     if (specifier === "./music-catalog") return musicCatalog;
     if (specifier === "./music-grid-page") return musicGridPage;
@@ -196,8 +204,12 @@ export async function runChecks() {
   assert.equal(records.length, 2);
 
   configure(catalog, { layout: "array", group: "genre", sort: "added" });
-  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => shelf.entryKeys.length), [24, 5],
-    "grouped ARRAY keeps each public catalog group in its own column");
+  const matrixShelfKeys = Array.from(shelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys));
+  assert.deepEqual(matrixShelfKeys.map(keys => keys.length), [20, 9],
+    "MATRIX packs public catalog groups into the shared twenty-slot shelves");
+  configure(catalog, { layout: "shelf", group: "genre", sort: "added" });
+  assert.deepEqual(Array.from(shelves.getMusicCatalogShelves(), shelf => Array.from(shelf.entryKeys)), matrixShelfKeys,
+    "switching layouts keeps every public entry at the same canonical shelf address");
   configure(catalog, { layout: "shelf", group: "decade", sort: "added" });
   let groups = catalog.getMusicCatalogGroups();
   assertGroupNames(groups, ["1990s", "2000s"], "decade grouping inherits the parent album year");

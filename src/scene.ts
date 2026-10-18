@@ -44,8 +44,9 @@ import { defaultMusicStyle, normalizeMusicStyle, stylePalette, type MusicStyle }
 import { getMusicCatalogOptions, getMusicCatalogVersion, getMusicCatalogGroups, getMusicFocusedEntry, getMusicEntryByKey } from "./music-catalog";
 import { getMusicCatalogShelves } from "./music-catalog-shelves";
 import { MUSIC_ARRAY_VIEW, MUSIC_MATRIX_VIEW, MUSIC_SHELF_VIEW, musicArrayPosition, musicPointerDragThreshold, resolveMusicDisplayLayout } from "./music-display-layout";
-import { musicArrayCompositionFrame, musicMatrixOverviewSpan } from "./music-layout-framing";
+import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "./music-layout-framing";
 import { musicSpatialCell, musicSpatialEntry, musicSpatialSelectionCell, musicShelfPoolCell } from "./music-spatial-layout";
+import { musicArraySnapCell } from "./music-array-layout";
 import { MusicSceneResources, type MusicSceneResourceUpdate } from "./music-scene-resources";
 import { musicLabFloorColor } from "./music-surface-textures";
 import { MusicCaseTitles } from "./music-case-titles";
@@ -1344,12 +1345,13 @@ export class ArchiveScene {
     const columnLengths = this.catalogView
       ? getMusicCatalogShelves().map(shelf => shelf.entryKeys.length)
       : archiveColumns.map((_, lane) => columnFiles(lane).length);
-    const rowPeriod = columnLengths.reduce((period, length) => {
+    const rowPeriod = (this.catalogView ? [MUSIC_SHELF_VIEW.slots, this.poolRows] : columnLengths).reduce((period, length) => {
       const count = length || 1;
       const next = period / gcd(period, count) * count;
       return next > 1e6 ? Infinity : next;
     }, 1);
-    const lanePeriod = Math.max(1, columnLengths.length);
+    const laneCount = Math.max(1, columnLengths.length);
+    const lanePeriod = this.catalogView ? laneCount / gcd(laneCount, LOOP_COLUMNS) * LOOP_COLUMNS : laneCount;
     const shift = {
       lane:
         Math.abs(this.selectedCell.lane) > 2048
@@ -1829,7 +1831,7 @@ export class ArchiveScene {
     if (!this.layoutWarmFrame) this.layoutTransition.advance(dt);
     const matrixPan = !this.shelfView && !cinematic ? this.matrixDrag.step(dt, this.reduced) : undefined;
     if (matrixPan && this.matrixDrag.settled && !this.matrixDrag.dragging) {
-      const cell = musicSpatialCell({ lane: Math.round(matrixPan.lane), row: Math.round(matrixPan.row) }, false);
+      const cell = musicArraySnapCell({ lane: Math.round(matrixPan.lane), row: matrixPan.row });
       this.matrixDrag.clear();
       const index = this.recordAtCell(cell);
       if (index >= 0 && !sameCell(cell, this.selectedCell)) this.onSelect?.(index, cell);
@@ -2613,6 +2615,39 @@ export class ArchiveScene {
       detailAim.addScaledVector(up, (detailY - 0.5) * height / pixelScale);
       cameraAim.lerp(detailAim, detail);
     }
+    if ((matrixOverview || matrixMusicIntro) && matrixNormalSpan !== undefined && matrixArrayFrame) {
+      const selectedSlot = canonicalCatalog.get(this.selectedCell.foobarEntryKey ?? ""), points: THREE.Vector3[] = [];
+      const residentShelves = selectedSlot ? getMusicCatalogShelves().slice(selectedSlot.lane, selectedSlot.lane + 4) : [];
+      for (const shelf of residentShelves) for (const key of shelf.entryKeys) {
+        const slot = canonicalCatalog.get(key)!;
+        if (!selectedSlot) continue;
+        const x = (slot.lane - selectedSlot.lane) * spacing.column;
+        const z = MUSIC_ARRAY_VIEW.inspectionZ + (slot.row - selectedSlot.row) * spacing.row;
+        // A fixed vertical envelope avoids breathing with hover/idle springs.
+        for (const bx of [this.caseLayout.bounds.min[0], this.caseLayout.bounds.max[0]])
+          for (const by of [this.caseLayout.bounds.min[1], this.caseLayout.bounds.max[1] + 2.5])
+            for (const bz of [this.caseLayout.bounds.min[2], this.caseLayout.bounds.max[2]])
+              points.push(new THREE.Vector3(x + bx, MUSIC_ARRAY_VIEW.floorY + by, z + bz));
+      }
+      const overviewYaw = matrixMusicIntro ? THREE.MathUtils.degToRad(MUSIC_MATRIX_VIEW.yaw) : yaw;
+      const overviewElevation = matrixMusicIntro ? THREE.MathUtils.degToRad(MUSIC_MATRIX_VIEW.elevation) : elevation;
+      const overviewDirection = new THREE.Vector3(-Math.sin(overviewYaw) * Math.cos(overviewElevation), Math.sin(overviewElevation), Math.cos(overviewYaw) * Math.cos(overviewElevation));
+      const overviewRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), overviewDirection).normalize();
+      const overviewUp = new THREE.Vector3().crossVectors(overviewDirection, overviewRight).normalize();
+      const overviewAim = framing.portrait ? new THREE.Vector3(0, -4.6 + settlingWave(0, 26.56) + .4 + 1.85, -2.17)
+        .addScaledVector(overviewUp, (framing.previewY - .5) * matrixNormalSpan)
+        : new THREE.Vector3(MUSIC_ARRAY_VIEW.aim.x, MUSIC_ARRAY_VIEW.aim.y, MUSIC_ARRAY_VIEW.aim.z);
+      const offset = musicArchiveOffset(width, height);
+      overviewAim.addScaledVector(overviewRight, offset.x * matrixNormalSpan * width / Math.max(1, height))
+        .addScaledVector(overviewUp, offset.y * matrixNormalSpan);
+      const clipRight = this.musicStyle.design === "archive"
+        ? 2 * (matrixArrayFrame.availableWidth + this.displayBleed) / Math.max(1, width) - 1 : 1;
+      const fitted = musicMatrixResidentFrame(overviewAim, overviewDirection, matrixNormalSpan, width / Math.max(1, height), points,
+        { minX: -.96, maxX: clipRight - .04, minY: -.94, maxY: .94 });
+      const overviewAmount = matrixMusicIntro ? introSettle : 1 - detail;
+      cameraAim.addScaledVector(fitted.aim.sub(overviewAim), overviewAmount);
+      framing.span += (fitted.span - matrixNormalSpan) * overviewAmount;
+    }
     const cameraPosition = cameraAim
       .clone()
       .addScaledVector(viewDirection, distance);
@@ -2883,6 +2918,7 @@ export class ArchiveScene {
       const pose = musicGeometryPose(matrix);
       if (pose.scale.x * pose.scale.y * pose.scale.z < 1e-9) return [];
       return [{ id: this.layoutTransition.occurrenceId(cell), cell: { ...cell }, entry: cell.foobarEntryKey,
+        alpha: (this.instances[0].instanceColor?.getX(index) ?? 2) - 1,
         route: this.layoutTransition.active ? this.layoutTransition.routeFor(cell) : undefined, matrix: matrix.toArray() }];
     }) : undefined;
     return {

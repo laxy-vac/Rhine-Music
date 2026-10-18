@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 import { MusicLayoutTransition } from "../src/music-layout-transition.ts";
-import { musicArrayCompositionFrame, musicMatrixOverviewSpan } from "../src/music-layout-framing.ts";
+import { deploymentStep } from "../src/music-shelf-deployment.ts";
+import { musicArrayCompositionFrame, musicMatrixOverviewSpan, musicMatrixResidentFrame } from "../src/music-layout-framing.ts";
+import { MUSIC_MATRIX_VIEW } from "../src/music-display-layout.ts";
 
 const CENTER = new THREE.Vector3(0, 1.85, 0);
 const CASE_BOUNDS = new THREE.Box3(new THREE.Vector3(-2.225, .175, -.07), new THREE.Vector3(2.225, 3.525, .07));
@@ -10,23 +12,30 @@ const CASE_BOUND_ARRAYS = { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max
 const ARRAY_OVERVIEW_SPAN = musicArrayCompositionFrame(1920, 1080, 1100, .8, -1, CASE_BOUND_ARRAYS, CENTER, false).effectiveSpan;
 const MATRIX_OVERVIEW_SPAN = musicMatrixOverviewSpan(ARRAY_OVERVIEW_SPAN);
 const RACK_BOUNDS = new THREE.Box3(new THREE.Vector3(-12, -4.425, -18), new THREE.Vector3(12, -.425, 18));
+const GRID_COLUMNS = 3;
+const GRID_ROWS = 20;
+const GRID_FIRST_ROW = 12;
+
+function latticeOffsets(rows) {
+  return Array.from({ length: GRID_COLUMNS }, (_, column) =>
+    Array.from({ length: rows }, (_, row) => [
+      column === 1 && row % GRID_ROWS === 10 ? "hero" : `entry-${column}-${row % GRID_ROWS}`,
+      column - 1,
+      row - 10,
+    ])).flat();
+}
+
 const ARRAY = {
-  selected: { lane: 2, row: 16, foobarEntryKey: "hero" },
+  selected: { lane: 2, row: GRID_FIRST_ROW + 10, foobarEntryKey: "hero" },
   spacing: { column: -4.95, row: -1 }, anchor: new THREE.Vector3(0, -2.502, 0),
-  aim: new THREE.Vector3(0, -4.425, -2.17), yaw: -38, elevation: 35, distance: 140, span: ARRAY_OVERVIEW_SPAN,
-  offsets: [
-    ["hero", 0, 0], ["core-1", 0, 1], ["core-2", 0, 2],
-    ["near", 1, 4], ["near-next", 1, 5], ["wrap-a", 4, -2], ["wrap-b", 0, 9], ["retiring", 1, 0],
-  ],
+  aim: new THREE.Vector3(0, -2.502, 0), yaw: -38, elevation: 35, distance: 140, span: 38,
+  offsets: latticeOffsets(GRID_ROWS),
 };
 const MATRIX = {
-  selected: { lane: 2, row: 15, foobarEntryKey: "hero" },
+  selected: { lane: 4, row: GRID_FIRST_ROW + 20 + 10, foobarEntryKey: "hero" },
   spacing: { column: -5.2, row: -.62 }, anchor: new THREE.Vector3(0, -3.25, 0),
-  aim: new THREE.Vector3(-1.091, -.045, .481), yaw: 59, elevation: 25, distance: 170, span: MATRIX_OVERVIEW_SPAN,
-  offsets: [
-    ["hero", 0, 0], ["core-1", 0, 1], ["core-2", 0, 2],
-    ["near", 1, 4], ["near-next", 1, 5], ["wrap-a", -4, 4], ["wrap-b", 0, -8], ["arriving", 1, 0],
-  ],
+  aim: new THREE.Vector3(0, -3.25, 0), yaw: 59, elevation: 25, distance: MUSIC_MATRIX_VIEW.distance, span: 50,
+  offsets: latticeOffsets(GRID_ROWS * 2),
 };
 const STEP = 1 / 120;
 const MAX_FRAMES = 50000;
@@ -41,8 +50,6 @@ function matrixAt(position, scale = new THREE.Vector3(1, 1, 1), rotation = new T
 }
 
 function matrixPosition(matrix) { return new THREE.Vector3().setFromMatrixPosition(matrix); }
-
-function smoothstep(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
 
 function yawQuaternion(angle) { return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle); }
 
@@ -71,6 +78,8 @@ function endpointCell(mode, key, laneOffset, rowOffset) {
   return { lane: mode.selected.lane + laneOffset, row: mode.selected.row + rowOffset, foobarEntryKey: key };
 }
 
+function sameCell(a, b) { return a.lane === b.lane && a.row === b.row; }
+
 function endpointMatrix(mode, cell, selected = false) {
   const position = mode.anchor.clone().add(new THREE.Vector3(
     (cell.lane - mode.selected.lane) * mode.spacing.column, 0,
@@ -80,37 +89,30 @@ function endpointMatrix(mode, cell, selected = false) {
   return matrixAt(position);
 }
 
-function endpointBasePosition(mode, cell, q, heading) {
-  const pivot = ARRAY.anchor.clone().lerp(MATRIX.anchor, smoothstep(q));
-  const position = matrixPosition(endpointMatrix(mode, cell));
-  position.sub(pivot).applyQuaternion(yawQuaternion(heading)).add(pivot);
-  const lift = .28 * smoothstep(Math.max(0, Math.min(1, q / .12))) *
-    (1 - smoothstep(Math.max(0, Math.min(1, (q - .65) / .25))));
-  position.y += lift;
-  return position;
-}
-
-function localZBounds(matrices, keys, heading) {
-  const inverse = yawQuaternion(-heading);
-  const values = keys.flatMap(key => transformedCorners(matrices.get(key)).map(point => point.applyQuaternion(inverse).z));
-  return { min: Math.min(...values), max: Math.max(...values) };
-}
-
 function modeCells(mode) {
   return mode.offsets.map(([key, lane, row]) => endpointCell(mode, key, lane, row));
 }
 
-function makeFlight(sourceName, targetName, { alignmentLift = 0, extraOffsets = {} } = {}) {
+function actorId(cell, selected) {
+  return `${cell.foobarEntryKey}|${cell.lane - selected.lane}|${cell.row - selected.row}`;
+}
+
+function cellSignature(cell) {
+  return `${cell.foobarEntryKey}|${cell.lane}|${cell.row}`;
+}
+
+function makeFlight(sourceName, targetName, { alignmentLift = 0 } = {}) {
   const sourceMode = sourceName === "array" ? ARRAY : MATRIX;
   const targetMode = targetName === "array" ? ARRAY : MATRIX;
   const sourceSelected = { ...sourceMode.selected };
   const targetSelected = { ...targetMode.selected };
-  const sourceCells = [...modeCells(sourceMode), ...(extraOffsets[sourceName] ?? [])
-    .map(([key, lane, row]) => endpointCell(sourceMode, key, lane, row))];
-  const targetCells = [...modeCells(targetMode), ...(extraOffsets[targetName] ?? [])
-    .map(([key, lane, row]) => endpointCell(targetMode, key, lane, row)), { lane: -10000, row: -10000 }];
-  const sourceByKey = new Map(sourceCells.map(cell => [cell.foobarEntryKey, cell]));
-  const targetByKey = new Map(targetCells.filter(cell => cell.foobarEntryKey).map(cell => [cell.foobarEntryKey, cell]));
+  const sourceCells = modeCells(sourceMode);
+  const targetCells = modeCells(targetMode);
+  const sourceById = new Map(sourceCells.map(cell => [actorId(cell, sourceSelected), cell]));
+  const targetBySignature = new Map(targetCells.filter(cell => cell.foobarEntryKey)
+    .map(cell => [cellSignature(cell), cell]));
+  const targetByRelative = new Map(targetCells.filter(cell => cell.foobarEntryKey)
+    .map(cell => [actorId(cell, targetSelected), cell]));
   const sourceSelectedRestMatrix = endpointMatrix(sourceMode, sourceSelected, true);
   const sourceSelectedMatrix = sourceSelectedRestMatrix.clone();
   if (alignmentLift) {
@@ -120,29 +122,29 @@ function makeFlight(sourceName, targetName, { alignmentLift = 0, extraOffsets = 
   }
   const sourceCamera = cameraEnd(sourceMode);
   const sourceSamples = sourceCells.map(cell => {
-    const selected = cell.foobarEntryKey === "hero";
+    const selected = sameCell(cell, sourceSelected) && cell.foobarEntryKey === sourceSelected.foobarEntryKey;
     const restMatrix = selected ? sourceSelectedRestMatrix.clone() : endpointMatrix(sourceMode, cell);
     const matrix = selected ? sourceSelectedMatrix.clone() : restMatrix.clone();
-    if (alignmentLift && cell.foobarEntryKey === "core-1") {
+    if (alignmentLift && !selected && cell.lane === sourceSelected.lane && cell.row === sourceSelected.row + 1) {
       const position = matrixPosition(matrix);
       position.y += alignmentLift;
       matrix.setPosition(position);
     }
-    return { cell: { ...cell }, matrix, restMatrix, alpha: 1, tint: 0 };
+    return { cell: { ...cell, motionId: actorId(cell, sourceSelected) }, matrix, restMatrix, alpha: 1, tint: 0 };
   });
+  const sourceSampleById = new Map(sourceSamples.map(sample => [sample.cell.motionId, sample]));
   const transition = new MusicLayoutTransition();
   transition.begin(sourceSamples, sourceSelected, sourceSelectedMatrix, sourceCamera.camera, sourceCamera.aim,
     sourceMode.spacing, targetName === "array", 4.45, -4.6, Number(sourceName === "array"), new Map(), CENTER,
     sourceSelectedRestMatrix, { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() });
   const plan = transition.bindCells(targetCells, targetSelected, targetMode.spacing.row,
-    cell => targetByKey.has(cell.foobarEntryKey), new Map());
+    cell => targetBySignature.has(cellSignature(cell)), new Map());
   transition.prepareTarget(matrixPosition(endpointMatrix(targetMode, targetSelected, true)));
   const targetMatrices = new Map();
   for (const cell of plan) {
-    const matrix = targetByKey.has(cell.foobarEntryKey)
-      ? endpointMatrix(targetMode, targetByKey.get(cell.foobarEntryKey), cell.foobarEntryKey === "hero")
-      : endpointMatrix(targetMode, cell);
-    if (cell.foobarEntryKey) targetMatrices.set(cell.foobarEntryKey, matrix.clone());
+    const target = targetBySignature.get(cellSignature(cell));
+    const matrix = endpointMatrix(targetMode, target ?? cell, transition.isSelected(cell));
+    if (target) targetMatrices.set(cellSignature(target), matrix.clone());
     transition.primeTarget(cell, matrix, transition.isSelected(cell));
   }
   assert.equal(transition.targetsReady, true, "the render-like priming pass must cache selected and target poses");
@@ -151,126 +153,8 @@ function makeFlight(sourceName, targetName, { alignmentLift = 0, extraOffsets = 
   const aim = sourceCamera.aim.clone();
   transition.applyCamera(camera, aim, targetCamera.position, targetCamera.aim, targetCamera.span);
   return { transition, sourceName, targetName, sourceMode, targetMode, sourceSelected, targetSelected, sourceSamples,
-    sourceCells, targetCells, sourceByKey, targetByKey, sourceCamera, targetCamera, camera, aim, plan, targetMatrices };
-}
-
-function makeLongGroupFlight(sourceName, targetName) {
-  const arraySelected = { lane: 1, row: 20, foobarEntryKey: "B0" };
-  const matrixSelected = { lane: 1, row: 12, foobarEntryKey: "B0" };
-  const arrayMode = { ...ARRAY, selected: arraySelected };
-  const matrixMode = { ...MATRIX, selected: matrixSelected };
-  const modes = { array: arrayMode, matrix: matrixMode };
-  const sourceMode = modes[sourceName], targetMode = modes[targetName];
-  const sourceSelected = { ...sourceMode.selected }, targetSelected = { ...targetMode.selected };
-  const arrayCells = [
-    ...Array.from({ length: 8 }, (_, index) => endpointCell(arrayMode, `A${20 + index}`, 0, -8 + index)),
-    ...Array.from({ length: 12 }, (_, index) => endpointCell(arrayMode, `B${index}`, 0, index)),
-  ];
-  const matrixCells = [
-    ...Array.from({ length: 8 }, (_, index) => endpointCell(matrixMode, `A${20 + index}`, -1, 8 + index)),
-    ...Array.from({ length: 12 }, (_, index) => endpointCell(matrixMode, `B${index}`, 0, index)),
-    ...Array.from({ length: 12 }, (_, index) => endpointCell(matrixMode, `B${index}`, 0, 12 + index)),
-  ];
-  const catalogFor = cells => {
-    const catalog = new Map();
-    cells.forEach((cell, order) => {
-      if (cell.foobarEntryKey && !catalog.has(cell.foobarEntryKey))
-        catalog.set(cell.foobarEntryKey, { lane: cell.lane, row: cell.row, order });
-    });
-    return catalog;
-  };
-  const catalogs = { array: catalogFor(arrayCells), matrix: catalogFor(matrixCells) };
-  const sourceCells = sourceName === "array" ? arrayCells : matrixCells;
-  const sourceSelectedMatrix = endpointMatrix(sourceMode, sourceSelected, true);
-  const sourceCamera = cameraEnd(sourceMode);
-  const sourceSamples = sourceCells.map(cell => {
-    const selected = cell.foobarEntryKey === sourceSelected.foobarEntryKey &&
-      cell.lane === sourceSelected.lane && cell.row === sourceSelected.row;
-    const matrix = selected ? sourceSelectedMatrix.clone() : endpointMatrix(sourceMode, cell);
-    return { cell: { ...cell, motionId: `${sourceName}:${cell.foobarEntryKey}:${cell.lane}:${cell.row}` },
-      matrix, restMatrix: matrix.clone(), alpha: 1, tint: 0 };
-  });
-  const targetCells = [...(targetName === "array" ? arrayCells : matrixCells)];
-  while (targetCells.length < 48) targetCells.push({ lane: -10000 - targetCells.length, row: -10000 - targetCells.length });
-  const targetBySignature = new Map(targetCells.filter(cell => cell.foobarEntryKey)
-    .map(cell => [`${cell.foobarEntryKey}|${cell.lane}|${cell.row}`, cell]));
-  const transition = new MusicLayoutTransition();
-  transition.begin(sourceSamples, sourceSelected, sourceSelectedMatrix, sourceCamera.camera, sourceCamera.aim,
-    sourceMode.spacing, targetName === "array", 4.45, -4.6, Number(sourceName === "array"), catalogs[sourceName], CENTER,
-    sourceSelectedMatrix, { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() });
-  const plan = transition.bindCells(targetCells, targetSelected, targetMode.spacing.row,
-    cell => targetBySignature.has(`${cell.foobarEntryKey}|${cell.lane}|${cell.row}`), catalogs[targetName]);
-  const targetHero = endpointMatrix(targetMode, targetSelected, true);
-  transition.prepareTarget(matrixPosition(targetHero));
-  const targetMatrices = new Map();
-  for (const cell of plan) {
-    const key = `${cell.foobarEntryKey}|${cell.lane}|${cell.row}`;
-    const selected = transition.isSelected(cell);
-    const target = targetBySignature.has(key) ? targetBySignature.get(key) : undefined;
-    const matrix = target ? endpointMatrix(targetMode, target, selected) : endpointMatrix(targetMode, cell, selected);
-    if (target) targetMatrices.set(key, matrix.clone());
-    transition.primeTarget(cell, matrix, selected);
-  }
-  assert.equal(transition.targetsReady, true);
-  const targetCamera = cameraEnd(targetMode), camera = sourceCamera.camera.clone(), aim = sourceCamera.aim.clone();
-  transition.applyCamera(camera, aim, targetCamera.position, targetCamera.aim, targetCamera.span);
-  return { transition, sourceName, targetName, sourceMode, targetMode, sourceSelected, targetSelected,
-    sourceCells, sourceSamples, targetCells, targetCamera, sourceCamera, camera, aim, plan, targetMatrices,
-    targetBySignature, catalogs };
-}
-
-function assertLargeUnion(size, sourceName) {
-  const targetName = sourceName === "array" ? "matrix" : "array";
-  const sourceMode = sourceName === "array" ? ARRAY : MATRIX;
-  const targetMode = targetName === "array" ? ARRAY : MATRIX;
-  const shared = size / 2;
-  const sourceSelected = { ...sourceMode.selected, foobarEntryKey: "shared-0" };
-  const targetSelected = { ...targetMode.selected, foobarEntryKey: "shared-0" };
-  const sourceEntries = [
-    ...Array.from({ length: shared }, (_, index) => `shared-${index}`),
-    ...Array.from({ length: size - shared }, (_, index) => `source-${index}`),
-  ];
-  const targetEntries = [
-    ...Array.from({ length: shared }, (_, index) => `shared-${index}`),
-    ...Array.from({ length: size - shared }, (_, index) => `target-${index}`),
-  ];
-  const sourceCells = sourceEntries.map((foobarEntryKey, index) => ({
-    lane: sourceSelected.lane, row: sourceSelected.row + index, foobarEntryKey,
-  }));
-  const targetCells = targetEntries.map((foobarEntryKey, index) => ({
-    lane: targetSelected.lane, row: targetSelected.row + index, foobarEntryKey,
-  }));
-  const sourceSelectedMatrix = endpointMatrix(sourceMode, sourceSelected, true);
-  const sourceCamera = cameraEnd(sourceMode);
-  const sourceSamples = sourceCells.map(cell => {
-    const selected = cell.foobarEntryKey === "shared-0";
-    const matrix = selected ? sourceSelectedMatrix.clone() : endpointMatrix(sourceMode, cell);
-    return { cell, matrix, restMatrix: matrix.clone(), alpha: 1, tint: 0 };
-  });
-  const transition = new MusicLayoutTransition();
-  transition.begin(sourceSamples, sourceSelected, sourceSelectedMatrix, sourceCamera.camera, sourceCamera.aim,
-    sourceMode.spacing, targetName === "array", 4.45, -4.6, Number(sourceName === "array"), new Map(), CENTER,
-    sourceSelectedMatrix, { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() });
-  const targetByKey = new Map(targetCells.map(cell => [cell.foobarEntryKey, cell]));
-  const plan = transition.bindCells(targetCells, targetSelected, targetMode.spacing.row,
-    cell => targetByKey.has(cell.foobarEntryKey), new Map());
-  const expectedUnion = size + (size - shared);
-  assert.equal(plan.length, expectedUnion, `${sourceName} ${size}: bind retains the entire source/target union`);
-  assert.ok(plan.length > 729, "the logical fixture exceeds the current 729-cell scene capacity without truncating the API plan");
-  assert.equal(new Set(plan.map(cell => transition.occurrenceId(cell))).size, expectedUnion,
-    `${sourceName} ${size}: every union owner has a unique motion identity`);
-  assert.equal(plan.filter(cell => transition.routeFor(cell)?.hasArray && transition.routeFor(cell)?.hasMatrix).length, shared);
-  assert.equal(plan.filter(cell => transition.routeFor(cell)?.hasArray && !transition.routeFor(cell)?.hasMatrix).length, size - shared);
-  assert.equal(plan.filter(cell => !transition.routeFor(cell)?.hasArray && transition.routeFor(cell)?.hasMatrix).length, size - shared);
-  for (let frame = 0; frame < 40 && !transition.settled; frame++) transition.advance(.5);
-  assert.equal(transition.settled, true, `${sourceName} ${size}: endpoint reaches a settled owner map`);
-  assert.deepEqual(transition.endpointSelection, targetSelected);
-  for (const cell of plan) {
-    const expected = targetByKey.get(cell.foobarEntryKey);
-    if (expected) assert.deepEqual(transition.endpointCell(cell), expected);
-    else assert.equal(transition.endpointCell(cell), undefined);
-  }
-  transition.clear();
+    sourceById, sourceSampleById, targetBySignature, targetByRelative,
+    sourceCamera, targetCamera, camera, aim, plan, targetMatrices };
 }
 
 function advanceToQ(flight, targetQ, epsilon = .00004) {
@@ -309,8 +193,7 @@ function outsideSide(projected) {
 }
 
 function targetMatrixForCell(flight, cell) {
-  const signature = `${cell.foobarEntryKey}|${cell.lane}|${cell.row}`;
-  return flight.targetMatrices.get(signature) ?? flight.targetMatrices.get(cell.foobarEntryKey);
+  return flight.targetMatrices.get(cellSignature(cell));
 }
 
 function renderState(flight) {
@@ -318,20 +201,23 @@ function renderState(flight) {
   const camera = flight.sourceCamera.camera.clone(), aim = flight.sourceCamera.aim.clone();
   transition.applyCamera(camera, aim, flight.targetCamera.position, flight.targetCamera.aim, flight.targetCamera.span);
   camera.updateMatrixWorld(true);
-  const matrices = new Map(), matricesByKey = new Map(), projected = new Map(), sides = new Map();
+  const matrices = new Map(), matricesById = new Map(), matricesByKey = new Map(), projected = new Map(), sides = new Map(), appearances = new Map();
   for (const cell of transition.bound ? flight.plan : []) {
-    const matrix = targetMatrixForCell(flight, cell)?.clone() ?? endpointMatrix(flight.targetMode, cell);
-    transition.apply(matrix, cell, transition.isSelected(cell));
-    const id = transition.occurrenceId(cell) ?? cell.foobarEntryKey;
+    const selected = transition.isSelected(cell);
+    const matrix = targetMatrixForCell(flight, cell)?.clone() ?? endpointMatrix(flight.targetMode, cell, selected);
+    transition.apply(matrix, cell, selected);
+    const id = transition.occurrenceId(cell) ?? cellSignature(cell);
     matrices.set(id, matrix);
-    if (cell.foobarEntryKey) matricesByKey.set(cell.foobarEntryKey, matrix);
+    matricesById.set(id, matrix);
+    if (cell.foobarEntryKey && !matricesByKey.has(cell.foobarEntryKey)) matricesByKey.set(cell.foobarEntryKey, matrix);
+    appearances.set(id, transition.appearance(cell, { alpha: 1, tint: 0 }));
     const points = transformedCorners(matrix);
     const projectedPoints = points.map(point => point.clone().project(camera));
     projected.set(id, projectedPoints);
     sides.set(id, outsideSide(projectedPoints));
   }
   const rack = transition.rackTransform(RACK_BOUNDS, -4.425);
-  return { camera, aim, matrices, matricesByKey, projected, sides, rack, frame: transition.frame };
+  return { camera, aim, matrices, matricesById, matricesByKey, projected, sides, appearances, rack, frame: transition.frame };
 }
 
 function moveToSettled(flight) {
@@ -349,61 +235,236 @@ function assertMatrixNear(actual, expected, epsilon = .04, label = "matrix") {
   }
 }
 
-function ownerFor(flight, cell) { return flight.transition.endpointCell(cell); }
-
 function assertStartPoses(flight, state) {
-  for (const source of flight.sourceCells) {
-    if (!source.foobarEntryKey) continue;
-    assertMatrixNear(state.matricesByKey.get(source.foobarEntryKey),
-      endpointMatrix(flight.sourceMode, source, source.foobarEntryKey === "hero"), 1e-5);
+  for (const sample of flight.sourceSamples) {
+    const id = sample.cell.motionId;
+    const selected = sameCell(sample.cell, flight.sourceSelected) && sample.cell.foobarEntryKey === flight.sourceSelected.foobarEntryKey;
+    assertMatrixNear(state.matricesById.get(id), endpointMatrix(flight.sourceMode, sample.cell, selected), 1e-5,
+      `source endpoint ${id}`);
   }
 }
 
 function assertTargetPoses(flight, state) {
-  for (const [key, expected] of flight.targetMatrices) {
-    if (!flight.targetByKey.has(key)) continue;
-    assertMatrixNear(state.matricesByKey.get(key), expected, 1e-5, `target endpoint ${key}`);
+  for (const cell of flight.plan) {
+    const owner = flight.transition.endpointCell(cell);
+    if (!owner) continue;
+    const id = flight.transition.occurrenceId(cell);
+    const expected = endpointMatrix(flight.targetMode, owner, flight.transition.isSelected(cell));
+    assertMatrixNear(state.matricesById.get(id), expected, 1e-5, `target endpoint ${cellSignature(owner)}`);
   }
 }
 
-test("ARRAY q=0 and MATRIX q=1 are exact endpoints with one canonical path in both directions", () => {
+function poseOf(matrix) {
+  const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
+  matrix.decompose(position, rotation, scale);
+  return { position, rotation, scale };
+}
+
+function arrayEndpointPose(flight, cell, cache = new Map()) {
+  const id = flight.transition.occurrenceId(cell);
+  const cached = cache.get(id);
+  if (cached) return cached;
+  const route = flight.transition.routeFor(cell);
+  assert.ok(route, `route exists for ${id}`);
+  const signature = `${cell.foobarEntryKey}|${route.arrayCell.lane}|${route.arrayCell.row}`;
+  if (route.resident) {
+    const matrix = flight.sourceName === "array"
+      ? flight.sourceSampleById.get(id)?.restMatrix
+      : flight.targetMatrices.get(signature);
+    assert.ok(matrix, `resident ARRAY endpoint exists for ${signature}`);
+    const pose = poseOf(matrix);
+    cache.set(id, pose);
+    return pose;
+  }
+
+  const residents = flight.plan.filter(candidate => flight.transition.routeFor(candidate)?.resident);
+  const nearest = residents.sort((a, b) => {
+    const left = flight.transition.routeFor(a).arrayCell, right = flight.transition.routeFor(b).arrayCell;
+    return Math.abs(left.lane - route.arrayCell.lane) * 100 + Math.abs(left.row - route.arrayCell.row) -
+      Math.abs(right.lane - route.arrayCell.lane) * 100 - Math.abs(right.row - route.arrayCell.row);
+  })[0];
+  const nearestRoute = nearest && flight.transition.routeFor(nearest);
+  const reference = nearest && arrayEndpointPose(flight, nearest, cache);
+  const pose = reference ? {
+    position: reference.position.clone(), rotation: reference.rotation.clone(), scale: reference.scale.clone(),
+  } : poseOf(endpointMatrix(ARRAY, route.arrayCell));
+  const address = nearestRoute?.arrayCell ?? flight.sourceSelected;
+  const arrayColumn = -Math.max(4.7, CASE_BOUNDS.getSize(new THREE.Vector3()).x + .5);
+  const arrayRow = -1;
+  pose.position.x += (route.arrayCell.lane - address.lane) * arrayColumn;
+  pose.position.z += (route.arrayCell.row - address.row) * arrayRow;
+  const lanes = residents.map(candidate => flight.transition.routeFor(candidate).arrayCell.lane);
+  const firstLane = lanes.length ? Math.min(...lanes) : flight.sourceSelected.lane;
+  const lastLane = lanes.length ? Math.max(...lanes) : flight.sourceSelected.lane;
+  if (route.arrayCell.lane < firstLane) pose.position.x += 40;
+  if (route.arrayCell.lane > lastLane) pose.position.x -= 40;
+  if (route.arrayCell.row < 12) pose.position.z += 32;
+  if (route.arrayCell.row > 31) pose.position.z -= 64;
+  pose.scale.setScalar(1);
+  cache.set(id, pose);
+  return pose;
+}
+
+function matrixEndpointPose(flight, cell) {
+  const route = flight.transition.routeFor(cell);
+  assert.ok(route, `route exists for ${flight.transition.occurrenceId(cell)}`);
+  const matrixCell = { lane: route.arrayCell.lane + MATRIX.selected.lane - ARRAY.selected.lane,
+    row: route.arrayCell.row + MATRIX.selected.row - ARRAY.selected.row, foobarEntryKey: cell.foobarEntryKey };
+  return poseOf(endpointMatrix(MATRIX, matrixCell, flight.transition.isSelected(cell)));
+}
+
+function expectedRelativePosition(flight, cell, q, heading, arrayPoseCache = new Map()) {
+  const hero = flight.plan.find(candidate => flight.transition.isSelected(candidate));
+  assert.ok(hero, "selected hero exists in the bound lattice");
+  const arrayPose = arrayEndpointPose(flight, cell, arrayPoseCache);
+  const matrixPose = matrixEndpointPose(flight, cell);
+  const arrayHero = arrayEndpointPose(flight, hero, arrayPoseCache);
+  const matrixHero = matrixEndpointPose(flight, hero);
+  const blend = deploymentStep(q);
+  return arrayPose.position.clone().sub(arrayHero.position)
+    .lerp(matrixPose.position.clone().sub(matrixHero.position), blend)
+    .applyQuaternion(yawQuaternion(heading));
+}
+
+function vectorNear(actual, expected, epsilon, label) {
+  assert.ok(actual.distanceTo(expected) <= epsilon,
+    `${label}: expected ${actual.toArray()} within ${epsilon} of ${expected.toArray()}`);
+}
+
+function obbFor(matrix, id) {
+  const elements = matrix.elements;
+  const axes = [
+    new THREE.Vector3(elements[0], elements[1], elements[2]).normalize(),
+    new THREE.Vector3(elements[4], elements[5], elements[6]).normalize(),
+    new THREE.Vector3(elements[8], elements[9], elements[10]).normalize(),
+  ];
+  const scale = basisLengths(matrix), size = CASE_BOUNDS.getSize(new THREE.Vector3());
+  return { id, center: matrixPosition(matrix), axes,
+    half: [size.x * scale[0] / 2, size.y * scale[1] / 2, size.z * scale[2] / 2] };
+}
+
+function obbOverlaps(a, b) {
+  const axes = [...a.axes, ...b.axes];
+  for (const left of a.axes) for (const right of b.axes) axes.push(new THREE.Vector3().crossVectors(left, right));
+  const delta = b.center.clone().sub(a.center);
+  for (const raw of axes) {
+    if (raw.lengthSq() < 1e-12) continue;
+    const axis = raw.clone().normalize();
+    const radius = (box, testAxis) => box.half.reduce((sum, half, index) => sum + half * Math.abs(testAxis.dot(box.axes[index])), 0);
+    if (Math.abs(delta.dot(axis)) >= radius(a, axis) + radius(b, axis) - 1e-5) return false;
+  }
+  return true;
+}
+
+function assertNoCaseOverlaps(state, label) {
+  const boxes = [...state.matricesById].map(([id, matrix]) => obbFor(matrix, id));
+  for (let left = 0; left < boxes.length; left++) for (let right = left + 1; right < boxes.length; right++)
+    assert.equal(obbOverlaps(boxes[left], boxes[right]), false,
+      `${label}: ${boxes[left].id} intersects ${boxes[right].id}`);
+}
+
+function assertDirectLatticePath(flight, state) {
+  const hero = flight.plan.find(cell => flight.transition.isSelected(cell));
+  assert.ok(hero, "a selected actor anchors the resident lattice");
+  const heroPosition = matrixPosition(state.matricesById.get(flight.transition.occurrenceId(hero)));
+  const arrayPoseCache = new Map();
+  for (const cell of flight.plan) {
+    if (!flight.transition.routeFor(cell)) continue;
+    const id = flight.transition.occurrenceId(cell);
+    const actual = matrixPosition(state.matricesById.get(id)).sub(heroPosition);
+    const expected = expectedRelativePosition(flight, cell, state.frame.q, state.frame.heading, arrayPoseCache);
+    vectorNear(actual, expected, .025, `single deploymentStep pose for ${id} at q=${state.frame.q.toFixed(3)}`);
+  }
+}
+
+function residentActorIds() {
+  return new Set(modeCells(ARRAY).map(cell => actorId(cell, ARRAY.selected)));
+}
+
+function assertResidentRoutes(flight) {
+  const expected = residentActorIds();
+  const found = new Set();
+  for (const cell of flight.plan) {
+    const id = flight.transition.occurrenceId(cell), route = flight.transition.routeFor(cell);
+    if (!route) continue;
+    if (expected.has(id)) {
+      found.add(id);
+      assert.equal(route.resident, true, `${id} is a resident ARRAY slot`);
+      assert.equal(route.core, true, `${id} keeps the legacy core flag as a resident alias`);
+      assert.equal(route.hasArray, true, `${id} has its canonical ARRAY endpoint`);
+      assert.deepEqual({ lane: route.arrayCell.lane, row: route.arrayCell.row },
+        { lane: flight.sourceName === "array" ? flight.sourceById.get(id).lane : flight.targetByRelative.get(id).lane,
+          row: flight.sourceName === "array" ? flight.sourceById.get(id).row : flight.targetByRelative.get(id).row },
+        `${id} keeps its physical ARRAY lattice address`);
+      assert.equal(route.hasMatrix, true, `${id} pairs with one MATRIX occurrence`);
+    }
+  }
+  assert.equal(found.size, expected.size, "all three columns and twenty ARRAY rows are resident actors");
+  return expected;
+}
+
+function assertAllActorsPresentAndOpaque(flight, state, label) {
+  assert.equal(state.matricesById.size, flight.plan.filter(cell => flight.transition.routeFor(cell)).length,
+    `${label} keeps a matrix for each bound physical occurrence`);
+  for (const cell of flight.plan) {
+    const route = flight.transition.routeFor(cell);
+    if (!route) continue;
+    const id = flight.transition.occurrenceId(cell), matrix = state.matricesById.get(id), appearance = state.appearances.get(id);
+    assert.ok(matrix, `${label}: ${id} remains in the scene`);
+    assert.ok(basisLengths(matrix).every(value => Math.abs(value - 1) < 1e-7), `${label}: ${id} remains full size`);
+    assert.equal(appearance.alpha, 1, `${label}: ${id} does not fade to hide a discontinuity`);
+  }
+}
+
+test("ARRAY/MATRIX share one 3x20 lattice and the camera path is direction-symmetric", () => {
   const arrayToMatrix = makeFlight("array", "matrix");
   const matrixToArray = makeFlight("matrix", "array");
   assert.equal(arrayToMatrix.transition.frame.q, 0);
   assert.equal(matrixToArray.transition.frame.q, 1);
+  assert.equal(arrayToMatrix.plan.length, GRID_COLUMNS * GRID_ROWS * 2,
+    "the plan contains sixty ARRAY residents and sixty additional MATRIX loop copies");
+  assert.equal(matrixToArray.plan.length, arrayToMatrix.plan.length);
+  const sharedIds = assertResidentRoutes(arrayToMatrix);
+  assert.deepEqual(assertResidentRoutes(matrixToArray), sharedIds);
 
-  const qSamples = [0, .15, .3, .5, .7, .85, 1];
+  const qSamples = [0, .1, .25, .5, .75, .9, 1];
   const forwardSamples = new Map(), reverseSamples = new Map();
-  for (const q of qSamples) {
-    forwardSamples.set(q, advanceToQ(arrayToMatrix, q));
-  }
-  for (const q of [...qSamples].reverse()) reverseSamples.set(q, advanceToQ(matrixToArray, q));
+  for (const q of qSamples) forwardSamples.set(q, advanceToQ(arrayToMatrix, q, .0000001));
+  for (const q of [...qSamples].reverse()) reverseSamples.set(q, advanceToQ(matrixToArray, q, .0000001));
   for (const q of qSamples) {
     const forward = forwardSamples.get(q), reverse = reverseSamples.get(q);
     close(forward.frame.q, reverse.frame.q, .00015);
     close(forward.frame.rowSpacing, reverse.frame.rowSpacing, .00015);
-    assert.ok(forward.frame.rowSpacing <= 1 + 1e-8 && forward.frame.rowSpacing >= .62 - 1e-8);
+    close(forward.frame.rowSpacing, THREE.MathUtils.lerp(1, .62, deploymentStep(q)), .00015);
     close(forward.frame.heading, reverse.frame.heading, .00015);
     assert.ok(Math.abs(forward.frame.heading) <= THREE.MathUtils.degToRad(10) + 1e-8);
-    assert.equal(forward.frame.coreCases, 3);
-    const coreKeys = arrayToMatrix.plan.filter(cell => arrayToMatrix.transition.routeFor(cell)?.core)
-      .map(cell => cell.foobarEntryKey).sort();
-    assert.deepEqual(coreKeys, ["core-1", "core-2", "hero"]);
+    assert.equal(forward.frame.residentCases, GRID_COLUMNS * GRID_ROWS);
+    assert.equal(reverse.frame.residentCases, GRID_COLUMNS * GRID_ROWS);
     assertFiniteCamera(forward.camera, forward.aim);
     assertFiniteCamera(reverse.camera, reverse.aim);
     assert.ok(Math.abs(forward.frame.cameraAsinArgument ?? 0) <= 1 + 1e-7);
     assert.ok(Math.abs(reverse.frame.cameraAsinArgument ?? 0) <= 1 + 1e-7);
-    for (const key of ["hero", "core-1", "core-2", "near", "near-next", "wrap-a", "wrap-b"]) {
-      const a = forward.matricesByKey.get(key), b = reverse.matricesByKey.get(key);
-      assert.ok(a && b, `missing normal case pose for ${key}`);
-      assertMatrixNear(a, b, .01);
+    assertAllActorsPresentAndOpaque(arrayToMatrix, forward, `ARRAY→MATRIX q=${q}`);
+    assertAllActorsPresentAndOpaque(matrixToArray, reverse, `MATRIX→ARRAY q=${q}`);
+    assertDirectLatticePath(arrayToMatrix, forward);
+    assertDirectLatticePath(matrixToArray, reverse);
+    assertNoCaseOverlaps(forward, `ARRAY→MATRIX q=${q}`);
+    assertNoCaseOverlaps(reverse, `MATRIX→ARRAY q=${q}`);
+    for (const id of sharedIds) {
+      assert.ok(forward.matricesById.has(id) && reverse.matricesById.has(id), `resident ${id} exists in both directions`);
+      assertMatrixNear(forward.matricesById.get(id), reverse.matricesById.get(id), .015, `resident ${id} q=${q}`);
+      assert.equal(forward.sides.get(id), undefined, `resident ${id} stays in view at q=${q}`);
+      assert.equal(reverse.sides.get(id), undefined, `resident ${id} stays in view at q=${q}`);
     }
-    assertMatrixNear(forward.rack.matrix, reverse.rack.matrix, .01);
+    assertMatrixNear(forward.rack.matrix, reverse.rack.matrix, .01, `rack q=${q}`);
     assert.equal(forward.rack.visible, reverse.rack.visible);
     assert.equal(forward.rack.visible, !forward.rack.outside);
     if (!forward.rack.visible) assert.ok(forward.rack.projected[1] < -1.1);
     assert.equal(forward.frame.rackDeployment, 1);
     assert.equal(reverse.frame.rackDeployment, 1);
+    assert.ok(forward.camera.position.distanceTo(reverse.camera.position) < .0001,
+      `hero-following camera position is symmetric at q=${q}`);
+    assert.ok(forward.aim.distanceTo(reverse.aim) < .0001, `hero-following camera aim is symmetric at q=${q}`);
   }
 
   assertStartPoses(arrayToMatrix, forwardSamples.get(0));
@@ -411,18 +472,8 @@ test("ARRAY q=0 and MATRIX q=1 are exact endpoints with one canonical path in bo
 
   const arrayEnd = moveToSettled(arrayToMatrix);
   assert.deepEqual(arrayToMatrix.transition.endpointSelection, arrayToMatrix.targetSelected);
-  for (const cell of arrayToMatrix.plan) {
-    const owner = ownerFor(arrayToMatrix, cell);
-    if (arrayToMatrix.targetByKey.has(cell.foobarEntryKey)) assert.deepEqual(owner, arrayToMatrix.targetByKey.get(cell.foobarEntryKey));
-    else assert.equal(owner, undefined);
-  }
-  for (const key of ["hero", "core-1", "core-2", "near", "near-next", "wrap-a", "wrap-b", "arriving"]) {
-    const cell = arrayToMatrix.plan.find(value => value.foobarEntryKey === key);
-    assert.ok(cell, `normal target plan includes ${key}`);
-    assertMatrixNear(arrayEnd.matrices.get(arrayToMatrix.transition.occurrenceId(cell)),
-      arrayToMatrix.targetMatrices.get(key), 1e-5);
-  }
-  assert.ok(arrayToMatrix.targetCamera.position.distanceTo(matrixPosition(arrayToMatrix.targetMatrices.get("hero"))) >
+  assertTargetPoses(arrayToMatrix, arrayEnd);
+  assert.ok(arrayToMatrix.targetCamera.position.distanceTo(matrixPosition(arrayToMatrix.targetMatrices.get(cellSignature(MATRIX.selected)))) >
     arrayToMatrix.sourceCamera.position.distanceTo(matrixPosition(endpointMatrix(ARRAY, ARRAY.selected, true))) + 10,
   "MATRIX pullback must increase camera-to-hero distance");
   assert.ok(arrayToMatrix.targetCamera.position.y < arrayToMatrix.sourceCamera.position.y,
@@ -431,59 +482,58 @@ test("ARRAY q=0 and MATRIX q=1 are exact endpoints with one canonical path in bo
 
   const matrixEnd = moveToSettled(matrixToArray);
   assert.deepEqual(matrixToArray.transition.endpointSelection, matrixToArray.targetSelected);
-  for (const cell of matrixToArray.plan) {
-    const owner = ownerFor(matrixToArray, cell);
-    if (matrixToArray.targetByKey.has(cell.foobarEntryKey)) assert.deepEqual(owner, matrixToArray.targetByKey.get(cell.foobarEntryKey));
-    else assert.equal(owner, undefined);
-  }
   assertTargetPoses(matrixToArray, matrixEnd);
   assertCameraEndpoint(matrixEnd.camera, matrixEnd.aim, matrixToArray.targetCamera);
 });
 
-test("A28 remainder plus B12 second ARRAY shelf keeps MATRIX B12 loop copies out of the matched core", () => {
-  const forward = makeLongGroupFlight("array", "matrix");
-  const reverse = makeLongGroupFlight("matrix", "array");
-  assert.deepEqual(forward.sourceCells.filter(cell => cell.foobarEntryKey.startsWith("A"))
-    .map(cell => cell.row), Array.from({ length: 8 }, (_, index) => 12 + index));
-  assert.deepEqual(forward.sourceCells.filter(cell => cell.foobarEntryKey.startsWith("B"))
-    .map(cell => cell.row), Array.from({ length: 12 }, (_, index) => 20 + index));
-  for (let index = 0; index < 12; index++)
-    assert.deepEqual(reverse.sourceCells.filter(cell => cell.foobarEntryKey === `B${index}`).map(cell => cell.row),
-      [12 + index, 24 + index]);
+test("MATRIX loop copies use unique physical occurrences and monotonic ARRAY extensions", () => {
+  const forward = makeFlight("array", "matrix");
+  const reverse = makeFlight("matrix", "array");
+  const laneOffset = MATRIX.selected.lane - ARRAY.selected.lane;
+  const rowOffset = MATRIX.selected.row - ARRAY.selected.row;
+  const extraMatrixCells = modeCells(MATRIX).filter(cell => cell.row - MATRIX.selected.row >= GRID_ROWS / 2);
+  assert.equal(extraMatrixCells.length, GRID_COLUMNS * GRID_ROWS);
 
-  const qSamples = [0, .2, .3, .5, .7, .85, 1];
-  const forwardSamples = new Map(), reverseSamples = new Map();
-  for (const q of qSamples) forwardSamples.set(q, advanceToQ(forward, q, .0000001));
-  for (const q of [...qSamples].reverse()) reverseSamples.set(q, advanceToQ(reverse, q, .0000001));
-  for (const q of qSamples) {
-    const a = forwardSamples.get(q), b = reverseSamples.get(q);
-    close(a.frame.q, b.frame.q, .000001);
-    assert.equal(a.frame.coreCases, 12, "the canonical B0..B11 run forms the selected core segment");
-    assert.equal(b.frame.coreCases, 12, "reverse flight keeps the same selected core segment");
-    const matched = flight => flight.plan.filter(cell => {
-      const route = flight.transition.routeFor(cell);
-      return route?.hasArray && route.hasMatrix;
-    });
-    const byKey = (flight, state) => {
-      const result = new Map();
-      for (const cell of matched(flight)) {
+  for (const flight of [forward, reverse]) {
+    const extras = [];
+    for (const target of extraMatrixCells) {
+      const arrayCell = { lane: target.lane - laneOffset, row: target.row - rowOffset, foobarEntryKey: target.foobarEntryKey };
+      const planned = flight.plan.find(cell => {
         const route = flight.transition.routeFor(cell);
-        if (cell.foobarEntryKey.startsWith("B")) {
-          assert.equal(route.core, true, `${cell.foobarEntryKey} remains in the B core`);
-          assert.equal(route.segment, 1, `${cell.foobarEntryKey} stays in the canonical second segment`);
-        } else {
-          assert.equal(route.core, false, `${cell.foobarEntryKey} remains a separate A segment`);
-          assert.equal(route.segment, 0, `${cell.foobarEntryKey} stays in the canonical first segment`);
-        }
-        assert.equal(result.has(cell.foobarEntryKey), false, `only one canonical match for ${cell.foobarEntryKey}`);
-        result.set(cell.foobarEntryKey, state.matrices.get(flight.transition.occurrenceId(cell)));
-      }
-      return result;
-    };
-    const aMatched = byKey(forward, a), bMatched = byKey(reverse, b);
-    assert.equal(aMatched.size, 20);
-    assert.deepEqual([...aMatched.keys()].sort(), [...bMatched.keys()].sort());
-    for (const [key, matrix] of aMatched) assertMatrixNear(matrix, bMatched.get(key), .015, `${key} q=${q}`);
+        return route?.hasMatrix && route.arrayCell.lane === arrayCell.lane &&
+          route.arrayCell.row === arrayCell.row && cell.foobarEntryKey === target.foobarEntryKey;
+      });
+      assert.ok(planned, `loop copy ${cellSignature(target)} has a physical actor`);
+      const route = flight.transition.routeFor(planned);
+      assert.equal(route.resident, false, "a MATRIX-only loop copy is not mislabeled as an ARRAY resident");
+      assert.equal(route.hasMatrix, true);
+      assert.equal(route.hasArray, false);
+      assert.deepEqual(route.arrayCell, { lane: arrayCell.lane, row: arrayCell.row },
+        "the extra copy receives its fixed ARRAY extension address");
+      extras.push({ cell: planned, route });
+    }
+    assert.equal(extras.length, GRID_COLUMNS * GRID_ROWS);
+    const rowsByLane = new Map();
+    for (const { route } of extras) {
+      const rows = rowsByLane.get(route.arrayCell.lane) ?? [];
+      rows.push(route.arrayCell.row);
+      rowsByLane.set(route.arrayCell.lane, rows);
+    }
+    for (const rows of rowsByLane.values())
+      assert.deepEqual(rows.sort((a, b) => a - b), Array.from({ length: GRID_ROWS }, (_, index) => GRID_FIRST_ROW + GRID_ROWS + index),
+        "virtual ARRAY rows extend the canonical twenty rows monotonically");
+  }
+
+  const start = renderState(forward);
+  const end = moveToSettled(forward);
+  for (const { cell } of [...forward.plan.map(cell => ({ cell }))]) {
+    const route = forward.transition.routeFor(cell);
+    if (!route || route.resident) continue;
+    const id = forward.transition.occurrenceId(cell);
+    assert.equal(start.appearances.get(id).alpha, 1, `${id} starts opaque at its virtual ARRAY endpoint`);
+    assert.equal(end.appearances.get(id).alpha, 1, `${id} ends opaque at its MATRIX endpoint`);
+    assert.ok(basisLengths(start.matricesById.get(id)).every(value => Math.abs(value - 1) < 1e-7));
+    assert.ok(basisLengths(end.matricesById.get(id)).every(value => Math.abs(value - 1) < 1e-7));
   }
 });
 
@@ -493,173 +543,63 @@ test("retarget at five canonical q points preserves velocity and plan identity",
     advanceToQ(flight, threshold, .00004);
     const q = flight.transition.frame.q, velocity = flight.transition.frame.qVelocity;
     const ids = flight.plan.map(cell => flight.transition.occurrenceId(cell));
+    const before = renderState(flight);
+    assert.ok(q >= 0 && q <= 1, `q=${q} remains within endpoint bounds`);
+    assert.ok(Math.abs(velocity) <= .44 + 1e-8, `velocity=${velocity} remains within its speed bound`);
     assert.equal(flight.transition.retarget(true), true, `reverse accepted at q=${threshold}`);
     close(flight.transition.frame.q, q, 0);
     close(flight.transition.frame.qVelocity, velocity, 0);
     assert.deepEqual(flight.plan.map(cell => flight.transition.occurrenceId(cell)), ids);
+    const after = renderState(flight);
+    for (const id of ids) assertMatrixNear(after.matricesById.get(id), before.matricesById.get(id), .00001,
+      `retarget keeps current pose for ${id}`);
+    assert.ok(after.camera.position.distanceTo(before.camera.position) < .00001, "retarget keeps the current camera pose");
     moveToSettled(flight);
     close(flight.transition.frame.q, 0, 0);
   }
 });
 
-test("ARRAY-only exits by q=.2, matched cases morph while parked at q=.2..4, and MATRIX-only enters from q=.4", () => {
-  const flight = makeFlight("array", "matrix");
-  const retiring = flight.plan.find(cell => cell.foobarEntryKey === "retiring");
-  const arriving = flight.plan.find(cell => cell.foobarEntryKey === "arriving");
-  const near = flight.plan.find(cell => cell.foobarEntryKey === "near");
-  const retiringRoute = flight.transition.routeFor(retiring), arrivingRoute = flight.transition.routeFor(arriving);
-  assert.equal(retiringRoute.hasArray, true);
-  assert.equal(retiringRoute.hasMatrix, false);
-  assert.equal(arrivingRoute.hasArray, false);
-  assert.equal(arrivingRoute.hasMatrix, true);
-  assert.equal(flight.transition.routeFor(near).hasArray, true);
-  assert.equal(flight.transition.routeFor(near).hasMatrix, true);
-  assert.equal(flight.transition.routeFor(near).core, false);
-
-  const states = new Map();
-  for (const q of [0, .1, .2, .25, .3, .35, .4, .7, 1]) {
-    const frame = advanceToQ(flight, q, .0000001);
-    states.set(q, frame);
-    const core = ["hero", "core-1", "core-2"];
-    for (const key of core) {
-      const cell = flight.plan.find(value => value.foobarEntryKey === key);
-      const id = flight.transition.occurrenceId(cell);
-      assert.ok(frame.projected.get(id).every(point => point.x > -1 && point.x < 1 && point.y > -1 && point.y < 1),
-        `core case ${key} stays visible at q=${q}`);
-    }
-    for (const cell of flight.plan) {
-      if (!cell.foobarEntryKey || !flight.transition.occurrenceId(cell)) continue;
-      const id = flight.transition.occurrenceId(cell);
-      const matrix = frame.matrices.get(id);
-      assert.ok(basisLengths(matrix).every(scale => Math.abs(scale - 1) < 1e-7), `case ${cell.foobarEntryKey} remains full-size`);
-      const points = transformedCorners(matrix);
-      const depths = points.map(point => -point.clone().applyMatrix4(frame.camera.matrixWorldInverse).z);
-      assert.ok(depths.every(depth => depth > 0), `case ${cell.foobarEntryKey} remains in front of the camera`);
-      const side = frame.sides.get(id);
-      const route = flight.transition.routeFor(cell);
-      assert.ok(route, `route metadata exists for ${cell.foobarEntryKey}`);
-      if (route.core) assert.ok(!side, `core case ${cell.foobarEntryKey} remains in the viewport at q=${q}`);
-      if (route.hasArray && route.hasMatrix && !route.core && q >= .2 && q <= .4)
-        assert.ok(side, `matched peripheral ${cell.foobarEntryKey} is fully parked during q=.2..4`);
-      if (cell.foobarEntryKey === "retiring" && q === 0)
-        assert.ok(!side, "ARRAY-only copy starts at its physical ARRAY position");
-      if (cell.foobarEntryKey === "retiring" && q >= .2)
-        assert.ok(side, `ARRAY-only cohort finishes its exit by q=.2 (sample=${q})`);
-      if (cell.foobarEntryKey === "arriving" && q === .4)
-        assert.ok(side, "MATRIX-only cohort begins fully parked at q=.4");
-      if (cell.foobarEntryKey === "arriving" && q === 1)
-        assert.ok(!side, "MATRIX-only copy reaches its physical MATRIX position");
-      if (cell.foobarEntryKey === "near" && (q === 0 || q === 1))
-        assert.ok(!side, `matched peripheral reaches a visible physical endpoint at q=${q}`);
-    }
-  }
-
-  const sourcePhase = .2, sourceFrame = states.get(sourcePhase);
-  const sourceMembers = ["retiring", "near", "wrap-a"];
-  const cohortOffsetAt = (frame, key, mode, owner) => matrixPosition(frame.matricesByKey.get(key))
-    .sub(endpointBasePosition(mode, owner, frame.frame.q, frame.frame.heading));
-  const sourceOffsets = sourceMembers.map(key => cohortOffsetAt(sourceFrame, key, ARRAY, flight.sourceByKey.get(key)));
-  for (const offset of sourceOffsets) assert.ok(offset.distanceTo(sourceOffsets[0]) < .001,
-    "left-side ARRAY cases across matched and A-only segments share one cohort translation");
-  const sourceStartOffset = cohortOffsetAt(states.get(0), "retiring", ARRAY, flight.sourceByKey.get("retiring"));
-  const sourceMidOffset = cohortOffsetAt(states.get(.1), "retiring", ARRAY, flight.sourceByKey.get("retiring"));
-  assert.ok(sourceStartOffset.length() < .001 && sourceMidOffset.length() > .001 &&
-    sourceMidOffset.length() < sourceOffsets[0].length(), "A-only local translation grows gradually from q=0 to q=.2");
-  const sourceLocal = sourceOffsets[0].clone().applyQuaternion(yawQuaternion(-sourceFrame.frame.heading));
-  assert.ok(sourceLocal.x < 0 && Math.abs(sourceLocal.z) < .001, "left cohort exits along local -X");
-  const sourceCoreZ = localZBounds(sourceFrame.matricesByKey, ["hero", "core-1", "core-2"], sourceFrame.frame.heading);
-  const sourceBackZ = localZBounds(sourceFrame.matricesByKey, ["wrap-b"], sourceFrame.frame.heading);
-  assert.ok(sourceCoreZ.min - sourceBackZ.max >= .059, "ARRAY front cohort clears the core envelope by .06");
-  const sourceBackCell = flight.sourceByKey.get("wrap-b");
-  const sourceBackOffset = matrixPosition(sourceFrame.matricesByKey.get("wrap-b"))
-    .sub(endpointBasePosition(ARRAY, sourceBackCell, sourceFrame.frame.q, sourceFrame.frame.heading))
-    .applyQuaternion(yawQuaternion(-sourceFrame.frame.heading));
-  assert.ok(sourceBackOffset.z < 0 && Math.abs(sourceBackOffset.x) < .001, "front cohort exits along local -Z");
-
-  const matrixPhase = .4, matrixFrame = states.get(matrixPhase);
-  const matrixMembers = ["near", "arriving"];
-  const matrixOffsets = matrixMembers.map(key => cohortOffsetAt(matrixFrame, key, MATRIX, flight.targetByKey.get(key)));
-  assert.ok(matrixOffsets[0].distanceTo(matrixOffsets[1]) < .001,
-    "left-side MATRIX cohort shares one translation across matched and incoming segments");
-  const matrixLocal = matrixOffsets[0].clone().applyQuaternion(yawQuaternion(-matrixFrame.frame.heading));
-  assert.ok(matrixLocal.x < 0 && Math.abs(matrixLocal.z) < .001, "left cohort enters along local -X");
-  const matrixMidOffset = cohortOffsetAt(states.get(.7), "arriving", MATRIX, flight.targetByKey.get("arriving"));
-  const matrixEndOffset = cohortOffsetAt(states.get(1), "arriving", MATRIX, flight.targetByKey.get("arriving"));
-  assert.ok(matrixOffsets[1].length() > .001 && matrixMidOffset.length() > .001 && matrixEndOffset.length() < .001,
-    "M-only translation eases from q=.4 and settles at its MATRIX endpoint");
-  const matrixCoreZ = localZBounds(matrixFrame.matricesByKey, ["hero", "core-1", "core-2"], matrixFrame.frame.heading);
-  const matrixFrontZ = localZBounds(matrixFrame.matricesByKey, ["wrap-b"], matrixFrame.frame.heading);
-  assert.ok(matrixFrontZ.min - matrixCoreZ.max >= .059, "MATRIX rear cohort clears the core envelope by .06");
-  const matrixBackOffset = matrixPosition(matrixFrame.matricesByKey.get("wrap-b"))
-    .sub(endpointBasePosition(MATRIX, flight.targetByKey.get("wrap-b"), matrixFrame.frame.q, matrixFrame.frame.heading))
-    .applyQuaternion(yawQuaternion(-matrixFrame.frame.heading));
-  assert.ok(matrixBackOffset.z > 0 && Math.abs(matrixBackOffset.x) < .001, "rear cohort enters along local +Z");
-});
-
-test("matched peripheral baseline spacing morphs only across q=.2..4", () => {
-  const flight = makeFlight("array", "matrix");
-  const first = flight.plan.find(cell => cell.foobarEntryKey === "near");
-  const second = flight.plan.find(cell => cell.foobarEntryKey === "near-next");
-  const firstRoute = flight.transition.routeFor(first), secondRoute = flight.transition.routeFor(second);
-  assert.equal(firstRoute.core, false);
-  assert.equal(secondRoute.core, false);
-  assert.equal(firstRoute.segment, secondRoute.segment, "adjacent matched cases share one rigid parking segment");
-  for (const q of [.2, .3, .4]) {
-    const frame = advanceToQ(flight, q, .0000001);
-    const delta = matrixPosition(frame.matricesByKey.get("near-next"))
-      .sub(matrixPosition(frame.matricesByKey.get("near")));
-    const phase = smoothstep((q - .2) / .2);
-    const expectedGap = 1 - .38 * phase;
-    close(delta.length(), expectedGap, .002);
-  }
-});
-
-test("one MATRIX cohort keeps matched and M-only multi-column and row spacing through entry", () => {
-  const extraOffsets = {
-    array: [
-      ["cohort-c1-r8", 1, 8], ["cohort-c2-r8", 2, 8], ["cohort-c1-r9", 1, 9],
-    ],
-    matrix: [
-      ["cohort-c1-r8", 1, 8], ["cohort-c2-r8", 2, 8], ["cohort-c1-r9", 1, 9],
-      ["cohort-in-c2-r9", 2, 9], ["cohort-in-c3-r8", 3, 8], ["cohort-in-c3-r9", 3, 9],
-      ["cohort-in-c4-r8", 4, 8],
-    ],
-  };
-  const flight = makeFlight("array", "matrix", { extraOffsets });
-  const pairs = [
-    ["cohort-c1-r8", "cohort-c2-r8", "column"],
-    ["cohort-c2-r8", "cohort-in-c3-r8", "column"],
-    ["cohort-c2-r8", "cohort-in-c2-r9", "row"],
-    ["cohort-in-c3-r8", "cohort-in-c3-r9", "row"],
-  ];
-  assert.equal(flight.transition.routeFor(flight.plan.find(cell => cell.foobarEntryKey === "cohort-c2-r8")).hasArray, true);
-  assert.equal(flight.transition.routeFor(flight.plan.find(cell => cell.foobarEntryKey === "cohort-c2-r8")).hasMatrix, true);
-  assert.equal(flight.transition.routeFor(flight.plan.find(cell => cell.foobarEntryKey === "cohort-in-c3-r8")).hasArray, false);
-  assert.equal(flight.transition.routeFor(flight.plan.find(cell => cell.foobarEntryKey === "cohort-in-c3-r8")).hasMatrix, true);
-
-  for (const q of [.4, .6, .8, 1]) {
-    const frame = advanceToQ(flight, q, .0000001);
-    const heading = yawQuaternion(frame.frame.heading);
-    const column = new THREE.Vector3(MATRIX.spacing.column, 0, 0).applyQuaternion(heading);
-    const row = new THREE.Vector3(0, 0, MATRIX.spacing.row).applyQuaternion(heading);
-    for (const [from, to, axis] of pairs) {
-      const actual = matrixPosition(frame.matricesByKey.get(to)).sub(matrixPosition(frame.matricesByKey.get(from)));
-      const expected = axis === "column" ? column : row;
-      assert.ok(actual.distanceTo(expected) < .0001,
-        `${from}→${to} keeps target ${axis} spacing at q=${q} with shared rig yaw`);
+test("resident boxes never leave and every shared/loop actor follows the same deploymentStep", () => {
+  const flights = [makeFlight("array", "matrix"), makeFlight("matrix", "array")];
+  const qSamples = Array.from({ length: 21 }, (_, index) => index / 20);
+  for (const flight of flights) {
+    const residentIds = assertResidentRoutes(flight);
+    const sourceIds = new Set(flight.sourceSamples.map(sample => sample.cell.motionId));
+    const sourceStart = renderState(flight);
+    const visibleResidentIds = new Set([...sourceIds].filter(id => residentIds.has(id) && sourceStart.sides.get(id) === undefined));
+    assert.equal(visibleResidentIds.size, residentIds.size, "every existing resident starts fully in view");
+    const sampleOrder = flight.sourceName === "array" ? qSamples : [...qSamples].reverse();
+    for (const q of sampleOrder) {
+      const state = advanceToQ(flight, q, .0000001);
+      assertAllActorsPresentAndOpaque(flight, state, `${flight.sourceName}→${flight.targetName} q=${q}`);
+      assertDirectLatticePath(flight, state);
+      assertNoCaseOverlaps(state, `${flight.sourceName}→${flight.targetName} q=${q}`);
+      for (const id of visibleResidentIds) assert.equal(state.sides.get(id), undefined,
+        `resident ${id} remains in view at q=${q}`);
+      for (const id of sourceIds) {
+        assert.ok(state.matricesById.has(id), `existing physical occurrence ${id} remains present at q=${q}`);
+      }
+      for (const id of visibleResidentIds) {
+        assert.equal(state.sides.get(id), undefined, `visible source occurrence ${id} does not leave and re-enter at q=${q}`);
+      }
     }
   }
 });
 
 test("a pre-existing hover aligns for .18s at fixed q, then follows the same q-only path in reverse", () => {
   const aligned = makeFlight("array", "matrix", { alignmentLift: .28 });
+  const residentIds = residentActorIds();
   assert.equal(aligned.transition.frame.q, 0);
   assert.equal(aligned.transition.frame.phase, "align");
   assert.equal(aligned.transition.frame.interactionSettling, true);
   const before = renderState(aligned);
-  for (const key of ["hero", "core-1"]) {
-    const sample = aligned.sourceSamples.find(value => value.cell.foobarEntryKey === key);
-    assertMatrixNear(before.matricesByKey.get(key), sample.matrix, .00001, `initial aligned ${key}`);
+  const hoverSample = aligned.sourceSamples.find(sample => sample.cell.lane === ARRAY.selected.lane &&
+    sample.cell.row === ARRAY.selected.row + 1);
+  for (const sample of [aligned.sourceSamples.find(value => value.cell.foobarEntryKey === "hero" &&
+    value.cell.lane === ARRAY.selected.lane && value.cell.row === ARRAY.selected.row), hoverSample]) {
+    assert.ok(sample);
+    assertMatrixNear(before.matricesById.get(sample.cell.motionId), sample.matrix, .00001,
+      `initial interaction alignment ${sample.cell.motionId}`);
   }
   aligned.transition.advance(.1);
   close(aligned.transition.frame.q, 0, 0);
@@ -676,8 +616,8 @@ test("a pre-existing hover aligns for .18s at fixed q, then follows the same q-o
   const reverseFlight = makeFlight("matrix", "array");
   const reverse = advanceToQ(reverseFlight, sampleQ, .0000001);
   close(forward.frame.q, reverse.frame.q, .000001);
-  for (const key of ["hero", "core-1", "core-2", "near", "near-next", "wrap-a", "wrap-b"])
-    assertMatrixNear(forward.matricesByKey.get(key), reverse.matricesByKey.get(key), .015, `aligned q-only ${key}`);
+  for (const id of residentIds)
+    assertMatrixNear(forward.matricesById.get(id), reverse.matricesById.get(id), .015, `aligned q-only ${id}`);
   assertMatrixNear(forward.rack.matrix, reverse.rack.matrix, .015, "aligned q-only rack");
   assert.ok(forward.camera.position.distanceTo(reverse.camera.position) < .0001, "camera path no longer contains elapsed-time residue");
   assert.ok(forward.aim.distanceTo(reverse.aim) < .0001);
@@ -688,8 +628,10 @@ test("a pre-existing hover aligns for .18s at fixed q, then follows the same q-o
   close(aligned.transition.frame.q, q, 0);
   close(aligned.transition.frame.qVelocity, velocity, 0);
   const afterRetarget = renderState(aligned);
-  for (const key of ["hero", "core-1", "near", "near-next"])
-    assertMatrixNear(afterRetarget.matricesByKey.get(key), beforeRetarget.matricesByKey.get(key), .00001, `retarget-stable ${key}`);
+  for (const cell of aligned.plan) {
+    const id = aligned.transition.occurrenceId(cell);
+    assertMatrixNear(afterRetarget.matricesById.get(id), beforeRetarget.matricesById.get(id), .00001, `retarget-stable ${id}`);
+  }
   assert.ok(afterRetarget.camera.position.distanceTo(beforeRetarget.camera.position) < .00001);
 });
 
@@ -724,64 +666,75 @@ test("responsive ARRAY span feeds a wider MATRIX span for Future, Punk and portr
   assert.ok(portrait.effectiveSpan > 0, "portrait ARRAY framing feeds a finite MATRIX span");
 });
 
-test("1000 and 4000 entry pure-logic unions preserve every source and target owner in both directions", () => {
-  for (const size of [1000, 4000]) {
-    assertLargeUnion(size, "array");
-    assertLargeUnion(size, "matrix");
+test("resident MATRIX framing fits every case across four finite columns", () => {
+  const points = [];
+  for (let column = -2; column < 2; column++) for (let row = 0; row < GRID_ROWS; row++) {
+    const cell = { lane: MATRIX.selected.lane + column, row: GRID_FIRST_ROW + row + 20, foobarEntryKey: `frame-${column}-${row}` };
+    const matrix = endpointMatrix(MATRIX, cell);
+    points.push(...transformedCorners(matrix));
+  }
+  const distance = MUSIC_MATRIX_VIEW.distance;
+  const fullClip = { minX: -.96, maxX: .96, minY: -.94, maxY: .94 };
+  const punkClip = { minX: -.96, maxX: .36, minY: -.94, maxY: .94 };
+  const cases = [
+    { name: "fullcanvas 1920x1080", aspect: 1920 / 1080, clip: fullClip },
+    { name: "Punk 1920x1080", aspect: 1920 / 1080, clip: punkClip },
+    { name: "fullcanvas portrait 390x844", aspect: 390 / 844, clip: fullClip },
+    { name: "Punk portrait 390x844", aspect: 390 / 844, clip: punkClip },
+  ];
+  for (const viewport of cases) {
+    const fitted = musicMatrixResidentFrame(MATRIX.aim.clone(), outward(MATRIX), MATRIX_OVERVIEW_SPAN,
+      viewport.aspect, points, viewport.clip);
+    const camera = new THREE.PerspectiveCamera(34, viewport.aspect, .1, 300);
+    camera.position.copy(fitted.aim).addScaledVector(outward(MATRIX), distance);
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(fitted.span / (2 * distance)));
+    camera.lookAt(fitted.aim);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    for (const point of points) {
+      const ndc = point.clone().project(camera);
+      assert.ok(ndc.x >= viewport.clip.minX - .01 && ndc.x <= viewport.clip.maxX + .01 &&
+        ndc.y >= viewport.clip.minY - .01 && ndc.y <= viewport.clip.maxY + .01,
+      `${viewport.name}: case must stay inside clip ${JSON.stringify(viewport.clip)}, got ${ndc.toArray()}`);
+    }
+    assert.ok(fitted.span >= MATRIX_OVERVIEW_SPAN, `${viewport.name}: fitted span must not shrink the source frame`);
   }
 });
 
-test("settled MATRIX owners rebind immediately and reverse back to the original ARRAY physical cells", () => {
+test("settled endpoints rebind shared actors to the selected-offset physical cells", () => {
   const forward = makeFlight("array", "matrix");
   moveToSettled(forward);
-  const matrixSamples = [];
+  assert.deepEqual(forward.transition.endpointSelection, MATRIX.selected);
+  const laneOffset = MATRIX.selected.lane - ARRAY.selected.lane;
+  const rowOffset = MATRIX.selected.row - ARRAY.selected.row;
+  const targetMatrixOwners = new Set();
   for (const cell of forward.plan) {
+    const route = forward.transition.routeFor(cell);
+    if (!route?.hasMatrix) continue;
     const owner = forward.transition.endpointCell(cell);
-    if (!owner) continue;
-    const matrix = forward.targetMatrices.get(owner.foobarEntryKey)?.clone();
-    assert.ok(matrix, `normal MATRIX owner has a cached pose for ${owner.foobarEntryKey}`);
-    matrixSamples.push({ cell: { ...owner }, matrix, restMatrix: matrix.clone(), alpha: 1, tint: 0 });
+    assert.ok(owner, `MATRIX occurrence ${forward.transition.occurrenceId(cell)} has an endpoint owner`);
+    assert.deepEqual(owner, {
+      lane: route.arrayCell.lane + laneOffset, row: route.arrayCell.row + rowOffset,
+      foobarEntryKey: cell.foobarEntryKey,
+    });
+    targetMatrixOwners.add(cellSignature(owner));
   }
-  const selected = forward.transition.endpointSelection;
-  assert.deepEqual(selected, forward.targetSelected);
+  assert.equal(targetMatrixOwners.size, GRID_COLUMNS * GRID_ROWS * 2);
 
-  const reverse = makeFlightFromSamples(matrixSamples, selected, MATRIX, ARRAY);
+  const reverse = makeFlight("matrix", "array");
   moveToSettled(reverse);
   assert.deepEqual(reverse.transition.endpointSelection, ARRAY.selected);
+  const restored = new Set();
   for (const cell of reverse.plan) {
+    const route = reverse.transition.routeFor(cell);
+    if (!route?.resident) continue;
     const owner = reverse.transition.endpointCell(cell);
-    if (!reverse.targetByKey.has(cell.foobarEntryKey)) continue;
-    assert.deepEqual(owner, reverse.targetByKey.get(cell.foobarEntryKey));
+    assert.ok(owner, `ARRAY resident ${reverse.transition.occurrenceId(cell)} restores a physical cell`);
+    assert.deepEqual(owner, { lane: route.arrayCell.lane, row: route.arrayCell.row, foobarEntryKey: cell.foobarEntryKey });
+    restored.add(cellSignature(owner));
   }
+  assert.equal(restored.size, GRID_COLUMNS * GRID_ROWS);
 });
-
-function makeFlightFromSamples(sourceSamples, sourceSelected, sourceMode, targetMode) {
-  const sourceCamera = cameraEnd(sourceMode), targetCamera = cameraEnd(targetMode);
-  const targetCells = [...modeCells(targetMode), { lane: -10000, row: -10000 }], targetSelected = { ...targetMode.selected };
-  const targetByKey = new Map(targetCells.filter(cell => cell.foobarEntryKey).map(cell => [cell.foobarEntryKey, cell]));
-  const transition = new MusicLayoutTransition();
-  const sourceSelectedMatrix = sourceSamples.find(sample => sample.cell.foobarEntryKey === "hero").matrix;
-  transition.begin(sourceSamples, sourceSelected, sourceSelectedMatrix, sourceCamera.camera, sourceCamera.aim,
-    sourceMode.spacing, targetMode === ARRAY, 4.45, -4.6, Number(sourceMode === ARRAY), new Map(), CENTER,
-    sourceSelectedMatrix, { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray() });
-  const plan = transition.bindCells(targetCells, targetSelected, targetMode.spacing.row,
-    cell => targetByKey.has(cell.foobarEntryKey), new Map());
-  const targetHero = endpointMatrix(targetMode, targetSelected, true);
-  transition.prepareTarget(matrixPosition(targetHero));
-  const targetMatrices = new Map();
-  for (const cell of plan) {
-    const matrix = endpointMatrix(targetMode, targetByKey.get(cell.foobarEntryKey) ?? cell, cell.foobarEntryKey === "hero");
-    if (cell.foobarEntryKey && targetByKey.has(cell.foobarEntryKey)) targetMatrices.set(cell.foobarEntryKey, matrix.clone());
-    transition.primeTarget(cell, matrix, transition.isSelected(cell));
-  }
-  assert.equal(transition.targetsReady, true);
-  const camera = sourceCamera.camera.clone(), aim = sourceCamera.aim.clone();
-  transition.applyCamera(camera, aim, targetCamera.position, targetCamera.aim, targetCamera.span);
-  return { transition, sourceName: sourceMode === ARRAY ? "array" : "matrix", targetName: targetMode === ARRAY ? "array" : "matrix",
-    sourceMode, targetMode, sourceSelected: { ...sourceSelected }, targetSelected, sourceCells: sourceSamples.map(s => s.cell),
-    targetCells, sourceByKey: new Map(sourceSamples.map(s => [s.cell.foobarEntryKey, s.cell])), targetByKey,
-    sourceCamera, targetCamera, camera, aim, plan, targetMatrices };
-}
 
 function assertFiniteCamera(camera, aim) {
   assert.ok(camera.position.toArray().every(Number.isFinite));

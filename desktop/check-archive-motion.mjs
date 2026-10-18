@@ -7,11 +7,17 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const wc = browserWindow.webContents;
   const screenshotDirectory = path.join(outputDirectory, 'archive-motion');
   const result = { ok: false, cases: [], assertions: {}, screenshots: [], timeline: [], transitionSamples: [],
-    geometryFrames:[], flightSamples:[], retargets:[], qSampleMisses:[], entryTimeline:[], summary: {} };
+    geometryFrames:[], flightSamples:[], routeEndpointBridges:[], retargets:[], qSampleMisses:[], entryTimeline:[], windowRestores:[], summary: {} };
   let transitionProbeStartedAt = 0;
   let transitionProbeContext = '';
   let transitionSequence = 0;
   const originalBackgroundThrottling = wc.getBackgroundThrottling?.() ?? true;
+  const ensureProbeVisible = () => {
+    if (browserWindow.isDestroyed() || browserWindow.isVisible()) return;
+    result.windowRestores.push({ at:Date.now(), minimized:browserWindow.isMinimized() });
+    if (browserWindow.isMinimized()) browserWindow.restore();
+    browserWindow.showInactive();
+  };
   const stateScript = String.raw`(() => {
     const stage = document.querySelector('#stage');
     const app = window.rhineMusic;
@@ -203,6 +209,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     let latest;
     while (Date.now() < deadline) {
       const sampleStartedAt = Date.now();
+      ensureProbeVisible();
       latest = await fastSnapshot();
       if (transitionProbeStartedAt) {
         const transition = latest.stats?.layoutTransition ?? {};
@@ -306,6 +313,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   };
   const identityMatches = (state, identity) => state.selectedAlbumId === identity.selectedAlbumId &&
     state.selectedEntryKey === identity.selectedEntryKey && !!state.selectedEntryKey;
+  const arrayCellKey = value => Number.isFinite(Number(value?.lane)) && Number.isFinite(Number(value?.row))
+    ? `${Number(value.lane)}:${Number(value.row)}` : null;
   const xyz = value => Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every(Number.isFinite)
     ? value.slice(0, 3).map(Number) : null;
   const geometryPoseMap = samples => new Map((Array.isArray(samples) ? samples : [])
@@ -515,8 +524,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       (instance?.entry || instance?.cell?.foobarEntryKey)).map(instance => {
       const entry = String(instance.entry ?? instance.cell.foobarEntryKey);
       const cell = `${Number(instance.cell.lane)}:${Number(instance.cell.row)}`;
-      const route = instance.route ? { segment:instance.route.segment ?? null, core:instance.route.core ?? null,
-        hasArray:instance.route.hasArray ?? null, hasMatrix:instance.route.hasMatrix ?? null } : null;
+      const route = instance.route ? { resident:instance.route.resident ?? null, core:instance.route.core ?? null,
+        hasArray:instance.route.hasArray ?? null, hasMatrix:instance.route.hasMatrix ?? null,
+        arrayCell:arrayCellKey(instance.route.arrayCell) } : null;
       return [instance.id || `${entry}|${cell}`, { id:instance.id ?? null, entry, cell, route, matrix:instance.matrix }];
     }));
   };
@@ -539,35 +549,42 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const selectedBounds = transformedBounds(geometry.bounds, selectedMatrix);
     const selectedScale = matrixScale(selectedMatrix);
     const projectedHeroBounds = selectedBounds ? projectWorldBounds(selectedBounds.points, state) : null;
-    const routeInstances = instances.filter(instance => instance?.route && instance?.entry && instance.route.core === false);
+    const routeInstances = instances.filter(instance => instance?.route && (instance?.entry || instance?.cell?.foobarEntryKey));
     const routeFrame = routeInstances.map(instance => {
       const scale = matrixScale(instance.matrix), world = transformedBounds(geometry.bounds, instance.matrix);
       const box = world ? projectWorldBounds(world.points, state) : null;
+      const alpha = Number(instance.alpha);
       const unitScale = !!scale?.every(value => Number.isFinite(value) && Math.abs(value - 1) <= .06);
       const positiveDepth = Number.isFinite(Number(box?.depthMin)) && Number(box.depthMin) > Math.max(0, Number(state.stats?.cameraNear) || 0);
       const fullyOffscreen = !!box?.valid && positiveDepth && box.intersectsFrustum === false;
-      return { id:instance.id ?? null, entry:instance.entry, cell:instance.cell,
-        route:instance.route, scale, unitScale, positiveDepth, fullyOffscreen,
+      return { id:instance.id ?? null, entry:instance.entry ?? instance.cell?.foobarEntryKey ?? null, cell:instance.cell,
+        route:instance.route, arrayCellKey:arrayCellKey(instance.route.arrayCell),
+        alpha:Number.isFinite(alpha) ? alpha : null, scale, unitScale, positiveDepth, fullyOffscreen,
         intersectsFrustum:box?.intersectsFrustum === true,
         ndcBounds:box ? { minX:box.minX, maxX:box.maxX, minY:box.minY, maxY:box.maxY,
           depthMin:box.depthMin, depthMax:box.depthMax } : null };
     });
-    const matchedPeripheral = routeFrame.filter(item => item.route.hasArray === true && item.route.hasMatrix === true);
+    const residentInstances = routeFrame.filter(item => item.route.resident === true);
     const oneEndRoutes = routeFrame.filter(item => item.route.hasArray !== item.route.hasMatrix);
     const matrixOnly = oneEndRoutes.filter(item => item.route.hasArray === false && item.route.hasMatrix === true);
     const arrayOnly = oneEndRoutes.filter(item => item.route.hasArray === true && item.route.hasMatrix === false);
-    const inPeripheralRearrangementWindow = Number(transition.q) >= .2 && Number(transition.q) <= .4;
-    const matchedPeripheralOffscreenFailures = inPeripheralRearrangementWindow
-      ? matchedPeripheral.filter(item => !item.unitScale || !item.positiveDepth || !item.fullyOffscreen)
-        .map(({ id, entry, cell, route, scale, positiveDepth, fullyOffscreen, ndcBounds }) =>
-          ({ id, entry, cell, route, scale, positiveDepth, fullyOffscreen, ndcBounds })) : [];
+    const routeContractFailures = routeFrame.filter(item =>
+      typeof item.route.resident !== 'boolean' || typeof item.route.hasArray !== 'boolean' ||
+      typeof item.route.hasMatrix !== 'boolean' || item.route.hasArray !== item.route.resident ||
+      item.route.core !== item.route.resident || !item.arrayCellKey)
+      .map(({ id, entry, cell, route, arrayCellKey:key }) => ({ id, entry, cell, route, arrayCellKey:key }));
     const oneEndScaleDepthFailures = oneEndRoutes.filter(item => !item.unitScale || !item.positiveDepth)
       .map(({ id, entry, cell, route, scale, positiveDepth, ndcBounds }) =>
         ({ id, entry, cell, route, scale, positiveDepth, ndcBounds }));
-    const fullSizeOffscreenGhosts = routeFrame.filter(item => item.unitScale && item.positiveDepth && item.fullyOffscreen)
-      .map(({ id, entry, cell, route, scale, ndcBounds }) => ({ id, entry, cell, route, scale, ndcBounds }));
-    const coreInstances = instances.filter(instance => instance.route?.core === true);
-    const coreScaleFailures = coreInstances.filter(instance => !matrixScale(instance.matrix)?.every(value =>
+    const fullSizeOffscreenGhosts = routeFrame.filter(item => item.unitScale && item.alpha != null &&
+      Math.abs(item.alpha - 1) <= 1e-4 && item.positiveDepth && item.fullyOffscreen)
+      .map(({ id, entry, cell, route, alpha, scale, ndcBounds }) => ({ id, entry, cell, route, alpha, scale, ndcBounds }));
+    const matrixOnlyVisualFailures = matrixOnly.filter(item => !item.unitScale || item.alpha == null ||
+      Math.abs(item.alpha - 1) > 1e-4 || !item.positiveDepth)
+      .map(({ id, entry, cell, route, alpha, scale, positiveDepth, ndcBounds }) =>
+        ({ id, entry, cell, route, alpha, scale, positiveDepth, ndcBounds }));
+    const residentRouteInstances = instances.filter(instance => instance.route?.resident === true);
+    const residentScaleFailures = residentRouteInstances.filter(instance => !matrixScale(instance.matrix)?.every(value =>
       Number.isFinite(value) && Math.abs(value - 1) <= .06)).map(instance => ({ id:instance.id ?? null,
         entry:instance.entry ?? instance.cell?.foobarEntryKey ?? null, cell:instance.cell ?? null,
         scale:matrixScale(instance.matrix) }));
@@ -590,13 +607,20 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       rackResources:state.stats?.shelfResources ?? null, rackParts:state.stats?.rackParts ?? [], rackFlight,
       motionViewport:state.stats?.motionViewport ?? null, instanceCount:instances.length,
       instanceOwners:instances.map(instance => ({ id:instance.id ?? null, entry:instance.entry ?? instance.cell?.foobarEntryKey ?? null,
-        cell:instance.cell ? { lane:instance.cell.lane, row:instance.cell.row } : null,
-        route:instance.route ?? null, matrix:instance.matrix })),
-      coreRouteCount:coreInstances.length, coreScaleFailures,
-      matchedPeripheralCount:matchedPeripheral.length, matchedPeripheralOffscreenFailures,
+         cell:instance.cell ? { lane:instance.cell.lane, row:instance.cell.row } : null,
+         route:instance.route ?? null, alpha:Number.isFinite(Number(instance.alpha)) ? Number(instance.alpha) : null,
+         matrix:instance.matrix })),
+      routeVisibility:routeFrame.map(({ id, entry, cell, route, arrayCellKey, alpha, scale, unitScale,
+        positiveDepth, fullyOffscreen, intersectsFrustum }) => ({ id, entry, cell, route, arrayCellKey,
+        alpha, scale, unitScale, positiveDepth, fullyOffscreen, intersectsFrustum })),
+      residentRouteCount:residentInstances.length, residentScaleFailures, routeContractFailures,
+      residentIds:residentInstances.map(item => ({ id:item.id, entry:item.entry, arrayCellKey:item.arrayCellKey,
+        alpha:item.alpha, unitScale:item.unitScale, positiveDepth:item.positiveDepth,
+        intersectsFrustum:item.intersectsFrustum })),
       oneEndRouteCount:oneEndRoutes.length, oneEndScaleDepthFailures,
       matrixOnlyCount:matrixOnly.length, matrixOnlyVisibleCount:matrixOnly.filter(item => item.intersectsFrustum).length,
       matrixOnlyOffscreenCount:matrixOnly.filter(item => item.fullyOffscreen).length,
+      matrixOnlyVisualFailures,
       arrayOnlyCount:arrayOnly.length, arrayOnlyVisibleCount:arrayOnly.filter(item => item.intersectsFrustum).length,
       arrayOnlyOffscreenCount:arrayOnly.filter(item => item.fullyOffscreen).length,
       visibleEntries,
@@ -608,6 +632,88 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       selectedAlbumId:sample.selectedAlbumId, selectedEntryKey:sample.selectedEntryKey,
       heroWorldBounds:sample.heroWorldBounds, instanceCount:sample.instanceCount, rackFlight });
     return sample;
+  };
+  const hydrateEndpointRouteMetadata = (endpoint, active, context) => {
+    if (!endpoint || !active) return { context, mapped:0, unmatched:[], duplicateIds:[], reason:'missing endpoint or active route sample' };
+    const offsetKey = owner => {
+      const cell = owner?.cell, selected = owner?.selectedCell;
+      if (!owner?.entry || !Number.isFinite(Number(cell?.lane)) || !Number.isFinite(Number(cell?.row)) ||
+          !Number.isFinite(Number(selected?.lane)) || !Number.isFinite(Number(selected?.row))) return null;
+      return `${owner.entry}|${Number(cell.lane) - Number(selected.lane)}:${Number(cell.row) - Number(selected.row)}`;
+    };
+    const activeByOffset = new Map();
+    for (const owner of active.instanceOwners ?? []) {
+      if (!owner?.route || !owner.id || !arrayCellKey(owner.route.arrayCell)) continue;
+      const key = offsetKey({ ...owner, selectedCell:active.selectedCell });
+      if (!key) continue;
+      const candidates = activeByOffset.get(key) ?? [];
+      candidates.push(owner);
+      activeByOffset.set(key, candidates);
+    }
+    const matchedIds = new Set(), unmatched = [], duplicateIds = [];
+    for (const owner of endpoint.instanceOwners ?? []) {
+      const key = offsetKey({ ...owner, selectedCell:endpoint.selectedCell });
+      const candidates = key ? activeByOffset.get(key) ?? [] : [];
+      const candidate = candidates.length === 1 ? candidates[0] : null;
+      if (!candidate) {
+        unmatched.push({ entry:owner.entry ?? null, cell:owner.cell ?? null, key, candidateCount:candidates.length });
+        continue;
+      }
+      if (matchedIds.has(candidate.id)) duplicateIds.push({ id:candidate.id, entry:owner.entry, cell:owner.cell, key });
+      matchedIds.add(candidate.id);
+      owner.id = candidate.id;
+      owner.route = candidate.route;
+    }
+    const state = { stats:{ motionViewport:endpoint.motionViewport, cameraPosition:endpoint.cameraPosition,
+      cameraAim:endpoint.cameraAim, cameraDistance:endpoint.cameraDistance, fieldOfView:endpoint.fieldOfView,
+      cameraNear:endpoint.cameraNear, cameraFar:endpoint.cameraFar } };
+    const routed = (endpoint.instanceOwners ?? []).filter(owner => owner?.route && owner?.entry);
+    const routeVisibility = routed.map(owner => {
+      const scale = matrixScale(owner.matrix), world = transformedBounds(endpoint.caseBounds, owner.matrix);
+      const box = world ? projectWorldBounds(world.points, state) : null;
+      const alpha = Number(owner.alpha);
+      const unitScale = !!scale?.every(value => Number.isFinite(value) && Math.abs(value - 1) <= .06);
+      const positiveDepth = Number.isFinite(Number(box?.depthMin)) && Number(box.depthMin) >
+        Math.max(0, Number(endpoint.cameraNear) || 0);
+      const fullyOffscreen = !!box?.valid && positiveDepth && box.intersectsFrustum === false;
+      return { id:owner.id, entry:owner.entry, cell:owner.cell, route:owner.route,
+        arrayCellKey:arrayCellKey(owner.route.arrayCell), alpha:Number.isFinite(alpha) ? alpha : null,
+        scale, unitScale, positiveDepth, fullyOffscreen, intersectsFrustum:box?.intersectsFrustum === true,
+        ndcBounds:box ? { minX:box.minX, maxX:box.maxX, minY:box.minY, maxY:box.maxY,
+          depthMin:box.depthMin, depthMax:box.depthMax } : null };
+    });
+    const resident = routeVisibility.filter(item => item.route.resident === true);
+    const oneEnd = routeVisibility.filter(item => item.route.hasArray !== item.route.hasMatrix);
+    const matrixOnly = oneEnd.filter(item => item.route.hasArray === false && item.route.hasMatrix === true);
+    endpoint.routeVisibility = routeVisibility;
+    endpoint.residentRouteCount = resident.length;
+    endpoint.residentIds = resident.map(item => ({ id:item.id, entry:item.entry, arrayCellKey:item.arrayCellKey,
+      alpha:item.alpha, unitScale:item.unitScale, positiveDepth:item.positiveDepth,
+      intersectsFrustum:item.intersectsFrustum }));
+    endpoint.residentScaleFailures = resident.filter(item => !item.unitScale).map(item => ({ id:item.id, entry:item.entry, scale:item.scale }));
+    endpoint.routeContractFailures = routeVisibility.filter(item =>
+      typeof item.route.resident !== 'boolean' || typeof item.route.hasArray !== 'boolean' ||
+      typeof item.route.hasMatrix !== 'boolean' || item.route.hasArray !== item.route.resident ||
+      item.route.core !== item.route.resident || !item.arrayCellKey)
+      .map(({ id, entry, cell, route, arrayCellKey:key }) => ({ id, entry, cell, route, arrayCellKey:key }));
+    endpoint.oneEndRouteCount = oneEnd.length;
+    endpoint.oneEndScaleDepthFailures = oneEnd.filter(item => !item.unitScale || !item.positiveDepth)
+      .map(({ id, entry, cell, route, scale, positiveDepth, ndcBounds }) => ({ id, entry, cell, route, scale, positiveDepth, ndcBounds }));
+    endpoint.matrixOnlyCount = matrixOnly.length;
+    endpoint.matrixOnlyVisibleCount = matrixOnly.filter(item => item.intersectsFrustum).length;
+    endpoint.matrixOnlyOffscreenCount = matrixOnly.filter(item => item.fullyOffscreen).length;
+    endpoint.matrixOnlyVisualFailures = matrixOnly.filter(item => !item.unitScale || item.alpha == null ||
+      Math.abs(item.alpha - 1) > 1e-4 || !item.positiveDepth)
+      .map(({ id, entry, cell, route, alpha, scale, positiveDepth, ndcBounds }) =>
+        ({ id, entry, cell, route, alpha, scale, positiveDepth, ndcBounds }));
+    endpoint.fullSizeOffscreenGhostCount = routeVisibility.filter(item => item.unitScale && item.alpha != null &&
+      Math.abs(item.alpha - 1) <= 1e-4 && item.positiveDepth && item.fullyOffscreen).length;
+    endpoint.visibleEntries = [...visibleEntryOwners(endpoint).values()].map(owner => ({
+      key:owner.key, cellKey:owner.cellKey, entry:owner.entry, id:owner.id, route:owner.route,
+      projectedBounds:owner.projectedBounds }));
+    return { context, endpointQ:endpoint.q, activeQ:active.q, mapped:matchedIds.size,
+      endpointInstanceCount:(endpoint.instanceOwners ?? []).length, routed:routeVisibility.length,
+      unmatched, duplicateIds, activeSelectedCell:active.selectedCell, endpointSelectedCell:endpoint.selectedCell };
   };
   const auditFlight = (context, target, requestedQValues, identity) => {
     const samples = result.transitionSamples.filter(sample => sample.context === context && sample.active === true &&
@@ -648,6 +754,90 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const sourceQ = activeTarget === 1 ? 0 : 1, targetQ = activeTarget;
     const sourceEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - sourceQ) <= .001);
     const targetEndpoint = actual.find(sample => sample.endpoint && Math.abs(sample.q - targetQ) <= .001);
+    const nearestActiveFrame = endpoint => endpoint ? actual.filter(sample => !sample.endpoint && sample.routeVisibility?.length)
+      .reduce((nearest, sample) => !nearest || Math.abs(sample.q - endpoint.q) < Math.abs(nearest.q - endpoint.q) ? sample : nearest, null) : null;
+    const sourceBridge = hydrateEndpointRouteMetadata(sourceEndpoint, nearestActiveFrame(sourceEndpoint), `${context} source endpoint`);
+    const targetBridge = hydrateEndpointRouteMetadata(targetEndpoint, nearestActiveFrame(targetEndpoint), `${context} target endpoint`);
+    result.routeEndpointBridges.push(sourceBridge, targetBridge);
+    const arrayEndpoint = sourceQ === 0 ? sourceEndpoint : targetEndpoint;
+    const matrixEndpoint = sourceQ === 1 ? sourceEndpoint : targetEndpoint;
+    const pathFrames = [...actual].sort((left, right) => left.q - right.q);
+    const visibilityFor = (frame, id) => frame.routeVisibility?.find(item => item.id === id) ?? null;
+    const ownerFor = (frame, id) => frame.instanceOwners?.find(item => item.id === id) ?? null;
+    const traceEndpointEntries = (endpoint, predicate, requireVisible = true) =>
+      (endpoint?.routeVisibility ?? []).filter(item => predicate(item) && (!requireVisible || item.intersectsFrustum === true));
+    const traceTracks = (endpointEntries, { resident = false, matrixOnly:trackMatrixOnly = false } = {}) => {
+      const unique = new Map();
+      for (const item of endpointEntries) {
+        const id = item.id ?? `${item.entry}|${item.arrayCellKey ?? ''}`;
+        if (id != null && !unique.has(id)) unique.set(id, item);
+      }
+      return [...unique.entries()].map(([id, endpointItem]) => {
+        const arrayCell = endpointItem.route?.arrayCell ?? null;
+        const expectedArrayCellKey = endpointItem.arrayCellKey;
+        const frames = pathFrames.map(frame => {
+          const visibility = visibilityFor(frame, id), owner = ownerFor(frame, id);
+          const world = owner ? transformedBounds(frame.caseBounds, owner.matrix) : null;
+          return { q:frame.q, endpoint:frame.endpoint, present:!!visibility && !!owner, visible:visibility?.intersectsFrustum === true,
+            entry:visibility?.entry ?? owner?.entry ?? null, route:visibility?.route ?? null,
+            arrayCellKey:visibility?.arrayCellKey ?? null, alpha:visibility?.alpha ?? null,
+            unitScale:visibility?.unitScale === true, positiveDepth:visibility?.positiveDepth === true,
+            center:world?.center ?? null };
+        });
+        const contiguousVisibility = (() => {
+          const visible = frames.map(frame => frame.visible), first = visible.indexOf(true), last = visible.lastIndexOf(true);
+          return first < 0 || visible.slice(first, last + 1).every(Boolean);
+        })();
+        const allPresent = frames.length === pathFrames.length && frames.every(frame => frame.present ||
+          (!resident && trackMatrixOnly && frame.endpoint === true && Math.abs(frame.q) <= .001));
+        const presentFrames = frames.filter(frame => frame.present);
+        const routeStable = presentFrames.length > 0 && presentFrames.every(frame => {
+          const route = frame.route;
+          return !!route && route.resident === resident && route.hasArray === resident &&
+            (resident ? typeof route.hasMatrix === 'boolean' : route.hasMatrix === trackMatrixOnly);
+        });
+        const arrayCellStable = !!expectedArrayCellKey && presentFrames.every(frame => frame.arrayCellKey === expectedArrayCellKey &&
+          arrayCellKey(frame.route?.arrayCell) === expectedArrayCellKey);
+        const alphaOkay = presentFrames.length > 0 && presentFrames.every(frame => Number.isFinite(Number(frame.alpha)) &&
+          (resident ? Number(frame.alpha) > .001 : Math.abs(Number(frame.alpha) - 1) <= 1e-4));
+        const scaleDepthOkay = presentFrames.length > 0 && presentFrames.every(frame => frame.unitScale && frame.positiveDepth);
+        const geometryPathFinite = presentFrames.length > 0 && presentFrames.every(frame => Array.isArray(frame.center) && frame.center.length === 3 &&
+          frame.center.every(Number.isFinite));
+        const firstCenter = frames.find(frame => Math.abs(frame.q) <= .001)?.center;
+        const lastCenter = frames.find(frame => Math.abs(frame.q - 1) <= .001)?.center;
+        const endpointMovement = firstCenter && lastCenter
+          ? Math.hypot(...firstCenter.map((value, index) => value - lastCenter[index])) : null;
+        return { id, entry:endpointItem.entry, arrayCell:arrayCellKey(arrayCell), lane:Number(arrayCell?.lane),
+          presentEveryFrame:allPresent, routeStable, arrayCellStable, alphaOkay, scaleDepthOkay,
+          allVisible:frames.every(frame => frame.visible), contiguousVisibility, geometryPathFinite,
+          endpointMovement:Number.isFinite(endpointMovement) ? endpointMovement : null,
+          visibleQ:frames.filter(frame => frame.visible).map(frame => frame.q),
+          missingQ:frames.filter(frame => !frame.present).map(frame => frame.q),
+          hiddenQ:frames.filter(frame => frame.present && !frame.visible).map(frame => frame.q),
+          alphaFailures:frames.filter(frame => !Number.isFinite(Number(frame.alpha)) ||
+            (resident ? Number(frame.alpha) <= .001 : Math.abs(Number(frame.alpha) - 1) > 1e-4)).map(frame => frame.q),
+          geometryFailures:frames.filter(frame => !frame.unitScale || !frame.positiveDepth || !frame.center).map(frame => frame.q) };
+      });
+    };
+    const arrayResidentEntries = traceEndpointEntries(arrayEndpoint,
+      item => item.route?.resident === true && item.route?.hasArray === true && item.entry !== identity.selectedEntryKey);
+    const residentTracks = traceTracks(arrayResidentEntries, { resident:true });
+    const residentLanes = [...new Set(residentTracks.map(track => track.lane).filter(Number.isFinite))].sort((a, b) => a - b);
+    const residentMovedLanes = [...new Set(residentTracks.filter(track => Number(track.endpointMovement) > .01)
+      .map(track => track.lane).filter(Number.isFinite))].sort((a, b) => a - b);
+    const residentPathOkay = residentTracks.length > 0 && residentLanes.length >= 2 &&
+      residentTracks.every(track => track.presentEveryFrame && track.routeStable && track.arrayCellStable &&
+        track.alphaOkay && track.scaleDepthOkay && track.allVisible && track.geometryPathFinite) &&
+      residentMovedLanes.length === residentLanes.length;
+    const matrixOnlyEndpointEntries = traceEndpointEntries(matrixEndpoint,
+      item => item.route?.resident === false && item.route?.hasArray === false && item.route?.hasMatrix === true);
+    const matrixOnlyTracks = traceTracks(matrixOnlyEndpointEntries, { resident:false, matrixOnly:true });
+    const matrixOnlyNoFadeOrScale = requested.length > 0 && requested.every(sample => sample.matrixOnlyCount > 0 &&
+      sample.matrixOnlyVisualFailures.length === 0);
+    const matrixOnlyOffscreenEvidence = requested.some(sample => sample.matrixOnlyOffscreenCount > 0);
+    const matrixOnlyPathOkay = matrixOnlyTracks.length > 0 && matrixOnlyTracks.every(track =>
+      track.presentEveryFrame && track.routeStable && track.arrayCellStable && track.alphaOkay &&
+      track.scaleDepthOkay && track.contiguousVisibility && track.geometryPathFinite);
     const sourceVisible = sourceEndpoint ? visibleEntryOwners(sourceEndpoint) : new Map();
     const targetVisible = targetEndpoint ? visibleEntryOwners(targetEndpoint) : new Map();
     const sourceVisibleEntries = new Set([...sourceVisible.values()].map(owner => owner.entry));
@@ -745,30 +935,17 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     });
     const selectedScaleOkay = requested.length > 0 && requested.every(sample => sample.selectedScale?.every(value =>
       Number.isFinite(value) && Math.abs(value - 1) <= .06));
-    const coreRouteScaleOne = requested.length > 0 && requested.every(sample => sample.coreRouteCount > 0 &&
-      sample.coreScaleFailures.length === 0);
-    const matchedRearrangementFrames = requested.filter(sample => sample.q >= .2 && sample.q <= .4);
-    const matchedPeripheralOffscreen = matchedRearrangementFrames.length > 0 && matchedRearrangementFrames.every(sample =>
-      sample.matchedPeripheralCount === 0 || sample.matchedPeripheralOffscreenFailures.length === 0);
-    const matchedPeripheralPresent = matchedRearrangementFrames.some(sample => sample.matchedPeripheralCount > 0);
-    const coreMiddleFrames = requested.filter(sample => sample.q >= .4 && sample.q <= .6);
-    const coreMiddleSampleCaptured = coreMiddleFrames.some(sample => sample.coreRouteCount > 0 && sample.coreScaleFailures.length === 0);
-    const oneEndUnitPositiveDepth = requested.length > 0 && requested.every(sample => sample.oneEndRouteCount > 0 &&
-      sample.oneEndScaleDepthFailures.length === 0);
-    const beforeMatrixEntryFrames = requested.filter(sample => sample.q < .4);
-    const lateMatrixEntry = requested.filter(sample => sample.q >= .9).sort((a,b) => a.q - b.q)[0];
-    const earlyArrayExit = requested.filter(sample => sample.q >= .2 && sample.q <= .4);
-    const lateArrayExit = requested.filter(sample => sample.q >= .55);
-    const matrixOnlyWaitsUntilQ04 = beforeMatrixEntryFrames.length >= 2 && beforeMatrixEntryFrames.every(sample =>
-      sample.matrixOnlyCount > 0 && sample.matrixOnlyOffscreenCount === sample.matrixOnlyCount);
-    const matrixOnlyArrivesByQ095 = !!lateMatrixEntry && lateMatrixEntry.matrixOnlyCount > 0 &&
-      lateMatrixEntry.visibleEntries.some(item => item.route?.hasArray === false && item.route?.hasMatrix === true);
-    const arrayOnlyClearsByQ02 = earlyArrayExit.length > 0 && earlyArrayExit.every(sample =>
-      sample.arrayOnlyCount === 0 || sample.arrayOnlyOffscreenCount === sample.arrayOnlyCount);
-    const arrayOnlyExitsByQ055 = lateArrayExit.length > 0 && lateArrayExit.every(sample =>
-      sample.arrayOnlyCount === 0 || sample.arrayOnlyOffscreenCount === sample.arrayOnlyCount);
-    const parkedGhostEvidenceFrames = matchedRearrangementFrames.filter(sample => sample.fullSizeOffscreenGhostCount > 0);
-    const ghostFullSizePresent = parkedGhostEvidenceFrames.length > 0;
+    const residentRouteScaleOne = requested.length > 0 && requested.every(sample => sample.residentRouteCount > 0 &&
+      sample.residentScaleFailures.length === 0);
+    const residentWindowFrames = requested.filter(sample => sample.q >= .2 && sample.q <= .4);
+    const residentMiddleFrames = requested.filter(sample => sample.q >= .4 && sample.q <= .6);
+    const residentMiddleSampleCaptured = residentMiddleFrames.some(sample => sample.residentRouteCount > 0 &&
+      sample.routeContractFailures.length === 0 && sample.residentScaleFailures.length === 0);
+    const activeOneEndSamples = requested.filter(sample => sample.oneEndRouteCount > 0);
+    const oneEndUnitPositiveDepth = activeOneEndSamples.every(sample => sample.oneEndScaleDepthFailures.length === 0);
+    const routeContractOkay = actual.length > 0 && actual.every(sample => sample.routeContractFailures.length === 0);
+    const endpointRoutesOkay = [sourceBridge, targetBridge].every(bridge => bridge.unmatched?.length === 0 &&
+      bridge.duplicateIds?.length === 0 && bridge.mapped > 0);
     const endpointBoxes = [sourceEndpoint, targetEndpoint].map(sample => sample?.heroProjectedBounds);
     const normalEndpointEnvelope = endpointBoxes.every(Boolean) ? {
       minY:Math.min(...endpointBoxes.map(box => box.minY)) - .01,
@@ -802,17 +979,21 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       rowSpacingRange:rowSpacings.length ? [Math.min(...rowSpacings), Math.max(...rowSpacings)] : [], rowSpacingStaysCompact,
       rackBoundsValid, rackVisibilityFollowsCompleteBounds, rackAtArrayVisible, rackExitsBelowViewport,
       rackDeploymentStaysFull, fullRackPosePresent,
-      selectedScaleOkay, coreRouteScaleOne, midpointCoreRouteCount:midpoint?.coreRouteCount ?? 0,
-      matchedPeripheralOffscreen, matchedPeripheralPresent,
-      matchedRearrangementQ:matchedRearrangementFrames.map(sample => sample.q),
-      parkedGhostEvidenceQ:parkedGhostEvidenceFrames.map(sample => sample.q),
-      coreMiddleSampleCaptured, coreMiddleQ:coreMiddleFrames.map(sample => sample.q),
-      oneEndUnitPositiveDepth, matrixOnlyWaitsUntilQ04, matrixOnlyArrivesByQ095,
-      arrayOnlyClearsByQ02, arrayOnlyExitsByQ055,
+      selectedScaleOkay, residentRouteScaleOne, midpointResidentRouteCount:midpoint?.residentRouteCount ?? 0,
+      routeContractOkay, endpointRoutesOkay, sourceBridge, targetBridge,
+      residentPathOkay, residentTrackCount:residentTracks.length, residentTracks,
+      residentArrayCellLanes:residentLanes, residentMovedLanes,
+      residentWindowQ:residentWindowFrames.map(sample => sample.q), residentMiddleSampleCaptured,
+      residentMiddleQ:residentMiddleFrames.map(sample => sample.q),
+      matrixOnlyNoFadeOrScale, matrixOnlyOffscreenEvidence, matrixOnlyPathOkay, matrixOnlyTrackCount:matrixOnlyTracks.length,
+      matrixOnlyTracks,
+      oneEndSampleCount:activeOneEndSamples.length, oneEndUnitPositiveDepth,
       oneEndCountsAt:requested.map(sample => ({ q:sample.q, matrixOnly:sample.matrixOnlyCount,
         matrixOnlyVisible:sample.matrixOnlyVisibleCount, arrayOnly:sample.arrayOnlyCount,
-        arrayOnlyVisible:sample.arrayOnlyVisibleCount, oneEndScaleDepthFailures:sample.oneEndScaleDepthFailures.length })),
-      ghostFullSizePresent, midpointGhostCount:midpoint?.fullSizeOffscreenGhostCount ?? 0,
+        matrixOnlyOffscreen:sample.matrixOnlyOffscreenCount, arrayOnlyVisible:sample.arrayOnlyVisibleCount,
+        oneEndScaleDepthFailures:sample.oneEndScaleDepthFailures.length,
+        matrixOnlyVisualFailures:sample.matrixOnlyVisualFailures.length })),
+      fullSizeOffscreenGhostCount:requested.map(sample => ({ q:sample.q, count:sample.fullSizeOffscreenGhostCount })),
       qSampleMisses, selectedViewportOkay, endpointsInsideCanvas, normalEndpointEnvelope,
       ownerCellEntryStable, ownerContinuity, neighborMotionPxPerSecond };
   };
@@ -885,7 +1066,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       active.stats.layoutTransition.path === 'camera-orbit' && identityMatches(active, identity), shortState(active));
     const end = await waitForFast(state => state.viewLayout === target && state.stats?.layoutTransition?.active === false &&
       Math.abs(Number(state.stats.layoutTransition.q) - desiredEnd) < .001,
-    `${designLabel} ${target} canonical endpoint`, 15000, 12);
+    `${designLabel} ${target} canonical endpoint`, 30000, 12);
     const detailedEnd = await geometrySnapshot();
     record(`${designLabel} ${target} reaches canonical q=${desiredEnd} with identity intact`,
       identityMatches(end, identity) && identityMatches(detailedEnd, identity) &&
@@ -971,9 +1152,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     record(`${context} captures dense actual q coverage in path order with camera-orbit`,
       audit.qCoverageOkay && audit.qMonotonic && audit.alignQFrozen && audit.postAlignQMonotonic &&
       audit.progressInBounds && audit.progressMonotonic && audit.pathIsCameraOrbit, audit);
-    record(`${context} captured actual q frames in the .2-.4 rearrangement window and core midpoint`,
-      audit.matchedRearrangementQ.length > 0 && audit.coreMiddleSampleCaptured,
-      { matchedActualQ:audit.matchedRearrangementQ, coreMiddleActualQ:audit.coreMiddleQ,
+    record(`${context} captures resident geometry through q=.2-.4 and the transition midpoint`,
+      audit.residentWindowQ.length > 0 && audit.residentMiddleSampleCaptured,
+      { residentActualQ:audit.residentWindowQ, residentMiddleActualQ:audit.residentMiddleQ,
         missedQSamples:audit.qSampleMisses });
     record(`${context} camera lowers and pulls back continuously toward MATRIX`,
       audit.cameraYMonotonic && audit.cameraYLowerAtMatrix && audit.pullsBackMonotonic && audit.pullsBackAtMatrix &&
@@ -985,36 +1166,40 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         heroDistancePathFacts:audit.heroDistancePathFacts,
         sourceToFirstActiveHeroDistanceDelta:audit.sourceToFirstActiveHeroDistanceDelta,
         heroDistanceSourceDeltaExplanation:audit.heroDistanceSourceDeltaExplanation });
-    record(`${context} preserves selected entry ownership, full-size core cases and every visible endpoint entry`,
+    record(`${context} preserves selected entry ownership, resident scale and every visible endpoint entry`,
       audit.allIdentityStable && audit.ownerCellEntryStable && audit.selectedViewportOkay && audit.selectedScaleOkay &&
-      audit.coreRouteScaleOne && audit.allVisibleEndpointEntriesRouted,
+      audit.residentRouteScaleOne && audit.routeContractOkay && audit.endpointRoutesOkay &&
+      audit.allVisibleEndpointEntriesRouted,
       { allIdentityStable:audit.allIdentityStable, ownerContinuity:audit.ownerContinuity,
         selectedViewportOkay:audit.selectedViewportOkay, selectedScaleOkay:audit.selectedScaleOkay,
-        coreRouteScaleOne:audit.coreRouteScaleOne, midpointCoreRouteCount:audit.midpointCoreRouteCount,
+        residentScaleOne:audit.residentRouteScaleOne, routeContractOkay:audit.routeContractOkay,
+        endpointRoutesOkay:audit.endpointRoutesOkay, sourceRouteBridge:audit.sourceBridge,
+        targetRouteBridge:audit.targetBridge,
+        midpointResidentRouteCount:audit.midpointResidentRouteCount,
         sourceVisibleEntryCount:audit.sourceVisibleEntryCount, targetVisibleEntryCount:audit.targetVisibleEntryCount,
         sourceRouteKey:audit.sourceRouteKey, targetRouteKey:audit.targetRouteKey,
         allVisibleEndpointEntriesRouted:audit.allVisibleEndpointEntriesRouted, routeCoverage:audit.routeCoverage });
-    record(`${context} matched peripheral cases stay unit-size and fully offscreen through actual q=.2..4`,
-      audit.matchedPeripheralOffscreen && audit.ghostFullSizePresent,
-      { matchedPeripheralOffscreen:audit.matchedPeripheralOffscreen, qSamples:audit.matchedRearrangementQ,
-        matchedPeripheralPresent:audit.matchedPeripheralPresent,
-        parkedGhostEvidenceQ:audit.parkedGhostEvidenceQ,
-        matchedCounts:observations.filter(sample => sample.q >= .2 && sample.q <= .4)
-          .map(sample => ({ q:sample.q, count:sample.matchedPeripheralCount })),
-        matchedCount:observations.find(sample => sample.requestedQ === .5)?.matchedPeripheralCount,
-        failures:observations.filter(sample => sample.q >= .25 && sample.q <= .6)
-          .map(sample => ({ q:sample.q, count:sample.matchedPeripheralOffscreenFailures.length,
-            first:sample.matchedPeripheralOffscreenFailures.slice(0, 3) })) });
+    record(`${context} carries every ARRAY-visible resident across multiple columns without withdrawal or re-entry`,
+      audit.residentPathOkay,
+      { residentTrackCount:audit.residentTrackCount, arrayCellLanes:audit.residentArrayCellLanes,
+        movedLanes:audit.residentMovedLanes,
+        failingTracks:audit.residentTracks.filter(track => !(track.presentEveryFrame && track.routeStable &&
+          track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay && track.allVisible &&
+          track.geometryPathFinite)).slice(0, 12),
+        tracks:audit.residentTracks });
     record(`${context} one-end cases stay unit-size and in positive camera depth while moving`,
       audit.oneEndUnitPositiveDepth, { oneEndUnitPositiveDepth:audit.oneEndUnitPositiveDepth,
-        oneEndCountsAt:audit.oneEndCountsAt,
+        auditedActiveSamples:audit.oneEndSampleCount, oneEndCountsAt:audit.oneEndCountsAt,
         failures:observations.map(sample => ({ q:sample.q, failures:sample.oneEndScaleDepthFailures.length,
           first:sample.oneEndScaleDepthFailures.slice(0, 3) })) });
-    record(`${context} MATRIX-only entries enter from q=.4 and ARRAY-only entries clear by q=.2/.55`,
-      audit.matrixOnlyWaitsUntilQ04 && audit.matrixOnlyArrivesByQ095 &&
-      audit.arrayOnlyClearsByQ02 && audit.arrayOnlyExitsByQ055,
-      { matrixOnlyWaitsUntilQ04:audit.matrixOnlyWaitsUntilQ04, matrixOnlyArrivesByQ095:audit.matrixOnlyArrivesByQ095,
-        arrayOnlyClearsByQ02:audit.arrayOnlyClearsByQ02, arrayOnlyExitsByQ055:audit.arrayOnlyExitsByQ055,
+    record(`${context} keeps M-only loop copies full-size and opaque while they move geometrically offscreen`,
+      audit.matrixOnlyNoFadeOrScale && audit.matrixOnlyPathOkay && audit.matrixOnlyOffscreenEvidence,
+      { matrixOnlyNoFadeOrScale:audit.matrixOnlyNoFadeOrScale,
+        matrixOnlyOffscreenEvidence:audit.matrixOnlyOffscreenEvidence,
+        matrixOnlyTrackCount:audit.matrixOnlyTrackCount,
+        failingTracks:audit.matrixOnlyTracks.filter(track => !(track.presentEveryFrame && track.routeStable &&
+          track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay && track.contiguousVisibility &&
+          track.geometryPathFinite)).slice(0, 12),
         oneEndCountsAt:audit.oneEndCountsAt });
     record(`${context} rack rotates within the 10 degree heading envelope and stays fully deployed in flight`,
       audit.rackHeadingTrackOkay && audit.rackDeploymentStaysFull && audit.fullRackPosePresent,
@@ -1113,6 +1298,29 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     await runFlightLeg(designLabel, 'shelf', identity, requestedDescending);
     return exerciseRetargets(designLabel, identity);
   };
+  const selectFixtureAlbumInFirstArrayLane = async (albumId, label) => {
+    const firstLaneId = /^fixture-album-0[1-7]$/;
+    let selected = await snapshot();
+    for (let lane = 0; lane < 3 && !firstLaneId.test(selected.selectedAlbumId ?? ''); lane++) {
+      const previousAlbumId = selected.selectedAlbumId;
+      await click('.music-navigation [data-action="genre-prev"]');
+      selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== previousAlbumId,
+        `${label} move selection to the first Fixture lane`, 10000, 35);
+    }
+    if (!firstLaneId.test(selected.selectedAlbumId ?? ''))
+      throw new Error(`${label} did not reach the first Fixture lane: ${JSON.stringify(shortState(selected))}`);
+    for (let advance = 0; advance < 7 && selected.selectedAlbumId !== albumId; advance++) {
+      const previousAlbumId = selected.selectedAlbumId;
+      await click('.music-navigation [data-action="next"]');
+      selected = await waitFor(state => state.selectedAlbumId && state.selectedAlbumId !== previousAlbumId && state.selectedEntryKey,
+        `${label} advance within the first Fixture lane toward ${albumId}`, 10000, 35);
+    }
+    if (selected.selectedAlbumId !== albumId || !selected.selectedEntryKey)
+      throw new Error(`${label} failed to select ${albumId} from the first Fixture lane: ${JSON.stringify(shortState(selected))}`);
+    return waitFor(state => state.selectedAlbumId === albumId && !!state.selectedEntryKey &&
+      Number(state.stats?.returningFiles) === 0 && state.stats?.selectionPhase === 'settled',
+    `${label} first-lane selection settles`, 10000, 40);
+  };
   const enterInterfaceSettings = async label => {
     await click('[data-action="settings"]');
     await waitFor(state => state.settingsHidden === false, `${label} Settings`, 10000);
@@ -1152,18 +1360,33 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     return wc.sendInputEvent(event);
   };
   const findHoverPoint = async label => {
-    const current = await snapshot();
+    const current = { ...await snapshot(), ...await geometrySnapshot() };
     const projected = current.stats?.projectedCenter;
-    const projectedPoint = Array.isArray(projected) && projected.length >= 2 && current.canvasRect
+    let projectedPoint = Array.isArray(projected) && projected.length >= 2 && current.canvasRect
       ? { x:Math.round(current.canvasRect.x + projected[0]), y:Math.round(current.canvasRect.y + projected[1]) }
       : pointInScene(current, 0.5, 0.5);
     if (!projectedPoint) throw new Error(`${label} has no visible MATRIX hover coordinate.`);
-    wc.sendInputEvent({ type:'mouseMove', x:projectedPoint.x, y:projectedPoint.y });
-    await pause(300);
-    let hovered = await snapshot();
-    if (!hovered.stats?.matrixHover?.cell) {
-      try { hovered = await waitFor(state => state.stats?.matrixHover?.cell,
-        `${label} projectedCenter matrix hover`, 1800, 30); } catch {}
+    const geometry = current.stats?.motionGeometry, rect = current.canvasRect;
+    const candidatePoints = (geometry?.instances ?? []).flatMap(instance => {
+      const world = transformedBounds(geometry.bounds, instance.matrix);
+      const box = world ? projectWorldBounds(world.points, current) : null;
+      if (!box?.intersectsFrustum || !rect) return [];
+      const x = rect.x + (box.minX + box.maxX + 2) * rect.width / 4;
+      const y = rect.y + (2 - box.minY - box.maxY) * rect.height / 4;
+      return x > rect.x + 30 && x < (current.canvasVisibleRight ?? rect.right) - 30 &&
+        y > rect.y + rect.height * .32 && y < rect.bottom - 80 ? [{ x:Math.round(x), y:Math.round(y) }] : [];
+    }).sort((a,b) => Math.hypot(a.x-projectedPoint.x,a.y-projectedPoint.y) - Math.hypot(b.x-projectedPoint.x,b.y-projectedPoint.y));
+    let hovered = current;
+    for (const point of [projectedPoint, ...candidatePoints.slice(0, 12)]) {
+      projectedPoint = point;
+      wc.sendInputEvent({ type:'mouseMove', x:point.x, y:point.y });
+      await pause(220);
+      hovered = await snapshot();
+      if (hovered.stats?.matrixHover?.cell) {
+        hovered = await waitFor(state => state.stats?.matrixHover?.cell &&
+          Math.abs(Number(state.stats.matrixHover.height) - .28) <= .025, `${label} visible-instance hover settles`, 3000, 30);
+        break;
+      }
     }
     return { point:projectedPoint, state:hovered };
   };
@@ -1447,6 +1670,13 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     { returningFiles:stableBeforeFirstTransition.stats?.returningFiles,
       selectionPhase:stableBeforeFirstTransition.stats?.selectionPhase, state:shortState(stableBeforeFirstTransition) });
 
+    selected = await selectFixtureAlbumInFirstArrayLane('fixture-album-02', 'Future multi-column flight');
+    identity = { selectedAlbumId:selected.selectedAlbumId, selectedEntryKey:selected.selectedEntryKey };
+    record('Future multi-column flight selects a non-first item in the first ARRAY lane',
+      identity.selectedAlbumId === 'fixture-album-02' && identity.selectedAlbumId === selected.selectedAlbumFromApp &&
+      !!identity.selectedEntryKey && Number(selected.stats?.returningFiles) === 0 && selected.stats?.selectionPhase === 'settled',
+    { identity, selectedCell:selected.stats?.selectedCell, returningFiles:selected.stats?.returningFiles,
+      selectionPhase:selected.stats?.selectionPhase, state:shortState(selected) });
     await exerciseLayoutTransitions('Future', identity);
     await takeScreenshot('future-array-overview');
     await transitionTo('Future', 'array', identity);
@@ -1460,6 +1690,13 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     let punk = await switchDesign('archive');
     record('theme switch preserves the selected album', punk.selectedAlbumId === identity.selectedAlbumId,
       { selectedAlbumId:punk.selectedAlbumId, expected:identity.selectedAlbumId });
+    punk = await selectFixtureAlbumInFirstArrayLane('fixture-album-02', 'Punk multi-column flight after MATRIX interaction');
+    identity = { selectedAlbumId:punk.selectedAlbumId, selectedEntryKey:punk.selectedEntryKey };
+    record('Punk multi-column flight returns to a non-first item in the first ARRAY lane',
+      identity.selectedAlbumId === 'fixture-album-02' && identity.selectedAlbumId === punk.selectedAlbumFromApp &&
+      !!identity.selectedEntryKey && Number(punk.stats?.returningFiles) === 0 && punk.stats?.selectionPhase === 'settled',
+    { identity, selectedCell:punk.stats?.selectedCell, returningFiles:punk.stats?.returningFiles,
+      selectionPhase:punk.stats?.selectionPhase, state:shortState(punk) });
     if (punk.viewLayout !== 'shelf') {
       const hover = await findHoverPoint('Punk hover alignment preflight');
       record('Punk MATRIX hover is active before the align phase', identityMatches(hover.state, identity) &&

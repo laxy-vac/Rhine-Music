@@ -67,7 +67,9 @@ node scripts/build-source-preview.mjs --interface-only
 
 隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实音频设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
 
-两主题 MATRIX/ARRAY 使用共享固定 q 几何路径，按 entry 和物理副本保留盒体身份；快速反向从当前 q/速度接续，终态恢复原物理坐标后可立即再次切换。纯运动与边界检查为 `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；合成几何检查为 `node scripts/check-archive-geometry.mjs`，报告写入 `.tools/animation-refinement-2026-10-18/check-archive-geometry.json`，覆盖 3 个合成目录、9×48 MATRIX 池中的 9×16 局部窗口及固定盒体尺寸。当前 21 项纯测和 2,652 帧有限几何采样已通过。隔离真实窗口回归命令为 `node desktop/check-startup-entry.cjs --archive-motion`，已通过 193 项检查、9 次转场和 Future ARRAY 的部分展开跳过、自然重播；33 张截图及 21 帧真实盒体矩阵保存在当次 `.tools/archive-motion-2026-10-18/` 目录。测试保留真实前端、合成 PNG 封面与 mock 音频，不扫描个人曲库或连接真实输出设备；有限采样不代表全库、全部盒型或硬件性能验收。Punk 不播放入场。
+两主题 MATRIX/ARRAY 使用共享固定 q 几何路径，全部已有可见列按 entry 和物理槽位保持身份、共同变形；不将非选中列撤走再重入。两模式共用每列 20 槽的规范地址，MATRIX 保留循环浏览与空槽吸附；快速反向沿当前 q/速度接续，终态恢复实际物理坐标和实例所有权。普通 MATRIX 与转场终点共用多列取景，详情和 MATRIX 入场尾段连续衔接；Future ARRAY 已确认的共同槽位入场保持独立。
+
+纯运动及入场回归为 `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；多列、双向路径、循环副本、边界和取景检查为 `node --experimental-strip-types --test scripts/check-layout-flight.mjs`。合成几何检查为 `node scripts/check-archive-geometry.mjs`，报告写入 `.tools/resident-field-2026-10-18/check-archive-geometry.json`，覆盖 3 个合成目录、完整 9×48 MATRIX 池、双向路径及连续反向；当前 3,774 帧采样中未发现盒体 SAT 碰撞。隔离窗口回归命令为 `node desktop/check-startup-entry.cjs --archive-motion`，覆盖 Future/Punk 多列连续可见、额外副本真实离镜、端点衔接、反向、鼠标拖动/悬停，以及 Future ARRAY 部分展开跳过和自然重播；本次 187 项检查通过，49 张截图和 48 帧实际盒体矩阵保存在 `.tools/archive-motion-2026-10-18/desktop-entry-1792308840132-52948/`。测试只使用合成 PNG 封面、独立 profile 和 mock 音频，不扫描个人曲库或连接实际音频设备。有限采样不代表全部盒型、任意视口或硬件性能验收；Punk 不播放入场。
 
 Future 界面音效可用 `node scripts/check-interface-audio.mjs` 验证模拟设备路由、主题/播放互斥、迟到请求取消、WAV 校验及缓存上限。`node desktop/check-interface-audio.cjs` 使用既有 Electron 的隔离隐藏页验证真实离线合成及外部 sink 生命周期，不调用真实音频设备。原生会话检查须在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only` 再执行 `node --test scripts/check-native-output.mjs`；不加此设置的既有套件包含真实设备检查，不能作为默认离线命令。
 
