@@ -1,74 +1,48 @@
 # 当前项目状态
 
-更新：2026-10-18。本文只记录现行实现状态；下一步见[优化基线](OPTIMIZATION-BASELINE.md)，操作见[本地开发](LOCAL-DEVELOPMENT.md)，工作规则见[AGENTS](../AGENTS.md)。
+更新：2026-10-18。当前源码为本仓库 `main`，版本号仍为 `0.3.1-preview.1`。功能代码基线为 `1bef54f`，本轮只整理文档、清退一次性验收入口及其合成产物，不开展运行性能优化。
 
-## 已完成基线
+## 当前交付边界
+
+- 下一阶段只开展启动与运行性能测量、定位和优化，范围见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
+- 当前入场、ARRAY/MATRIX 桥接及 Punk 顶屏效果保留。用户已停止本轮动效设计；保留实现不代表视觉满意，不主动重新设计或移植 Punk 入场。
+- 视觉验收交用户；Agent 做必要构建和与改动直接相关的有限检查。性能改动仍需真实的前后测量，不恢复多轮自动视觉审查或大截图矩阵。
+- 当前源码预览已经过 TypeScript/Vite 构建。旧安装器未重新打包、安装或发布，不代表当前源码。
+
+## 已有功能
 
 | 区域 | 当前能力 |
 | --- | --- |
-| 统一架构 | Future/Punk 共用应用状态、目录、视图、播放和 ArchiveScene/WebGL；共享资源与生命周期，保留主题皮肤及兼容偏好读取 |
-| 专辑浏览 | ARRAY / MATRIX / GRID、SHOW / GROUP / SORT、筛选与分页；两主题 ARRAY→MATRIX 共用镜头转向与几何变化的固定 q 路径，保留原 ARRAY/MATRIX 镜头端点，所有已有可见列连续收紧行距与列距，不撤走后重入，完整货架移出画面；反向沿原路径与当前速度返回，保持 canonical entry 与物理副本身份；MATRIX 按真实列长循环补齐短列，额外副本从已有阵列边缘向外错峰浮起/沉回，已有专辑随同一波面轻抬并归位；MATRIX 鼠标拖动/惯性/悬停；Punk 工具区紧凑收在左上，场景自然衔接右栏；打开、播放、返回和非首曲身份保持一致 |
-| STYLE 外观 | 两主题保留原 Style 视觉与预览；Future LIGHT 可选暖白或 RhineLabUI 原版日间色，双层胶囊原位过渡并保存；日夜、主题色、文字字号、盒体与场景外观各自管理。内部页面值仍为 `theme` |
-| Settings | 固定七类：界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于；界面与交互默认打开，各项控件只在所属类别出现一次 |
-| 显示与性能 | 窗口比例、全屏、渲染画质、优先显卡和性能检测集中在 Settings；减少动态与唱片波动位于界面与交互 |
-| 物理显卡身份 | DXGI 逻辑适配器按物理 PnP 身份归并；偏好同时保存稳定物理身份及会话 LUID，旧偏好只按精确别名迁移，不按型号猜卡 |
-| 播放栏 | 统一上一曲、播放/暂停、下一曲、停止，SHUFFLE ALL 与七种 ORDER；进度上方显示当前歌词，不重复显示 DSP OFF |
-| 歌词 | 首次云端解析、Local/Cloud 真切换、缺本地回退云、手动导入、副本缓存、独立偏移写回、默认跟随播放 |
-| 歌词与信号展示 | 当前行、盒体与播放资料同步；32 段真实频谱的帧间平滑和需求生命周期；独立信号页 |
-| EQ | 入门图形/参数界面、曲线、频段图例和主题控件；Future 推子与高低音滑条采用同一细轨道/圆形滑块材质及紧凑读数，移除整块悬停受光；LSP 采用官方 CLAP 原生窗口 |
-| 设置与弹窗 | Future Settings 使用编号目录、统一内距与控件对齐，桌面按内容分栏、窄窗单列；横向滑杆悬停展成长胶囊，拖动锁定尺寸，浮动读数与精确输入共用原值，填色无左侧固定空边。搜索/在线曲库保留固定标题、内部细滚动条、自绘下拉与紧凑分区 |
-| 唱片盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光与磨砂可调，封面和金边独立；Punk 前玻璃嵌入边框，实体右内板加厚并保留小间距，只有 Punk ARRAY 在上框表面显示专辑名，先白底再扫描，强调线随 Color Studies；编辑、独立预设、铭牌、格式标识和纸面遮挡 |
-| 启动 | 后台初始化及首帧就绪后首次显示窗口；Future ALBUMS/MATRIX 与 ARRAY 每次打开播放各自可跳过的入场；欢迎文案/ID 可自定义并限制字母、空格与长度；Punk 入场暂缓，保留禁用入口；已显示窗口重载保持可见 |
-| 音频与来源 | 本地/FTP/在线专辑，PCM/DSD/DoP 输出与处理，Sony 音效、音频信息及明确的设备错误 |
-| 界面音效与释放 | Future 按参考接入入场与交互音序、方向声像和十声部尾音叠加，跟随播放器输出，音乐播放期间静音，Punk 禁用待设计；暂停、停止、结束及错误后关闭音乐设备，暂停保留准确进度以供重开恢复 |
+| 架构 | Electron 桌面宿主、本地服务、TypeScript/Vite 前端与 Three.js；Future/Punk 共用应用状态、目录、播放、ArchiveScene 和资源生命周期 |
+| 浏览 | ARRAY/MATRIX/GRID，SHOW/GROUP/SORT、搜索、分页、曲目身份、打开/播放/返回；MATRIX 拖动、惯性和悬停 |
+| 空间动效 | 两主题共用固定 q 的 ARRAY/MATRIX 桥接；已有可见列持续保留，货架整体离镜，额外副本错峰升沉；原 ARRAY/MATRIX 静态镜头保持独立 |
+| 主题和设置 | STYLE 管理主题、日夜配色、文字、盒体和场景外观；Settings 七类分别管理界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于 |
+| 显示 | 比例、原生全屏、画质、实验性优先显卡和合成质量建议；显卡按物理 PnP 身份去重，选择后重启生效 |
+| 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合、实体内板和 ARRAY 顶屏保留 |
+| 入场 | Future ALBUMS 的 MATRIX/ARRAY 共用终端前导，各有场景段，可跳过/重播；欢迎文案/ID 受字母、空格及长度限制；Punk 入场暂缓 |
+| 音频 | 本地/FTP/在线来源、统一播放栏、PCM/DSD/DoP、EQ、Sony 音效和官方 LSP 原生窗口 |
+| 歌词与信号 | Local/Cloud 双 bank、独立偏移、导入保护、跟随播放及真实频谱；Future 界面音效跟随播放器输出，音乐播放时静音，Punk 禁用 |
 
-缓存更新、封面闪烁、隐藏启动无窗口、EQ 图例裁切和本轮界面反馈已关闭，不再列为“待确认”问题。版本、旧分支和历史测试结果不承担当前状态说明。
+主题与几何契约见 [THEME-PAGE](THEME-PAGE.md)，状态/目录边界见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，数据及音频规则见各专项文档。
 
-## 后续工作
+## 性能事实与未知
 
-下一步是启动与运行性能测量、RTX 5080 掉帧定位，以及按用户后续参考划分其他主题/排列的入场。具体范围、现有证据和验收口径统一维护在[优化基线](OPTIMIZATION-BASELINE.md)，不在多份文档重复排期待办。
-
-当前音频精度、LSP 输入率及复杂实时处理的能力边界见[音频实现](AUDIO-CORE-IMPLEMENTATION.md)和[LSP](LSP-ADVANCED-EQ.md)。未知的驱动/DAC 内部信息不视作已修复缺陷，也不伪造测量结果。
-
-## 验证口径
-
-当前已通过 TypeScript/Vite 构建、运行模块图检查和 24 项显卡身份/偏好离线检查（含两项保存并发守卫）。隔离真实窗口已确认七类 Settings、两主题 STYLE 页面、原生全屏往返、物理显卡去重与手动启动，以及动效/画质互不覆盖。36 张合成专辑的既有入场回归包含跳过、重播、文案/ID 边界、十次首帧就绪与重载、分类归属和 Punk 禁用入口。此范围不表示个人硬件性能已优化，也不替代设备安装或发布验收。
-
-收集截图时仅测试进程采用避免遮挡的调度选项，并在首帧就绪后临时维持绘制、结束前恢复；原生隐藏启动与重载另由不覆盖绘制时钟的启动探针检查。合成目录和截图检查不等于个人曲库、真实设备或硬件性能测量。
-
-当前本机隔离调查发现四个 DXGI/KMT 逻辑 LUID 全部对应同一个物理 PnP 设备，合并后为一张 RTX 5080；SetupAPI 从物理设备节点读取的位置为 PCI 1:0.0，DXGI 报告显存 16,753,098,752 字节（15.6 GiB）。原逻辑地址 `0:0.1` 与越界值不代表物理 PCI 位置。该映射修正设备身份，不构成掉帧修复结论；性能测量仍列在[优化基线](OPTIMIZATION-BASELINE.md)。
-
-当前源码与此前 `0.3.1-preview.1` 安装器各有自己的快照；源码修复不会自动更新旧安装器。未重新打包、安装或发布。
-
-Future 日间配色通过规范化/色值/主题档案离线检查、五项系统日夜跟随检查及隔离窗口验收；实测中间颜色、两层胶囊快速反向、焦点/滚动、保存、日夜/Punk 往返、减少动态、左侧色点和 800px Appearance 布局。颜色采用参考源码固定提交，播放器专用材质和灯光仍沿现有模型职责处理。
-
-Future Settings 整体布局通过 TypeScript/Vite 构建与隔离 Electron 检查：七类唯一归属、两种日间和夜间、中英文、FTP 六字段及节点/值保持、声音控件保持、长音频表单滚动和折叠说明可达性。25 张设置截图包含 800×450 固定 16:9 与 800×900 自由比例。组合图形检查共 56 张截图，包含 Future 昼夜滑杆悬停延展、真实持键移动时的连续数值与进度、固定几何、移出/松开、Tab 数值编辑与编辑期间抑制展开，以及 Punk 回归；结束不残留浮层或占位。合成空库检查未扫描个人曲库或接入播放设备。
-
-Future 简单款玻璃通过类型与构建、现有 GLB/独立封面/金边检查及 `--case-glass` 隔离窗口的 13 项检查：透光与磨砂分别保存、玻璃主体与背板联动、金边材质不变、结构与日夜往返、局部重置及纹理上传。三张 PNG 合成封面截图由主 Agent 复核，低透光、高透光及强磨砂下封面均保持清晰，玻璃与金边没有附加信息；未使用个人曲库或真实音频设备。
-
-Punk 盒体与顶部显示屏通过 TypeScript/Vite 构建、29 项实际 GLB/挂载/材质检查和 29 项隔离 Electron 检查。实机覆盖换片、上框与方块编辑、Hazard/Field 配色、白底与扫描顺序、双向清除及 Future 两种盒体的 ARRAY 静止端点；10 张截图已复核。渲染仍为原有六个 pass，850ms 静止采样无纹理上传，标题绘制计数不变；原镜头与布局路径的 10 项回归通过。这些是合成窗口检查，不代表个人曲库或整机性能验收。
-
-Archive 路径覆盖规范两端、多列保留、5 处反向与连续 retarget、混合列周期、源悬停归位和响应式取景。45/39/38/65 条目合成场景共 5,032 帧，屏内 OBB SAT 碰撞、几何误差和 retarget 错误均为零；地址检查包括 20/19 列在正负远循环位置的完整配对，及 20/20/5 末列的无空槽循环。壳体、封面、标题、标签、格式徽标、深度、AO/Bokeh 和背景淡化 mask 共用地下裁剪，resident 保持独立。严格同 q 合同覆盖规范静止端点与同一路径中途反向；快速选片尚未归位的旧返回副本，不作为另一次新转场的像素/alpha 复现合同。
-
-隔离 Electron 使用 45 张合成专辑，逐槽核对完整 9×48 MATRIX 所有权及末列循环、正反升沉、启用的 Hi-Res 徽标、普通帧交接、跨周期物理地址往返、拖动/悬停、800px 改窗及 Future ARRAY 跳过和完整重播。截图文件名标识请求 q，实际采样 q 与捕获前后时钟保存在报告中。几何检查使用完整盒体矩阵与 bounds；材质准备造成的长帧沿用场景 50ms 步长上限，避免补跑跳过几何阶段。验证仅使用独立 profile、合成目录和 mock 音频，不表示所有盒型、全库或硬件性能验收；Punk 入场保持禁用。操作与本次报告见[本地开发](LOCAL-DEVELOPMENT.md)。
-
-Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项混音/路由/取消检查及 39 项 Electron 离线合成与生命周期检查；6 项硬件检查明确跳过。全部 17 类参考音色均生成不同的非静音 PCM WAV，原生音效路径的 AudioContext 创建数为零；既有原生解码器的无输出模式也已逐样本验证渐进 Float32 输入。Future/Punk 昼夜滑杆填充、拖动、键盘、数字编辑/去重和禁用态均经隔离窗口检查；跳过、重播和十次首帧就绪/重载通过。参考触发映射见[界面音效](INTERFACE-AUDIO.md)。上述结果不包含真实设备听音验收。
+- 本机此前枚举的四个 DXGI/KMT 逻辑 LUID 对应同一张物理 RTX 5080，位置 PCI 1:0.0，报告显存约 15.6 GiB。身份修正不等于掉帧修复。
+- 尚未建立当前版本的真实运行帧时间、CPU/GPU 负载、内存/显存或分阶段启动基线。不能将旧合成窗口 ready 时间、屏幕 FPS 或功能测试通过数当成性能结论。
+- 现有质量建议使用合成场景；`ArchiveScene.stats().frameTime` 是场景累计时钟，不是单帧耗时。
+- 卡巴斯基对 Codex 缓存运行时 pnpm 的报警原因仍未知；环境现状和限制见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)。
 
 ## 源码地图
 
-| 职责 | 首选入口 |
+| 职责 | 入口 |
 | --- | --- |
-| 应用编排、路由、偏好 | `src/music-app.ts` |
-| Future 控件与 Settings 呈现 | `src/future-settings-layout.ts`、`src/future-settings.css`、`src/future-range-interaction.ts`、`src/future-controls.css` |
-| 公共状态、目录、展示 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
-| 场景、布局、货架和资源 | `src/scene.ts`、`src/music-spatial-layout.ts`、`src/music-shelf.ts`、`src/music-scene-resources.ts` |
-| 空间切换、货架部署、MATRIX 拖动与 ARRAY 入场 | `src/music-layout-flight.ts`、`src/music-layout-rise.ts`、`src/music-layout-addresses.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-shelf-deployment.ts`、`src/music-matrix-drag.ts`、`src/future-entry.ts`；Punk 衔接样式为 `src/punk-archive.css` |
-| 专辑、队列和焦点 | `src/album-panel.ts`、`src/album-interaction.ts`、`src/album-queue.ts` |
-| 主题和盒体 | `src/music-style.ts`、`src/case-model.ts`、`src/case-editor.ts`、`src/future-*.css`、`src/punk-*.css` |
-| 歌词、频谱与信号 | `src/lyrics-page.ts`、`src/lyrics-settings.ts`、`src/signal-page.ts` |
-| EQ、音频与服务 | `src/eq-controls.ts`、`scripts/music-server.mjs`、`scripts/native-output.mjs`、`native/audio-host.cpp` |
-| 窗口和启动 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs` |
-| 隔离质量检测 | `src/quality-detection.ts`、`quality-benchmark.html` |
-| Archive 动效验收 | `scripts/check-music-layout-motion.mjs`、`scripts/check-layout-flight.mjs`、`scripts/check-layout-addresses.mjs`、`scripts/check-appearance.mjs`、`scripts/check-archive-geometry.mjs`、`desktop/check-archive-motion.mjs`、`desktop/check-startup-entry.cjs --archive-motion` |
+| 应用接线、路由和偏好 | `src/music-app.ts` |
+| 公共状态与目录 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
+| 主场景及资源 | `src/scene.ts`、`src/music-scene-resources.ts`、`src/music-shelf.ts`、`src/music-spatial-layout.ts` |
+| 镜头、桥接和升沉 | `src/music-layout-flight.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-layout-rise.ts`、`src/music-layout-addresses.ts` |
+| 模型、材质与图集 | `src/case-model.ts`、`src/case-materials.ts`、`src/music-case-titles.ts`、`src/punk-case-display.ts`、`src/cover-atlas.ts` |
+| 画质与合成测量 | `src/render-quality.ts`、`src/quality-detection.ts`、`src/quality-benchmark-frame.ts`、`quality-benchmark.html` |
+| 桌面、启动和服务 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs`、`scripts/music-server.mjs` |
+| 歌词、信号与音频 | `src/lyrics-page.ts`、`src/signal-page.ts`、`src/eq-controls.ts`、`scripts/native-output.mjs`、`native/audio-host.cpp` |
 
-规范见[文档索引](README.md)，资源权利见[NOTICE](../NOTICE.md)。
+运行操作见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)，后续工作只在 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md) 维护。历史代码和已跟踪文档只在 Git 中按需追溯，不作为当前接手材料。

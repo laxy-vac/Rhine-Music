@@ -5,7 +5,7 @@
 ## 接手顺序
 
 1. [PROJECT-STATUS](PROJECT-STATUS.md)：当前已完成能力与源码地图。
-2. [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)：本轮交付与下一步优化范围。
+2. [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)：启动与运行性能目标、测量口径和保护点。
 3. [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)：构建、启动、数据和检查入口。
 4. [AGENTS](../AGENTS.md)：工作规则与产品保护点。
 

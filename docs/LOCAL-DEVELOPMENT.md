@@ -1,98 +1,78 @@
 # 本地开发
 
-更新：2026-10-18。状态见[PROJECT-STATUS](PROJECT-STATUS.md)，优化范围见[OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)，权限与产品保护点见[AGENTS](../AGENTS.md)。
+更新：2026-10-18。功能见 [PROJECT-STATUS](PROJECT-STATUS.md)，下一阶段见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)，权限和保护点见 [AGENTS](../AGENTS.md)。
 
-## 工作目录与启动
+## 源码与启动
 
-所有命令在本仓库 `Rhine-Music-Demo-AudioEnhanced` 根目录执行。日常开发使用 `main`，修改前检查 Git 状态并保留用户工作。
+工作区：`D:\CodexLocalWorkContent\PersonalMusicPlayer`。唯一活动仓库：`source\Rhine-Music-Demo-AudioEnhanced`，当前分支 `main`。所有项目命令在仓库根执行，先查看 Git 状态并保留用户改动。
 
 ```powershell
 node scripts/build-source-preview.mjs --interface-only
 .\启动源码验证.cmd
 ```
 
-等价 npm 入口为 `npm run build:preview` 与 `npm run desktop`。界面包含 TypeScript/Vite 构建，输出 `.tools/source-preview-interface` 和来源清单，不覆盖上游 `dist`。
+`--interface-only` 只执行现有项目的 TypeScript/Vite，输出 `.tools/source-preview-interface` 及来源清单，不运行包管理器或原生组件准备。等价入口为 `npm run build:preview` 与 `npm run desktop`。
 
-修改桌面宿主、预加载层、服务或原生组件时使用 `构建源码验证.cmd`（核心是 `node scripts/build-source-preview.mjs`）。复用已有组件；缺项先说明，不自动下载或安装。
+修改宿主、预加载层、服务或原生组件时按需要使用 `构建源码验证.cmd`，核心为 `node scripts/build-source-preview.mjs`；缺组件先说明，不自动安装、下载或修复环境。
 
-- 源码入口不会自动构建、准备工具或扫描曲库；修改后先完成相应构建。
-- desktop/服务读取当前源码，前端优先使用 `.tools/source-preview-interface`，指纹不一致会拒绝启动。
-- 调试界面缺失时仍有旧 `dist` 回退；它不能代表新版，先补当前构建。
-- 磁盘修改不会替换旧窗口内存或已载入模型。构建后完整退出并重开窗口。
-- 窗口在后台初始化与首帧就绪后首次显示；已显示窗口重载保持可见，无旧加载页或 Punk intro。
-- Future 的 ALBUMS/MATRIX、ALBUMS/ARRAY 默认每次新开窗口在显示后播放对应入场并停在总览；按钮、Enter、Esc 可全程跳过。ARRAY 在共用欢迎前导后于 22–25 秒按共同槽位锚点连续展开货架结构与专辑，25.5 秒完成结构段，界面显现至约 27 秒到总览；MATRIX 保留自己的空间入场。设置 → 界面与交互 → 终端入场可配置自动播放、欢迎文案与 ID 或手动重播；Punk 不播放入场，设置入口保持禁用。两主题的 STYLE 页面只管理主题、日夜配色、文字字号、盒体与场景外观预览。
-- Settings → 界面与交互管理语言、减少动态、唱片波动、入场和界面声音；Settings → 显示与性能管理窗口比例、全屏、渲染画质、优先显卡与性能检测。各项控件只出现于对应类别，Style 页面不重复这些设置。显卡选择完全退出并重开后生效；默认自动，设备按物理 PnP 身份归并，不安装工具或改系统配置。若选卡后无法正常启动，可运行 `node scripts/launch-source-preview.mjs --gpu-auto` 仅本次使用自动，再到 Settings → 显示与性能选择自动恢复默认；安装版也接受 `--gpu-auto` 启动参数。
-- Future 的 STYLE → LIGHT 下可选“暖白 / 原版”，选择随 Future 主题档案保存；切 DARK 或 Punk 不覆盖它。旧偏好缺少此字段时保持暖白。`node scripts/check-day-palette.mjs` 检查规范化/保存结构和颜色映射；`node desktop/check-startup-entry.cjs --graphics` 包含双层胶囊、颜色过渡、键盘/焦点和日夜/Punk 隔离检查。
-- Future 的 STYLE → 简单粗糙提供玻璃透光率、磨砂度调节，实时预览并保存；封面和金边保持独立。“恢复玻璃默认设置”只恢复主体与背板的这两项参数，保留其他材质与结构设置。
+- 启动器不会自动构建、准备工具或扫描曲库；前端优先使用源码预览，并检查指纹。
+- `.tools/source-preview-interface` 缺失时可能回退旧 `dist`，不能把它当成新版。
+- 磁盘修改不替换旧窗口内存；必要构建后完整退出并重开。
+- 当前源码预览的生产文件已构建到 `1bef54f` 功能代码。文档整理和检查脚本退役不改变生产前端，无需为此重建。
+- 窗口首次显示受初始化/首帧门控制；已显示窗口重载保持可见。Future 入场可跳过，Punk 不播放入场。
+- `启动音乐播放器.bat`、`.command` 与旧 launcher 仅保留兼容引用，不是日常开发入口。
 
-`启动音乐播放器.bat`、`.command`及其旧 launcher 保留兼容测试引用，不是当前开发入口。`Build-Windows-EXE.cmd`是当前品尝版打包的兼容包装。
-
-## 现有环境与产物
+## 既有环境
 
 | 内容 | 位置 |
 | --- | --- |
 | 项目依赖 | `node_modules/` |
-| Electron 运行时 | `.tools/source-preview-electron` |
-| 前端、指纹、Vite缓存 | `.tools/source-preview-interface`、同名前缀 manifest、`.tools/source-preview-vite-cache` |
-| 原生主机与复制 DLL | `.tools/source-preview-native-audio` |
+| Electron | `.tools/source-preview-electron` |
+| 前端、指纹、Vite cache | `.tools/source-preview-interface`、`.tools/source-preview-interface.manifest.json`、`.tools/source-preview-vite-cache` |
+| 原生主机/DLL | `.tools/source-preview-native-audio` |
 | PCM 解码组件 | `.tools/audio-codecs`、`vendor/audio/codec-sdk` |
-| LSP 工具 | `.tools/lsp-plugin` |
-| Zig 编译器与缓存 | `.tools/walkman/compiler/zig-x86_64-windows-0.15.2`、`.tools/zig-cache` |
+| LSP | `.tools/lsp-plugin` |
+| Zig 与缓存 | `.tools/walkman/compiler/zig-x86_64-windows-0.15.2`、`.tools/zig-cache` |
 | 安装器工具 | `.tools/installer-tools/nsis/3.13/nsis-3.13` |
-| 任务日志和临时产物 | 项目专用 `.tools/<任务名>`；工作区临时文件按已有规范放置 |
+| 临时测量与报告 | 专用 `.tools/<任务名>`，不进入源码交付 |
 
-以上是已有落点，不是安装授权。prepare/runtime/codec/LSP 等准备脚本可能联网或改变环境，不能作为普通接手步骤；新克隆缺少本机环境时先取得用户批准。不要改全局 PATH、共享依赖、注册表、服务、权限或安全机制。
+这些位置不构成安装或变更授权。prepare/runtime/codec/LSP 等脚本可能联网、下载或修改环境，不能当作普通接手步骤。缺少 Node、依赖或桌面组件时报告，不自动执行 pnpm/npm install、恢复缓存或修改 PATH/全局配置。
 
-## 数据位置与保护
+### 当前运行时报警
 
-源码启动器在 `source/<仓库>` 布局下使用工作区根的 `music-data-source-preview`；其他布局使用仓库父目录下同名目录。路径由 `scripts/launch-source-preview.mjs`计算，不通过文档猜测或自动迁移。
+2026-10-18，用户报告卡巴斯基删除 `PDM:Trojan.Win32.Generic` 对象：`C:\Users\Entropy\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\node_modules\pnpm\dist\pnpm.mjs`，发起进程为同一运行时的 `node.exe`，PID 22036，时间 20:37:07（Asia/Shanghai）。
+
+只读排查确认 Codex 工具包 `26.1011.51657` 声明 Node v24.19.0、pnpm 11.25.0；Node 的 OpenJS Foundation 数字签名有效。排查时 pnpm 的 `bin/pnpm.mjs` 和 `dist/pnpm.mjs` 均缺失，随后现有 Node 仍完成了项目构建。项目构建入口及其直接 helper 没有 pnpm、安装/下载或共享运行时写入调用。
+
+具体触发行为及是否误报未确认；缺少卡巴斯基完整命令行、父进程和行为链。用户曾自行退出卡巴允许继续，不能据此假定后续保护状态或性能基准环境。Agent 未恢复文件、添加白名单、安装依赖或修改安全设置。后续若受阻，先核对现状和完整事件，不绕过保护或自动修复运行时。
+
+## 个人数据
+
+源码启动器在 `source/<仓库>` 布局下使用工作区根的 `music-data-source-preview`；其他布局使用仓库父目录下同名目录。最终路径由 `scripts/launch-source-preview.mjs` 计算，不自动迁移。
 
 | 内容 | 位置/规则 |
 | --- | --- |
-| 桌面 profile | `music-data-source-preview/desktop` |
-| 偏好 | profile 的 `preferences.json`；全局日夜、跟随系统、画质、比例、减少动态、唱片波动、公共 view 与主题配置 |
+| 桌面 profile、偏好 | `music-data-source-preview/desktop`；`preferences.json` |
 | 索引、封面与默认缓存 | `music-data-source-preview/music-data` |
-| 主题个人预设 | profile 旁 `presets/themes/theme-presets.json`；Future/Punk 两库独立 |
-| 入门 EQ 文件 | 默认 profile 旁 `presets/eq/standard`，用户可主动选择目录 |
-| EQ 目录配置 | profile 的 `standard-eq-library.json` |
-| LSP/旧 EQ 聚合预设 | profile 旁 `presets/eq/audio-processing-presets.json`；兼容读取保留 |
-| 歌词 | 用户指定缓存目录；每曲 SHA-256 命名 V3 容器，独立 Local/Cloud bank，详见[歌词](LYRICS.md) |
-| 安装版 | `<安装目录>/data` 与 `<安装目录>/presets`，与源码 profile 分开 |
+| 主题预设 | profile 旁 `presets/themes/theme-presets.json`，两主题独立 |
+| EQ | profile 旁 `presets/eq/standard`、`standard-eq-library.json`、兼容聚合预设 |
+| 歌词 | 用户指定缓存目录，每曲 SHA-256 的 V3 容器，Local/Cloud 双 bank，见 [LYRICS](LYRICS.md) |
+| 安装版 | 安装目录中的 `data` 与 `presets`，与源码 profile 独立 |
 
-目录移除不删除音乐。歌词导入只复制文本，不接收原始路径或改删原文件；偏移写对应缓存 bank。坏文件、外部编辑和未知文件不能被自动覆盖。缓存路径调整不自动搬运文件；Git 回滚不会迁移或降级个人数据。
+目录移除不删除音乐；歌词导入只复制文本。坏文件、外部编辑和未知文件不能自动覆盖。性能优化、文档清理或 Git 回滚均不能清个人数据、重置预设或迁移缓存来制造结果。
 
-## 验证与排查
+## 必要检查与排查
 
-`npm test`是默认有限离线检查；`--interface-only`包含类型检查与前端构建。按实际改动选择[优化基线的检查入口](OPTIMIZATION-BASELINE.md)，不为了补历史台账重复运行全套测试。
+`--interface-only` 包含类型检查和前端构建；其它检查按 [优化基线](OPTIMIZATION-BASELINE.md) 选择。只做与改动直接相关的有限验证，视觉效果交用户，不默认多轮自动审查或大截图矩阵。
 
-隔离 Electron/图形检查使用专用 profile、合成目录和 mock 音频，不能接入个人目录或真实音频设备。实际窗口、硬件、安装/卸载和性能验收分别记录。
+既有整窗探针使用独立 profile、合成目录和 mock 音频，不能代替个人曲库、设备或硬件性能测量。音频原生检查先在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only`；不带此设置的既有套件可能访问真实设备，不能默认运行。
 
-两主题 MATRIX/ARRAY 使用共享固定 q 几何路径，全部已有可见列按 entry 和物理槽位保持身份、共同变形；不将非选中列撤走再重入。ARRAY 保留每架 20 槽的有限规范地址，MATRIX 按各列真实数量循环填满，拖动按整数行吸附；每列循环相位保持完整配对，MATRIX 物理位置在经过 ARRAY 后恢复；快速反向沿当前 q/速度接续，终态恢复实际物理坐标和实例所有权。逐槽浮动波面从已有阵列边缘向外接续：已有专辑轻抬再归位，额外副本从真实地面以下错峰浮起，反向按同一相位沉回；地下部分在壳体、封面、标题、标签、格式徽标和辅助渲染中统一裁剪。普通 MATRIX、转场终点与入场尾段共用动画前的独立镜头（140 距离、7.33 基准 span、59°/25°），不根据 ARRAY 缩放或居民数量扩大构图；实例持续保留并接受原取景范围的自然裁切，详情连续衔接；Future ARRAY 已确认的共同槽位入场保持独立。
+实际运行性能应记录真实帧间隔、环境和操作；现有 `stats().frameTime` 是场景时钟。当前没有整机性能基准报告，旧动效 ready 时间、截图 FPS 和通过数都不能用于判断掉帧原因。
 
-纯运动及入场回归为 `node --experimental-strip-types --test scripts/check-music-layout-motion.mjs`；多列、双向路径、升沉、边界和取景检查为 `node --experimental-strip-types --test scripts/check-layout-flight.mjs scripts/check-layout-addresses.mjs`；`node --experimental-transform-types scripts/check-appearance.mjs` 覆盖地下裁剪的各材质及辅助 pass。合成几何检查为 `node scripts/check-archive-geometry.mjs`，报告写入 `.tools/emergence-motion-2026-10-18/check-archive-geometry.json`，覆盖 45/39/38/65 条目的四个合成目录、完整 9×48 MATRIX 池、混合周期远位置、双向路径及连续反向；当前 5,032 帧采样中未发现盒体 SAT 碰撞。隔离窗口回归命令为 `node desktop/check-startup-entry.cjs --archive-motion`，覆盖 Future/Punk 多列实例连续保留及原始镜头端点、末列无空槽、额外副本满尺寸错峰升沉、已有专辑单峰轻抬与地下徽标裁剪、端点衔接、非零循环地址往返、反向、鼠标拖动/悬停，以及 Future ARRAY 部分展开跳过和自然重播；本次 280 项动效及镜头检查、启动门检查通过；13 次独立旧版镜头基线检查和 12 次端点对比同时通过，Punk STYLE 中 ARRAY 尺寸从 1 改到 1.3 时 MATRIX 镜头保持原样，49 张截图和 155 帧实际盒体矩阵保存在 `.tools/archive-motion-2026-10-18/desktop-entry-1792319709499-42224/`。几何由隔离 renderer 的 RAF 回调独立密采，避免截图耗时漏过中间 q；截图名使用请求 q，报告保留实际 q。测试只使用合成 PNG 封面、独立 profile 和 mock 音频，不扫描个人曲库或连接实际音频设备。有限采样不代表全部盒型、任意视口或硬件性能验收；Punk 不播放入场。
+看不到修改时先检查源码入口、主题、来源清单、是否重开窗口和模型版本。不要清个人缓存或重置偏好。显卡选择需完全退出后重启；可用 `node scripts/launch-source-preview.mjs --gpu-auto` 仅本次自动选卡，再由用户调整 Settings 偏好。
 
-Punk 盒体及顶部显示屏的离线入口为 `node scripts/check-punk-case-display.mjs`：读取实际 GLB，检查四边封合、实体内板厚度与小间距、资源哈希、实际部件变换及挂载、显示材质和正反相位，共 29 项。隔离窗口入口为 `node desktop/check-startup-entry.cjs --punk-case-display`，使用 36 张合成专辑和 mock 音频，检查换片、上框/方块编辑、Hazard/Field 强调色、白底→扫描及反向清除、Punk MATRIX 和 Future 两种盒体的隐藏状态，并记录真实 renderer pass 与 WebGL 纹理上传。报告与 10 张截图放在 `.tools/punk-case-display-2026-10-18/desktop-entry-*/`，不读取个人曲库或连接真实设备。
+## 交付与历史
 
-Future 界面音效可用 `node scripts/check-interface-audio.mjs` 验证模拟设备路由、主题/播放互斥、迟到请求取消、WAV 校验及缓存上限。`node desktop/check-interface-audio.cjs` 使用既有 Electron 的隔离隐藏页验证真实离线合成及外部 sink 生命周期，不调用真实音频设备。原生会话检查须在本次命令进程内设置 `RHINE_NATIVE_TEST_MODE=mock-only` 再执行 `node --test scripts/check-native-output.mjs`；不加此设置的既有套件包含真实设备检查，不能作为默认离线命令。
+`npm run package:preview` / `打包品尝版.cmd` 使用已有工具生成安装器；`npm run export:source` 导出源码 ZIP。两者不会自动准备依赖；打包不等于安装或设备验收。当前旧安装器未因源码变化更新。
 
-Settings 分类、两主题 STYLE 页面、原生全屏往返及本机显卡枚举使用 `node desktop/check-startup-entry.cjs --graphics`。其中 `desktop/check-future-settings.mjs` 检查 Future 七类设置的桌面/窄窗布局、控件可达性与分组，并把日间两种配色、夜间及 Punk 对照截图保存到该次隔离目录的 `future-settings/`；`desktop/check-eq-sliders.mjs` 检查 Future 昼夜图形/参数 EQ 和高低音滑条的静态悬停、统一材质与横竖拖动，截图同样保存在该次隔离目录。`--graphics` 是兼容保留的 probe 参数名；显卡设置位于 Settings → 显示与性能。加 `--gpu-manual` 可在隔离配置中以可用物理卡启动，验证真实前端的手动选卡路径。纯偏好及身份/LUID 边界检查为 `node scripts/check-gpu-selection.cjs`。这些检查不接入个人曲库、播放设备或系统显卡设置。
-
-看不到修改时，依次核对当前源码入口与主题、构建来源清单、是否完整退出旧窗口、模型内容版本与地址。模型变更须同步对应资源版本并重建；不要清个人缓存或重置偏好制造新版效果。
-
-无窗口问题应检查完整生产前端的隐藏启动链路和日志；不能用简单 data 页面通过替代。性能问题按[优化基线](OPTIMIZATION-BASELINE.md)记录环境与分阶段测量，不凭平均 FPS 或合成推荐推断个人设备结论。
-
-## 打包与源码导出
-
-`npm run package:preview`或`打包品尝版.cmd`使用已准备工具生成安装器；`npm run export:source`生成交付 ZIP。两者不自动准备依赖或同步远程，打包不等于安装/设备验收。
-
-本仓库是唯一活动源码。用户自行设置远程并只发布 `main`；ZIP 不用于建立第二份日常开发仓库。工具、个人配置、机器日志与原曲库不入库，许可与交付范围见[品尝版说明](PREVIEW-RELEASE.md)和[NOTICE](../NOTICE.md)。
-
-## 历史与回滚
-
-当前入口不保留已结束阶段计划或逐轮战报。按需读取整理前的文件：
-
-```powershell
-git show fc0790e:docs/PROJECT-STATUS.md
-```
-
-旧分支和标签保留本地，不自动合并或发布。回滚采用审阅后的 `git revert`，不用硬重置或强制检出；回滚源码后重建对应产物。不要通过删除缓存、降级歌词容器或覆盖用户预设来适配旧代码。
+只维护当前仓库 `main`，不恢复第二套活动源码。远程发布由用户处理，不自动 fetch/pull/push。历史试验、旧顶屏方案和专项验收脚本从 Git 按需追溯；本轮删除的忽略目录合成报告未纳入 Git，不承诺恢复。回滚用审阅后的 `git revert`，不硬重置、不强制检出或迁移个人数据。来源与许可始终见 [NOTICE](../NOTICE.md)。

@@ -6,10 +6,10 @@ Windows 音乐播放器，基于 RhineLabUI，提供 Future / Rhine 与 Punk / A
 
 ## 当前基线
 
-日常开发使用本仓库的 `main`。两主题共用状态、目录、播放及三维渲染；本轮界面、歌词、控件和启动修复已由用户确认完成。下一步集中处理性能与新的统一入场。
+日常开发使用本仓库的 `main`。两主题共用状态、目录、播放及三维渲染。当前功能和动效保留，下一阶段集中处理启动与运行性能；动效设计已停止，不代表视觉满意，也不自动继续设计 Punk 入场。
 
 - [当前状态](docs/PROJECT-STATUS.md)：已完成能力与源码地图。
-- [优化基线](docs/OPTIMIZATION-BASELINE.md)：本轮交付、真实待办、测量与回归要求。
+- [优化基线](docs/OPTIMIZATION-BASELINE.md)：运行性能目标、测量口径、源码入口和保护点。
 - [本地开发](docs/LOCAL-DEVELOPMENT.md)：构建、启动、工具及数据位置。
 - [文档索引](docs/README.md)：当前产品与技术规范。
 

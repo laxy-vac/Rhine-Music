@@ -1,78 +1,58 @@
-# 下一步优化基线
+# 启动与运行性能优化基线
 
-更新：2026-10-18。本文件统一记录已交付结果、仍需完善的工作和下一步的验收口径；当前功能地图见[PROJECT-STATUS](PROJECT-STATUS.md)。
+更新：2026-10-18。下一阶段的目标是测出当前版本在本机的瓶颈，再优化启动等待、稳定帧时间和交互卡顿。当前尚无可用于证明改善的性能基线。功能地图见 [PROJECT-STATUS](PROJECT-STATUS.md)，环境和操作见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)。
 
-## 已完成并关闭
+## 范围与工作方式
 
-| 项目 | 交付结果 |
-| --- | --- |
-| 专辑资料与操作 | 两主题资料、格式标签、打开/播放和返回动作整理；Punk 连体操作条及标签解码同步，去除多余常驻橙框 |
-| 歌词来源与缓存 | 首次自动云搜索保存；默认来源由全局设置决定，默认 QQ 音乐；Local/Cloud 按用户选择生效，页签与设置源一致 |
-| 本地导入与回退 | 点击 Local 不弹选择器；手动 Import 后使用缓存副本；无本地时提示并回退云，原始导入文件不改不删 |
-| 偏移与跟随 | Local/Cloud 各保留一份内容及各自偏移，校准写入对应缓存；默认跟随歌词，异步结果不能覆盖用户后选来源 |
-| 歌词显示与频谱 | Future 昼夜排版、当前行、设置和右侧真实盒体/播放资料；32 段真实数据平滑显示，停止/隐藏正确释放需求 |
-| 播放栏 | 当前句位于进度上方，SHUFFLE ALL 与完整自绘 ORDER，停止键位于底部；移除顶部重复运输键和底栏 DSP OFF |
-| 两主题与双语 | 主题选择预览统一；日夜独立；中文保留英文共用 Punk 风格词表 |
-| 设置、EQ 与滚动 | Future 昼夜控件/受光、推子、频段强调、曲线图例胶囊、焦点与滚动修复，参数/图形图例不再被裁切 |
-| 系统日夜跟随 | 开启时按系统当前状态对齐，之后仅跟随真实变化；手动选择不被持续纠正，重启保留手动状态 |
-| 搜索与在线曲库 | Future 两弹窗重做：固定标题、内部无箭头细滑块、圆角筛选、长名称省略、自绘来源和紧凑表单 |
-| 启动与旧入场 | 旧加载画面及 Punk intro 移除；后台加载及首帧就绪后首次显示窗口；隐藏节流无窗口回归已修复 |
-| Future MATRIX/ARRAY 入场 | 共用终端前导；ARRAY 在 22–25 秒连续展开共同槽位上的结构与专辑，镜头跟随生成中心后归回总览，保留跳过/重播；Punk 入场暂缓 |
-| 空间排列与浏览 | 两主题沿同一 q 路径桥接原 ARRAY/MATRIX 镜头端点，已有各列按共享槽位连续变形并收紧行列间距，不按选中列拆分退场，完整货架移出画面；反向倒走同一路径并保留速度，恢复物理端点与实例所有权；MATRIX 按真实列长循环补齐短列，额外副本从已有阵列边缘向外错峰浮起/沉回，已有专辑随同一波面轻抬并归位；MATRIX 拖动/悬停及 Punk 紧凑工具区保持 |
-| STYLE、Settings 与入场个性化 | 两主题 STYLE 只管理主题、日夜配色、文字字号、盒体与场景外观预览；Settings 七类各自拥有唯一控件，界面与交互默认打开；Future 欢迎文案与 ID 可改并受字母/空格/24 字符边界保护，Punk 入场入口预留且禁用 |
-| 显示与性能、全屏与物理显卡 | Settings 中管理比例、全屏、渲染画质、优先显卡与性能检测；原生全屏往返与状态同步；显卡按稳定物理 PnP 身份归并 DXGI 逻辑别名，缺失身份不猜卡，保存后重启生效 |
+- 保留当前功能、画质、镜头、几何布局和动效，不借性能任务重新设计界面或继续打磨 Punk 顶屏。
+- 先测量、后改动，每次围绕已确认的热点给出可重现的前后对照；区分已验证事实、推测与未知。
+- 视觉验收交用户。仅运行与实际改动直接相关的构建和有限回归，不默认多轮 Agent 复核、整套历史测试或大规模截图采样。
+- 复用已有环境。安装、依赖/驱动变更、共享配置、安全设置、个人曲库和真实音频设备仍遵守任务授权，不能用准备脚本或包管理器隐式扩展。
 
-缓存更新、纸卡闪烁、旧顶栏横滑条、控件漏光和本轮已反馈的界面问题不再作为未完成任务保留。已结束的统一架构迁移也不再按阶段重新排期。
+## 首轮应得到的结果
 
-## 需要继续完善
-
-| 优先项 | 已知事实 | 下一步需要得到的结果 |
+| 项目 | 当前已知 | 需要测量 |
 | --- | --- | --- |
-| 启动耗时 | 已实现加载好再显示；尚无真实曲库的分阶段耗时基线 | 分开测服务/偏好/索引、资源读取、场景创建、着色器与首帧，定位关键路径和窗口等待时间 |
-| RTX 5080 掉帧 | 已确认本机 4 个 DXGI/KMT 逻辑 LUID 映射到同一物理 RTX 5080；掉帧瓶颈仍未测定，不是已定位的 GPU 或 CPU 故障 | 固定场景采集帧时间、主线程/GPU负载、资源与内存；分别比较静止、切专辑、滚动、开合和页面切换 |
-| 其他入场构图与 Punk UI | Future ALBUMS/MATRIX 与 ARRAY 已有各自入场；Punk UI 后续大修，其入场明确暂缓，GRID 等其他排列直接显示 | 按用户后续方向确定 Punk UI 和其余入场，沿用公共状态、首帧门与 renderer，不自动移植 Future 入场或恢复旧加载页 |
-| 资源与交互开销 | 两主题已共用 renderer/资源；ARRAY 的盒体几何、玻璃与阴影仍有实际成本 | 依据测量处理首载、重复工作、资源生命周期和长任务，验证视觉质量及选择/点击命中不退化 |
-| 复杂音频实时性 | LSP 当前使用通用 DSP 核，复杂设置的实时性能未全面测量 | 如另行开展音频优化，独立测处理耗时、缓冲和输出，不用图形 FPS 推断音频稳定性 |
+| 启动 | 后台初始化及必要首帧后显示；显示后的窗口重载保持可见 | 服务/偏好/索引、资源读取、场景创建、着色器及首帧各阶段的关键路径；冷/暖条件分别记录 |
+| 运行掉帧 | 此前枚举为一张物理 RTX 5080；瓶颈未定位 | 固定条件下的帧间隔分布、长任务、CPU/GPU 负载、内存/显存与交互响应；不能只报平均 FPS |
+| 场景成本 | 盒体实例、玻璃透射、阴影、AO、景深及后处理共存 | 区分 CPU 更新、GPU 绘制、编译、上传、资源分配和合成成本，确认实际瓶颈 |
+| 闲置与页面生命周期 | 共用场景与资源已有释放路径，实际闲置开销未测 | 静止、隐藏、页面切换及开返后的持续更新、监听器、纹理重画/上传和内存增长 |
+| 卡巴运行时报警 | 检测对象属于 Codex 缓存 pnpm；具体行为链未查明 | 若阻碍工具运行，先确认已有组件现状与完整报警详情，不自动恢复文件、加白名单或关闭保护 |
 
-后续工作从测量开始。保留现有画质和产品行为，优先消除实际重复工作和热点；不以降低画质、伪造数据、静默换设备或改用户偏好掩盖问题。
+音频 DSP 实时优化、Punk UI 大修及其他入场不属于本阶段，除非用户另行指定。
 
-## 可复用的事实与保护点
+## 测量口径
 
-- 唯一活动源码为本仓库 `main`；当前版本号仍为 `0.3.1-preview.1`，旧安装器与当前源码分开看待。
-- 隐藏初始化期间仅对本窗口关闭 `backgroundThrottling`；首次显示后恢复。已显示窗口重载保持可见，不能再次隐藏等待帧回调。
-- `frontendReady` 在完整前端初始化及首帧后发出，主进程验证发送窗口、主 frame 与来源；不能用简单测试页替代生产 WebGL 启动。
-- 现有完整隔离探针在36张合成专辑场景中一次 ready 约9.95秒。它只证明功能链路可达，不是可跨版本比较的启动基准或个人曲库耗时。
-- `view`、entry identity、来源选择 revision、主题与盒体偏好继续由现有公共状态管理；优化不能复制第二套状态或第二个 renderer。
-- 原始歌词、音乐、用户预设和缓存受现有保护；不通过清个人数据、强制重置或权限放宽解决性能问题。
+记录同一主题/日夜、布局、盒型/材质、画质档位、实际渲染尺寸/DPR、窗口比例、显示状态、数据规模、缓存和运行环境。优先用可重复的合成目录及 mock 音频隔离问题；个人曲库和真实设备只在获准范围内使用。
 
-## 测量与验收
+覆盖静止、选片、MATRIX 拖动、ARRAY/MATRIX 切换、详情开返、页面切换、歌词/信号页等实际操作。按发现的问题选取代表场景，不要求每次穷举全部组合。
 
-先记录同一窗口尺寸、比例、布局、主题、盒体、画质、数据规模、冷/暖启动条件及运行环境，再比较改动。区分启动等待、稳定帧时间、交互卡顿和音频处理；不要只报平均 FPS。
+帧时间来自实际 RAF/性能时间戳或可靠的 CPU/GPU 观测。`src/scene.ts` 当前 `stats().frameTime` 返回 `this.clock`，是场景累计时间；`drawCalls/triangles` 直接来自 `renderer.info.render`，尚未建立整帧多 pass 汇总口径。不要直接把这些字段当成完整帧成本。GPU 时间不可用时明确说明，不能由 CPU 时间倒推。
 
-每个性能改动必须有可重现的前后对照，并保留当前视觉和交互契约。回归重点：启动首次显示/重载、ARRAY/MATRIX/GRID、专辑开返和身份、主题/日夜、歌词切源/偏移、EQ、原生窗口与资源释放。
+`quality-detection.ts` / `quality-benchmark-frame.ts` 已有合成 ARRAY 和开返场景、FPS、P95、慢帧比例及样本数，可按需要复用。它用于画质建议，不覆盖所有布局或真实曲库，也不是当前 RTX 5080 的瓶颈结论。
 
-默认使用合成目录及 mock 音频端口。个人曲库、实际设备或系统变更按任务授权单独处理；现有隔离结果不冒充硬件验收。需要新增工具或依赖时先说明并取得批准。
+## 需要保护的实现
 
-## 当前验证入口
+- Future/Punk 共用状态、目录、播放、ArchiveScene/WebGL 和生命周期，不复制第二套权威状态或 renderer。
+- 公共布局值仍是 `shelf`→ARRAY、`array`→MATRIX、`grid`→GRID，entry key 与父专辑身份不能被槽位编号替代。
+- ARRAY 每架 20 槽；普通 MATRIX 池为 9×48，桥接预留 729 槽。已有可见专辑保持身份，循环副本、末列与地下裁剪规则保留。
+- 只优化桥接实现时仍保留原静态镜头：MATRIX 距离 140、基准 span 7.33、59°/25°；不能根据 ARRAY 缩放或实例数改变 MATRIX 构图。ARRAY 保留自己的响应式镜头规则。
+- 渲染链包含主场景、SSAO、Bokeh、SMAA、播放栏玻璃/输出与阵列淡化等 pass，启用情况受画质影响。Punk 源盒体为 98,080 三角形、15 部件类型；这些是候选成本，尚未证明是掉帧原因。
+- 不通过降低用户画质、切换盒型/设备、清个人缓存、缩减条目或改变偏好掩盖问题。诊断时临时对照参数须明确记录并恢复。
+- 源模型、材质与视觉资源的版权、哈希版本、用户预设和数据格式保持；原生音频输出与设备释放不可因图形优化退化。
+
+## 按需使用的入口
 
 | 目的 | 入口 |
 | --- | --- |
-| 基本离线检查 | `npm test` |
-| 界面类型与构建 | `node scripts/build-source-preview.mjs --interface-only` |
-| 真实前端隐藏启动/重载 | `node desktop/check-startup-entry.cjs` |
-| Future 入场与文本边界 | `node scripts/check-entry-preferences.mjs`；`node desktop/check-startup-entry.cjs --future-entry`，合成专辑与模拟音频；截图及报告保存在 `.tools/future-entry-2026-10-17/` |
-| 系统跟随语义与整窗交互 | `node --experimental-strip-types --test scripts/check-music-theme-follow.mjs`；`node desktop/check-startup-entry.cjs --theme-follow` |
-| Settings 显示与性能、STYLE、全屏和显卡 | `node scripts/check-gpu-selection.cjs`；`node desktop/check-startup-entry.cjs --graphics`（兼容保留的 probe 名称，检查 Settings → 显示与性能及 STYLE）；可加 `--gpu-manual` 验证隔离配置中的物理卡启动路径 |
-| Future 两弹窗 | `node desktop/check-startup-entry.cjs --future-panels` |
-| EQ 图例裁切 | `node scripts/check-foobar-layout.mjs --eq-legend` |
-| Future 简单款玻璃与预览 | `node desktop/check-startup-entry.cjs --case-glass`，合成专辑与 mock 音频，检查透光/磨砂保存、结构往返及局部重置 |
-| 两主题布局切换、拖动与 ARRAY 入场 | `node --experimental-strip-types --test scripts/check-layout-flight.mjs scripts/check-layout-addresses.mjs scripts/check-music-layout-motion.mjs`；`node scripts/check-archive-geometry.mjs`；`node desktop/check-startup-entry.cjs --archive-motion` |
-| 三维资源/盒体专项 | `scripts/check-case-system.mjs`，按相关模式运行 |
+| 必要类型与前端构建 | `node scripts/build-source-preview.mjs --interface-only` |
+| 质量建议及合成测量 | Settings → 显示与性能；`src/quality-detection.ts`、`src/quality-benchmark-frame.ts` |
+| 启动门/重载 | `node desktop/check-startup-entry.cjs` |
+| 镜头、布局与升沉纯检查 | `node --experimental-strip-types --test scripts/check-layout-flight.mjs scripts/check-layout-addresses.mjs scripts/check-music-layout-motion.mjs` |
+| 地下裁剪或几何改动 | `scripts/check-appearance.mjs`、`scripts/check-archive-geometry.mjs`，仅在改动相关实现时使用 |
+| 必要整窗交互 | `desktop/check-startup-entry.cjs` 的 `--graphics`、`--archive-motion` 等既有模式；不作为每次默认步骤 |
+| 显卡身份 | `node scripts/check-gpu-selection.cjs` |
 
-只运行与当前改动相关的必要检查，命令索引不要求逐次补跑全部旧矩阵。环境与边界见[本地开发](LOCAL-DEVELOPMENT.md)。
+当前没有专门的整机性能基准报告；不得把这些功能检查入口的通过数当成性能改善。Punk 顶屏的一次性验收脚本和旧合成报告已清退，可复用的“静止时是否重画/上传纹理”观测纳入本阶段统一测量，不保留单独设计验收框架。
 
-## 追溯与本次整理
-
-用户确认前的源码节点为 `fc0790e`。整理前本地标签为 `checkpoint/pre-optimization-cleanup-2026-10-17`；更早的修改前快照标签 `checkpoint/pre-unified-ui-2026-10-17` 继续保留。
-
-仓库入口改为当前状态、优化基线、开发操作及专项契约；清退过时阶段报告、重复修复战报和专属历史配图，历史通过 Git 恢复。本机工具、依赖、构建产物、个人数据、来源与许可不因文档整理迁移或删除。
+性能结果及临时捕获放在新的专用 `.tools/performance-*` 目录，与工具、源码和个人数据分开。交付时说明测量条件、前后数据、实际修改和局限，不追加逐轮战报。
