@@ -7,7 +7,7 @@
 | 区域 | 当前能力 |
 | --- | --- |
 | 统一架构 | Future/Punk 共用应用状态、目录、视图、播放和 ArchiveScene/WebGL；共享资源与生命周期，保留主题皮肤及兼容偏好读取 |
-| 专辑浏览 | ARRAY / MATRIX / GRID、SHOW / GROUP / SORT、筛选与分页；两主题 ARRAY→MATRIX 共用镜头拉远、降低与转向的固定 q 路径，所有已有可见列连续收紧行距与列距，不撤走后重入，完整货架移出画面；反向沿原路径与当前速度返回，保持 canonical entry 与物理副本身份；MATRIX 按真实列长循环补齐短列，额外副本从地面浮起/沉回；MATRIX 鼠标拖动/惯性/悬停；Punk 工具区紧凑收在左上，场景自然衔接右栏；打开、播放、返回和非首曲身份保持一致 |
+| 专辑浏览 | ARRAY / MATRIX / GRID、SHOW / GROUP / SORT、筛选与分页；两主题 ARRAY→MATRIX 共用镜头拉远、降低与转向的固定 q 路径，所有已有可见列连续收紧行距与列距，不撤走后重入，完整货架移出画面；反向沿原路径与当前速度返回，保持 canonical entry 与物理副本身份；MATRIX 按真实列长循环补齐短列，额外副本从已有阵列边缘向外错峰浮起/沉回，已有专辑随同一波面轻抬并归位；MATRIX 鼠标拖动/惯性/悬停；Punk 工具区紧凑收在左上，场景自然衔接右栏；打开、播放、返回和非首曲身份保持一致 |
 | STYLE 外观 | 两主题保留原 Style 视觉与预览；Future LIGHT 可选暖白或 RhineLabUI 原版日间色，双层胶囊原位过渡并保存；日夜、主题色、文字字号、盒体与场景外观各自管理。内部页面值仍为 `theme` |
 | Settings | 固定七类：界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于；界面与交互默认打开，各项控件只在所属类别出现一次 |
 | 显示与性能 | 窗口比例、全屏、渲染画质、优先显卡和性能检测集中在 Settings；减少动态与唱片波动位于界面与交互 |
@@ -60,7 +60,7 @@ Future 音效通过 51 项播放器/适配器/原生会话模拟检查、16 项�
 | Future 控件与 Settings 呈现 | `src/future-settings-layout.ts`、`src/future-settings.css`、`src/future-range-interaction.ts`、`src/future-controls.css` |
 | 公共状态、目录、展示 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
 | 场景、布局、货架和资源 | `src/scene.ts`、`src/music-spatial-layout.ts`、`src/music-shelf.ts`、`src/music-scene-resources.ts` |
-| 空间切换、货架部署、MATRIX 拖动与 ARRAY 入场 | `src/music-layout-flight.ts`、`src/music-layout-addresses.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-shelf-deployment.ts`、`src/music-matrix-drag.ts`、`src/future-entry.ts`；Punk 衔接样式为 `src/punk-archive.css` |
+| 空间切换、货架部署、MATRIX 拖动与 ARRAY 入场 | `src/music-layout-flight.ts`、`src/music-layout-rise.ts`、`src/music-layout-addresses.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-shelf-deployment.ts`、`src/music-matrix-drag.ts`、`src/future-entry.ts`；Punk 衔接样式为 `src/punk-archive.css` |
 | 专辑、队列和焦点 | `src/album-panel.ts`、`src/album-interaction.ts`、`src/album-queue.ts` |
 | 主题和盒体 | `src/music-style.ts`、`src/case-model.ts`、`src/case-editor.ts`、`src/future-*.css`、`src/punk-*.css` |
 | 歌词、频谱与信号 | `src/lyrics-page.ts`、`src/lyrics-settings.ts`、`src/signal-page.ts` |

@@ -339,7 +339,48 @@ function boxReport(box) {
 function cloneRoute(route) {
   return route ? { segment: route.segment, core: route.core, resident: route.resident,
     hasArray: route.hasArray, hasMatrix: route.hasMatrix,
-    arrayCell: route.arrayCell ? { lane: route.arrayCell.lane, row: route.arrayCell.row } : null } : null;
+    arrayCell: route.arrayCell ? { lane: route.arrayCell.lane, row: route.arrayCell.row } : null,
+    rise: route.rise ? { start: route.rise.start, end: route.rise.end, edgeDistance: route.rise.edgeDistance,
+      alongDistance: route.rise.alongDistance, amount: route.rise.amount, lift: route.rise.lift } : null } : null;
+}
+
+function expectedRiseSchedule(flight, route) {
+  const columns = new Map();
+  for (const slot of flight.scenario.arrayCatalog.values()) {
+    const column = columns.get(slot.lane) ?? { min: slot.row, max: slot.row };
+    column.min = Math.min(column.min, slot.row);
+    column.max = Math.max(column.max, slot.row);
+    columns.set(slot.lane, column);
+  }
+  const cell = route.arrayCell, selection = flight.scenario.arrayCatalog.get(flight.scenario.selectedKey);
+  const edgeDistance = route.resident ? 0 : Math.min(...[...columns].map(([lane, range]) => {
+    const rowGap = cell.row < range.min ? range.min - cell.row : cell.row > range.max ? cell.row - range.max : 0;
+    return Math.hypot(4 * (cell.lane - lane), rowGap);
+  }));
+  const alongDistance = Math.abs(cell.row - selection.row) * .36;
+  const start = .18 + .34 * (1 - Math.exp(-(edgeDistance + alongDistance) / 9));
+  return { edgeDistance, alongDistance, start, end: start + .44 };
+}
+
+function checkRiseRoute(flight, q, context, id, route) {
+  const rise = route?.rise;
+  if (!rise || typeof rise !== "object") {
+    addError(flight.errors, { context, reason: "case route is missing its per-item rise schedule", id, route: cloneRoute(route) });
+    return;
+  }
+  const expected = expectedRiseSchedule(flight, route);
+  for (const key of ["edgeDistance", "alongDistance", "start", "end"])
+    if (!Number.isFinite(Number(rise[key])) || Math.abs(Number(rise[key]) - expected[key]) > 1e-7)
+      addError(flight.errors, { context, reason: `rise ${key} differs from the independent address formula`, id,
+        actual: rise[key], expected: expected[key], arrayCell: route.arrayCell });
+  const amount = deploymentStep(q, expected.start, expected.end);
+  const lift = route.resident ? .22 * Math.sin(Math.PI * amount) ** 2 : 0;
+  if (!Number.isFinite(Number(rise.amount)) || Math.abs(Number(rise.amount) - amount) > 1e-7)
+    addError(flight.errors, { context, reason: "rise amount does not follow its per-item q interval", id,
+      q: round(q), actual: rise.amount, expected: round(amount), start: expected.start, end: expected.end });
+  if (!Number.isFinite(Number(rise.lift)) || Math.abs(Number(rise.lift) - lift) > 1e-7)
+    addError(flight.errors, { context, reason: "resident lift differs from the independent single-peak formula", id,
+      q: round(q), actual: rise.lift, expected: round(lift), resident: route.resident });
 }
 
 function makePoseSnapshot(flight, context) {
@@ -349,7 +390,7 @@ function makePoseSnapshot(flight, context) {
   camera.updateMatrixWorld(true);
   const frame = transition.frame;
   const q = Number(frame.q), qVelocity = Number(frame.qVelocity);
-  const expectedRise = deploymentStep(q, .2, 1);
+  const expectedRise = deploymentStep(q, .18, .96);
   const expectedGroundY = THREE.MathUtils.lerp(-4.63, ARRAY_GROUND_Y, 1 - deploymentStep(q, .65, .95));
   flight.counts.samples++;
   flight.qRange.min = Math.min(flight.qRange.min, q);
@@ -360,7 +401,7 @@ function makePoseSnapshot(flight, context) {
   if (!Number.isFinite(qVelocity) || Math.abs(qVelocity) > VELOCITY_LIMIT + 1e-7)
     addError(flight.errors, { context, reason: "q velocity exceeds .44", q: round(q), qVelocity: round(qVelocity) });
   if (Math.abs(Number(frame.extraRise) - expectedRise) > 1e-8)
-    addError(flight.errors, { context, reason: "extraRise is not the independent .2-to-1 vertical phase",
+    addError(flight.errors, { context, reason: "extraRise is not the independent global .18-to-.96 transition envelope",
       q: round(q), actual: round(frame.extraRise), expected: round(expectedRise) });
   if (Math.abs(Number(frame.groundY) - expectedGroundY) > 1e-8)
     addError(flight.errors, { context, reason: "groundY does not follow the floor phase",
@@ -395,13 +436,16 @@ function makePoseSnapshot(flight, context) {
     if (route) {
       const arrayCell = route.arrayCell;
       const arrayKey = cellKey(arrayCell);
+      checkRiseRoute(flight, q, context, id, route);
       if (typeof route.resident !== "boolean" || typeof route.hasArray !== "boolean" ||
           typeof route.hasMatrix !== "boolean" || route.core !== route.resident || route.hasArray !== route.resident || !arrayKey)
         addError(flight.errors, { context, reason: "resident/endpoint route contract mismatch", id, entry: cell.foobarEntryKey, route: cloneRoute(route) });
-      const routeState = `${route.resident}|${route.hasArray}|${route.hasMatrix}|${arrayKey}`;
+      const rise = route.rise;
+      const riseState = rise ? [rise.start, rise.end, rise.edgeDistance, rise.alongDistance].map(round).join(":") : "missing";
+      const routeState = `${route.resident}|${route.hasArray}|${route.hasMatrix}|${arrayKey}|${riseState}`;
       const previousRoute = flight.routeById.get(id);
       if (previousRoute != null && previousRoute !== routeState)
-        addError(flight.errors, { context, reason: "fixed route or arrayCell changed", id, before: previousRoute, after: routeState });
+        addError(flight.errors, { context, reason: "fixed route, arrayCell or rise schedule changed", id, before: previousRoute, after: routeState });
       else flight.routeById.set(id, routeState);
       if (route.resident) {
         residentCount++;
@@ -468,18 +512,21 @@ function decompose(matrixArray) {
   return { position, rotation, scale };
 }
 
-function directPoseMatrix(q0Array, q1Array, selectedQ0Array, selectedQ1Array, q, heading, extra = false) {
+function directPoseMatrix(q0Array, q1Array, selectedQ0Array, selectedQ1Array, q, heading, route) {
   const amount = deploymentStep(q);
+  const rise = route?.rise;
+  const riseAmount = rise && Number.isFinite(Number(rise.start)) && Number.isFinite(Number(rise.end))
+    ? deploymentStep(q, rise.start, rise.end) : 0;
   const a = decompose(q0Array), b = decompose(q1Array);
   const selectedA = decompose(selectedQ0Array), selectedB = decompose(selectedQ1Array);
   const position = a.position.clone().lerp(b.position, amount);
-  if (extra) position.y = THREE.MathUtils.lerp(a.position.y, b.position.y, deploymentStep(q, .2, 1));
+  if (route?.resident === false) position.y = THREE.MathUtils.lerp(a.position.y, b.position.y, riseAmount);
+  else if (route?.resident === true) position.y += .22 * Math.sin(Math.PI * riseAmount) ** 2;
   const rotation = a.rotation.clone().slerp(b.rotation, amount);
   const scale = a.scale.clone().lerp(b.scale, amount);
   const pivot = selectedA.position.clone().lerp(selectedB.position, amount);
   const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), heading);
   position.sub(pivot).applyQuaternion(yaw).add(pivot);
-  if (!extra) position.y += .28 * deploymentStep(q, 0, .06) * (1 - deploymentStep(q, .65, .9));
   rotation.premultiply(yaw);
   return new THREE.Matrix4().compose(position, rotation, scale);
 }
@@ -506,7 +553,7 @@ function checkDirectPose(flight, snapshot) {
     }
     const extra = instance.route?.resident === false;
     const expected = directPoseMatrix(pair.q0, pair.q1, endpoint.selectedQ0, endpoint.selectedQ1,
-      snapshot.q, snapshot.heading, extra);
+      snapshot.q, snapshot.heading, instance.route);
     const actual = new THREE.Matrix4().fromArray(instance.matrix);
     const error = matrixError(actual, expected);
     flight.directPose.samples++;
@@ -520,7 +567,8 @@ function checkDirectPose(flight, snapshot) {
     }
     if (error > DIRECT_POSE_TOLERANCE)
       addError(flight.errors, { context: snapshot.context,
-        reason: extra ? "extra matrix differs from eased XZ and independent vertical-rise path" : "resident matrix differs from ease(q)+heading+lift path",
+        reason: extra ? "extra matrix differs from eased XZ and its independent vertical-rise path" :
+          "resident matrix differs from ease(q)+heading+its ordered single-peak lift path",
         q: round(snapshot.q), id: instance.id, entry: instance.entry, error: round(error) });
   }
 }
@@ -584,22 +632,56 @@ function recordArrayEndpointAudit(flight) {
     const bounds = item.aabb ? new THREE.Box3(new THREE.Vector3().fromArray(item.aabb.min),
       new THREE.Vector3().fromArray(item.aabb.max)) : new THREE.Box3();
     return { id: item.id, entry: item.entry, arrayCell: item.route.arrayCell, alpha: item.alpha,
+      rise: item.route.rise,
       unitScale: item.scale.every(value => Math.abs(value - 1) <= 1e-6),
       positiveDepth: item.projection.positiveDepth,
       belowGround: bounds.max.y < endpoint.groundY - .239,
       verticalClearance: round(endpoint.groundY - bounds.max.y),
       bounds: { min: roundVector(bounds.min), max: roundVector(bounds.max) } };
   });
+  const extraStarts = extraFacts.map(item => Number(item.rise?.start)).filter(Number.isFinite);
+  const riseRange = extraStarts.length ? Math.max(...extraStarts) - Math.min(...extraStarts) : 0;
+  const extraRowsByLane = new Map();
+  for (const item of extraFacts) {
+    const rows = extraRowsByLane.get(item.arrayCell.lane) ?? [];
+    rows.push({ row: item.arrayCell.row, start: Number(item.rise?.start),
+      distance: Number(item.rise?.edgeDistance) + Number(item.rise?.alongDistance) });
+    extraRowsByLane.set(item.arrayCell.lane, rows);
+  }
+  const adjacentRiseFailures = [];
+  for (const [lane, rows] of extraRowsByLane) {
+    rows.sort((left, right) => left.row - right.row || left.distance - right.distance);
+    for (let index = 1; index < rows.length; index++) {
+      const previous = rows[index - 1], current = rows[index];
+      if (current.row - previous.row !== 1) continue;
+      const distanceDelta = current.distance - previous.distance, startDelta = current.start - previous.start;
+      if (Math.abs(startDelta) > .055 || (Math.abs(distanceDelta) > 1e-6 && distanceDelta * startDelta <= 0))
+        adjacentRiseFailures.push({ lane, previous, current, distanceDelta, startDelta });
+    }
+  }
+  const residentLaneMin = lanes.length ? Math.min(...lanes) : Infinity;
+  const residentLaneMax = lanes.length ? Math.max(...lanes) : -Infinity;
+  const extraLaneSides = { left: extras.filter(item => item.route.arrayCell.lane < residentLaneMin).length,
+    right: extras.filter(item => item.route.arrayCell.lane > residentLaneMax).length };
+  const outerSidesCovered = extraLaneSides.left > 0 && extraLaneSides.right > 0;
+  const outerSidesRequired = flight.scenario.groupLengths.length >= 4;
+  const staggeredRiseOkay = riseRange > .1 && adjacentRiseFailures.length === 0 &&
+    extraFacts.every(item => Number.isFinite(Number(item.rise?.start)) && Number.isFinite(Number(item.rise?.end)));
   const ok = residents.length === flight.scenario.count && lanes.length >= 2 && extras.length > 0 &&
+    staggeredRiseOkay && (!outerSidesRequired || outerSidesCovered) &&
     extraFacts.every(item => item.alpha != null && Math.abs(item.alpha - 1) <= 1e-6 && item.unitScale &&
       item.positiveDepth && item.belowGround);
-  if (!ok) addError(flight.errors, { reason: "ARRAY endpoint does not keep canonical residents and fully buried M-only copies",
+  if (!ok) addError(flight.errors, { reason: "ARRAY endpoint fails its resident, buried-copy or staggered-rise audit",
     residentCount: residents.length, expectedResidents: flight.scenario.count, residentLanes: lanes,
+    staggeredRise: { ok: staggeredRiseOkay, riseRange: round(riseRange), adjacentRiseFailures: adjacentRiseFailures.slice(0, 12),
+      extraLaneSides, outerSidesRequired, outerSidesCovered },
     mOnlyCount: extras.length, mOnlyFailures: extraFacts.filter(item => !(item.alpha != null && Math.abs(item.alpha - 1) <= 1e-6 &&
       item.unitScale && item.positiveDepth && item.belowGround)).slice(0, 10) });
   return { ok, residentCount: residents.length, expectedResidents: flight.scenario.count, residentLanes: lanes,
     mOnlyCount: extras.length, mOnlyBelowGroundCount: extraFacts.filter(item => item.belowGround).length,
     minimumVerticalClearance: extraFacts.length ? Math.min(...extraFacts.map(item => item.verticalClearance)) : null,
+    staggeredRise: { ok: staggeredRiseOkay, startRange: round(riseRange), adjacentRiseFailures: adjacentRiseFailures.slice(0, 12),
+      extraLaneSides, outerSidesRequired, outerSidesCovered },
     mOnlySamples: extraFacts.slice(0, 24) };
 }
 
@@ -744,12 +826,13 @@ async function main() {
       canonicalArray: { rowsPerColumn: ARRAY_ROWS, fixtures: scenariosToRun.map(item => item.groupLengths),
         packing: "global catalog order; lane=floor(order/20), row=order%20" },
       matrixPool: { lanes: MATRIX_LANES, rows: MATRIX_ROWS, activeRowsPerLane: MATRIX_WINDOW_ROWS },
-      path: "direct deploymentStep(q) endpoint pose mix, selected-anchor heading rotation, and q-based lift",
+      path: "direct deploymentStep(q) endpoint pose mix, selected-anchor heading rotation, per-item emergence and resident float lift",
       qBounds: [-Q_BOUND, 1 + Q_BOUND], qVelocityLimit: VELOCITY_LIMIT,
       caseBounds: { min: CASE_BOUNDS.min.toArray(), max: CASE_BOUNDS.max.toArray(), dimensions: CASE_SIZE.toArray() },
       collisionMethod: "current-frame AABB broadphase followed by 15-axis OBB separating-axis test on the full transformed CASE_BOUNDS",
       cameraDepth: "production flight camera endpoints; every sampled case bbox is checked against camera near/far depth",
-      loopCopies: "M-only copies remain unit-scale and alpha one; their ARRAY endpoint is a standard ARRAY lattice position with the full case bbox below the floor, then rises by extraRise",
+      loopCopies: "M-only copies remain unit-scale and alpha one; their ARRAY endpoint is fully below the floor, then each rises on its address-derived q interval",
+      residentLift: "residents use the same address schedule and add a .22*sin(pi*amount)^2 single-peak lift without leaving the ARRAY lattice",
     },
     scenarios,
     summary: {
@@ -776,7 +859,8 @@ async function main() {
       arrayEndpoint: { residents: item.arrayLoopEndpoint.residentCount, mOnly: item.arrayLoopEndpoint.mOnlyCount,
         belowGround: item.arrayLoopEndpoint.mOnlyBelowGroundCount,
         minimumVerticalClearance: item.arrayLoopEndpoint.minimumVerticalClearance },
-      geometryErrors: item.geometryErrors.length, collisions: item.collisions.uniquePairs })) }, null, 2));
+      geometryErrors: item.geometryErrors.length, geometryErrorSamples: item.geometryErrors.slice(0, 3),
+      collisions: item.collisions.uniquePairs })) }, null, 2));
   if (report.summary.geometryErrors > 0 || report.summary.uniqueCollisionPairs > 0 || report.summary.retargetErrors > 0)
     process.exitCode = 1;
 }

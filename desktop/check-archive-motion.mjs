@@ -292,13 +292,47 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     })()`);
     if (!clicked) throw new Error(`Missing or disabled archive motion control: ${selector}`);
   };
+  const diagnosticFailure = item => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.ok === false || item.okay === false || item.passed === false || item.sampleOkay === false) return true;
+    if (finiteValue(item.error) && Math.abs(Number(item.error)) > .035) return true;
+    const failureFlags = ['routeStable','arrayCellStable','alphaOkay','scaleDepthOkay','geometryPathFinite',
+      'badgeKindValid','extraClipMatchesRoute','completeBoundsAtArray','riseMonotonicByQ',
+      'riseMonotonicInTravel','extraRiseRange','fullyRaisedAtMatrix','adjacentSlotsContinuous',
+      'visibleAmountsDiffer','orderedWindowsVary'];
+    return failureFlags.some(key => item[key] === false) ||
+      Object.entries(item).some(([key, value]) =>
+        /(?:^missing|failures$|misses$|unmatched$|duplicateIds$|ownerChanges$)/i.test(key) &&
+        Array.isArray(value) && value.length > 0);
+  };
+  const summarizeDiagnostic = (value, key = '') => {
+    if (Array.isArray(value)) {
+      if (value.length <= 12) return value.map(item => summarizeDiagnostic(item));
+      const numeric = value.every(item => typeof item === 'number' && Number.isFinite(item));
+      if (numeric) return { count:value.length, min:Math.min(...value), max:Math.max(...value),
+        first:value[0], last:value.at(-1) };
+      const failureList = /(?:failures|misses|unmatched|duplicateIds|ownerChanges|failingTracks)$/i.test(key);
+      const failures = value.filter(diagnosticFailure);
+      const sampleIndexes = [...new Set([0, Math.floor((value.length - 1) / 2), value.length - 1])];
+      return { count:value.length,
+        ...(failureList ? { items:value.slice(0, 6).map(item => summarizeDiagnostic(item)) } : {}),
+        ...(failures.length ? { failureCount:failures.length,
+          failures:failures.slice(0, 6).map(item => summarizeDiagnostic(item)) } : {}),
+        ...(!failureList ? { samples:sampleIndexes.map(index => summarizeDiagnostic(value[index])) } : {}) };
+    }
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value).map(([childKey, child]) =>
+      [childKey, summarizeDiagnostic(child, childKey)]));
+  };
   const record = (name, passed, detail = null) => {
     result.assertions[name] = Boolean(passed);
-    result.cases.push({ name, ok:Boolean(passed), ...(detail === null ? {} : { detail }) });
+    result.cases.push({ name, ok:Boolean(passed),
+      ...(detail === null ? {} : { detail:summarizeDiagnostic(detail) }) });
   };
   const recordObserved = (name, passed, detail = null) => {
     result.assertions[name] = Boolean(passed);
-    result.cases.push({ name, ok:Boolean(passed), ...(detail === null ? {} : { detail }) });
+    result.cases.push({ name, ok:Boolean(passed),
+      ...(detail === null ? {} : { detail:summarizeDiagnostic(detail) }) });
   };
   const shortState = state => ({
     design:state.design, page:state.page, viewLayout:state.viewLayout,
@@ -363,6 +397,22 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
   const arrayCellKey = value => Number.isFinite(Number(value?.lane)) && Number.isFinite(Number(value?.row))
     ? `${Number(value.lane)}:${Number(value.row)}` : null;
   const fixtureMatrixShelves = buildArchiveMotionFixtureShelves(probeReport?.syntheticArchiveMotionFixtureCatalog);
+  const routeRiseIdentity = route => route?.rise == null ? null : {
+    start:route.rise.start ?? null, end:route.rise.end ?? null,
+    edgeDistance:route.rise.edgeDistance ?? null, alongDistance:route.rise.alongDistance ?? null,
+  };
+  const riseScheduleOkay = rise => {
+    if (!rise || !finiteValue(rise.start) || !finiteValue(rise.end) ||
+        !finiteValue(rise.edgeDistance) || !finiteValue(rise.alongDistance) ||
+        !finiteValue(rise.amount) || !finiteValue(rise.lift)) return false;
+    const start = Number(rise.start), end = Number(rise.end);
+    const edgeDistance = Number(rise.edgeDistance), alongDistance = Number(rise.alongDistance);
+    const amount = Number(rise.amount);
+    const expectedStart = .18 + .34 * (1 - Math.exp(-(edgeDistance + alongDistance) / 9));
+    return edgeDistance >= 0 && alongDistance >= 0 && amount >= -.001 && amount <= 1.001 &&
+      start >= .18 - .002 && start <= .52 + .002 && Math.abs(start - expectedStart) <= .002 &&
+      Math.abs((end - start) - .44) <= .002 && end >= .62 - .002 && end <= .96 + .002;
+  };
   const xyz = value => Array.isArray(value) && value.length >= 3 && value.slice(0, 3).every(Number.isFinite)
     ? value.slice(0, 3).map(Number) : null;
   const geometryPoseMap = samples => new Map((Array.isArray(samples) ? samples : [])
@@ -574,7 +624,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       const cell = `${Number(instance.cell.lane)}:${Number(instance.cell.row)}`;
       const route = instance.route ? { resident:instance.route.resident ?? null, core:instance.route.core ?? null,
         hasArray:instance.route.hasArray ?? null, hasMatrix:instance.route.hasMatrix ?? null,
-        arrayCell:arrayCellKey(instance.route.arrayCell) } : null;
+        arrayCell:arrayCellKey(instance.route.arrayCell), rise:routeRiseIdentity(instance.route) } : null;
       return [instance.id || `${entry}|${cell}`, { id:instance.id ?? null, entry, cell, route, matrix:instance.matrix }];
     }));
   };
@@ -653,8 +703,90 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const routeContractFailures = routeFrame.filter(item =>
       typeof item.route.resident !== 'boolean' || typeof item.route.hasArray !== 'boolean' ||
       typeof item.route.hasMatrix !== 'boolean' || item.route.hasArray !== item.route.resident ||
-      item.route.core !== item.route.resident || !item.arrayCellKey)
+      item.route.core !== item.route.resident || !item.arrayCellKey || !riseScheduleOkay(item.route.rise))
       .map(({ id, entry, cell, route, arrayCellKey:key }) => ({ id, entry, cell, route, arrayCellKey:key }));
+    const riseFormulaFailures = routeFrame.filter(item => {
+      const rise = item.route?.rise, q = Number(transition.q);
+      if (!riseScheduleOkay(rise) || !Number.isFinite(q)) return true;
+      const expectedAmount = quinticStep(q, Number(rise.start), Number(rise.end));
+      const expectedLift = item.route.resident === true ? .22 * Math.sin(Math.PI * expectedAmount) ** 2 : 0;
+      return Math.abs(Number(rise.amount) - expectedAmount) > .01 ||
+        Math.abs(Number(rise.lift) - expectedLift) > .004;
+    }).map(({ id, entry, cell, route, arrayCellKey:key }) => {
+      const rise = route?.rise, q = Number(transition.q);
+      const expectedAmount = riseScheduleOkay(rise) && Number.isFinite(q)
+        ? quinticStep(q, Number(rise.start), Number(rise.end)) : null;
+      const expectedLift = expectedAmount === null ? null
+        : route.resident === true ? .22 * Math.sin(Math.PI * expectedAmount) ** 2 : 0;
+      return { id, entry, cell, route, arrayCellKey:key, q, expectedAmount, expectedLift };
+    });
+    const residentColumnRanges = new Map();
+    for (const item of routeFrame.filter(item => item.route.resident === true && item.arrayCellKey)) {
+      const lane = Number(item.route.arrayCell.lane), row = Number(item.route.arrayCell.row);
+      if (!Number.isFinite(lane) || !Number.isFinite(row)) continue;
+      const range = residentColumnRanges.get(lane) ?? { min:row, max:row };
+      range.min = Math.min(range.min, row); range.max = Math.max(range.max, row);
+      residentColumnRanges.set(lane, range);
+    }
+    const riseOriginLane = Number(transition.riseOrigin?.lane), riseOriginRow = Number(transition.riseOrigin?.row);
+    if (Number.isFinite(riseOriginLane) && Number.isFinite(riseOriginRow)) {
+      const range = residentColumnRanges.get(riseOriginLane) ?? { min:riseOriginRow, max:riseOriginRow };
+      range.min = Math.min(range.min, riseOriginRow); range.max = Math.max(range.max, riseOriginRow);
+      residentColumnRanges.set(riseOriginLane, range);
+    }
+    const selectedArrayRow = Number(transition.riseOrigin?.row);
+    const riseDistanceFailures = routeFrame.filter(item => {
+      const rise = item.route?.rise, cell = item.route?.arrayCell;
+      const lane = Number(cell?.lane), row = Number(cell?.row);
+      if (!riseScheduleOkay(rise) || !Number.isFinite(lane) || !Number.isFinite(row) ||
+          !Number.isFinite(selectedArrayRow)) return true;
+      const expectedAlong = .36 * Math.abs(row - selectedArrayRow);
+      let expectedEdge = 0;
+      if (item.route.resident !== true) {
+        const distances = [...residentColumnRanges.entries()].map(([columnLane, range]) => {
+          const rowDistance = row < range.min ? range.min - row : row > range.max ? row - range.max : 0;
+          return Math.hypot(4 * (lane - columnLane), rowDistance);
+        });
+        if (!distances.length) return true;
+        expectedEdge = Math.min(...distances);
+      }
+      return Math.abs(Number(rise.edgeDistance) - expectedEdge) > .002 ||
+        Math.abs(Number(rise.alongDistance) - expectedAlong) > .002;
+    }).map(({ id, entry, cell, route, arrayCellKey:key }) => {
+      const rise = route?.rise, arrayCell = route?.arrayCell;
+      const lane = Number(arrayCell?.lane), row = Number(arrayCell?.row);
+      const expectedAlong = Number.isFinite(row) && Number.isFinite(selectedArrayRow)
+        ? .36 * Math.abs(row - selectedArrayRow) : null;
+      let expectedEdge = null;
+      if (route?.resident === true && Number.isFinite(lane)) expectedEdge = 0;
+      else if (Number.isFinite(lane) && Number.isFinite(row) && residentColumnRanges.size) {
+        expectedEdge = Math.min(...[...residentColumnRanges.entries()].map(([columnLane, range]) => {
+          const rowDistance = row < range.min ? range.min - row : row > range.max ? row - range.max : 0;
+          return Math.hypot(4 * (lane - columnLane), rowDistance);
+        }));
+      }
+      return { id, entry, cell, route, arrayCellKey:key, selectedArrayRow,
+        expectedEdgeDistance:expectedEdge, expectedAlongDistance:expectedAlong };
+    });
+    const focusRise = transition.focusRise ?? null;
+    const focusQ = Number(transition.q);
+    const expectedFocusAmount = riseScheduleOkay(focusRise) && Number.isFinite(focusQ)
+      ? quinticStep(focusQ, Number(focusRise.start), Number(focusRise.end)) : null;
+    const expectedFocusLift = expectedFocusAmount === null ? null
+      : .22 * Math.sin(Math.PI * expectedFocusAmount) ** 2;
+    const focusOwner = routeFrame.find(item => item.route.resident === true &&
+      Number(item.route.arrayCell?.lane) === Number(transition.riseOrigin?.lane) &&
+      Number(item.route.arrayCell?.row) === Number(transition.riseOrigin?.row));
+    const focusRiseFailures = !riseScheduleOkay(focusRise) || Math.abs(Number(focusRise.start) - .18) > .002 ||
+      Math.abs(Number(focusRise.end) - .62) > .002 || Math.abs(Number(focusRise.edgeDistance)) > .002 ||
+      Math.abs(Number(focusRise.alongDistance)) > .002 ||
+      Math.abs(Number(focusRise.amount) - Number(expectedFocusAmount)) > .01 ||
+      Math.abs(Number(focusRise.lift) - Number(expectedFocusLift)) > .004 ||
+      (focusOwner && (Math.abs(Number(focusOwner.route.rise.amount) - Number(focusRise.amount)) > .01 ||
+        Math.abs(Number(focusOwner.route.rise.lift) - Number(focusRise.lift)) > .004))
+      ? [{ q:focusQ, focusRise, expectedAmount:expectedFocusAmount, expectedLift:expectedFocusLift,
+          focusOwner:focusOwner ? { id:focusOwner.id, arrayCell:focusOwner.route.arrayCell, rise:focusOwner.route.rise } : null }]
+      : [];
     const oneEndScaleDepthFailures = oneEndRoutes.filter(item => !item.unitScale || !item.positiveDepth)
       .map(({ id, entry, cell, route, scale, positiveDepth, ndcBounds }) =>
         ({ id, entry, cell, route, scale, positiveDepth, ndcBounds }));
@@ -677,6 +809,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       phase:transition.phase ?? null, entryPhase:transition.phase ?? null,
       groundY:finiteValue(transition.groundY) ? Number(transition.groundY) : null,
       extraRise:finiteValue(transition.extraRise) ? Number(transition.extraRise) : null,
+      riseOrigin:transition.riseOrigin ?? null,
+      focusRise,
       hiRes:state.stats?.hiRes ?? null, floorY:finiteValue(state.stats?.floorY) ? Number(state.stats.floorY) : null,
       archiveBadge:state.stats?.archiveBadge ?? null,
       path:transition.path ?? null, heading:Number(transition.heading),
@@ -700,6 +834,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         positiveDepth, fullyOffscreen, intersectsFrustum, worldBounds, badgeKind, extraClip }) => ({ id, entry, cell, route, arrayCellKey,
         alpha, scale, unitScale, positiveDepth, fullyOffscreen, intersectsFrustum, worldBounds, badgeKind, extraClip })),
       residentRouteCount:residentInstances.length, residentScaleFailures, routeContractFailures,
+      riseFormulaFailures, riseDistanceFailures, focusRiseFailures,
       residentIds:residentInstances.map(item => ({ id:item.id, entry:item.entry, arrayCellKey:item.arrayCellKey,
         alpha:item.alpha, unitScale:item.unitScale, positiveDepth:item.positiveDepth,
         intersectsFrustum:item.intersectsFrustum })),
@@ -714,6 +849,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     result.flightSamples.push(sample);
     result.geometryFrames.push({ context, q:sample.q, requestedQ, endpoint, frameTime:sample.frameTime,
       entryPhase:sample.entryPhase, groundY:sample.groundY, floorY:sample.floorY, extraRise:sample.extraRise,
+      riseOrigin:sample.riseOrigin, focusRise:sample.focusRise,
       floorY:sample.floorY, archiveBadge:sample.archiveBadge, hiRes:sample.hiRes,
       hiRes:sample.hiRes,
       selectedAlbumId:sample.selectedAlbumId, selectedEntryKey:sample.selectedEntryKey,
@@ -742,7 +878,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       candidates.push(owner);
       activeByOffset.set(key, candidates);
     }
-    const matchedIds = new Set(), unmatched = [], duplicateIds = [];
+    const matchedIds = new Set(), unmatched = [], duplicateIds = [], endpointRouteRiseRepairs = [], endpointRiseFormulaFailures = [];
     for (const owner of endpoint.instanceOwners ?? []) {
       const key = offsetKey({ ...owner, selectedCell:endpoint.selectedCell });
       const candidates = key ? activeByOffset.get(key) ?? [] : [];
@@ -754,7 +890,33 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       if (matchedIds.has(candidate.id)) duplicateIds.push({ id:candidate.id, entry:owner.entry, cell:owner.cell, key });
       matchedIds.add(candidate.id);
       owner.id = candidate.id;
-      owner.route = candidate.route;
+      const endpointQ = Number(endpoint.q);
+      const endpointRoute = owner.route;
+      const sourceRise = endpointRoute?.rise ?? candidate.route?.rise;
+      if (endpointRoute?.rise) {
+        if (riseScheduleOkay(endpointRoute.rise) && Number.isFinite(endpointQ)) {
+          const expectedAmount = quinticStep(endpointQ, Number(endpointRoute.rise.start), Number(endpointRoute.rise.end));
+          const expectedLift = endpointRoute.resident === true ? .22 * Math.sin(Math.PI * expectedAmount) ** 2 : 0;
+          if (Math.abs(Number(endpointRoute.rise.amount) - expectedAmount) > .01 ||
+              Math.abs(Number(endpointRoute.rise.lift) - expectedLift) > .004)
+            endpointRiseFormulaFailures.push({ id:owner.id, entry:owner.entry, cell:owner.cell, q:endpointQ,
+              route:endpointRoute, expectedAmount, expectedLift });
+        } else endpointRiseFormulaFailures.push({ id:owner.id, entry:owner.entry, cell:owner.cell,
+          q:endpointQ, route:endpointRoute, reason:'endpoint route rise metadata is incomplete' });
+        owner.route = endpointRoute;
+      } else if (riseScheduleOkay(sourceRise) && Number.isFinite(endpointQ)) {
+        const amount = quinticStep(endpointQ, Number(sourceRise.start), Number(sourceRise.end));
+        const lift = (endpointRoute?.resident ?? candidate.route?.resident) === true
+          ? .22 * Math.sin(Math.PI * amount) ** 2 : 0;
+        owner.route = { ...candidate.route, ...(endpointRoute ?? {}),
+          rise:{ ...sourceRise, amount, lift } };
+        endpointRouteRiseRepairs.push({ id:owner.id, entry:owner.entry, cell:owner.cell,
+          source:'nearest active fixed schedule', q:endpointQ, amount, lift });
+      } else {
+        owner.route = endpointRoute ?? candidate.route;
+        endpointRiseFormulaFailures.push({ id:owner.id, entry:owner.entry, cell:owner.cell,
+          q:endpointQ, route:owner.route, reason:'no usable endpoint or active rise schedule' });
+      }
     }
     const state = { stats:{ motionViewport:endpoint.motionViewport, cameraPosition:endpoint.cameraPosition,
       cameraAim:endpoint.cameraAim, cameraDistance:endpoint.cameraDistance, fieldOfView:endpoint.fieldOfView,
@@ -780,6 +942,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const oneEnd = routeVisibility.filter(item => item.route.hasArray !== item.route.hasMatrix);
     const matrixOnly = oneEnd.filter(item => item.route.hasArray === false && item.route.hasMatrix === true);
     endpoint.routeVisibility = routeVisibility;
+    endpoint.routeRiseRepairs = endpointRouteRiseRepairs;
+    endpoint.riseFormulaFailures = [...(endpoint.riseFormulaFailures ?? []), ...endpointRiseFormulaFailures];
     endpoint.residentRouteCount = resident.length;
     endpoint.residentIds = resident.map(item => ({ id:item.id, entry:item.entry, arrayCellKey:item.arrayCellKey,
       alpha:item.alpha, unitScale:item.unitScale, positiveDepth:item.positiveDepth,
@@ -788,7 +952,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     endpoint.routeContractFailures = routeVisibility.filter(item =>
       typeof item.route.resident !== 'boolean' || typeof item.route.hasArray !== 'boolean' ||
       typeof item.route.hasMatrix !== 'boolean' || item.route.hasArray !== item.route.resident ||
-      item.route.core !== item.route.resident || !item.arrayCellKey)
+      item.route.core !== item.route.resident || !item.arrayCellKey || !riseScheduleOkay(item.route.rise))
       .map(({ id, entry, cell, route, arrayCellKey:key }) => ({ id, entry, cell, route, arrayCellKey:key }));
     endpoint.oneEndRouteCount = oneEnd.length;
     endpoint.oneEndScaleDepthFailures = oneEnd.filter(item => !item.unitScale || !item.positiveDepth)
@@ -804,7 +968,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       projectedBounds:owner.projectedBounds }));
     return { context, endpointQ:endpoint.q, activeQ:active.q, mapped:matchedIds.size,
       endpointInstanceCount:(endpoint.instanceOwners ?? []).length, routed:routeVisibility.length,
-      unmatched, duplicateIds, activeSelectedCell:active.selectedCell, endpointSelectedCell:endpoint.selectedCell };
+      unmatched, duplicateIds, endpointRouteRiseRepairs, endpointRiseFormulaFailures,
+      activeSelectedCell:active.selectedCell, endpointSelectedCell:endpoint.selectedCell };
   };
   const auditMatrixPhysicalSlots = endpoint => {
     const gpuOwners = new Map(), duplicateCells = [], missingCellOwners = [], entryMismatches = [];
@@ -910,6 +1075,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const sourceBridge = hydrateEndpointRouteMetadata(sourceEndpoint, nearestActiveFrame(sourceEndpoint), `${context} source endpoint`);
     const targetBridge = hydrateEndpointRouteMetadata(targetEndpoint, nearestActiveFrame(targetEndpoint), `${context} target endpoint`);
     result.routeEndpointBridges.push(sourceBridge, targetBridge);
+    const endpointRiseFormulaFailures = [...(sourceBridge.endpointRiseFormulaFailures ?? []),
+      ...(targetBridge.endpointRiseFormulaFailures ?? [])];
     const arrayEndpoint = sourceQ === 0 ? sourceEndpoint : targetEndpoint;
     const matrixEndpoint = sourceQ === 1 ? sourceEndpoint : targetEndpoint;
     const matrixSlotOwnership = auditMatrixPhysicalSlots(matrixEndpoint);
@@ -936,11 +1103,13 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
             visible:visibility?.intersectsFrustum === true, entryPhase:frame.entryPhase ?? frame.phase ?? null,
             groundY:frame.groundY ?? null, floorY:frame.floorY ?? null, extraRise:frame.extraRise ?? null,
             entry:visibility?.entry ?? owner?.entry ?? null, route:visibility?.route ?? null,
+            rise:(visibility?.route ?? owner?.route)?.rise ?? null,
             arrayCellKey:visibility?.arrayCellKey ?? null, alpha:visibility?.alpha ?? null,
             badgeKind:visibility?.badgeKind ?? owner?.badgeKind ?? null,
             extraClip:visibility?.extraClip ?? owner?.extraClip ?? null,
             unitScale:visibility?.unitScale === true, positiveDepth:visibility?.positiveDepth === true,
             center:world?.center ?? null, worldBounds:world ? { min:world.min, max:world.max } : null,
+            centerY:world?.center?.[1] ?? null,
             surfaceBottom:world?.min?.[1] ?? null, surfaceTop:world?.max?.[1] ?? null };
         });
         const contiguousVisibility = (() => {
@@ -954,7 +1123,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         const routeStable = presentFrames.length > 0 && presentFrames.every(frame => {
           const route = frame.route;
           return !!route && route.resident === resident && route.hasArray === resident &&
-            (resident ? typeof route.hasMatrix === 'boolean' : route.hasMatrix === trackMatrixOnly);
+            (resident ? typeof route.hasMatrix === 'boolean' : route.hasMatrix === trackMatrixOnly) &&
+            riseScheduleOkay(route.rise) &&
+            JSON.stringify(routeRiseIdentity(route)) === JSON.stringify(routeRiseIdentity(presentFrames[0].route));
         });
         const arrayCellStable = !!expectedArrayCellKey && presentFrames.every(frame => frame.arrayCellKey === expectedArrayCellKey &&
           arrayCellKey(frame.route?.arrayCell) === expectedArrayCellKey);
@@ -978,9 +1149,11 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
           verticalSamples:frames.map(frame => ({ q:frame.q, requestedQ:frame.requestedQ, endpoint:frame.endpoint,
             present:frame.present, transitionActive:frame.transitionActive, entryPhase:frame.entryPhase,
             groundY:frame.groundY, floorY:frame.floorY,
-            extraRise:frame.extraRise,
+            extraRise:frame.extraRise, riseAmount:frame.rise?.amount ?? null, riseLift:frame.rise?.lift ?? null,
+            rise:frame.rise,
             badgeKind:frame.badgeKind, extraClip:frame.extraClip,
-            surfaceBottom:frame.surfaceBottom, surfaceTop:frame.surfaceTop, worldBounds:frame.worldBounds })),
+            centerY:frame.centerY, surfaceBottom:frame.surfaceBottom, surfaceTop:frame.surfaceTop,
+            worldBounds:frame.worldBounds })),
           missingQ:frames.filter(frame => !frame.present).map(frame => frame.q),
           hiddenQ:frames.filter(frame => frame.present && !frame.visible).map(frame => frame.q),
           alphaFailures:frames.filter(frame => !Number.isFinite(Number(frame.alpha)) ||
@@ -991,6 +1164,82 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const arrayResidentEntries = traceEndpointEntries(arrayEndpoint,
       item => item.route?.resident === true && item.route?.hasArray === true && item.entry !== identity.selectedEntryKey);
     const residentTracks = traceTracks(arrayResidentEntries, { resident:true });
+    const residentLiftTracks = residentTracks.map(track => {
+      const frames = track.verticalSamples.filter(frame => frame.present && finiteValue(frame.q) &&
+        finiteValue(frame.centerY) && finiteValue(frame.riseLift));
+      const firstRest = frames.filter(frame => frame.transitionActive && frame.entryPhase !== 'align')
+        .reduce((nearest, frame) => !nearest || Math.abs(Number(frame.q) - sourceQ) < Math.abs(Number(nearest.q) - sourceQ)
+          ? frame : nearest, null);
+      const targetRest = frames.find(frame => frame.endpoint && Math.abs(Number(frame.q) - targetQ) <= .001);
+      const preAlignSource = frames.find(frame => frame.endpoint && Math.abs(Number(frame.q) - sourceQ) <= .001);
+      const sourceRest = alignSamples.length ? firstRest : preAlignSource;
+      const sourceEase = sourceRest ? quinticStep(Number(sourceRest.q), 0, 1) : NaN;
+      const targetEase = targetRest ? quinticStep(Number(targetRest.q), 0, 1) : NaN;
+      const fitSpan = targetEase - sourceEase;
+      const validationFrames = frames.filter(frame =>
+        (frame.transitionActive && frame.entryPhase !== 'align') ||
+        (frame.endpoint && (Math.abs(Number(frame.q) - targetQ) <= .001 || !alignSamples.length)));
+      const residuals = validationFrames.map(frame => {
+        const progress = (quinticStep(Number(frame.q), 0, 1) - sourceEase) / fitSpan;
+        const baselineY = Number(sourceRest?.centerY) +
+          (Number(targetRest?.centerY) - Number(sourceRest?.centerY)) * progress;
+        const measuredLift = Number(frame.centerY) - baselineY;
+        return { q:frame.q, phase:frame.entryPhase, endpoint:frame.endpoint, measuredLift, expectedLift:Number(frame.riseLift),
+          error:measuredLift - Number(frame.riseLift) };
+      });
+      const peakMeasuredLift = residuals.length ? Math.max(...residuals.map(item => item.measuredLift)) : null;
+      return { id:track.id, entry:track.entry, arrayCell:track.arrayCell,
+        hasRestBaselines:!!sourceRest && !!targetRest, sourceQ:sourceRest?.q ?? null,
+        sourcePhase:sourceRest?.entryPhase ?? null, targetQ:targetRest?.q ?? null,
+        sourceY:finiteValue(sourceRest?.centerY) ? Number(sourceRest.centerY) : null,
+        targetY:finiteValue(targetRest?.centerY) ? Number(targetRest.centerY) : null,
+        preAlignSourceY:finiteValue(preAlignSource?.centerY) ? Number(preAlignSource.centerY) : null,
+        preAlignSourceDelta:finiteValue(preAlignSource?.centerY) && finiteValue(sourceRest?.centerY)
+          ? Number(preAlignSource.centerY) - Number(sourceRest.centerY) : null,
+        residuals, peakMeasuredLift,
+        okay:!!sourceRest && !!targetRest && Number.isFinite(fitSpan) && Math.abs(fitSpan) > 1e-6 &&
+          Math.abs(Number(sourceRest.q) - sourceQ) <= .1 && Math.abs(Number(sourceRest.riseLift)) <= .001 &&
+          residuals.length >= 3 &&
+          residuals.every(item => Number.isFinite(item.error) && Math.abs(item.error) <= .035) &&
+          Number.isFinite(peakMeasuredLift) && peakMeasuredLift > .1 };
+    });
+    const residentLiftPathOkay = residentLiftTracks.length > 0 && residentLiftTracks.every(track => track.okay);
+    const focusFirstRest = actual.filter(sample => sample.transitionActive && sample.phase !== 'align' &&
+      finiteValue(sample.heroWorldCenter?.[1]) && finiteValue(sample.focusRise?.lift))
+      .reduce((nearest, sample) => !nearest || Math.abs(Number(sample.q) - sourceQ) < Math.abs(Number(nearest.q) - sourceQ)
+        ? sample : nearest, null);
+    const focusTargetRest = actual.find(sample => sample.endpoint && Math.abs(Number(sample.q) - targetQ) <= .001);
+    const focusPreAlignSource = actual.find(sample => sample.endpoint && Math.abs(Number(sample.q) - sourceQ) <= .001);
+    const focusSourceRest = alignSamples.length ? focusFirstRest : focusPreAlignSource;
+    const focusSourceEase = focusSourceRest ? quinticStep(Number(focusSourceRest.q), 0, 1) : NaN;
+    const focusTargetEase = focusTargetRest ? quinticStep(Number(focusTargetRest.q), 0, 1) : NaN;
+    const focusFitSpan = focusTargetEase - focusSourceEase;
+    const selectedFocusLiftPath = actual.filter(sample => finiteValue(sample.q) &&
+      finiteValue(sample.heroWorldCenter?.[1]) && finiteValue(sample.focusRise?.lift) &&
+      ((sample.transitionActive && sample.phase !== 'align') ||
+        (sample.endpoint && (Math.abs(Number(sample.q) - targetQ) <= .001 || !alignSamples.length)))).map(sample => {
+      const progress = (quinticStep(Number(sample.q), 0, 1) - focusSourceEase) / focusFitSpan;
+      const baselineY = Number(focusSourceRest?.heroWorldCenter?.[1]) +
+        (Number(focusTargetRest?.heroWorldCenter?.[1]) - Number(focusSourceRest?.heroWorldCenter?.[1])) * progress;
+      const measuredLift = Number(sample.heroWorldCenter[1]) - baselineY;
+      return { q:sample.q, phase:sample.phase, endpoint:sample.endpoint,
+        riseAmount:Number(sample.focusRise.amount), measuredLift, expectedLift:Number(sample.focusRise.lift),
+        error:measuredLift - Number(sample.focusRise.lift) };
+    });
+    const selectedFocusPathOkay = !!focusSourceRest && !!focusTargetRest && Number.isFinite(focusFitSpan) &&
+      Math.abs(Number(focusSourceRest.q) - sourceQ) <= .1 && Math.abs(Number(focusSourceRest.focusRise?.lift)) <= .001 &&
+      Math.abs(focusFitSpan) > 1e-6 && selectedFocusLiftPath.length >= 3 && selectedFocusLiftPath.every(sample =>
+        Number.isFinite(sample.error) && Math.abs(sample.error) <= .035) &&
+      Math.max(...selectedFocusLiftPath.map(sample => sample.measuredLift)) > .1;
+    const selectedFocusBaseline = { sourceQ:focusSourceRest?.q ?? null, sourcePhase:focusSourceRest?.phase ?? null,
+      sourceY:finiteValue(focusSourceRest?.heroWorldCenter?.[1]) ? Number(focusSourceRest.heroWorldCenter[1]) : null,
+      targetQ:focusTargetRest?.q ?? null,
+      targetY:finiteValue(focusTargetRest?.heroWorldCenter?.[1]) ? Number(focusTargetRest.heroWorldCenter[1]) : null,
+      preAlignSourceY:finiteValue(focusPreAlignSource?.heroWorldCenter?.[1])
+        ? Number(focusPreAlignSource.heroWorldCenter[1]) : null,
+      preAlignSourceDelta:finiteValue(focusPreAlignSource?.heroWorldCenter?.[1]) &&
+        finiteValue(focusSourceRest?.heroWorldCenter?.[1])
+        ? Number(focusPreAlignSource.heroWorldCenter[1]) - Number(focusSourceRest.heroWorldCenter[1]) : null };
     const residentLanes = [...new Set(residentTracks.map(track => track.lane).filter(Number.isFinite))].sort((a, b) => a - b);
     const residentMovedLanes = [...new Set(residentTracks.filter(track => Number(track.endpointMovement) > .01)
       .map(track => track.lane).filter(Number.isFinite))].sort((a, b) => a - b);
@@ -1007,8 +1256,14 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const extraCurveSamples = actual.filter(sample => !sample.endpoint && sample.transitionActive &&
       finiteValue(sample.q) && finiteValue(sample.extraRise) && finiteValue(sample.groundY));
     const extraRiseFormulaFailures = extraCurveSamples.filter(sample =>
-      Math.abs(sample.extraRise - quinticStep(sample.q, .2, 1)) > .01).map(sample => ({ q:sample.q,
-      actualExtraRise:sample.extraRise, expectedExtraRise:quinticStep(sample.q, .2, 1) }));
+      Math.abs(sample.extraRise - quinticStep(sample.q, .18, .96)) > .01).map(sample => ({ q:sample.q,
+      actualEnvelope:sample.extraRise, expectedEnvelope:quinticStep(sample.q, .18, .96) }));
+    const perItemRiseFormulaFailures = actual.flatMap(sample =>
+      (sample.riseFormulaFailures ?? []).map(failure => ({ q:sample.q, ...failure })));
+    const riseDistanceFailures = actual.flatMap(sample =>
+      (sample.riseDistanceFailures ?? []).map(failure => ({ q:sample.q, ...failure })));
+    const focusRiseFormulaFailures = actual.flatMap(sample =>
+      (sample.focusRiseFailures ?? []).map(failure => ({ q:sample.q, ...failure })));
     const groundFormulaFailures = extraCurveSamples.filter(sample => {
       const expectedGroundY = expectedArchiveMotionGroundY(sample.q, sample.caseBounds);
       return !Number.isFinite(expectedGroundY) || Math.abs(sample.groundY - expectedGroundY) > .002;
@@ -1016,7 +1271,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       expectedGroundY:expectedArchiveMotionGroundY(sample.q, sample.caseBounds) }));
     const floorAgreementFailures = extraCurveSamples.filter(sample => !finiteValue(sample.floorY) ||
       Math.abs(sample.groundY - sample.floorY) > .002).map(sample => ({ q:sample.q, groundY:sample.groundY, floorY:sample.floorY }));
-    const matrixOnlyExtraRiseCurveOkay = extraCurveSamples.length > 0 && extraRiseFormulaFailures.length === 0;
+    const matrixOnlyExtraRiseCurveOkay = extraCurveSamples.length > 0 && extraRiseFormulaFailures.length === 0 &&
+      perItemRiseFormulaFailures.length === 0 && riseDistanceFailures.length === 0 &&
+      focusRiseFormulaFailures.length === 0;
     const matrixOnlyGroundCurveOkay = extraCurveSamples.length > 0 && groundFormulaFailures.length === 0 &&
       floorAgreementFailures.length === 0;
     const matrixOnlyTrackIntegrity = matrixOnlyTracks.length > 0 && matrixOnlyTracks.every(track =>
@@ -1024,7 +1281,7 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       track.scaleDepthOkay && track.geometryPathFinite && track.badgeKindValid && track.extraClipMatchesRoute);
     const matrixOnlyVerticalTracks = matrixOnlyTracks.map(track => {
       const actualPath = track.verticalSamples.filter(frame => frame.present && frame.transitionActive &&
-        finiteValue(frame.q) && finiteValue(frame.extraRise) &&
+        finiteValue(frame.q) && finiteValue(frame.riseAmount) &&
         finiteValue(frame.surfaceTop) && finiteValue(frame.groundY))
         .sort((left, right) => left.q - right.q);
       const nearestActualQ = q => actualPath.reduce((nearest, frame) => !nearest ||
@@ -1038,25 +1295,30 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         Number(nearArray.surfaceTop) <= Number(nearArray.groundY) - .001 &&
         Number(nearArray.surfaceBottom) <= Number(nearArray.surfaceTop);
       const riseMonotonicByQ = actualPath.length >= 3 && actualPath.slice(1).every((frame, index) =>
-        frame.extraRise + .005 >= actualPath[index].extraRise && frame.surfaceTop + .035 >= actualPath[index].surfaceTop);
-      const extraRiseRange = actualPath.length >= 2 && actualPath[0].extraRise <= .01 && actualPath.at(-1).extraRise >= .95;
-      const expectedNearMatrixRise = finiteValue(nearMatrix?.q) ? quinticStep(Number(nearMatrix.q), .2, 1) : null;
-      const fullyRaisedAtMatrix = finiteValue(nearMatrix?.extraRise) && finiteValue(expectedNearMatrixRise) &&
-        expectedNearMatrixRise >= .95 && Math.abs(Number(nearMatrix.extraRise) - expectedNearMatrixRise) <= .01;
+        frame.riseAmount + .005 >= actualPath[index].riseAmount && frame.surfaceTop + .035 >= actualPath[index].surfaceTop);
+      const riseAmounts = actualPath.map(frame => Number(frame.riseAmount));
+      const extraRiseRange = riseAmounts.length >= 2 && riseAmounts.every(value => value >= -.001 && value <= 1.001) &&
+        Math.max(...riseAmounts) - Math.min(...riseAmounts) >= .75;
+      const expectedNearMatrixRise = finiteValue(nearMatrix?.q) && riseScheduleOkay(nearMatrix?.rise)
+        ? quinticStep(Number(nearMatrix.q), Number(nearMatrix.rise.start), Number(nearMatrix.rise.end)) : null;
+      const fullyRaisedAtMatrix = finiteValue(nearMatrix?.riseAmount) && finiteValue(expectedNearMatrixRise) &&
+        Math.abs(Number(nearMatrix.riseAmount) - expectedNearMatrixRise) <= .01;
       const sinkMonotonicInTravel = actualPath.length >= 3 && [...actualPath].reverse().slice(1).every((frame, index, reversed) =>
-        frame.surfaceTop <= reversed[index].surfaceTop + .035 && frame.extraRise <= reversed[index].extraRise + .005);
+        frame.surfaceTop <= reversed[index].surfaceTop + .035 && frame.riseAmount <= reversed[index].riseAmount + .005);
       const riseMonotonicInTravel = target === 'array' ? riseMonotonicByQ : sinkMonotonicInTravel;
       const verticalTravelDistance = actualPath.length >= 2 ? actualPath.at(-1).surfaceTop - actualPath[0].surfaceTop : null;
       return { id:track.id, entry:track.entry, arrayCell:track.arrayCell, completeBoundsAtArray,
         arraySurface:{ q:nearArray?.q ?? null, entryPhase:nearArray?.entryPhase ?? null, groundY:nearArray?.groundY ?? null,
-          extraRise:nearArray?.extraRise ?? null, surfaceBottom:nearArray?.surfaceBottom ?? null,
+          extraRise:nearArray?.extraRise ?? null, riseAmount:nearArray?.riseAmount ?? null,
+          surfaceBottom:nearArray?.surfaceBottom ?? null,
           surfaceTop:nearArray?.surfaceTop ?? null, badgeKind:nearArray?.badgeKind ?? null,
           extraClip:nearArray?.extraClip ?? null, worldBounds:nearArray?.worldBounds ?? null },
         matrixSurface:{ q:nearMatrix?.q ?? null, entryPhase:nearMatrix?.entryPhase ?? null, groundY:nearMatrix?.groundY ?? null,
-          extraRise:nearMatrix?.extraRise ?? null, surfaceBottom:nearMatrix?.surfaceBottom ?? null,
+          extraRise:nearMatrix?.extraRise ?? null, riseAmount:nearMatrix?.riseAmount ?? null,
+          surfaceBottom:nearMatrix?.surfaceBottom ?? null,
           surfaceTop:nearMatrix?.surfaceTop ?? null, badgeKind:nearMatrix?.badgeKind ?? null,
           extraClip:nearMatrix?.extraClip ?? null, worldBounds:nearMatrix?.worldBounds ?? null },
-        actualPathQ:actualPath.map(frame => frame.q), extraRise:actualPath.map(frame => frame.extraRise),
+        actualPathQ:actualPath.map(frame => frame.q), riseAmount:actualPath.map(frame => frame.riseAmount),
         surfaceTop:actualPath.map(frame => frame.surfaceTop), riseMonotonicByQ, riseMonotonicInTravel,
         sinkMonotonicInTravel, extraRiseRange, fullyRaisedAtMatrix, verticalTravelDistance };
     });
@@ -1071,6 +1333,39 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const matrixOnlyRisePathOkay = matrixOnlyVerticalTracks.length > 0 && matrixOnlyVerticalTracks.every(track =>
       track.riseMonotonicInTravel && track.extraRiseRange && track.fullyRaisedAtMatrix &&
       Number.isFinite(track.verticalTravelDistance) && track.verticalTravelDistance > .1);
+    const orderedExtraRiseWave = requested.filter(sample => sample.q >= .30 && sample.q <= .80).map(sample => {
+      const extras = sample.routeVisibility.filter(item => item.route?.resident === false &&
+        item.route?.hasArray === false && item.route?.hasMatrix === true &&
+        riseScheduleOkay(item.route.rise) && item.arrayCellKey);
+      const slots = [...new Map(extras.map(item => [item.arrayCellKey, item])).values()];
+      const visible = slots.filter(item => item.intersectsFrustum === true);
+      const amounts = visible.map(item => Number(item.route.rise.amount));
+      const starts = slots.map(item => Number(item.route.rise.start));
+      const amountRange = amounts.length ? Math.max(...amounts) - Math.min(...amounts) : 0;
+      const distinctStartCount = new Set(starts.map(value => value.toFixed(3))).size;
+      const neighbors = [];
+      for (let leftIndex = 0; leftIndex < slots.length; leftIndex++) {
+        const left = slots[leftIndex], leftCell = left.route.arrayCell;
+        for (let rightIndex = leftIndex + 1; rightIndex < slots.length; rightIndex++) {
+          const right = slots[rightIndex], rightCell = right.route.arrayCell;
+          const distance = Math.abs(Number(leftCell?.lane) - Number(rightCell?.lane)) +
+            Math.abs(Number(leftCell?.row) - Number(rightCell?.row));
+          if (distance === 1) neighbors.push({ left:left.arrayCellKey, right:right.arrayCellKey,
+            startDelta:Math.abs(Number(left.route.rise.start) - Number(right.route.rise.start)) });
+        }
+      }
+      const maxAdjacentStartDelta = neighbors.length ? Math.max(...neighbors.map(pair => pair.startDelta)) : null;
+      const visibleAmountsDiffer = visible.length >= 2 && amountRange >= .12;
+      const orderedWindowsVary = distinctStartCount >= 2;
+      const adjacentSlotsContinuous = neighbors.length >= 5 && maxAdjacentStartDelta <= .17;
+      return { q:sample.q, visibleExtraCount:visible.length, visibleAmountRange:amountRange,
+        distinctStartCount, neighborPairCount:neighbors.length, maxAdjacentStartDelta,
+        visibleAmountsDiffer, orderedWindowsVary, adjacentSlotsContinuous,
+        sampleOkay:visibleAmountsDiffer && orderedWindowsVary && adjacentSlotsContinuous };
+    }).sort((left, right) => right.visibleAmountRange - left.visibleAmountRange);
+    const orderedExtraRiseWaveEvidence = orderedExtraRiseWave[0] ?? null;
+    const orderedExtraRiseWaveOkay = !!orderedExtraRiseWaveEvidence?.sampleOkay &&
+      perItemRiseFormulaFailures.length === 0 && riseDistanceFailures.length === 0;
     const extraRiseSamples = extraCurveSamples.map(sample => ({ requestedQ:sample.requestedQ, q:sample.q,
       entryPhase:sample.entryPhase, groundY:sample.groundY, extraRise:sample.extraRise }));
     const sourceVisible = sourceEndpoint ? visibleEntryOwners(sourceEndpoint) : new Map();
@@ -1179,7 +1474,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       sample.routeContractFailures.length === 0 && sample.residentScaleFailures.length === 0);
     const activeOneEndSamples = requested.filter(sample => sample.oneEndRouteCount > 0);
     const oneEndUnitPositiveDepth = activeOneEndSamples.every(sample => sample.oneEndScaleDepthFailures.length === 0);
-    const routeContractOkay = actual.length > 0 && actual.every(sample => sample.routeContractFailures.length === 0);
+    const routeContractOkay = actual.length > 0 && actual.every(sample => sample.routeContractFailures.length === 0) &&
+      perItemRiseFormulaFailures.length === 0 && riseDistanceFailures.length === 0 &&
+      focusRiseFormulaFailures.length === 0 && endpointRiseFormulaFailures.length === 0;
     const endpointRoutesOkay = [sourceBridge, targetBridge].every(bridge => bridge.unmatched?.length === 0 &&
       bridge.duplicateIds?.length === 0 && bridge.mapped > 0);
     const endpointBoxes = [sourceEndpoint, targetEndpoint].map(sample => sample?.heroProjectedBounds);
@@ -1220,14 +1517,19 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       rackDeploymentStaysFull, fullRackPosePresent,
       selectedScaleOkay, residentRouteScaleOne, midpointResidentRouteCount:midpoint?.residentRouteCount ?? 0,
       routeContractOkay, endpointRoutesOkay, sourceBridge, targetBridge,
+      riseFormulaFailures:perItemRiseFormulaFailures, riseDistanceFailures, focusRiseFormulaFailures,
+      endpointRiseFormulaFailures,
       residentPathOkay, residentTrackCount:residentTracks.length, residentTracks,
+      residentLiftPathOkay, residentLiftTracks, selectedFocusPathOkay, selectedFocusLiftPath, selectedFocusBaseline,
       residentArrayCellLanes:residentLanes, residentMovedLanes,
       residentWindowQ:residentWindowFrames.map(sample => sample.q), residentMiddleSampleCaptured,
       residentMiddleQ:residentMiddleFrames.map(sample => sample.q),
       matrixOnlyOpaqueUnitScale, matrixOnlyTrackIntegrity, matrixOnlyArrayBoundsSubmerged,
       matrixOnlyRisePathOkay, matrixOnlyExtraRiseCurveOkay, matrixOnlyGroundCurveOkay,
+      orderedExtraRiseWaveOkay, orderedExtraRiseWaveEvidence, orderedExtraRiseWave,
       matrixOnlyHiResBadgeSubmerged, matrixOnlyHiResBadgeTracks, futureArchiveBadgeEnabled,
-      extraRiseFormulaFailures, groundFormulaFailures, floorAgreementFailures,
+      extraRiseFormulaFailures, perItemRiseFormulaFailures, riseDistanceFailures, focusRiseFormulaFailures,
+      groundFormulaFailures, floorAgreementFailures,
       matrixOnlyTrackCount:matrixOnlyTracks.length, matrixOnlyTracks,
       matrixOnlyVerticalTracks, extraRiseSamples,
       oneEndSampleCount:activeOneEndSamples.length, oneEndUnitPositiveDepth,
@@ -1449,6 +1751,13 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
           track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay && track.allVisible &&
           track.geometryPathFinite && track.badgeKindValid && track.extraClipMatchesRoute)).slice(0, 12),
         tracks:audit.residentTracks });
+    record(context + ' resident surfaces add the scheduled lift over the eased ARRAY-to-MATRIX baseline',
+      audit.residentLiftPathOkay,
+      { tracks:audit.residentLiftTracks });
+    record(context + ' selected focus follows its dedicated rise schedule over the eased baseline',
+      audit.selectedFocusPathOkay,
+      { baseline:audit.selectedFocusBaseline, selectedFocusLiftPath:audit.selectedFocusLiftPath,
+        focusRiseFailures:audit.focusRiseFormulaFailures.slice(0, 12) });
     record(`${context} one-end cases stay unit-size and in positive camera depth while moving`,
       audit.oneEndUnitPositiveDepth, { oneEndUnitPositiveDepth:audit.oneEndUnitPositiveDepth,
         auditedActiveSamples:audit.oneEndSampleCount, oneEndCountsAt:audit.oneEndCountsAt,
@@ -1465,6 +1774,9 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
         matrixOnlyExtraRiseCurveOkay:audit.matrixOnlyExtraRiseCurveOkay,
         matrixOnlyGroundCurveOkay:audit.matrixOnlyGroundCurveOkay,
         extraRiseFormulaFailures:audit.extraRiseFormulaFailures,
+        perItemRiseFormulaFailures:audit.perItemRiseFormulaFailures,
+        riseDistanceFailures:audit.riseDistanceFailures,
+        focusRiseFormulaFailures:audit.focusRiseFormulaFailures,
         groundFormulaFailures:audit.groundFormulaFailures,
         floorAgreementFailures:audit.floorAgreementFailures,
         matrixOnlyTrackCount:audit.matrixOnlyTrackCount,
@@ -1473,6 +1785,11 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
           track.arrayCellStable && track.alphaOkay && track.scaleDepthOkay && track.geometryPathFinite &&
           track.badgeKindValid && track.extraClipMatchesRoute)).slice(0, 12),
         oneEndCountsAt:audit.oneEndCountsAt });
+    record(context + ' extra items rise in a deterministic outward wave with continuous neighboring slots',
+      audit.orderedExtraRiseWaveOkay,
+      { evidence:audit.orderedExtraRiseWaveEvidence, candidates:audit.orderedExtraRiseWave,
+        perItemRiseFormulaFailures:audit.perItemRiseFormulaFailures.slice(0, 12),
+        riseDistanceFailures:audit.riseDistanceFailures.slice(0, 12) });
     record(`${context} keeps the Future Hi-Res badge active and clips its buried extra instances`,
       designLabel !== 'Future' || (audit.futureArchiveBadgeEnabled && audit.matrixOnlyHiResBadgeSubmerged),
       { appliesToFuture:designLabel === 'Future', archiveBadgeEnabled:audit.futureArchiveBadgeEnabled,
@@ -1505,7 +1822,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       targetCameraToHeroDistance:endSample.cameraToHeroDistance,
       sourceToFirstActiveHeroDistanceDelta:audit.sourceToFirstActiveHeroDistanceDelta,
       heroDistancePathFacts:audit.heroDistancePathFacts,
-      heroDistanceSourceDeltaExplanation:audit.heroDistanceSourceDeltaExplanation, handoff, audit });
+      heroDistanceSourceDeltaExplanation:audit.heroDistanceSourceDeltaExplanation, handoff,
+      audit:summarizeDiagnostic(audit) });
     return { endpointFast, audit };
   };
   const exerciseRetargets = async (designLabel, identity) => {
@@ -1619,14 +1937,20 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
     const sharedTrackKeys = [...forwardTracks.keys()].filter(key => reverseTracks.has(key));
     const pairedSurfaces = sharedTrackKeys.flatMap(key => {
       const left = forwardTracks.get(key), right = reverseTracks.get(key);
-      const leftPoints = left.actualPathQ.map((actualQ, index) => ({ q:actualQ, surfaceTop:left.surfaceTop[index] }));
-      const rightPoints = right.actualPathQ.map((actualQ, index) => ({ q:actualQ, surfaceTop:right.surfaceTop[index] }));
+      const leftPoints = left.actualPathQ.map((actualQ, index) => ({ q:actualQ,
+        surfaceTop:left.surfaceTop[index], riseAmount:left.riseAmount[index] }));
+      const rightPoints = right.actualPathQ.map((actualQ, index) => ({ q:actualQ,
+        surfaceTop:right.surfaceTop[index], riseAmount:right.riseAmount[index] }));
       const overlap = commonQRange(leftPoints, rightPoints);
       if (!overlap) return [];
       return preferredCompareQs.filter(q => q >= overlap.min + .01 && q <= overlap.max - .01).map(q => {
         const forwardTop = interpolateAtQ(leftPoints, q, 'surfaceTop');
         const reverseTop = interpolateAtQ(rightPoints, q, 'surfaceTop');
-        return { key, q, forwardTop, reverseTop,
+        const forwardAmount = interpolateAtQ(leftPoints, q, 'riseAmount');
+        const reverseAmount = interpolateAtQ(rightPoints, q, 'riseAmount');
+        return { key, q, forwardTop, reverseTop, forwardAmount, reverseAmount,
+          riseAmountDelta:Number.isFinite(forwardAmount) && Number.isFinite(reverseAmount)
+            ? Math.abs(forwardAmount - reverseAmount) : null,
           absoluteDelta:Number.isFinite(forwardTop) && Number.isFinite(reverseTop) ? Math.abs(forwardTop - reverseTop) : null };
       });
     });
@@ -1634,7 +1958,8 @@ export async function checkArchiveMotion({ browserWindow, outputDirectory, probe
       sharedExtraTracks:sharedTrackKeys.length, pairedSurfaces,
       ok:pairedRise.length >= 3 && pairedRise.every(sample => sample.riseDelta !== null && sample.riseDelta <= .025 &&
         sample.groundDelta !== null && sample.groundDelta <= .025) && sharedTrackKeys.length > 0 &&
-        pairedSurfaces.length > 0 && pairedSurfaces.every(sample => sample.absoluteDelta !== null && sample.absoluteDelta <= .12) };
+        pairedSurfaces.length > 0 && pairedSurfaces.every(sample => sample.riseAmountDelta !== null &&
+          sample.riseAmountDelta <= .025 && sample.absoluteDelta !== null && sample.absoluteDelta <= .12) };
     result.extraRiseReversals.push(extraRiseReversal);
     record(`${designLabel} extras use the same ground, rise and full-box height at matching q in reverse`,
       extraRiseReversal.ok, extraRiseReversal);

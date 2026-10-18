@@ -574,7 +574,9 @@ async function runLauncher() {
     report.onlineMockCalls = panelOnlineCalls ?? null;
     report.libraryScanCalls = scanCalls;
     await fs.mkdir(runDirectory, { recursive: true });
-    await fs.writeFile(finalReportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8').catch(() => {});
+    // Dense motion evidence stays complete; indentation can exceed V8's string
+    // limit when the wrapper includes the full Electron report a second time.
+    await fs.writeFile(finalReportPath, `${JSON.stringify(report, null, archiveMotionMode ? 0 : 2)}\n`, 'utf8').catch(() => {});
     process.stdout.write(`${JSON.stringify({
       ok: report.ok,
       startupOutcome: report.electron?.startupOutcome ?? 'probe-error',
@@ -1295,7 +1297,7 @@ async function runElectronProbe() {
       && report.assertions
       && Object.values(report.assertions).every(Boolean);
     try {
-      await fs.writeFile(config?.electronReportPath ?? path.join(runDirectory, 'electron-report.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+      await fs.writeFile(config?.electronReportPath ?? path.join(runDirectory, 'electron-report.json'), `${JSON.stringify(report, null, config?.archiveMotion ? 0 : 2)}\n`, 'utf8');
     } catch (error) {
       console.error(`Could not write Electron startup report: ${error.message}`);
     }

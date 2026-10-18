@@ -2995,6 +2995,7 @@ export class ArchiveScene {
         ...this.layoutTransition.frame, ...(!this.layoutTransition.active ? {
           q:Number(!this.shelfView), qVelocity:0, desiredEnd:Number(!this.shelfView), heading:0,
           groundY:this.floor.position.y, extraRise:Number(!this.shelfView),
+          focusRise:{ start:.18, end:.62, edgeDistance:0, alongDistance:0, amount:Number(!this.shelfView), lift:0 },
           rowSpacing:Math.abs(this.spatialSpacing.row), rackDeployment:Number(this.shelfView),
         } : {}) },
       shelfEntry: { phase: this.shelfEntryPhase, deployment: this.shelfEntryDeployment, caseScaleY: this.model.scale.y,

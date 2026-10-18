@@ -310,6 +310,94 @@ function matrixEndpointPose(flight, cell) {
   return poseOf(endpointMatrix(MATRIX, matrixCell, flight.transition.isSelected(cell)));
 }
 
+function expectedRiseSchedule(flight, route) {
+  const residents = flight.plan.map(cell => flight.transition.routeFor(cell))
+    .filter(candidate => candidate?.resident).map(candidate => candidate.arrayCell);
+  const columns = new Map();
+  for (const cell of residents) {
+    const column = columns.get(cell.lane) ?? { min: cell.row, max: cell.row };
+    column.min = Math.min(column.min, cell.row);
+    column.max = Math.max(column.max, cell.row);
+    columns.set(cell.lane, column);
+  }
+  const selected = flight.plan.find(cell => flight.transition.isSelected(cell));
+  const selectedRoute = selected && flight.transition.routeFor(selected);
+  assert.ok(selectedRoute?.arrayCell, "the selected actor anchors the rise schedule");
+  const cell = route.arrayCell;
+  const edgeDistance = route.resident ? 0 : Math.min(...[...columns].map(([lane, range]) => {
+    const rowGap = cell.row < range.min ? range.min - cell.row : cell.row > range.max ? cell.row - range.max : 0;
+    return Math.hypot(4 * (cell.lane - lane), rowGap);
+  }));
+  const alongDistance = Math.abs(cell.row - selectedRoute.arrayCell.row) * .36;
+  const start = .18 + .34 * (1 - Math.exp(-(edgeDistance + alongDistance) / 9));
+  return { edgeDistance, alongDistance, start, end: start + .44 };
+}
+
+function assertRiseRoutesAtQ(flight, q, label) {
+  const extras = [];
+  const residentsByLane = new Map();
+  for (const cell of flight.plan) {
+    const route = flight.transition.routeFor(cell);
+    if (!route) continue;
+    const rise = route.rise;
+    assert.ok(rise && typeof rise === "object", `${label}: ${cell.foobarEntryKey} exposes its rise schedule`);
+    const expected = expectedRiseSchedule(flight, route);
+    close(rise.edgeDistance, expected.edgeDistance, .000001);
+    close(rise.alongDistance, expected.alongDistance, .000001);
+    close(rise.start, expected.start, .000001);
+    close(rise.end, expected.end, .000001);
+    const amount = deploymentStep(q, expected.start, expected.end);
+    close(rise.amount, amount, .000001);
+    close(rise.lift, route.resident ? .22 * Math.sin(Math.PI * amount) ** 2 : 0, .000001);
+    if (route.resident) {
+      const rows = residentsByLane.get(route.arrayCell.lane) ?? [];
+      rows.push({ row: route.arrayCell.row, start: rise.start });
+      residentsByLane.set(route.arrayCell.lane, rows);
+    } else extras.push({ route, amount });
+  }
+  if (extras.length) {
+    const starts = extras.map(item => item.route.rise.start);
+    assert.ok(Math.max(...starts) - Math.min(...starts) > .1,
+      `${label}: extras at different boundary distances start at different q values`);
+    const qMid = .5;
+    const midAmounts = extras.map(item => deploymentStep(qMid, item.route.rise.start, item.route.rise.end));
+    assert.ok(Math.max(...midAmounts) - Math.min(...midAmounts) > .1,
+      `${label}: extras are at visibly different rise phases through the midpoint`);
+    const byLane = new Map();
+    for (const item of extras) {
+      const rows = byLane.get(item.route.arrayCell.lane) ?? [];
+      rows.push({ row: item.route.arrayCell.row, start: item.route.rise.start });
+      byLane.set(item.route.arrayCell.lane, rows);
+    }
+    for (const [lane, rows] of byLane) {
+      rows.sort((a, b) => a.row - b.row);
+      for (let index = 1; index < rows.length; index++) {
+        const before = extras.find(item => item.route.arrayCell.lane === lane && item.route.arrayCell.row === rows[index - 1].row);
+        const after = extras.find(item => item.route.arrayCell.lane === lane && item.route.arrayCell.row === rows[index].row);
+        const distanceDelta = (after.route.rise.edgeDistance + after.route.rise.alongDistance) -
+          (before.route.rise.edgeDistance + before.route.rise.alongDistance);
+        const startGap = rows[index].start - rows[index - 1].start;
+        if (distanceDelta !== 0) assert.ok((distanceDelta > 0) === (startGap > 0),
+          `${label}: neighboring extra rise starts follow their combined boundary distance`);
+        assert.ok(Math.abs(startGap) <= .055,
+          `${label}: neighboring extra rows have continuous rise starts (${startGap})`);
+      }
+    }
+  }
+  const selection = flight.plan.find(cell => flight.transition.isSelected(cell));
+  const selectedRow = flight.transition.routeFor(selection).arrayCell.row;
+  for (const rows of residentsByLane.values()) {
+    rows.sort((a, b) => a.row - b.row);
+    for (let index = 1; index < rows.length; index++) {
+      const before = Math.abs(rows[index - 1].row - selectedRow), after = Math.abs(rows[index].row - selectedRow);
+      if (before !== after) assert.ok((after > before) === (rows[index].start > rows[index - 1].start),
+        `${label}: resident rise timing follows distance from selection`);
+      assert.ok(Math.abs(rows[index].start - rows[index - 1].start) <= .02,
+        `${label}: neighboring resident rise schedules remain close`);
+    }
+  }
+}
+
 function expectedRelativePosition(flight, cell, q, heading, arrayPoseCache = new Map()) {
   const hero = flight.plan.find(candidate => flight.transition.isSelected(candidate));
   assert.ok(hero, "selected hero exists in the bound lattice");
@@ -317,15 +405,18 @@ function expectedRelativePosition(flight, cell, q, heading, arrayPoseCache = new
   const matrixPose = matrixEndpointPose(flight, cell);
   const arrayHero = arrayEndpointPose(flight, hero, arrayPoseCache);
   const matrixHero = matrixEndpointPose(flight, hero);
+  const route = flight.transition.routeFor(cell), heroRoute = flight.transition.routeFor(hero);
   const blend = deploymentStep(q);
   const expected = arrayPose.position.clone().sub(arrayHero.position)
     .lerp(matrixPose.position.clone().sub(matrixHero.position), blend)
-  if (!flight.transition.routeFor(cell).resident) {
-    const rise = deploymentStep(q, .2, 1);
-    const rootLift = .28 * deploymentStep(q, 0, .06) * (1 - deploymentStep(q, .65, .9));
-    expected.y = THREE.MathUtils.lerp(arrayPose.position.y, matrixPose.position.y, rise) -
-      THREE.MathUtils.lerp(arrayHero.position.y, matrixHero.position.y, blend) - rootLift;
-  }
+  const itemAmount = deploymentStep(q, route.rise.start, route.rise.end);
+  const heroAmount = deploymentStep(q, heroRoute.rise.start, heroRoute.rise.end);
+  const itemLift = route.resident ? .22 * Math.sin(Math.PI * itemAmount) ** 2 : 0;
+  const heroLift = .22 * Math.sin(Math.PI * heroAmount) ** 2;
+  if (route.resident) expected.y += itemLift - heroLift;
+  else expected.y = THREE.MathUtils.lerp(arrayPose.position.y, matrixPose.position.y,
+    itemAmount) -
+    THREE.MathUtils.lerp(arrayHero.position.y, matrixHero.position.y, blend) - heroLift;
   return expected.applyQuaternion(yawQuaternion(heading));
 }
 
@@ -376,7 +467,11 @@ function assertDirectLatticePath(flight, state) {
     const id = flight.transition.occurrenceId(cell);
     const actual = matrixPosition(state.matricesById.get(id)).sub(heroPosition);
     const expected = expectedRelativePosition(flight, cell, state.frame.q, state.frame.heading, arrayPoseCache);
-    vectorNear(actual, expected, .025, `single deploymentStep pose for ${id} at q=${state.frame.q.toFixed(3)}`);
+    const route = flight.transition.routeFor(cell), heroRoute = flight.transition.routeFor(hero);
+    const sampleRise = value => ({ start: value.start, end: value.end,
+      amount: deploymentStep(state.frame.q, value.start, value.end) });
+    vectorNear(actual, expected, .025, `single deploymentStep pose for ${id} at q=${state.frame.q.toFixed(3)} ` +
+      `itemRise=${JSON.stringify(sampleRise(route.rise))} heroRise=${JSON.stringify(sampleRise(heroRoute.rise))}`);
   }
 }
 
@@ -548,8 +643,9 @@ test("MATRIX loop copies retain unique physical occurrences and submerged ARRAY 
   for (const q of qSamples) {
     const forwardState = advanceToQ(forwardFlight, q, .0000001);
     forwardStates.set(q, forwardState);
-    close(forwardState.frame.extraRise, deploymentStep(q, .2, 1), .000001);
+    close(forwardState.frame.extraRise, deploymentStep(q, .18, .96), .000001);
     close(forwardState.frame.groundY, expectedGround(q), .000001);
+    assertRiseRoutesAtQ(forwardFlight, forwardState.frame.q, `ARRAY→MATRIX q=${q}`);
     for (const cell of forwardFlight.plan) {
       const route = forwardFlight.transition.routeFor(cell);
       if (!route || route.resident) continue;
@@ -560,7 +656,7 @@ test("MATRIX loop copies retain unique physical occurrences and submerged ARRAY 
       const position = matrixPosition(matrix);
       const arrayY = arrayEndpointPose(forwardFlight, cell).position.y;
       const matrixY = matrixEndpointPose(forwardFlight, cell).position.y;
-      close(position.y, THREE.MathUtils.lerp(arrayY, matrixY, deploymentStep(q, .2, 1)), .015);
+      close(position.y, THREE.MathUtils.lerp(arrayY, matrixY, route.rise.amount), .015);
       assert.ok(basisLengths(matrix).every(value => Math.abs(value - 1) < 1e-7), `${id} stays full size at q=${q}`);
       assert.equal(forwardState.appearances.get(id).alpha, 1, `${id} stays opaque at q=${q}`);
       const previous = previousY.get(address);
@@ -575,15 +671,16 @@ test("MATRIX loop copies retain unique physical occurrences and submerged ARRAY 
   for (const q of [...qSamples].reverse()) {
     const reverseState = advanceToQ(reverseFlight, q, .0000001);
     reverseStates.set(q, reverseState);
-    close(reverseState.frame.extraRise, deploymentStep(q, .2, 1), .000001);
+    close(reverseState.frame.extraRise, deploymentStep(q, .18, .96), .000001);
     close(reverseState.frame.groundY, expectedGround(q), .000001);
+    assertRiseRoutesAtQ(reverseFlight, reverseState.frame.q, `MATRIX→ARRAY q=${q}`);
     for (const cell of reverseFlight.plan) {
       const route = reverseFlight.transition.routeFor(cell);
       if (!route || route.resident) continue;
       const id = reverseFlight.transition.occurrenceId(cell);
       const matrix = reverseState.matricesById.get(id);
       const expectedY = THREE.MathUtils.lerp(arrayEndpointPose(reverseFlight, cell).position.y,
-        matrixEndpointPose(reverseFlight, cell).position.y, deploymentStep(q, .2, 1));
+        matrixEndpointPose(reverseFlight, cell).position.y, route.rise.amount);
       close(matrixPosition(matrix).y, expectedY, .015);
       assert.ok(basisLengths(matrix).every(value => Math.abs(value - 1) < 1e-7), `${id} stays full size in reverse at q=${q}`);
       assert.equal(reverseState.appearances.get(id).alpha, 1, `${id} stays opaque in reverse at q=${q}`);
@@ -639,10 +736,12 @@ test("resident boxes remain visible while loop copies follow their reversible ri
     const sourceIds = new Set(flight.sourceSamples.map(sample => sample.cell.motionId));
     const sourceStart = renderState(flight);
     const visibleResidentIds = new Set([...sourceIds].filter(id => residentIds.has(id) && sourceStart.sides.get(id) === undefined));
+    const residentLiftTracks = new Map();
     assert.equal(visibleResidentIds.size, residentIds.size, "every existing resident starts fully in view");
     const sampleOrder = flight.sourceName === "array" ? qSamples : [...qSamples].reverse();
     for (const q of sampleOrder) {
       const state = advanceToQ(flight, q, .0000001);
+      assertRiseRoutesAtQ(flight, state.frame.q, `${flight.sourceName}→${flight.targetName} q=${q}`);
       assertAllActorsPresentAndOpaque(flight, state, `${flight.sourceName}→${flight.targetName} q=${q}`);
       assertDirectLatticePath(flight, state);
       assertNoCaseOverlaps(state, `${flight.sourceName}→${flight.targetName} q=${q}`);
@@ -651,8 +750,51 @@ test("resident boxes remain visible while loop copies follow their reversible ri
       for (const id of sourceIds) {
         assert.ok(state.matricesById.has(id), `existing physical occurrence ${id} remains present at q=${q}`);
       }
+      for (const cell of flight.plan) {
+        const route = flight.transition.routeFor(cell);
+        if (!route?.resident) continue;
+        const id = flight.transition.occurrenceId(cell), track = residentLiftTracks.get(id) ?? [];
+        track.push({ q: state.frame.q, lift: route.rise.lift, start: route.rise.start, row: route.arrayCell.row });
+        residentLiftTracks.set(id, track);
+      }
       for (const id of visibleResidentIds) {
         assert.equal(state.sides.get(id), undefined, `visible source occurrence ${id} does not leave and re-enter at q=${q}`);
+      }
+    }
+    const selected = flight.plan.find(cell => flight.transition.isSelected(cell));
+    const selectedRoute = flight.transition.routeFor(selected), selectedRow = selectedRoute.arrayCell.row;
+    close(selectedRoute.rise.start, .18, .000001);
+    close(selectedRoute.rise.end, .62, .000001);
+    for (const [id, track] of residentLiftTracks) {
+      const ordered = track.sort((a, b) => a.q - b.q);
+      assert.ok(ordered.length === qSamples.length, `${id} keeps a sampled resident lift track`);
+      close(ordered[0].lift, 0, .000001);
+      close(ordered.at(-1).lift, 0, .000001);
+      const peak = Math.max(...ordered.map(sample => sample.lift));
+      assert.ok(peak > .19, `${id} receives the resident float lift (peak=${peak})`);
+      const peakIndex = ordered.findIndex(sample => sample.lift === peak);
+      assert.ok(ordered.slice(1, peakIndex + 1).every((sample, index) =>
+        sample.lift + .001 >= ordered[index].lift), `${id} resident lift rises to one peak`);
+      assert.ok(ordered.slice(peakIndex + 1).every((sample, index) =>
+        sample.lift <= ordered[peakIndex + index].lift + .001), `${id} resident lift falls after its peak`);
+    }
+    for (const lane of [...new Set([...residentLiftTracks.keys()].map(id => {
+      const cell = flight.plan.find(candidate => flight.transition.occurrenceId(candidate) === id);
+      return flight.transition.routeFor(cell).arrayCell.lane;
+    }))]) {
+      const rows = [...residentLiftTracks.entries()].map(([id, track]) => {
+        const cell = flight.plan.find(candidate => flight.transition.occurrenceId(candidate) === id);
+        const route = flight.transition.routeFor(cell);
+        return route.arrayCell.lane === lane ? { row: route.arrayCell.row, start: track[0].start } : null;
+      }).filter(Boolean).sort((a, b) => a.row - b.row);
+      for (let index = 1; index < rows.length; index++) {
+        const previousDistance = Math.abs(rows[index - 1].row - selectedRow);
+        const currentDistance = Math.abs(rows[index].row - selectedRow);
+        if (previousDistance !== currentDistance)
+          assert.ok((currentDistance > previousDistance) === (rows[index].start > rows[index - 1].start),
+            `resident lane ${lane} rises in ordered waves away from the selected row`);
+        assert.ok(Math.abs(rows[index].start - rows[index - 1].start) <= .02,
+          `resident lane ${lane} keeps adjacent rise starts close`);
       }
     }
   }

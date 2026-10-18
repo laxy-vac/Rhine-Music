@@ -3,12 +3,13 @@ import type { ArchiveCell } from "./archive-loop";
 import { deploymentStep as ease } from "./music-shelf-deployment.ts";
 import { musicGeometryPose, type GeometryPose, type CanonicalSlot, type LayoutSample } from "./music-layout-transition.ts";
 import { musicLayoutAddresses } from "./music-layout-addresses.ts";
+import { musicLayoutRiseSchedule, type MusicLayoutRise } from "./music-layout-rise.ts";
 import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout.ts";
 
 type MotionCell = ArchiveCell & { motionId?: string };
 type Source = GeometryPose & { actual: GeometryPose; id: string; cell: ArchiveCell; alpha: number; tint: number; canonical?: CanonicalSlot };
 type Item = { id: string; cell: MotionCell; arrayCell: ArchiveCell; source?: Source; target?: ArchiveCell; targetPose?: GeometryPose;
-  resident: boolean; selected: boolean; targetAppearance?: { alpha: number; tint: number }; virtualArray?: GeometryPose };
+  resident: boolean; selected: boolean; rise?: MusicLayoutRise; targetAppearance?: { alpha: number; tint: number }; virtualArray?: GeometryPose };
 type Edge = "left" | "right" | "top" | "bottom";
 type CameraEnd = { position: THREE.Vector3; aim: THREE.Vector3; span: number; fov: number };
 type CameraFrame = { camera: THREE.PerspectiveCamera; aim: THREE.Vector3; focus: THREE.Vector3; asinArgument: number };
@@ -44,6 +45,7 @@ export class MusicLayoutTransition {
   private arrayRow = -1;
   private catalog = new Map<string, CanonicalSlot>();
   private addresses?: ReturnType<typeof musicLayoutAddresses>;
+  private focusRise: MusicLayoutRise = { start: .18, end: .62, edgeDistance: 0, alongDistance: 0 };
   private epoch = 0;
   private sourceCamera = new THREE.PerspectiveCamera();
   private sourceAim = new THREE.Vector3();
@@ -66,12 +68,16 @@ export class MusicLayoutTransition {
   get floorAmount() { return 1 - ease(this.q, .65, .95); }
   get groundY() { return THREE.MathUtils.lerp(-4.63,
     MUSIC_ARRAY_VIEW.floorY + this.bounds.min.y - MUSIC_SHELF_VIEW.floorDrop, this.floorAmount); }
-  get extraRise() { return ease(this.q, .2, 1); }
+  get extraRise() { return ease(this.q, .18, .96); }
   get rackDeployment() { return this.active ? 1 : Number(this.q === 0); }
   get titleAmount() { return 1 - ease(this.q, .15, .7); }
   private get blend() { return this.fromShelf ? ease(this.q) : 1 - ease(this.q); }
   private get residual() { return this.alignmentDuration ? 1 - ease(this.elapsed, 0, this.alignmentDuration) : 0; }
-  private get lift() { return .28 * ease(this.q, 0, .06) * (1 - ease(this.q, .65, .9)); }
+  private riseFor(item?: Item) {
+    const schedule = item?.rise ?? this.focusRise;
+    const amount = ease(this.q, schedule.start, schedule.end);
+    return { ...schedule, amount, lift: !item || item.resident ? .22 * Math.sin(Math.PI * amount) ** 2 : 0 };
+  }
   get frame() { return { phase: this.residual > 0 ? "align" : this.progress < .3 ? "depart" : this.progress < .7 ? "orbit" : "arrive",
     q: this.q, qVelocity: this.qVelocity, desiredEnd: this.desiredEnd, heading: this.heading,
     rowSpacing: this.rowSpacing, rackDeployment: this.rackDeployment, geometric: true, path: "camera-orbit",
@@ -83,7 +89,8 @@ export class MusicLayoutTransition {
     arriving: [...this.items.values()].filter(item => !item.source && item.target).length,
     coreCases: [...this.items.values()].filter(item => item.resident).length,
     residentCases: [...this.items.values()].filter(item => item.resident).length,
-    groundY: this.groundY, extraRise: this.extraRise,
+    groundY: this.groundY, extraRise: this.extraRise, riseOrigin: { ...this.arraySelection },
+    riseMode: "edge-wave", focusRise: this.riseFor(),
     rowOffsets: this.addresses ? Object.fromEntries(this.addresses.rowOffsets) : {},
     rackFlight: this.rackFrame ? { visible: this.rackFrame.visible, outside: this.rackFrame.outside,
       translation: this.rackFrame.translation, projected: this.rackFrame.projected } : null,
@@ -178,7 +185,9 @@ export class MusicLayoutTransition {
     }
     const kept = [...paired.values()].sort((a, b) => Number(b.selected) - Number(a.selected) ||
       Number(b.resident) - Number(a.resident) || a.arrayCell.lane - b.arrayCell.lane || a.arrayCell.row - b.arrayCell.row);
-    for (const item of kept) this.items.set(item.id, item);
+    const schedule = musicLayoutRiseSchedule(kept.filter(item => item.resident).map(item => item.arrayCell), this.arraySelection);
+    this.focusRise = schedule(this.arraySelection);
+    for (const item of kept) { item.rise = schedule(item.arrayCell); this.items.set(item.id, item); }
     this.plan = kept.map(item => item.cell);
     while (this.plan.length < target.length) this.plan.push({ lane: -10000, row: -10000 });
     return this.plan;
@@ -189,7 +198,8 @@ export class MusicLayoutTransition {
     const item = this.item(cell);
     return item ? { segment: item.arrayCell.lane, core: item.resident, resident: item.resident,
       arrayCell: { lane: item.arrayCell.lane, row: item.arrayCell.row },
-      hasArray: item.resident, hasMatrix: this.fromShelf ? !!item.target : !!item.source } : undefined;
+      hasArray: item.resident, hasMatrix: this.fromShelf ? !!item.target : !!item.source,
+      rise: this.riseFor(item) } : undefined;
   }
   isSelected(cell: ArchiveCell) { return this.item(cell)?.selected ?? false; }
   isExtra(cell: ArchiveCell) { const item = this.item(cell); return !!item && !item.resident; }
@@ -247,13 +257,14 @@ export class MusicLayoutTransition {
   private baseline(item?: Item, selected = false): GeometryPose {
     const endpoints = this.endpointPoses(item, selected);
     const pose = mixPose(endpoints.array, endpoints.matrix, ease(this.q));
+    const rise = this.riseFor(item);
     if (item && !item.resident) pose.position.y = THREE.MathUtils.lerp(endpoints.array.position.y,
-      endpoints.matrix.position.y, this.extraRise);
+      endpoints.matrix.position.y, rise.amount);
     const anchors = this.endpointPoses(undefined, true);
     const pivot = anchors.array.position.clone().lerp(anchors.matrix.position, ease(this.q));
     const rotation = yawQuaternion(this.heading);
     pose.position.sub(pivot).applyQuaternion(rotation).add(pivot);
-    if (!item || item.resident) pose.position.y += this.lift;
+    pose.position.y += rise.lift;
     pose.rotation.premultiply(rotation);
     if (this.residual > 0) {
       const source = selected ? this.sourceSelected : item?.source;
