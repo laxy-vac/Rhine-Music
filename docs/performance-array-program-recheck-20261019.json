@@ -1,0 +1,566 @@
+{
+  "date": "2026-10-19",
+  "status": "candidate-enabled-in-source-preview; awaiting user visual acceptance; overall performance benefit not established",
+  "baselineCommit": "435e404",
+  "change": "Restore ARRAY-only identical shader-code program keys; keep materials/uniforms independent, original MATRIX keys, gold/mode branches and prewarm both key states.",
+  "conditions": {
+    "gpu": "NVIDIA GeForce RTX 5080",
+    "design": "rhine",
+    "quality": "ultra",
+    "case": "punk",
+    "window": [
+      2560,
+      1440
+    ],
+    "canvas": [
+      3840,
+      2160
+    ],
+    "albums": 45,
+    "titleLengths": "7–23",
+    "personalLibrary": false,
+    "realAudio": false
+  },
+  "method": "Same process; per theme three valid 6-second native 20Hz wheel-selection samples per state, 8-second interaction warmup before every state, order OFF/ON, ON/OFF, OFF/ON; all other accepted optimizations retained. FPS = 1000 / pooled RAF mean. No assumption of linear gains from program count.",
+  "comparison": [
+    {
+      "name": "day-array",
+      "disabled": {
+        "enabled": false,
+        "frames": 1202,
+        "meanMs": 14.929118136439264,
+        "fps": 66.98319290267935,
+        "p95Ms": 27.79999999998836,
+        "over50Percent": 0,
+        "repetitions": [
+          {
+            "name": "day-array",
+            "enabled": false,
+            "repetition": 1,
+            "fps": 64.01042885316039,
+            "meanMs": 15.622454308093998,
+            "frames": 383,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 20
+            }
+          },
+          {
+            "name": "day-array",
+            "enabled": false,
+            "repetition": 2,
+            "fps": 68.4828290608308,
+            "meanMs": 14.602200488997562,
+            "frames": 409,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 20
+            }
+          },
+          {
+            "name": "day-array",
+            "enabled": false,
+            "repetition": 3,
+            "fps": 68.45769815164225,
+            "meanMs": 14.607560975609735,
+            "frames": 410,
+            "programs": {
+              "caseMaterials": 200,
+              "activeCasePrograms": 20
+            }
+          }
+        ]
+      },
+      "enabled": {
+        "enabled": true,
+        "frames": 1102,
+        "meanMs": 16.26878402903811,
+        "fps": 61.467408886558616,
+        "p95Ms": 33.30000000000291,
+        "over50Percent": 0,
+        "repetitions": [
+          {
+            "name": "day-array",
+            "enabled": true,
+            "repetition": 1,
+            "fps": 61.27901152112206,
+            "meanMs": 16.318801089918257,
+            "frames": 367,
+            "programs": {
+              "caseMaterials": 200,
+              "activeCasePrograms": 6
+            }
+          },
+          {
+            "name": "day-array",
+            "enabled": true,
+            "repetition": 2,
+            "fps": 57.36298489385333,
+            "meanMs": 17.432844574780034,
+            "frames": 341,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 6
+            }
+          },
+          {
+            "name": "day-array",
+            "enabled": true,
+            "repetition": 3,
+            "fps": 65.72581990458073,
+            "meanMs": 15.214720812182756,
+            "frames": 394,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 6
+            }
+          }
+        ]
+      },
+      "fpsChangePercent": -8.234579119174978
+    },
+    {
+      "name": "night-array",
+      "disabled": {
+        "enabled": false,
+        "frames": 1036,
+        "meanMs": 17.342760617760625,
+        "fps": 57.66094695304193,
+        "p95Ms": 33.39999999999418,
+        "over50Percent": 0.3861003861003861,
+        "repetitions": [
+          {
+            "name": "night-array",
+            "enabled": false,
+            "repetition": 1,
+            "fps": 57.43863750208716,
+            "meanMs": 17.40988372093023,
+            "frames": 344,
+            "programs": {
+              "caseMaterials": 200,
+              "activeCasePrograms": 20
+            }
+          },
+          {
+            "name": "night-array",
+            "enabled": false,
+            "repetition": 2,
+            "fps": 50.4729752314738,
+            "meanMs": 19.812582781456936,
+            "frames": 302,
+            "programs": {
+              "caseMaterials": 200,
+              "activeCasePrograms": 20
+            }
+          },
+          {
+            "name": "night-array",
+            "enabled": false,
+            "repetition": 3,
+            "fps": 65.05746742956265,
+            "meanMs": 15.371025641025671,
+            "frames": 390,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 20
+            }
+          }
+        ]
+      },
+      "enabled": {
+        "enabled": true,
+        "frames": 1167,
+        "meanMs": 15.372236503856062,
+        "fps": 65.0523428877219,
+        "p95Ms": 27.79999999998836,
+        "over50Percent": 0.17137960582690662,
+        "repetitions": [
+          {
+            "name": "night-array",
+            "enabled": true,
+            "repetition": 1,
+            "fps": 64.28344826434683,
+            "meanMs": 15.556103896103911,
+            "frames": 385,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 6
+            }
+          },
+          {
+            "name": "night-array",
+            "enabled": true,
+            "repetition": 2,
+            "fps": 72.40061674599428,
+            "meanMs": 13.812037037037078,
+            "frames": 432,
+            "programs": {
+              "caseMaterials": 200,
+              "activeCasePrograms": 6
+            }
+          },
+          {
+            "name": "night-array",
+            "enabled": true,
+            "repetition": 3,
+            "fps": 58.49419236232974,
+            "meanMs": 17.095714285714287,
+            "frames": 350,
+            "programs": {
+              "caseMaterials": 220,
+              "activeCasePrograms": 6
+            }
+          }
+        ]
+      },
+      "fpsChangePercent": 12.818721032624381
+    }
+  ],
+  "programCount": {
+    "disabled": 20,
+    "enabled": 6
+  },
+  "interpretation": "Day ARRAY regressed in each pair. Night results varied: two gains and one regression. Earlier single-sample benefit did not reproduce as a consistent improvement across day/night.",
+  "pixelComparisons": {
+    "requested": false,
+    "performed": false,
+    "reason": "User explicitly requested skipping pixel differences and will perform visual acceptance. Program/label pixel checks were skipped; raw strictSettingsMaxOnePassed is not meaningful because its inputs are null skipped placeholders."
+  },
+  "functionalChecks": {
+    "shaderErrors": [],
+    "selectionTransaction": {
+      "ok": true,
+      "initial": "fixture-album-01",
+      "expectedForward": "fixture-album-06",
+      "expectedReverse": "fixture-album-04",
+      "startCell": {
+        "lane": 0,
+        "row": 12,
+        "foobarEntryKey": "fixture-album-01"
+      },
+      "forward": {
+        "app": "fixture-album-06",
+        "scene": "fixture-album-06"
+      },
+      "opened": {
+        "app": "fixture-album-04",
+        "scene": "fixture-album-04",
+        "hasTrack": true,
+        "title": "现场精选 第04辑"
+      },
+      "returned": true
+    },
+    "resources": {
+      "ok": true,
+      "frames": 2624,
+      "visibleResourceChecks": 13768,
+      "fieldValueChecks": 0,
+      "viewportValueChecks": 1537,
+      "watchedTextures": 23,
+      "violations": []
+    },
+    "caseSettings": {
+      "ok": true,
+      "pixelComparisonSkipped": true,
+      "results": [
+        {
+          "name": "original",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "original",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "opaque cover",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "opaque cover",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "clear cover",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "clear cover",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "frosted cover",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "frosted cover",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "opaque optics",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "opaque optics",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "clear optics",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "clear optics",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "colored marble",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "colored marble",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "hidden parts",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "hidden parts",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "label transform",
+          "enabled": false,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        },
+        {
+          "name": "label transform",
+          "enabled": true,
+          "materials": 40,
+          "uniformChecks": 40,
+          "pixelComparisonSkipped": true,
+          "difference": {
+            "max": null,
+            "mean": null,
+            "changedPercent": null,
+            "overOnePercent": null
+          }
+        }
+      ]
+    },
+    "independentMaterialUniformValues": "Unit check plus 720 runtime optical uniform ownership checks across nine settings and both flags passed",
+    "typecheckBuild": true
+  },
+  "delegation": "One native read-only child agent explicitly requested gpt-6-luna/max; actual backend model metadata not exposed by client. Static review found no specific uniform/cover ownership problem.",
+  "runReference": ".tools/performance-array-program-recheck-20261019/run-after-1792385370950-36132",
+  "sourceProvenance": {
+    "phase": "after",
+    "manifestPath": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface.manifest.json",
+    "manifestBuiltAt": "2026-10-19T04:49:10.909Z",
+    "distDirectory": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface",
+    "baselineCommit": null,
+    "diagnosticTransform": null,
+    "recording": "Task-built artifact with existing build metadata; no extra source hashing."
+  },
+  "isolation": {
+    "scanCalls": 0,
+    "deniedNodeFetches": [],
+    "audioRequests": [],
+    "realDesktopMainExecuted": false,
+    "realPreloadAndBuiltRenderer": true,
+    "syntheticAlbumCount": 45,
+    "decadeCounts": [
+      7,
+      28,
+      10
+    ],
+    "personalRoots": [],
+    "nativeCalls": {
+      "status": 0,
+      "eqEditor": 0,
+      "previewEq": 0,
+      "current": 1,
+      "refresh": 0,
+      "start": 0,
+      "queue": 0,
+      "control": 0,
+      "stopCurrent": 0
+    },
+    "sonyCalls": {
+      "status": 0,
+      "prepare": 0,
+      "clearCache": 0,
+      "audio": 0,
+      "growingAudio": 0,
+      "job": 0,
+      "cancel": 0
+    },
+    "bootstrapOk": false,
+    "sourceProvenance": {
+      "phase": "after",
+      "manifestPath": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface.manifest.json",
+      "manifestBuiltAt": "2026-10-19T04:49:10.909Z",
+      "distDirectory": "D:\\CodexLocalWorkContent\\PersonalMusicPlayer\\source\\Rhine-Music-Demo-AudioEnhanced\\.tools\\source-preview-interface",
+      "baselineCommit": null,
+      "diagnosticTransform": null,
+      "recording": "Task-built artifact with existing build metadata; no extra source hashing."
+    }
+  },
+  "limitations": [
+    "Synthetic library and one RTX 5080 only",
+    "Three short repetitions per state; observed runtime variance remains",
+    "Visual acceptance pending; no pixel comparisons or claims of pixel identity",
+    "Candidate is enabled for preview evaluation; not included in a rebuilt installer"
+  ]
+}
