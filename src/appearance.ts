@@ -4,7 +4,6 @@ import { internalOpticsFragment } from "./internal-optics.ts";
 import { setMusicGlassClarity, setMusicGlassTheme } from "./music-model.ts";
 import { ThemeTransition } from "./theme-transition.ts";
 import { shadeHiResGold } from "./hi-res-gold.ts";
-import { musicCaseProgramKey } from "./music-case-program-key";
 
 import type { MusicSelectionLighting } from "./music-lighting";
 
@@ -14,7 +13,6 @@ type Palette = { high: Surface; low?: Surface };
 // The array and selected file share geometry. Morph their surface properties
 // on one mesh so transparent shells never overlap during a quality change.
 export class CardAppearance {
-  programReuseEnabled = false;
   musicLighting?: MusicSelectionLighting;
   private palettes = new Map<string, Palette>();
   private warmth = { value: 1 };
@@ -64,7 +62,7 @@ export class CardAppearance {
           this.musicLighting?.shade(shader, mesh.userData.surface, mat);
           if (useGold) shadeHiResGold(shader, gold);
         };
-        mat.customProgramCacheKey = () => musicCaseProgramKey(mesh.userData.surface, "selected", useGold, this.programReuseEnabled);
+        mat.customProgramCacheKey = () => `editable-case-${mesh.userData.surface}-selected-v2-${useGold}`;
         continue;
       }
       const name = mesh.userData.surface as string;

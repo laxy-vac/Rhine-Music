@@ -69,7 +69,6 @@ import { MusicInstanceDrawList } from "./music-instance-draw-list";
 import { MusicPartDrawSlots } from "./music-part-draw-slots";
 import { MusicInstanceTransforms } from "./music-instance-transforms";
 import { MusicFrameViewport } from "./music-frame-viewport";
-import { musicCaseProgramKey } from "./music-case-program-key";
 import { MusicInstanceShadows } from "./music-instance-shadows";
 import { MusicSharedDepthBokehPass } from "./music-shared-depth-bokeh";
 import {
@@ -114,8 +113,6 @@ export class ArchiveScene {
   private readonly partDrawSlots = new MusicPartDrawSlots();
   private readonly instanceTransforms = new MusicInstanceTransforms();
   private readonly frameViewport = new MusicFrameViewport();
-  private caseProgramReuseEnabled = true;
-  private caseProgramWarmupMode?: boolean;
   private readonly instanceShadows = new MusicInstanceShadows();
   private readonly drawSlots: number[] = [];
   private readonly visibleDrawSlots: number[] = [];
@@ -800,7 +797,6 @@ export class ArchiveScene {
     this.musicStyle = normalizeMusicStyle(value);
     this.displayBleed = Number.parseFloat(getComputedStyle(this.container.closest(".music-app") ?? this.container).getPropertyValue("--foobar-scene-bleed")) || 0;
     this.displayLayout = nextLayout;
-    this.syncCaseProgramReuse();
     // All music layouts resolve public entry identities; only the array wraps.
     this.catalogView = musicLibrary;
     if (musicLibrary && this.loaded && !this.sceneResources) {
@@ -963,7 +959,7 @@ export class ArchiveScene {
           inst.userData.hiResRail = true;
         }
         material.onBeforeCompile = shader => { this.selectionLighting?.shade(shader, child.userData.surface, material); if (gold) shadeHiResGold(shader); };
-        material.customProgramCacheKey = () => musicCaseProgramKey(child.userData.surface, "array", gold, this.caseProgramReuseActive());
+        material.customProgramCacheKey = () => `editable-case-${child.userData.surface}-array-v2-${gold}`;
         inst.castShadow = child.userData.casePart === "back" || child.userData.casePart === "frame";
         inst.receiveShadow = true; inst.frustumCulled = false;
         inst.visible = records.length > 0;
@@ -1857,23 +1853,6 @@ export class ArchiveScene {
       this.onHover?.(null);
     });
     window.addEventListener("blur", () => { this.matrixDrag.clear(); this.matrixHoverCell = undefined; });
-  }
-  setCaseProgramReuse(enabled: boolean): void {
-    this.caseProgramReuseEnabled = enabled;
-    this.syncCaseProgramReuse();
-  }
-  private caseProgramReuseActive(): boolean {
-    return this.caseProgramReuseEnabled && (this.caseProgramWarmupMode ?? this.shelfView);
-  }
-  private syncCaseProgramReuse(): void {
-    const active = this.caseProgramReuseActive();
-    if (this.appearance.programReuseEnabled === active) return;
-    this.appearance.programReuseEnabled = active;
-    this.scene.traverse(object => {
-      if (!(object instanceof THREE.Mesh) || !object.userData.casePart) return;
-      for (const material of Array.isArray(object.material) ? object.material : [object.material])
-        if (material instanceof THREE.MeshPhysicalMaterial) material.needsUpdate = true;
-    });
   }
   prepareFrameViewport(): void {
     if (musicLibrary && this.loaded && this.musicArchiveReady && !this.layoutTransition.active &&
@@ -2976,12 +2955,6 @@ export class ArchiveScene {
     try {
       groups.forEach(object => { object.visible = true; });
       await this.renderer.compileAsync(this.scene, this.camera);
-      if (this.caseProgramReuseEnabled && musicLibrary) {
-        this.caseProgramWarmupMode = !this.caseProgramReuseActive();
-        this.syncCaseProgramReuse();
-        try { await this.renderer.compileAsync(this.scene, this.camera); }
-        finally { this.caseProgramWarmupMode = undefined; this.syncCaseProgramReuse(); }
-      }
       this.covers?.flushUploads(this.renderer);
       this.composer.render();
     } finally {
