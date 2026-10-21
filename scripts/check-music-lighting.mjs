@@ -153,7 +153,11 @@ const printShader = {
 lighting.shadePrint(printShader);
 assert.ok(!printShader.fragmentShader.includes('MusicDiffuseDirect'), 'Matte artwork retains its original Lambert light path');
 assert.ok(printShader.fragmentShader.includes('printLight'));
-assert.ok(printShader.fragmentShader.includes('outgoingLight *= mix(musicPrintAmbient, 1.0, printLight)'));
+assert.ok(printShader.fragmentShader.includes('outgoingLight *= mix(musicPrintAmbient, musicWindowGain, printLight)'));
+assert.ok(printShader.fragmentShader.includes('outgoingLight = min(outgoingLight, diffuseColor.rgb)'),
+  'Higher central exposure cannot bleach the print beyond its original colors');
+assert.strictEqual(printShader.uniforms.musicWindowGain, shellShader.uniforms.musicWindowGain,
+  'Shell and artwork share the fixed window exposure');
 assert.ok(printShader.vertexShader.includes('vMusicPrintOrigin'));
 assert.strictEqual(printShader.uniforms.musicPrintLightColumn, shellShader.uniforms.musicLightColumn,
   'Shell and print shader paths share the same cached origin uniform');
@@ -291,13 +295,16 @@ assert.deepEqual(scene.children.filter((child) => child instanceof THREE.Light),
 lighting.setTheme('night', key, undefined, 'archive');
 assert.equal(scene.environmentIntensity, .20, 'Punk retains its night ambient level');
 assert.equal(shellShader.uniforms.musicWindowAmbient.value, 1, 'Punk does not receive Future night shaping');
+assert.equal(shellShader.uniforms.musicWindowGain.value, 1, 'Punk night keeps its existing exposure');
 assert.equal(printShader.uniforms.musicPrintAmbient.value, .12);
 lighting.setTheme('night', key, undefined, 'rhine');
 assert.equal(scene.environmentIntensity, .10);
 assert.equal(shellShader.uniforms.musicWindowAmbient.value, .24, 'Only Future night concentrates illumination');
+assert.equal(shellShader.uniforms.musicWindowGain.value, 2.2, 'Future night has a bright central window');
 assert.equal(printShader.uniforms.musicPrintAmbient.value, .06);
 lighting.setTheme('day', key, undefined, 'rhine');
 assert.equal(shellShader.uniforms.musicWindowAmbient.value, 1, 'Daylight restores the shared soft look');
+assert.equal(shellShader.uniforms.musicWindowGain.value, 1, 'Daylight does not inherit night exposure');
 sameTransform(lighting.state, themeTransforms);
 
 lighting.setQuality('full');

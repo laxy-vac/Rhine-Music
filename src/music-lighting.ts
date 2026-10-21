@@ -14,6 +14,7 @@ export class MusicSelectionLighting {
   private readonly scatterStrength = { value: 1 };
   private readonly printAmbient = { value: 0.5 };
   private readonly windowAmbient = { value: 1 };
+  private readonly windowGain = { value: 1 };
   private readonly shellBounds = { value: new THREE.Vector4(
     MUSIC_MODEL.center.x - MUSIC_MODEL.width / 2,
     MUSIC_MODEL.center.y - MUSIC_MODEL.height / 2,
@@ -89,6 +90,7 @@ export class MusicSelectionLighting {
     targets.number(this.scatterStrength, "value", futureNight ? .62 : night ? .72 : 1);
     targets.number(this.printAmbient, "value", futureNight ? .06 : night ? .12 : theme === "dusk" ? .38 : .5);
     targets.number(this.windowAmbient, "value", futureNight ? .24 : 1);
+    targets.number(this.windowGain, "value", futureNight ? 2.2 : 1);
     if (!transition) targets.finish();
   }
 
@@ -99,6 +101,7 @@ export class MusicSelectionLighting {
   shadePrint(shader: THREE.WebGLProgramParametersWithUniforms) {
     shader.uniforms.musicPrintLightColumn = this.column;
     shader.uniforms.musicPrintAmbient = this.printAmbient;
+    shader.uniforms.musicWindowGain = this.windowGain;
     shader.vertexShader = "varying vec3 vMusicPrintOrigin;\n" + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace("#include <begin_vertex>", `
       #include <begin_vertex>
@@ -112,14 +115,17 @@ export class MusicSelectionLighting {
       varying vec3 vMusicPrintOrigin;
       uniform vec3 musicPrintLightColumn;
       uniform float musicPrintAmbient;
+      uniform float musicWindowGain;
     ` + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", `
       // The low local key reaches nearby rows/lanes; the stacked shelf shelters
       // the rest. The lifted cover stays in the light while its neighbors fall
-      // below it. This attenuation only removes diffuse light, never adds white.
+      // below it. Night's central exposure can recover the original print's
+      // colors, but cannot bleach them beyond the ink's existing color limit.
       vec3 printDistance = (vMusicPrintOrigin - musicPrintLightColumn) / vec3(6.0, 3.35, 5.5);
       float printLight = exp(-dot(printDistance, printDistance));
-      outgoingLight *= mix(musicPrintAmbient, 1.0, printLight);
+      outgoingLight *= mix(musicPrintAmbient, musicWindowGain, printLight);
+      if (musicWindowGain > 1.0) outgoingLight = min(outgoingLight, diffuseColor.rgb);
       #include <opaque_fragment>
     `);
   }
@@ -164,6 +170,7 @@ export class MusicSelectionLighting {
     shader.uniforms.musicShellBounds = this.shellBounds;
     shader.uniforms.musicEdgeFalloff = this.edgeFalloff;
     shader.uniforms.musicWindowAmbient = this.windowAmbient;
+    shader.uniforms.musicWindowGain = this.windowGain;
     const declarations = `
       varying vec3 vMusicLocal;
       varying vec3 vMusicOrigin;
@@ -188,12 +195,13 @@ export class MusicSelectionLighting {
       uniform vec4 musicShellBounds;
       uniform vec2 musicEdgeFalloff;
       uniform float musicWindowAmbient;
+      uniform float musicWindowGain;
     ` + shader.fragmentShader;
     // Shape only reflected light. Emissive parts retain their authored output.
     shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>", `
       #include <lights_fragment_end>
       vec3 musicWindowDistance = (vMusicOrigin - musicLightColumn) / vec3(6.0, 4.2, 5.5);
-      float musicWindowLight = mix(musicWindowAmbient, 1.0, exp(-dot(musicWindowDistance, musicWindowDistance)));
+      float musicWindowLight = mix(musicWindowAmbient, musicWindowGain, exp(-dot(musicWindowDistance, musicWindowDistance)));
       reflectedLight.directDiffuse *= musicWindowLight;
       reflectedLight.indirectDiffuse *= musicWindowLight;
       reflectedLight.directSpecular *= musicWindowLight;
