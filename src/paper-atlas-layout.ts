@@ -18,15 +18,6 @@ export type PaperAtlasLayout = {
   locate(slot: number): PaperAtlasSlot | undefined;
 };
 
-export function musicTitleTileSizeForRows(rows: number, maxTextureSize: number): PaperAtlasTileSize {
-  const rowCount = Math.max(1, Math.floor(rows));
-  const limit = Math.max(1, Math.floor(maxTextureSize));
-  return {
-    width: Math.min(512, Math.floor(limit / 8)),
-    height: Math.min(64, Math.floor(limit / rowCount)),
-  };
-}
-
 export function albumLabelTileSizeForRows(rows: number, maxTextureSize: number, sourceHeight: number): PaperAtlasTileSize {
   const rowCount = Math.max(1, Math.floor(rows));
   const limit = Math.max(16, Math.floor(maxTextureSize));

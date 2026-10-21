@@ -49,8 +49,6 @@ import { musicSpatialCell, musicSpatialEntry, musicSpatialSelectionCell, musicSh
 import { musicArraySnapCell } from "./music-array-layout";
 import { MusicSceneResources, type MusicSceneResourceUpdate } from "./music-scene-resources";
 import { musicLabFloorColor } from "./music-surface-textures";
-import { MusicCaseTitles } from "./music-case-titles";
-import { punkCaseDisplayPhase } from "./punk-case-display";
 import { defaultCaseSettings, normalizeCaseSettings, activeCaseAppearance, type CaseSettings } from "./case-settings";
 import { setCaseAlbumOcclusion, setCaseGlassFrost } from "./case-materials";
 import { createCaseModel, applyCaseAppearance, disposeCaseModel } from "./case-model";
@@ -215,7 +213,6 @@ export class ArchiveScene {
   private stars?: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private covers?: CoverAtlas;
   private rhineInfo?: CaseAlbumInfo;
-  private caseTitles?: MusicCaseTitles;
   private selectionLighting?: MusicSelectionLighting;
   private readonly windowLightAnchor = new THREE.Vector3();
   private readonly focusPoint = new THREE.Vector3();
@@ -518,10 +515,6 @@ export class ArchiveScene {
       this.scene.add(inst);
     }
     this.covers = new CoverAtlas(count, this.renderer.capabilities.maxTextureSize, this.renderer.capabilities.getMaxAnisotropy(), this.selectionLighting);
-    if (musicLibrary) {
-      this.caseTitles = new MusicCaseTitles(count, this.renderer.capabilities.maxTextureSize);
-      this.scene.add(this.caseTitles.array); this.model.add(this.caseTitles.selected);
-    }
     this.scene.add(this.covers.array);
     this.scene.add(this.covers.arrayInsert);
     this.model.add(this.covers.selected);
@@ -653,11 +646,10 @@ export class ArchiveScene {
     }
     if (this.stars) targets.number(this.stars.material, "opacity", theme === "night" ? .6 : 0);
     this.appearance.setTheme(theme, targets);
-    this.selectionLighting?.setTheme(theme, this.light, targets);
+    this.selectionLighting?.setTheme(theme, this.light, targets, this.musicStyle.design);
     this.sceneResources?.setStyle(this.musicStyle, theme === "night", stylePalette(this.musicStyle, theme === "night" ? "night" : "day"));
     this.sceneResources?.applyGroundFinish(this.floor.material);
     applyTextureQuality(this.floor, this.renderer, this.quality);
-    this.caseTitles?.setStyle(stylePalette(this.musicStyle, theme === "night" ? "night" : "day").accent);
     this.themeTransition = animate && !this.reduced && musicLibrary ? targets : undefined;
     if (!this.themeTransition) targets.finish();
     this.syncThemeStars();
@@ -807,7 +799,6 @@ export class ArchiveScene {
     this.sceneResources?.applyGroundFinish(this.floor.material);
     applyTextureQuality(this.floor, this.renderer, this.quality);
     if (this.sceneResources) applyTextureQuality(this.sceneResources.group, this.renderer, this.quality);
-    this.caseTitles?.setStyle(stylePalette(this.musicStyle, this.theme === "night" ? "night" : "day").accent);
     this.syncViewCanvases();
     this.syncDisplayViewportClip();
     if (previousView !== this.catalogView || previousCanvas !== this.displayLayout.canvas) this.syncDisplayCatalog();
@@ -974,11 +965,6 @@ export class ArchiveScene {
       this.refreshHiRes();
     }
     this.applyEditableCaseMaterials();
-    this.caseTitles?.setLayout(this.caseLayout, this.model, activeCaseAppearance(this.caseSettings));
-    if (this.caseTitles) for (const old of this.outgoing) old.group.traverse(child => {
-      if (child instanceof THREE.Mesh && child.userData.punkDisplay)
-        child.geometry = this.caseTitles!.selected.geometry;
-    });
     this.syncRhineAlbumInfo();
     this.syncViewCanvases();
   }
@@ -1450,7 +1436,6 @@ export class ArchiveScene {
     if (this.looping && changed && this.loaded && this.lift.value > 0.0001) {
       const group = this.model.clone(true);
       this.rhineInfo?.snapshot(group);
-      this.caseTitles?.snapshot(group);
       this.appearance.prepare(group);
       if (this.caseGeometryKey) applyCaseAppearance(group, activeCaseAppearance(this.caseSettings), this.quality);
       const cover = group.children.find((child) => child.userData.albumCover) as THREE.Mesh | undefined;
@@ -2278,9 +2263,6 @@ export class ArchiveScene {
     const hidden = new Set(this.outgoing.map((o) => cellKey(o.cell)));
     hidden.add(cellKey(this.selectedCell));
     this.motionGeometrySamples = [];
-    const topDisplayEnabled = this.musicStyle.design === "archive" && this.caseSettings.structure === "punk";
-    const topDisplayPhase = punkCaseDisplayPhase(this.layoutTransition.canonicalQ, this.shelfView,
-      this.layoutTransition.active, this.reduced);
     this.arrayAppearance.setSubmersion(this.layoutTransition.active, this.layoutTransition.groundY);
     if (this.layoutTransition.active) this.layoutTransition.prepareTarget(new THREE.Vector3(chosen.x - trackX,
       chosen.y + field(selectedRow, selectedLane) + this.lift.value, chosen.z + entryZ + railAt(selectedLane)));
@@ -2301,7 +2283,7 @@ export class ArchiveScene {
     let lastRenderable = -1;
     const sharedInstanceMatrix = musicLibrary ? this.instanceTransforms.bind([
       ...this.instances, this.caseHitProxy, this.covers?.array, this.covers?.arrayInsert,
-      this.caseTitles?.array, this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge,
+      this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge,
     ].filter((mesh): mesh is THREE.InstancedMesh => !!mesh)) : undefined;
     this.drawSlots.length = 0;
     for (let i = 0; i < this.positions.length; i++) {
@@ -2358,12 +2340,6 @@ export class ArchiveScene {
         this.arrayAppearance.write(this.covers.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         this.arrayAppearance.write(this.covers.arrayInsert, i, rowAppearance.alpha, rowAppearance.tint, emerging);
         this.covers.setSlot(i, records[this.recordAtCell(this.cells[i])]);
-        if (this.caseTitles && topDisplayEnabled && (this.shelfView || this.layoutTransition.active)) {
-          if (this.caseTitles.array.instanceMatrix !== sharedInstanceMatrix) this.caseTitles.array.setMatrixAt(i, this.dummy.matrix);
-          this.arrayAppearance.write(this.caseTitles.array, i, rowAppearance.alpha, rowAppearance.tint, emerging);
-          this.caseTitles.setSlot(i, (this.layoutTransition.active && this.cells[i].foobarEntryKey
-            ? getMusicEntryByKey(this.cells[i].foobarEntryKey!) : musicSpatialEntry(this.cells[i], this.shelfView))?.record.title ?? "");
-        }
         if (this.rhineInfo) {
           const index = this.recordAtCell(this.cells[i]);
           if (this.rhineInfo.arrayLabel.instanceMatrix !== sharedInstanceMatrix) this.rhineInfo.arrayLabel.setMatrixAt(i, this.dummy.matrix);
@@ -2375,7 +2351,7 @@ export class ArchiveScene {
         }
       }
     }
-    for (const inst of [ ...this.instances, this.covers?.array, this.covers?.arrayInsert, this.caseTitles?.array,
+    for (const inst of [ ...this.instances, this.covers?.array, this.covers?.arrayInsert,
       this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge ]) if (inst) {
       inst.instanceMatrix.needsUpdate = true;
       this.arrayAppearance.finish(inst);
@@ -2385,16 +2361,6 @@ export class ArchiveScene {
     const submitted = this.shelfView && !this.layoutTransition.active ? lastRenderable + 1 : this.positions.length;
     for (const inst of this.instances) inst.count = submitted;
     if (this.caseHitProxy) this.caseHitProxy.count = submitted;
-    if (this.caseTitles) {
-      this.caseTitles.array.count = submitted; this.caseTitles.array.instanceMatrix.needsUpdate = true;
-      this.caseTitles.selected.scale.setScalar(1);
-      this.caseTitles.setDisplay(topDisplayEnabled && this.model.visible, topDisplayPhase.power, topDisplayPhase.scan);
-      for (const old of this.outgoing) old.group.traverse(child => {
-        if (child.userData.punkDisplay) child.visible = this.caseTitles!.selected.visible;
-      });
-      if (topDisplayEnabled)
-        this.caseTitles.select(musicSpatialEntry(this.selectedCell, this.shelfView)?.record.title ?? "");
-    }
     if (this.rhineInfo) {
       this.rhineInfo.arrayLabel.count = this.rhineInfo.arrayBadge.count = submitted;
       this.rhineInfo.arrayLabel.instanceMatrix.needsUpdate = true;
@@ -2861,7 +2827,7 @@ export class ArchiveScene {
   }
   private renderArchiveFrame() {
     if (!musicLibrary) { this.composer.render(); return; }
-    const meshes = [...this.instances, this.covers?.array, this.covers?.arrayInsert, this.caseTitles?.array,
+    const meshes = [...this.instances, this.covers?.array, this.covers?.arrayInsert,
       this.rhineInfo?.arrayLabel, this.rhineInfo?.arrayBadge].filter((mesh): mesh is THREE.InstancedMesh => !!mesh);
     let slots = this.drawSlots;
     let shadowSlots = this.drawSlots;
@@ -3047,7 +3013,6 @@ export class ArchiveScene {
       shelfResources: this.sceneResources?.group.visible ?? false,
       spatialSpacing: this.spatialSpacing,
       caseStructure: this.model.userData.caseStructure ?? null,
-      punkDisplay: this.caseTitles?.state ?? null,
       renderPipeline: this.composer.passes.map(pass => ({ type: pass.constructor.name, enabled: pass.enabled })),
       selectionLight: this.selectionLighting?.state ?? null,
       focus: { point: this.focusPoint.toArray(), distance: (this.bokeh.uniforms as Record<string, { value: number }>).focus.value,

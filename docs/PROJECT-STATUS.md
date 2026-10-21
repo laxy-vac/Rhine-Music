@@ -1,6 +1,6 @@
 # 当前项目状态
 
-更新：2026-10-19。当前源码为本仓库 `main`，版本号仍为 `0.3.1-preview.1`。MATRIX 标签缓存、固定浏览光源、MATRIX 对焦及日夜反光调整均按用户决定保留。灯光调整的行为验证通过，性能测量未证明整体提速。ARRAY/MATRIX 各自原主光方向保留，MATRIX 仍为左侧来光；极致画质、Punk 模型、材质参数和镜头动效保留。
+更新：2026-10-22。当前源码为本仓库 `main`，版本号仍为 `0.3.1-preview.1`。保留 `435e404` 对应的性能优化；浏览镜面反射改用预计算宽幅柔光环境，实时灯保留原漫反射和阴影，Future 单独调整夜间明暗分布，Punk 盒顶白条及显示适配已移除。ARRAY/MATRIX 各自原主光方向保留，MATRIX 仍为左侧来光；极致画质、Punk 模型、材质参数和镜头动效保留。本次外观修复未做性能增益声明。
 
 ## 当前交付边界
 
@@ -9,8 +9,8 @@
 
 
 - MATRIX 标签缓存已完成隔离前后测量和标签像素检查；剩余性能工作见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
-- 浏览侧光、补光与纸面光场固定在选片视窗，仅随既有布局转换进度改变配置；MATRIX 浏览对焦点固定，详情/入场仍沿原流程对焦。日夜降低侧光峰值和窄亮带，环境反射在初始化时拓宽、预滤波。ARRAY 夜间实测回退的数据保留，用户接受保留当前版本不等于已证明性能提升。
-- 当前入场、ARRAY/MATRIX 桥接及 Punk 顶屏效果保留。用户已停止本轮动效设计；保留实现不代表视觉满意，不主动重新设计或移植 Punk 入场。
+- Future/Punk 共用宽幅柔光环境反射，实时聚光与补光只负责原有漫反射，避免在壳体、清漆和 sheen 上叠加点状镜面高光。纸面保持原 Lambert 印刷材质，粗糙度、金属度、清漆及透光设置保留。Future 夜间降低全局铺光，只对反射光加强选片视窗与暗部的层次；Punk 保留自己的夜间环境和配色。灯位仅随既有布局转换进度变化，MATRIX 浏览对焦点仍固定。
+- 当前入场与 ARRAY/MATRIX 桥接保留。Punk 顶屏白条、扫描显示、挂载适配、转场接线和专用纹理分配已移除，独立编号铭牌保留；不主动重新设计或移植 Punk 入场。
 - 视觉验收交用户；Agent 做必要构建和与改动直接相关的有限检查。性能改动仍需真实的前后测量，不恢复多轮自动视觉审查或大截图矩阵。
 - 当前源码预览已经过 TypeScript/Vite 构建。旧安装器未重新打包、安装或发布，不代表当前源码。
 
@@ -23,7 +23,7 @@
 | 空间动效 | 两主题共用固定 q 的 ARRAY/MATRIX 桥接；已有可见列持续保留，货架整体离镜，额外副本错峰升沉；原 ARRAY/MATRIX 静态镜头保持独立 |
 | 主题和设置 | STYLE 管理主题、日夜配色、文字、盒体和场景外观；Settings 七类分别管理界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于 |
 | 显示 | 比例、原生全屏、画质、实验性优先显卡和合成质量建议；显卡按物理 PnP 身份去重，选择后重启生效 |
-| 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合、实体内板和 ARRAY 顶屏保留 |
+| 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合和实体内板保留，顶部无显示白条 |
 | 入场 | Future ALBUMS 的 MATRIX/ARRAY 共用终端前导，各有场景段，可跳过/重播；欢迎文案/ID 受字母、空格及长度限制；Punk 入场暂缓 |
 | 音频 | 本地/FTP/在线来源、统一播放栏、PCM/DSD/DoP、EQ、Sony 音效和官方 LSP 原生窗口 |
 | 歌词与信号 | Local/Cloud 双 bank、独立偏移、导入保护、跟随播放及真实频谱；Future 界面音效跟随播放器输出，音乐播放时静音，Punk 禁用 |
@@ -46,7 +46,7 @@
 | 公共状态与目录 | `src/music-application-state.ts`、`src/music-catalog.ts`、`src/music-catalog-markup.ts` |
 | 主场景及资源 | `src/scene.ts`、`src/music-scene-resources.ts`、`src/music-shelf.ts`、`src/music-spatial-layout.ts` |
 | 镜头、桥接和升沉 | `src/music-layout-flight.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-layout-rise.ts`、`src/music-layout-addresses.ts` |
-| 模型、材质与图集 | `src/case-model.ts`、`src/case-materials.ts`、`src/music-case-titles.ts`、`src/punk-case-display.ts`、`src/cover-atlas.ts` |
+| 模型、材质与图集 | `src/case-model.ts`、`src/case-materials.ts`、`src/rhine-album-info.ts`、`src/cover-atlas.ts` |
 | 画质与合成测量 | `src/render-quality.ts`、`src/quality-detection.ts`、`src/quality-benchmark-frame.ts`、`quality-benchmark.html` |
 | 桌面、启动和服务 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs`、`scripts/music-server.mjs` |
 | 歌词、信号与音频 | `src/lyrics-page.ts`、`src/signal-page.ts`、`src/eq-controls.ts`、`scripts/native-output.mjs`、`native/audio-host.cpp` |

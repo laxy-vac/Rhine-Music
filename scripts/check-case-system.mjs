@@ -1104,8 +1104,6 @@ function unifiedSnapshot() {
     valid, modelVisible: scene.model.visible, coversVisible: scene.covers.array.visible,
     instancesVisible: scene.instances.some(instance => instance.visible),
     spacing: { ...scene.spatialSpacing }, caseLayout: structuredClone(scene.caseLayout),
-    topTitles: { array: !!scene.caseTitles?.array.visible, selected: !!scene.caseTitles?.selected.visible,
-      selectedText: scene.caseTitles?.selectedKey ?? "", count: scene.caseTitles?.array.count ?? 0 },
     projection: { origin: projectCell({ lane: 0, row: 12 }), lane: projectCell({ lane: 1, row: 12 }),
       row: projectCell({ lane: 0, row: 13 }) },
     resourceCapacity: scene.sceneResources?.capacity ?? 0, support,
@@ -1200,10 +1198,6 @@ async function unifiedRenderVariant(design, mode, scheme = "archive") {
     "The entire selected shelf case must remain inside its real visible width with a ten-pixel margin: " + JSON.stringify(result.selectedScreenBounds));
   expect(result.support.every(item => item.clearance >= -0.001),
     "Every actual case bound must clear its physical tray: " + JSON.stringify(result.support.filter(item => item.clearance < -0.001)));
-  expect(result.topTitles.array === unifiedStyle.topTitles && result.topTitles.selected === unifiedStyle.topTitles,
-    "The shelf title-strip visibility must follow the user's theme appearance setting.");
-  if (unifiedStyle.topTitles) expect(result.topTitles.selectedText === unifiedTrack.record.title,
-    "A shelf title strip uses the selected track title rather than its parent's album title.");
   if (design === "archive") expect(archiveScene.caseSettings.enabled && archiveScene.caseSettings.structure === "punk" &&
     !archiveScene.rhineInfo.selectedBadge.visible && !archiveScene.rhineInfo.arrayBadge.visible,
     "Legacy disabled Punk settings remain enabled with full parent labels and no format badge overlays.");
@@ -1255,8 +1249,6 @@ async function exerciseUnifiedRender() {
       expect(stats.selectedCell.foobarEntryKey === unifiedTrack.key && stats.musicPresentationPhase === "presented",
         "A layout switch must retain the non-first track and open presentation.");
       expect(archiveScene.covers === atlas && archiveScene.positions === positions, "Layout switches reuse atlas and instance allocation.");
-      if (layout !== "shelf") expect(!archiveScene.caseTitles.array.visible && !archiveScene.caseTitles.selected.visible,
-        "Array/grid inspection must not acquire shelf title-strip overlays.");
       audit.details.push({ design, layout, entryKey: stats.selectedCell.foobarEntryKey, phase: stats.musicPresentationPhase });
     }
     archiveScene.setMode("archive"); stepArchiveScene(8);
@@ -1429,7 +1421,7 @@ async function prepareArrayCoverVisibility(design, finish, selectedSlot, neutral
   configureMusicCatalog({ layout: "shelf", show: "tracks", group: "none", sort: "added" }, "");
   archiveHost.dataset.design = design;
   archiveHost.dataset.foobarLayout = "array";
-  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" };
   archiveHost.style.background = design === "archive" ? stylePalette(style, "day").bg : "#eae5e1";
   scene.setMusicStyle(style);
   scene.setTheme("day");
@@ -1453,7 +1445,7 @@ async function prepareArrayCoverVisibility(design, finish, selectedSlot, neutral
   let regions = arrayCoverVisibilityRegions();
   if (neutralizeRowTint) {
     const meshes = [...scene.instances, scene.covers.array, scene.covers.arrayInsert,
-      scene.caseTitles?.array, scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge].filter(Boolean);
+      scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge].filter(Boolean);
     for (const item of regions) {
       if (item.index === undefined) continue;
       for (const mesh of meshes) {
@@ -1535,7 +1527,6 @@ function arrayCompositionRenderSnapshot() {
     ...scene.instances.map((mesh, index) => ({ kind: mesh.userData.casePart || "case-instance-" + index, mesh })),
     { kind: "cover", mesh: scene.covers.array },
     { kind: "paper", mesh: scene.covers.arrayInsert },
-    ...(scene.caseTitles ? [{ kind: "title", mesh: scene.caseTitles.array }] : []),
     ...shelfMeshes.map(mesh => ({ kind: mesh.name || "shelf-part", mesh })),
   ];
   const instance = (mesh, index) => {
@@ -1548,9 +1539,8 @@ function arrayCompositionRenderSnapshot() {
   };
   return {
     selectedLane: scene.selectedCell.lane, focusLane,
-    style: { design: scene.musicStyle.design, shelf: scene.musicStyle.shelf, topTitles: scene.musicStyle.topTitles,
+    style: { design: scene.musicStyle.design, shelf: scene.musicStyle.shelf,
       layout: scene.displayLayout.effective, modelVisible: scene.model.visible },
-    titlesVisible: !!scene.caseTitles?.array.visible,
     traysVisible: !!scene.sceneResources?.group.visible,
     lanes: [0, 1, 2, 3, 4].map(lane => {
       const slotIndex = scene.cells.findIndex(cell => cell.lane === lane && cell.row === 12 && musicSpatialEntry(cell, true));
@@ -2133,8 +2123,7 @@ async function prepareArrayTray(design, theme, floor, layout = "shelf") {
   if (!arrayMotionPrepare) await exercisePunkArrayMotion(true);
   await arrayMotionPrepare(design, layout, "full");
   archiveHost.dataset.design = design;
-  archiveScene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true,
-    topTitles: true, floor });
+  archiveScene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor });
   archiveScene.setTheme(theme);
   archiveScene.setQuality({ ...qualityPresets.high, scale: 100, pixelRatio: 1, modelDetail: "medium" });
   await archiveScene.setCaseSettings(sceneCaseSettings("punk"));
@@ -2148,7 +2137,7 @@ async function prepareFloorGuideCase(theme, floor, scheme = "archive", layout = 
   await prepareArrayTray("archive", theme, floor, layout);
   archiveHost.dataset.design = "archive";
   archiveHost.dataset.mode = theme;
-  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, topTitles: true, floor, scheme });
+  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, floor, scheme });
   archiveScene.setTheme(theme);
   await new Promise(resolve => setTimeout(resolve, 750));
   stepArchiveScene(45);
@@ -2156,7 +2145,7 @@ async function prepareFloorGuideCase(theme, floor, scheme = "archive", layout = 
   return floorGuideSnapshot();
 }
 async function setFloorGuideScheme(theme, scheme) {
-  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, topTitles: true, floor: "deck", scheme });
+  archiveScene.setMusicStyle({ ...archiveMusicStyle, shelf: true, floor: "deck", scheme });
   archiveScene.setTheme(theme);
   await new Promise(resolve => setTimeout(resolve, 750));
   stepArchiveScene(45);
@@ -2328,7 +2317,7 @@ function captureEmptyArrayTray(zoomFactor = 2.25, focus = "browse") {
     hide(scene.model); hide(scene.caseHitProxy);
     for (const instance of scene.instances) hide(instance);
     for (const object of [scene.covers?.array, scene.covers?.arrayInsert, scene.covers?.selected, scene.covers?.selectedInsert,
-      scene.caseTitles?.array, scene.caseTitles?.selected, scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge,
+      scene.rhineInfo?.arrayLabel, scene.rhineInfo?.arrayBadge,
       scene.rhineInfo?.selectedLabel, scene.rhineInfo?.selectedBadge]) hide(object);
     for (const old of scene.outgoing) hide(old.group);
     scene.sceneResources?.group.traverse(child => {
@@ -3198,7 +3187,7 @@ async function exercisePunkArrayMotion(screenshotsOnly = false, hoverMixedParent
   };
   const prepare = async (design = "archive", layout = "shelf", wave = "full") => {
     configureMusicCatalog({ layout, show: "tracks", group: "none", sort: "added" }, "");
-    scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true });
+    scene.setMusicStyle({ ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" });
     archiveHost.dataset.design = design;
     await scene.setCaseSettings(sceneCaseSettings("punk"));
     scene.setQuality({ ...qualityPresets.original, wave, modelDetail: "medium", lighting: "high", scale: 80,
@@ -3335,10 +3324,10 @@ async function exercisePunkArrayMotion(screenshotsOnly = false, hoverMixedParent
   const frozen = compare(afterSwitch, beforeReduced, 0, false);
   const nextLane = compare(switched, afterSwitch, 1, true);
   const composition = arrayCompositionRenderSnapshot();
-  expect(Math.abs(composition.focusLane - 1) < 1e-3 && composition.titlesVisible && composition.traysVisible,
-    "The composition snapshot must include active title and physical tray rendering: " + JSON.stringify({
+  expect(Math.abs(composition.focusLane - 1) < 1e-3 && composition.traysVisible,
+    "The composition snapshot must include the physical tray rendering: " + JSON.stringify({
       selectedLane: composition.selectedLane, focusLane: composition.focusLane, style: composition.style,
-      titlesVisible: composition.titlesVisible, traysVisible: composition.traysVisible,
+      traysVisible: composition.traysVisible,
     }));
   const hiddenRight = composition.lanes.find(value => value.lane === 0);
   expect(hiddenRight.appearance.alpha < .0001 && hiddenRight.meshes.every(mesh => mesh.instances.length === 0 || mesh.instances.every(instance => !instance.drawn)),
@@ -3822,7 +3811,7 @@ async function prepareArrayCompositionInteraction() {
 
 async function prepareArrayCompositionScreenshot(design, width, height) {
   const scene = archiveScene;
-  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" };
   archiveHost.dataset.design = design; archiveHost.dataset.foobarLayout = "array";
   archiveHost.style.width = width + "px"; archiveHost.style.height = height + "px"; archiveHost.style.margin = "0";
   archiveHost.style.background = design === "archive" ? stylePalette(style, "day").bg : "#eae5e1";
@@ -4728,7 +4717,7 @@ async function prepareCoverFlickerScene(design, layout) {
   setMusicAlbums(albums, [{ id: "cover-flicker-fixture", name: "Cover Flicker Fixture" }], "genre");
   configureMusicCatalog({ layout, show: "tracks", group: "none", sort: "added" }, "");
   await scene.refreshLibrary(0);
-  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck", topTitles: true };
+  const style = { ...(design === "archive" ? archiveMusicStyle : defaultMusicStyle), shelf: true, floor: "deck" };
   archiveHost.dataset.design = design;
   archiveHost.dataset.foobarLayout = "array";
   archiveHost.style.cssText = "position:relative;width:1450px;height:840px;background:#07111f;margin:0";
@@ -5271,7 +5260,7 @@ window.caseCheck = {
       schemeCardsPresent: archiveStyleMarkup.includes("data-style-scheme") && archiveStyleMarkup.includes("COLOUR SCHEME"),
       schemePreviewPresent: archiveStyleMarkup.includes("data-style-preview-content") &&
         archiveStyleMarkup.includes("style-preview-scheme") && archiveStyleMarkup.includes("style-dual-swatches"),
-      displaySettingsPresent: ["arrayScale", "inspectScale", "textScale", "floor", "topTitles", "grain"]
+      displaySettingsPresent: ["arrayScale", "inspectScale", "textScale", "floor", "grain"]
         .every(field => archiveStyleMarkup.includes(\`data-style-field="\${field}"\`)),
       themeSwitchPresent: archiveStyleMarkup.includes('data-style-design="rhine"') && archiveStyleMarkup.includes('data-style-design="archive"'),
       qualitySlotPresent: archiveStyleMarkup.includes("theme-quality-slot"),

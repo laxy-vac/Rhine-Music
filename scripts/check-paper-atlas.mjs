@@ -3,11 +3,9 @@ import test from "node:test";
 import {
   albumLabelTileSizeForRows,
   createPaperAtlasLayout,
-  musicTitleTileSizeForRows,
 } from "../src/paper-atlas-layout.ts";
 
 const profiles = [
-  { name: "music titles", columns: 8, measure: musicTitleTileSizeForRows, pagedAt4096: true },
   { name: "Rhine label", columns: 16, measure: (rows, max) => albumLabelTileSizeForRows(rows, max, 440), pagedAt4096: true },
   { name: "Punk label", columns: 16, measure: (rows, max) => albumLabelTileSizeForRows(rows, max, 600), pagedAt4096: true },
 ];

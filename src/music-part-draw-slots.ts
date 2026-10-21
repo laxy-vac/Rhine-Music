@@ -72,12 +72,11 @@ function isMaterialBoundsSafe(mesh: InstancedMesh, material: Material, hasRestPo
   // keeps the standard instanceMatrix -> projection path. None moves vertices.
   const knownCasePart = Boolean(mesh.userData.casePart) && hasRestPosition && material instanceof MeshPhysicalMaterial;
   const knownCoverAtlas = mesh.geometry.hasAttribute("coverTile") && material instanceof MeshLambertMaterial;
-  const knownTitleAtlas = mesh.userData.punkDisplay === true && material instanceof MeshBasicMaterial;
   const knownLabelAtlas = mesh.userData.rhineAlbumInfo === true && mesh.userData.role === "label" &&
     material instanceof MeshBasicMaterial;
   const knownBadgeAtlas = mesh.userData.rhineAlbumInfo === true && mesh.userData.role === "badge" &&
     material instanceof ShaderMaterial;
-  if (knownCasePart || knownCoverAtlas || knownTitleAtlas || knownLabelAtlas || knownBadgeAtlas) return true;
+  if (knownCasePart || knownCoverAtlas || knownLabelAtlas || knownBadgeAtlas) return true;
 
   // Arbitrary custom shaders and onBeforeCompile hooks can alter `position`.
   // Restrict the generic path to standard Three materials with its stock hook.

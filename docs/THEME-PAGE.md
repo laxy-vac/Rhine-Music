@@ -20,7 +20,9 @@ Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、�
 
 ARRAY/MATRIX 各自原来的主光方向是既有视觉契约，MATRIX 保持左侧来光。原方向光及阴影灯的位置和目标保留；侧光使用各自旧版静态相机的局部偏移，禁止由性能改动重新布光。
 
-日间与夜间将侧光、原有补光和纸面光场固定在选片视窗，保留各自光色与明暗。MATRIX 拖动、ARRAY 连续切选只移动唱片；两种布局的灯位仅由既有转换进度 q 平滑过渡，保持光源距离以避免转场中途变亮。侧光峰值为旧值的 70%，窄亮带为原强度的 25%；材质参数和原着色路径保留。环境反射发光面在初始化时拓宽、降低峰值并预滤波，不逐帧重建。盒体自发光仍保留，主场景不启用跟随盒体的附加辅助灯。
+Future 与 Punk 共用预计算的宽幅柔光环境反射：壳体、清漆及 sheen 的镜面反射来自拓宽并预滤波的工作室发光面，实时聚光和近距补光只保留原漫反射，避免再叠加零面积光源的针尖高光。纸面仍使用原无镜面反射的 Lambert 材质，不以改写材质粗糙度或自发光代替柔光。环境贴图仅在初始化时计算，不增加实时面光积分或渲染 pass。MATRIX 拖动、ARRAY 连续切选只移动唱片，光源与纸面光场固定在选片视窗；两种布局的灯位仅随既有转换进度 q 平滑过渡，原主光方向和阴影灯位置保持。
+
+Future 夜间单独降低环境、半球及方向补光，保留选片窗口的中性柔光与轻微暖边，让外围自然进入暗部；空间衰减作用于反射光，不削弱部件自发光设置。Punk 不使用 Future 的夜间铺光和空间衰减参数，保留自身夜间配色。盒体材质、部件变换、透射与可见性设置继续生效，主场景不启用跟随被选专辑的附加辅助灯。
 
 MATRIX 浏览的景深对焦点固定在选片视窗，避免焦平面追随被选中的唱片。镜头原有导航动效、详情展开及入场流程保留；详情仍沿既有展开过程对焦。灯位固定不代表反光图案静止，唱片或视角运动仍会产生正常的材质反射变化。
 
@@ -117,7 +119,7 @@ Future 的结构选择为简单粗糙（minimal）、精细（rhine）和 Punk �
 
 Future Punk 拓展与 Punk 主题共用编辑器分组和操作，视觉皮肤及个人库仍分开。HEX 输入接受 #RGB 和 #RRGGBB，可省略 #；提交时归一为大写六位，非法值不保存。个人预设保存完整材质与部件快照，不自动覆盖重名项目；两库各自最多 50 项。Punk 内置材质预设为 marble、hazard、white、glass、frost、red、blue、coral、tide、aurora。
 
-Punk 盒体的前玻璃覆盖四边倒角并嵌入边框，右侧实体内板厚 0.055、与前玻璃保留 0.025 间距（Blender 源单位）。顶部显示屏只属于 Punk 主题的 ARRAY，平贴上框表面，右端接入顶部方块，左端细线跟随 Color Studies 强调色；MATRIX 和 Future 的任何盒体均不显示。屏幕保持固定全幅，MATRIX→ARRAY 时白底随多次逐行刷新渐亮，再按从上到下、行内从左到右的扫描顺序显示专辑名；反向先消退内容，再逐渐释放屏幕余辉，露出上框原色。扫描亮带和细线只在变化期间出现，细线在远景自动减弱，屏幕没有横向伸缩或边界展开。显示屏跟随盒体矩阵及上框编辑，不改变既有镜头或升沉路径。复用原有标题图集和两组绘制对象，使用无光照材质、深度遮挡，不计算自身反射、折射或阴影，不增加渲染 pass；扫描只更新 uniform，标题或颜色改变时才重绘贴图。
+Punk 盒体的前玻璃覆盖四边倒角并嵌入边框，右侧实体内板厚 0.055、与前玻璃保留 0.025 间距（Blender 源单位）。盒顶白色字条及其显示机制已移除：ARRAY/MATRIX 均不创建显示平面、标题图集、扫描着色或挂载适配，转换和退场也不更新显示副本。物理上框、顶夹、前玻璃和实体内板保留，普通专辑编号铭牌沿原独立路径工作。
 
 盒体封面纸卡与印刷面由共享 helper 定位：正常厚度下相隔 0.002 模型单位，背层先绘制，选中项、阵列、预览和查看器使用相同顺序。此几何约束用于避免两面深度竞争；玻璃、阴影、封面和质量设置仍按各自材质工作。
 
@@ -126,5 +128,5 @@ Punk 盒体的前玻璃覆盖四边倒角并嵌入边框，右侧实体内板厚
 ## 实现入口
 
 - 主题与偏好：[music-app.ts](../src/music-app.ts)、[music-theme-follow.ts](../src/music-theme-follow.ts)
-- 浏览与场景：[music-catalog-markup.ts](../src/music-catalog-markup.ts)、[music-catalog-grid.ts](../src/music-catalog-grid.ts)、[scene.ts](../src/scene.ts)、[music-scene-resources.ts](../src/music-scene-resources.ts)、[music-case-titles.ts](../src/music-case-titles.ts)
+- 浏览与场景：[music-catalog-markup.ts](../src/music-catalog-markup.ts)、[music-catalog-grid.ts](../src/music-catalog-grid.ts)、[scene.ts](../src/scene.ts)、[music-scene-resources.ts](../src/music-scene-resources.ts)
 - 资料与盒体：[album-panel.ts](../src/album-panel.ts)、[album-interaction.ts](../src/album-interaction.ts)、[album-queue.ts](../src/album-queue.ts)、[case-settings.ts](../src/case-settings.ts)、[case-model.ts](../src/case-model.ts)、[case-editor.ts](../src/case-editor.ts)、[case-materials.ts](../src/case-materials.ts)、[rhine-case-model.ts](../src/rhine-case-model.ts)

@@ -73,20 +73,20 @@ const keyShadow = key.castShadow;
 const lighting = new MusicSelectionLighting(scene);
 const addedLights = scene.children.filter((child) => child instanceof THREE.Light)
   .filter((child) => !existingLights.includes(child));
-assert.equal(addedLights.length, 2, 'The view adds the original spot and reflected point fill only');
+assert.equal(addedLights.length, 2, 'The existing diffuse key and fill are retained');
 assert.strictEqual(addedLights[0], lighting.source);
-const bounceLight = addedLights.find((light) => light instanceof THREE.PointLight);
-assert.ok(lighting.source instanceof THREE.SpotLight, 'The original window source remains a spot light');
-assert.equal(lighting.source.castShadow, false, 'The spot source adds no shadow pass');
-assert.ok(bounceLight, 'The original reflected fill remains a point light');
+const bounceLight = addedLights.find((light) => light !== lighting.source);
+assert.ok(lighting.source instanceof THREE.SpotLight, 'The authored diffuse window key is retained');
+assert.equal(lighting.source.castShadow, false, 'The diffuse source adds no shadow pass');
+assert.ok(bounceLight instanceof THREE.PointLight, 'The original diffuse reflected fill is retained');
 assert.equal(bounceLight.castShadow, false, 'The reflected fill adds no shadow pass');
 assert.equal(scene.children.filter((child) => child instanceof THREE.SpotLight).length, 1);
-assert.equal(scene.children.filter((child) => child instanceof THREE.PointLight).length, 1,
-  'Only the one original local reflected fill is present');
-assert.equal(scene.children.filter((child) => child instanceof THREE.RectAreaLight).length, 0);
+assert.equal(scene.children.filter((child) => child instanceof THREE.PointLight).length, 1);
+assert.equal(scene.children.filter((child) => child instanceof THREE.RectAreaLight).length, 0,
+  'Wide reflections reuse the baked environment rather than costly per-fragment area integration');
 assert.equal(lighting.state.fillVisible, false, 'The local fill starts hidden below full quality');
 assert.equal(key.castShadow, keyShadow);
-const allowedLights = [...existingLights, lighting.source, ...scene.children.filter((child) => child instanceof THREE.PointLight)];
+const allowedLights = [...existingLights, ...addedLights];
 const assertMainLightsFixed = () => {
   assert.ok(key.position.equals(keyPosition) && key.target.position.equals(keyTarget),
     'The original directional key position and target stay fixed');
@@ -102,6 +102,7 @@ const arrayState = structuredClone(lighting.state);
 assert.equal(arrayState.type, 'SpotLight');
 assert.equal(arrayState.fixedTo, 'selection-window');
 assert.equal(arrayState.reflection, 'prefiltered-softbox');
+assert.equal(arrayState.punctualSpecular, false);
 assert.equal(arrayState.layoutProgress, 0);
 assert.deepEqual(arrayState.target, fixtureAim(origin, layout).toArray());
 assert.ok(new THREE.Vector3().fromArray(arrayState.position).sub(new THREE.Vector3().fromArray(arrayState.target))
@@ -117,7 +118,7 @@ assertMainLightsFixed();
 const shellShader = {
   uniforms: {},
   vertexShader: '#include <begin_vertex>\nvoid main() {}',
-  fragmentShader: '#include <opaque_fragment>\nvoid main() {}',
+  fragmentShader: '#include <lights_physical_pars_fragment>\n#include <lights_fragment_end>\n#include <opaque_fragment>\nvoid main() {}',
 };
 lighting.shade(shellShader, 'Frosted_Polymer');
 assert.ok(shellShader.vertexShader.includes('vMusicOrigin = (modelMatrix * musicOrigin).xyz'));
@@ -125,6 +126,13 @@ assert.ok(shellShader.fragmentShader.includes('musicLightColumn'));
 assert.ok(shellShader.fragmentShader.includes('topRim'));
 assert.ok(shellShader.fragmentShader.includes('edgeScatter'));
 assert.ok(shellShader.fragmentShader.includes('musicEdgeFalloff'));
+assert.ok(shellShader.fragmentShader.includes('reflectedLight.directSpecular *= musicWindowLight'));
+assert.ok(shellShader.fragmentShader.includes('#define RE_Direct MusicDiffuseDirect'));
+assert.ok(shellShader.fragmentShader.includes('BRDF_Lambert(material.diffuseContribution)'));
+const diffuseOnly = shellShader.fragmentShader.split('void MusicDiffuseDirect')[1].split('#undef RE_Direct')[0];
+assert.ok(!diffuseOnly.includes('directSpecular') && !diffuseOnly.includes('clearcoatSpecular') && !diffuseOnly.includes('sheenSpecular'),
+  'Punctual sources cannot add a narrow shell, clearcoat or sheen highlight');
+assert.ok(!shellShader.fragmentShader.includes('totalEmissiveRadiance *='), 'Window shaping preserves authored emission');
 assert.ok(shellShader.uniforms.musicLightColumn.value.equals(origin));
 assert.deepEqual(shellShader.uniforms.musicShellBounds.value.toArray(),
   [layout.bounds.min[0], layout.bounds.min[1], layout.bounds.max[1], 1 / layout.height]);
@@ -140,9 +148,10 @@ const printProperties = {
 const printShader = {
   uniforms: {},
   vertexShader: '#include <begin_vertex>\nvoid main() {}',
-  fragmentShader: '#include <opaque_fragment>\nvoid main() {}',
+  fragmentShader: '#include <lights_lambert_pars_fragment>\n#include <opaque_fragment>\nvoid main() {}',
 };
 lighting.shadePrint(printShader);
+assert.ok(!printShader.fragmentShader.includes('MusicDiffuseDirect'), 'Matte artwork retains its original Lambert light path');
 assert.ok(printShader.fragmentShader.includes('printLight'));
 assert.ok(printShader.fragmentShader.includes('outgoingLight *= mix(musicPrintAmbient, 1.0, printLight)'));
 assert.ok(printShader.vertexShader.includes('vMusicPrintOrigin'));
@@ -275,9 +284,21 @@ for (const theme of ['day', 'dusk', 'night']) {
 assert.notDeepEqual(themeLook[0], themeLook[2], 'Day and night retain distinct lighting looks');
 assert.ok(themeLook.flat().every((value) => Number.isFinite(value) && value >= 0),
   'Every theme retains finite nonnegative light values');
-assert.ok(themeLook[0][1] < 180 * 64, 'The daytime spot peak is reduced from the original level');
+assert.ok(Math.abs(themeLook[0][1] - 180 * 64 * .7) < 1e-9, 'Diffuse illumination retains its original intensity');
 assert.deepEqual(scene.children.filter((child) => child instanceof THREE.Light), allowedLights,
   'Theme changes do not add or remove light objects');
+
+lighting.setTheme('night', key, undefined, 'archive');
+assert.equal(scene.environmentIntensity, .20, 'Punk retains its night ambient level');
+assert.equal(shellShader.uniforms.musicWindowAmbient.value, 1, 'Punk does not receive Future night shaping');
+assert.equal(printShader.uniforms.musicPrintAmbient.value, .12);
+lighting.setTheme('night', key, undefined, 'rhine');
+assert.equal(scene.environmentIntensity, .10);
+assert.equal(shellShader.uniforms.musicWindowAmbient.value, .24, 'Only Future night concentrates illumination');
+assert.equal(printShader.uniforms.musicPrintAmbient.value, .06);
+lighting.setTheme('day', key, undefined, 'rhine');
+assert.equal(shellShader.uniforms.musicWindowAmbient.value, 1, 'Daylight restores the shared soft look');
+sameTransform(lighting.state, themeTransforms);
 
 lighting.setQuality('full');
 const beforeHide = structuredClone(lighting.state);
@@ -323,4 +344,4 @@ assert.equal(traversals, 0, 'Hidden case lights do not traverse the model');
 assert.equal(worldUpdates, 0, 'Hidden case lights do not update world matrices');
 assert.ok(caseLights.every((light) => !light.visible), 'Hidden case lighting turns off all local lights');
 
-console.log('Music lighting passed: original main key remains fixed, one window spot retains canonical ARRAY/MATRIX offsets, shader origins stay fixed through model/camera motion, full-only reflected fill remains fixed, light counts and material/shader contracts are preserved, and hidden case-light updates early-exit.');
+console.log('Music lighting passed: wide baked studio reflections replace punctual shell highlights; original diffuse lights, ARRAY/MATRIX directions and fixed anchors remain; only Future night concentrates reflected light; print, emission, shadow and lifecycle contracts are preserved.');

@@ -32,7 +32,7 @@ Blender X水平、Z竖直、Y深度且负向在前。保持整面玻璃、盒内
 
 Punk右侧实体铭牌保留原GLB几何，运行时另加完整RHINE LAB/INFO/NO/标记纸面，使用与Rhine相同的archive-label.ts绘制。原铭牌源尺寸.54×.32，统一nativeCaseLayout缩放后的.51686×.30629与GLB实测一致，不能把两者差值当成需要二次缩放的误差。新画面覆盖正面96%，字体等比居中，不拉伸；标签板变换/显隐及cover拆解同步，使用无灯光材质并写入深度。主场景模型缓存的铭牌叠加在ArchiveCaseRenderer完成，源GLB/PNG和内容哈希不变。
 
-两个主题的Punk盒体均保留完整动态铭牌，不添加Hi-Res/DSD徽标；格式徽标仅保留在Future精细款。Punk主题不再展示旧CASE SKIN列表和原图预览，使用同一自制可调Punk模型。只有Punk主题的ARRAY在上框表面增加动态专辑显示屏，右接顶部方块，左侧强调线随配色变化；MATRIX及Future不显示。显示屏由运行时无光照平面和缓存图集构成，不写入GLB，详见[主题规则](../docs/THEME-PAGE.md)。
+两个主题的Punk盒体均保留完整动态铭牌，不添加Hi-Res/DSD徽标；格式徽标仅保留在Future精细款。Punk主题不再展示旧CASE SKIN列表和原图预览，使用同一自制可调Punk模型。盒顶白条及其ARRAY/MATRIX显示适配已移除，不再创建运行时显示平面和标题图集；物理上框、顶夹与GLB保留，详见[主题规则](../docs/THEME-PAGE.md)。
 
 ## 导出与缓存版本
 

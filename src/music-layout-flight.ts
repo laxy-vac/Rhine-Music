@@ -61,7 +61,6 @@ export class MusicLayoutTransition {
   private rackFrame?: { matrix: THREE.Matrix4; visible: boolean; outside: boolean; translation: number[]; projected: number[] };
 
   get bound() { return !!this.plan; }
-  get canonicalQ() { return this.q; }
   get settled() { return this.elapsed >= this.alignmentDuration && Math.abs(this.q - this.desiredEnd) < 1e-8 && Math.abs(this.qVelocity) < 1e-8; }
   get progress() { return this.active ? this.desiredEnd === 1 ? this.q : 1 - this.q : 1; }
   get heading() { return THREE.MathUtils.degToRad(10) * Math.sin(Math.PI * ease(this.q)); }

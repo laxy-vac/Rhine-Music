@@ -13,13 +13,14 @@ export class MusicSelectionLighting {
   private readonly scatterColor = { value: new THREE.Color("#ffdba3") };
   private readonly scatterStrength = { value: 1 };
   private readonly printAmbient = { value: 0.5 };
+  private readonly windowAmbient = { value: 1 };
   private readonly shellBounds = { value: new THREE.Vector4(
     MUSIC_MODEL.center.x - MUSIC_MODEL.width / 2,
     MUSIC_MODEL.center.y - MUSIC_MODEL.height / 2,
     MUSIC_MODEL.center.y + MUSIC_MODEL.height / 2,
     1 / MUSIC_MODEL.height,
   ) };
-  private readonly edgeFalloff = { value: new THREE.Vector2(1.7, 24) };
+  private readonly edgeFalloff = { value: new THREE.Vector2(1.7, 6) };
 
   private readonly aim = new THREE.Vector3();
   private readonly arrayOffset = this.windowOffset(-38, 35);
@@ -30,7 +31,7 @@ export class MusicSelectionLighting {
   private transformUpdates = 0;
 
   constructor(private readonly scene: THREE.Scene) {
-    this.source.name = "Fixed selection window key";
+    this.source.name = "Fixed selection window diffuse key";
     this.source.castShadow = false;
     this.source.visible = false;
     // Preserve the original independent directional/contact-shadow rig.
@@ -70,21 +71,24 @@ export class MusicSelectionLighting {
   // All quality levels share the same source; no moving local fill is added.
   setQuality(quality: "basic" | "high" | "full") { this.quality = quality; }
 
-  setTheme(theme: "day" | "night" | "dusk", key: THREE.DirectionalLight, transition?: ThemeTransition) {
+  setTheme(theme: "day" | "night" | "dusk", key: THREE.DirectionalLight, transition?: ThemeTransition, design: "rhine" | "archive" = "rhine") {
     const night = theme === "night";
+    const futureNight = night && design === "rhine";
     const targets = transition ?? new ThemeTransition();
-    targets.number(this.scene, "environmentIntensity", night ? 0.20 : 0.28);
-    targets.number(key, "intensity", night ? 0.30 : 0.45);
+    targets.number(this.scene, "environmentIntensity", futureNight ? .10 : night ? .20 : .28);
+    targets.number(key, "intensity", futureNight ? .18 : night ? .30 : .45);
     for (const child of this.scene.children) {
-      if (child instanceof THREE.HemisphereLight) targets.number(child, "intensity", night ? 0.30 : 0.45);
-      if (child instanceof THREE.DirectionalLight && child !== key) targets.number(child, "intensity", night ? 0.04 : 0.06);
+      if (child instanceof THREE.HemisphereLight) targets.number(child, "intensity", futureNight ? .16 : night ? .30 : .45);
+      if (child instanceof THREE.DirectionalLight && child !== key) targets.number(child, "intensity", futureNight ? .025 : night ? .04 : .06);
     }
-    targets.color(this.source.color, night ? "#dbe9ff" : "#ffe3b2");
-    targets.number(this.source, "intensity", (night ? 130 : 180) * 64 * 0.7);
-    targets.color(this.bounce.color, night ? "#dbe9ff" : "#ffe3b2");
-    targets.color(this.scatterColor.value, night ? "#cee5ff" : "#ffdba3");
-    targets.number(this.scatterStrength, "value", night ? .72 : 1);
-    targets.number(this.printAmbient, "value", night ? .12 : theme === "dusk" ? .38 : .5);
+    const color = futureNight ? "#e9edf2" : night ? "#dbe9ff" : "#ffe3b2";
+    targets.color(this.source.color, color);
+    targets.number(this.source, "intensity", (night ? 130 : 180) * 64 * .7);
+    targets.color(this.bounce.color, color);
+    targets.color(this.scatterColor.value, futureNight ? "#e7dfca" : night ? "#cee5ff" : "#ffdba3");
+    targets.number(this.scatterStrength, "value", futureNight ? .62 : night ? .72 : 1);
+    targets.number(this.printAmbient, "value", futureNight ? .06 : night ? .12 : theme === "dusk" ? .38 : .5);
+    targets.number(this.windowAmbient, "value", futureNight ? .24 : 1);
     if (!transition) targets.finish();
   }
 
@@ -128,6 +132,25 @@ export class MusicSelectionLighting {
     // Covers are independent surface prints. Keep this guard even when a
     // caller accidentally registers them with the shell lighting controller.
     if (surface === "Album_Print") return;
+    // Punctual sources provide the authored diffuse illumination and shadows.
+    // Specular/clearcoat/sheen reflection comes from the broad studio emitters
+    // already baked into PMREM, not a second, zero-size highlight on the shell.
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_physical_pars_fragment>", `
+      #include <lights_physical_pars_fragment>
+      void MusicDiffuseDirect(const in IncidentLight directLight, const in vec3 geometryPosition,
+          const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal,
+          const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+        vec3 irradiance = saturate(dot(geometryNormal, directLight.direction)) * directLight.color;
+        #ifdef USE_SHEEN
+          float sheenAlbedoV = IBLSheenBRDF(geometryNormal, geometryViewDir, material.sheenRoughness);
+          float sheenAlbedoL = IBLSheenBRDF(geometryNormal, directLight.direction, material.sheenRoughness);
+          irradiance *= 1.0 - max3(material.sheenColor) * max(sheenAlbedoV, sheenAlbedoL);
+        #endif
+        reflectedLight.directDiffuse += irradiance * BRDF_Lambert(material.diffuseContribution);
+      }
+      #undef RE_Direct
+      #define RE_Direct MusicDiffuseDirect
+    `);
     shader.uniforms.musicLightColumn = this.column;
     shader.uniforms.musicScatterColor = this.scatterColor;
     shader.uniforms.musicScatterStrength = this.scatterStrength;
@@ -140,6 +163,7 @@ export class MusicSelectionLighting {
     shader.uniforms.musicScatterFidelity = fidelity;
     shader.uniforms.musicShellBounds = this.shellBounds;
     shader.uniforms.musicEdgeFalloff = this.edgeFalloff;
+    shader.uniforms.musicWindowAmbient = this.windowAmbient;
     const declarations = `
       varying vec3 vMusicLocal;
       varying vec3 vMusicOrigin;
@@ -163,7 +187,26 @@ export class MusicSelectionLighting {
       // left X, bottom Y, top Y, inverse height — shared with the real shell.
       uniform vec4 musicShellBounds;
       uniform vec2 musicEdgeFalloff;
+      uniform float musicWindowAmbient;
     ` + shader.fragmentShader;
+    // Shape only reflected light. Emissive parts retain their authored output.
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>", `
+      #include <lights_fragment_end>
+      vec3 musicWindowDistance = (vMusicOrigin - musicLightColumn) / vec3(6.0, 4.2, 5.5);
+      float musicWindowLight = mix(musicWindowAmbient, 1.0, exp(-dot(musicWindowDistance, musicWindowDistance)));
+      reflectedLight.directDiffuse *= musicWindowLight;
+      reflectedLight.indirectDiffuse *= musicWindowLight;
+      reflectedLight.directSpecular *= musicWindowLight;
+      reflectedLight.indirectSpecular *= musicWindowLight;
+      #ifdef USE_CLEARCOAT
+        clearcoatSpecularDirect *= musicWindowLight;
+        clearcoatSpecularIndirect *= musicWindowLight;
+      #endif
+      #ifdef USE_SHEEN
+        sheenSpecularDirect *= musicWindowLight;
+        sheenSpecularIndirect *= musicWindowLight;
+      #endif
+    `);
     const glass = surface === "Frosted_Polymer";
     const spine = surface === "Ivory_Edges";
     shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", `
@@ -194,10 +237,10 @@ export class MusicSelectionLighting {
         float grazing = 1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0);
         float edgeScatter = ${spine ? '0.30' : '0.14'} * edgeTransport + ${spine ? '0.016' : '0.003'};
         outgoingLight += musicScatterColor * musicScatterStrength * guidedLight * edgeScatter * lowerLight * musicOpticalScatter;
-        // A narrow glint at the top and the lit spine changes with viewing angle.
+        // A broad, lower-radiance rim shares the softbox's finite extent.
         // Warm light stays on the glass; the independent cover has no such term.
         float ribbon = topRim * (0.22 + 0.78 * edgeTransport) + ${spine ? '0.18' : '0.035'} * edgeTransport * grazing;
-        outgoingLight += musicScatterColor * musicScatterStrength * laneLight * hotLight * ribbon * 0.8 * musicScatterFidelity * musicOpticalScatter;
+        outgoingLight += musicScatterColor * musicScatterStrength * laneLight * hotLight * ribbon * 0.2 * musicScatterFidelity * musicOpticalScatter;
       ` : ''}
       #include <opaque_fragment>
     `);
@@ -214,7 +257,7 @@ export class MusicSelectionLighting {
       position: this.source.position.toArray(), target: this.aim.toArray(),
       layoutProgress: this.progress, transformUpdates: this.transformUpdates,
       fixedTo: "selection-window",
-      reflection: "prefiltered-softbox",
+      reflection: "prefiltered-softbox", punctualSpecular: false,
       fillVisible: this.bounce.visible, fillPosition: this.bounce.position.toArray(),
     };
   }

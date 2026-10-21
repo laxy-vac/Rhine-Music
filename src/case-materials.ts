@@ -330,8 +330,8 @@ export function setCaseGlassFrost(root: THREE.Object3D, amount: number) {
   });
 }
 
-/** The same local part transform also mounts attached, unlit surface graphics. */
-export function casePartTransformMatrix(transform: CaseTransform, pivot: THREE.Vector3): THREE.Matrix4 {
+/** Build a part-local transform around its saved pivot. */
+function casePartTransformMatrix(transform: CaseTransform, pivot: THREE.Vector3): THREE.Matrix4 {
   const quaternion = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(
       ...(transform.rotation.map(THREE.MathUtils.degToRad) as [
