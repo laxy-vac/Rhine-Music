@@ -4,6 +4,9 @@ export interface MusicTrack {
   albumId: string;
   title: string;
   artist: string;
+  /** Ordered performers; the first value is the lead performer for grouping. */
+  artists?: string[];
+  coverUrl?: string;
   trackNumber?: number;
   discNumber?: number;
   duration: number;
@@ -37,12 +40,14 @@ export interface MusicAlbum {
   id: string;
   title: string;
   artist: string;
+  artists?: string[];
   year?: number;
   discCount?: number;
   description?: string;
   descriptionSource?: {
     name: string;
-    url: string;
+    url?: string;
+    kind?: "manual" | "online";
     checkedAt?: string;
     license?: string;
   };

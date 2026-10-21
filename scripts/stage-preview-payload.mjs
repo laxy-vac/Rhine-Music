@@ -600,6 +600,7 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
 
   const graphRoots = [
     'scripts/music-server.mjs',
+    'scripts/metadata-tag-worker.mjs',
     'desktop/main.cjs',
     'desktop/preload.cjs',
     'desktop/self-test.mjs',
@@ -632,7 +633,11 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
     'README.md',
     'docs/PROJECT-STATUS.md',
     'docs/UNIFIED-ARCHITECTURE.md',
+    'docs/METADATA-EDITOR.md',
     'docs/PREVIEW-RELEASE.md',
+    'public/licenses/taglib-wasm-license.txt',
+    'public/licenses/taglib-lgpl-2.1.txt',
+    'public/licenses/msgpack.txt',
     'windows/app.ico',
     'vendor/audio/lsp-plugin/COPYING',
     'vendor/audio/lsp-plugin/COPYING.LESSER',

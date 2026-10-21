@@ -11,6 +11,7 @@
 - MATRIX 标签缓存已完成隔离前后测量和标签像素检查；剩余性能工作见 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md)。
 - Future/Punk 共用宽幅柔光环境反射，实时聚光与补光只负责原有漫反射，避免在壳体、清漆和 sheen 上叠加点状镜面高光。纸面保持原 Lambert 印刷材质，粗糙度、金属度、清漆及透光设置保留。Future 夜间降低全局铺光，只对反射光加强选片视窗与暗部的层次；Punk 保留自己的夜间环境和配色。灯位仅随既有布局转换进度变化，MATRIX 浏览对焦点仍固定。
 - 当前入场与 ARRAY/MATRIX 桥接保留。Punk 顶屏白条、扫描显示、挂载适配、转场接线和专用纹理分配已移除，独立编号铭牌保留；不主动重新设计或移植 Punk 入场。
+- 专辑资料与歌曲标签编辑已接入当前源码：专辑候选先预览并填入草稿、用户显式保存；歌曲标签由后台 TagLib worker 写回，曲目歌手多值及顺序保留，按主唱分组。定向后端检查、源码预览构建和隔离 Future 编辑交互通过；Punk 视觉与个人曲库体验交用户验收，完整边界与操作见 [METADATA-EDITOR](METADATA-EDITOR.md)；当前安装器尚未重打。
 - 视觉验收交用户；Agent 做必要构建和与改动直接相关的有限检查。性能改动仍需真实的前后测量，不恢复多轮自动视觉审查或大截图矩阵。
 - 当前源码预览已经过 TypeScript/Vite 构建。旧安装器未重新打包、安装或发布，不代表当前源码。
 
@@ -26,6 +27,7 @@
 | 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合和实体内板保留，顶部无显示白条 |
 | 入场 | Future ALBUMS 的 MATRIX/ARRAY 共用终端前导，各有场景段，可跳过/重播；欢迎文案/ID 受字母、空格及长度限制；Punk 入场暂缓 |
 | 音频 | 本地/FTP/在线来源、统一播放栏、PCM/DSD/DoP、EQ、Sony 音效和官方 LSP 原生窗口 |
+| 元数据 | 专辑介绍与封面在本地曲库单独保存；歌曲标签使用 TagLib 写回，支持多歌手增删排序；单曲封面支持嵌入、继承或按曲关联 sidecar；资料来源默认 Wikipedia，可配置 QQ、网易和自定义 JSON 字段映射 |
 | 歌词与信号 | Local/Cloud 双 bank、独立偏移、导入保护、跟随播放及真实频谱；Future 界面音效跟随播放器输出，音乐播放时静音，Punk 禁用 |
 
 主题与几何契约见 [THEME-PAGE](THEME-PAGE.md)，状态/目录边界见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，数据及音频规则见各专项文档。
@@ -48,7 +50,9 @@
 | 镜头、桥接和升沉 | `src/music-layout-flight.ts`、`src/music-layout-framing.ts`、`src/music-layout-transition.ts`、`src/music-layout-rise.ts`、`src/music-layout-addresses.ts` |
 | 模型、材质与图集 | `src/case-model.ts`、`src/case-materials.ts`、`src/rhine-album-info.ts`、`src/cover-atlas.ts` |
 | 画质与合成测量 | `src/render-quality.ts`、`src/quality-detection.ts`、`src/quality-benchmark-frame.ts`、`quality-benchmark.html` |
+| 元数据编辑 UI 与类型 | `src/album-info-editor.ts`、`src/metadata-editor-types.ts` |
 | 桌面、启动和服务 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs`、`scripts/music-server.mjs` |
+| 元数据 API、来源和文件写回 | `scripts/music-metadata-editor.mjs`、`scripts/album-info-sources.mjs`、`scripts/metadata-tag-client.mjs`、`scripts/metadata-tag-worker.mjs`、`scripts/audio-tag-editor.mjs`、`scripts/track-artwork-overrides.mjs`、`scripts/music-library.mjs` |
 | 歌词、信号与音频 | `src/lyrics-page.ts`、`src/signal-page.ts`、`src/eq-controls.ts`、`scripts/native-output.mjs`、`native/audio-host.cpp` |
 
 运行操作见 [LOCAL-DEVELOPMENT](LOCAL-DEVELOPMENT.md)，后续工作只在 [OPTIMIZATION-BASELINE](OPTIMIZATION-BASELINE.md) 维护。历史代码和已跟踪文档只在 Git 中按需追溯，不作为当前接手材料。

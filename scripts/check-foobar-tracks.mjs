@@ -25,12 +25,13 @@ function runModule(source, filename, requireMock) {
   return module.exports;
 }
 
-function makeTrack(albumId, index, artist, title) {
+function makeTrack(albumId, index, artist, title, artists) {
   return {
     id: `${albumId}-track-${String(index + 1).padStart(2, "0")}`,
     albumId,
     title,
     artist,
+    ...(artists ? { artists: [...artists] } : {}),
     trackNumber: index + 1,
     discNumber: index < 20 ? 1 : 2,
     duration: 180 + index,
@@ -42,13 +43,15 @@ function makeTrack(albumId, index, artist, title) {
   };
 }
 
-function makeRecord({ id, title, artist, category, year, trackCount, needle = false }) {
+function makeRecord({ id, title, artist, category, year, trackCount, needle = false, albumArtists, trackArtist, trackArtists }) {
   const tracks = Array.from({ length: trackCount }, (_, index) => makeTrack(
     id,
     index,
     needle && index === 0 ? "Guest Artist" : artist,
     needle && index === 0 ? "Needle" : `${title} Track ${String(index + 1).padStart(2, "0")}`,
+    needle && index === 0 ? undefined : trackArtists,
   ));
+  if (trackArtist && !needle) for (const track of tracks) track.artist = trackArtist;
   return {
     id,
     title,
@@ -65,6 +68,7 @@ function makeRecord({ id, title, artist, category, year, trackCount, needle = fa
       id,
       title,
       artist,
+      ...(albumArtists ? { artists: [...albumArtists] } : {}),
       year,
       genreId: category.toLowerCase(),
       rawGenres: [category],
@@ -75,6 +79,17 @@ function makeRecord({ id, title, artist, category, year, trackCount, needle = fa
       offline: false,
     },
   };
+}
+
+export function createArtistCreditRecords() {
+  return [
+    makeRecord({ id: "lead-credit-b", title: "B Lead Album", artist: "Album Lead / Album Guest B", albumArtists: ["Album Lead", "Album Guest B"],
+      trackArtist: "Track Lead / GuestBravo", trackArtists: ["Track Lead", "GuestBravo"], category: "Rock", year: 2001, trackCount: 1 }),
+    makeRecord({ id: "lead-credit-a", title: "A Lead Album", artist: "Album Lead / Album Guest A", albumArtists: ["Album Lead", "Album Guest A"],
+      trackArtist: "Track Lead / GuestAlpha", trackArtists: ["Track Lead", "GuestAlpha"], category: "Rock", year: 2000, trackCount: 1 }),
+    makeRecord({ id: "ac-dc-credit", title: "AC/DC Album", artist: "AC/DC", albumArtists: ["AC/DC"],
+      trackArtist: "AC/DC", trackArtists: ["AC/DC"], category: "Rock", year: 1979, trackCount: 1 }),
+  ];
 }
 
 export function createGridPaginationRecords() {
@@ -99,7 +114,17 @@ export async function createTrackFixture(seedRecords) {
     makeRecord({ id: "album-rock", title: "Rock Album", artist: "Alpha Artist", category: "Alternative", year: 2002, trackCount: 24, needle: true }),
     makeRecord({ id: "album-jazz", title: "Jazz Album", artist: "Beta Artist", category: "Jazz", year: 1994, trackCount: 5 }),
   ];
-  const dataModule = { records };
+  const musicOrderSource = await readFile(path.join(project, "src/music-order.ts"), "utf8");
+  const musicOrder = runModule(musicOrderSource, "music-order.js", specifier => {
+    throw new Error(`Unexpected music order import: ${specifier}`);
+  });
+  const dataSource = await readFile(path.join(project, "src/data.ts"), "utf8");
+  const archiveContent = { records, categories: [], columns: [] };
+  const dataModule = runModule(dataSource, "data.js", specifier => {
+    if (specifier === "../content/archives.json") return { __esModule: true, default: archiveContent };
+    if (specifier === "./music-order.ts") return musicOrder;
+    throw new Error(`Unexpected data import: ${specifier}`);
+  });
   const viewSettingsSource = await readFile(path.join(project, "src/music-view-settings.ts"), "utf8");
   const viewSettings = runModule(viewSettingsSource, "music-view-settings.js", specifier => {
     throw new Error(`Unexpected view settings import: ${specifier}`);
@@ -112,6 +137,7 @@ export async function createTrackFixture(seedRecords) {
   const musicCatalogSource = await readFile(path.join(project, "src/music-catalog.ts"), "utf8");
   const musicCatalog = runModule(musicCatalogSource, "music-catalog.js", specifier => {
     if (specifier === "./data") return dataModule;
+    if (specifier === "./music-order.ts") return musicOrder;
     if (specifier === "./music-application-state") return applicationState;
     throw new Error(`Unexpected public catalog import: ${specifier}`);
   });
@@ -168,7 +194,7 @@ export async function createTrackFixture(seedRecords) {
     throw new Error(`Unexpected catalog markup import: ${specifier}`);
   });
   return { catalog: musicCatalog, shelves: musicShelves, musicCatalog, musicShelves, musicGridPage, arrayLayout, displayLayout,
-    applicationState, viewSettings, catalogMarkup, records,
+    applicationState, viewSettings, catalogMarkup, records, dataModule, musicOrder,
     replaceRecords(next) { dataModule.records = next; } };
 }
 
@@ -186,9 +212,41 @@ function assertGroupNames(groups, expectedNames, label) {
 
 export async function runChecks() {
   const fixture = await createTrackFixture();
-  const { musicCatalog: catalog, musicShelves: shelves, applicationState, records, catalogMarkup } = fixture;
+  const { musicCatalog: catalog, musicShelves: shelves, applicationState, records, catalogMarkup, dataModule, musicOrder } = fixture;
   const musicApplication = applicationState.musicApplication;
   const originalRecords = records;
+
+  const splitCases = [
+    ["Lead / Guest", "Lead"], ["Lead/Guest", "Lead"], ["Diana Ross/Marvin Gaye", "Diana Ross"],
+    ["张学友/黎明", "张学友"], ["Lead／Guest", "Lead"], ["MCR/Paramore", "MCR"],
+    ["Lead; Guest", "Lead"], ["Lead；Guest", "Lead"],
+    ["Lead、Guest", "Lead"], ["Lead，Guest", "Lead"], ["Lead|Guest", "Lead"],
+    ["Lead feat. Guest", "Lead"], ["Lead ft. Guest", "Lead"], ["Lead FT. Guest", "Lead"],
+    ["Lead featuring Guest", "Lead"], ["Lead (Feat. Guest)", "Lead"], ["Lead (featuring Guest)", "Lead"],
+    ["Lead with Guest", "Lead"], ["Lead x Guest", "Lead"], ["Lead + Guest", "Lead"], ["张三&李四", "张三"],
+    ["AC/DC", "AC/DC"], ["Simon & Garfunkel", "Simon & Garfunkel"], ["Simon & Garfunkel feat. Guest", "Simon & Garfunkel"],
+    ["Hall & Oates", "Hall & Oates"], ["Florence + the Machine", "Florence + the Machine"],
+    ["Earth, Wind & Fire", "Earth, Wind & Fire"],
+    ["Lead, Guest", "Lead, Guest"], ["Dr. Dre", "Dr. Dre"], ["Smith-Jones", "Smith-Jones"],
+    ["张和李", "张和李"], ["Max", "Max"], ["Within Temptation", "Within Temptation"],
+  ];
+  for (const [credit, expected] of splitCases) {
+    assert.equal(musicOrder.leadMusicArtist(credit), expected, `Lead artist parsing preserves the expected credit: ${credit}`);
+  }
+  assert.equal(musicOrder.leadMusicArtist("Lead / Guest", ["Lead", "Guest"]), "Lead",
+    "A structured ordered artist list selects its first name.");
+  assert.equal(musicOrder.leadMusicArtist("Lead / Guest", ["AC/DC"]), "AC/DC",
+    "A single structured artist name is kept intact, even when it contains a slash.");
+  assert.equal(musicOrder.leadMusicArtist("陈奕迅/王菲", ["陈奕迅/王菲"]), "陈奕迅",
+    "A joined collaboration stored in a single native tag still groups by its lead artist.");
+  assert.equal(musicOrder.musicArtistKey({ artist: "Lead / Guest", artists: ["Lead", "Guest"] }), "lead",
+    "Album artist keys normalize the structured lead name.");
+
+  const creditAlbums = createArtistCreditRecords().map(record => record.album);
+  const orderedCredits = musicOrder.orderMusicAlbums(creditAlbums, "artist");
+  const leadAlbumIndexes = orderedCredits.flatMap((album, index) => musicOrder.musicArtistKey(album) === "album lead" ? [index] : []);
+  assert.equal(leadAlbumIndexes.length, 2, "Different album guests share the same primary artist key.");
+  assert.equal(leadAlbumIndexes[1], leadAlbumIndexes[0] + 1, "Primary artist sorting keeps collaborations contiguous.");
 
   configure(catalog, { layout: "shelf", show: "albums", group: "genre", sort: "artist" });
   const albumEntries = catalog.getMusicDisplayEntries();
@@ -412,6 +470,72 @@ export async function runChecks() {
   gridCatalog.focusMusicEntry(revealEntry.key);gridState.setGridPage(0);musicGridPage.revealMusicGridEntry(revealEntry.key);
   assert.equal(gridState.gridPage, 2, "Focusing an entry reveals its containing page.");
   assert.equal(gridState.catalogFocus.entryKey, revealEntry.key, "Revealing an entry preserves its stable identity.");
+
+  const artistCreditFixture = await createTrackFixture(createArtistCreditRecords());
+  const artistCreditCatalog = artistCreditFixture.musicCatalog;
+  const artistCreditRecords = artistCreditFixture.records;
+  artistCreditCatalog.configureMusicCatalog({ show: "albums", group: "artist", sort: "artist" }, "");
+  let creditGroups = artistCreditCatalog.getMusicCatalogGroups();
+  const albumLeadGroup = creditGroups.find(group => group.name === "Album Lead");
+  assert.ok(albumLeadGroup, "Album artist grouping uses the first structured album artist.");
+  assert.equal(albumLeadGroup.entryKeys.length, 2, "Albums with different guests share their lead artist group.");
+  const albumLeadEntries = Array.from(albumLeadGroup.entryKeys, key => artistCreditCatalog.getMusicEntryByKey(key)).filter(Boolean);
+  assert.deepEqual(Array.from(albumLeadEntries, entry => entry.record.title), ["A Lead Album", "B Lead Album"],
+    "Albums sharing a lead artist sort together while retaining their canonical order.");
+  assert.equal(albumLeadEntries[1].record.en, "Album Lead / Album Guest B");
+  assert.equal(albumLeadEntries[1].album.artist, "Album Lead / Album Guest B");
+  assert.deepEqual(albumLeadEntries[1].album.artists, ["Album Lead", "Album Guest B"]);
+  assert.strictEqual(albumLeadEntries[1].album, artistCreditRecords[0].album,
+    "Album sorting and grouping do not replace or clone the canonical album object.");
+  assert.match(artistCreditFixture.catalogMarkup.musicGridMarkup(albumLeadEntries[1].recordIndex, albumLeadEntries[1].key),
+    /Album Lead \/ Album Guest B/, "Album cards display the complete original artist credit.");
+
+  artistCreditCatalog.configureMusicCatalog({ show: "tracks", group: "artist", sort: "artist" }, "");
+  creditGroups = artistCreditCatalog.getMusicCatalogGroups();
+  const trackLeadGroup = creditGroups.find(group => group.name === "Track Lead");
+  assert.ok(trackLeadGroup, "Track view groups by the first structured track artist.");
+  assert.equal(trackLeadGroup.entryKeys.length, 2, "Track collaborations share their lead artist group.");
+  const trackLeadEntries = Array.from(trackLeadGroup.entryKeys, key => artistCreditCatalog.getMusicEntryByKey(key)).filter(Boolean);
+  assert.deepEqual(Array.from(trackLeadEntries, entry => entry.track.title), ["A Lead Album Track 01", "B Lead Album Track 01"],
+    "Different track guests remain adjacent under their shared lead artist.");
+  const guestTrackEntry = artistCreditCatalog.getMusicEntryByKey("track|lead-credit-b|lead-credit-b-track-01");
+  assert.ok(guestTrackEntry);
+  assert.equal(guestTrackEntry.track.artist, "Track Lead / GuestBravo");
+  assert.deepEqual(guestTrackEntry.track.artists, ["Track Lead", "GuestBravo"]);
+  assert.strictEqual(guestTrackEntry.track, artistCreditRecords[0].album.tracks[0],
+    "Sorting preserves the canonical non-first track identity.");
+  assert.match(artistCreditFixture.catalogMarkup.musicGridMarkup(guestTrackEntry.recordIndex, guestTrackEntry.key),
+    /Track Lead \/ GuestBravo/, "Track cards display the complete original artist credit.");
+
+  artistCreditCatalog.configureMusicCatalog({ show: "tracks", group: "az", sort: "added" }, "");
+  creditGroups = artistCreditCatalog.getMusicCatalogGroups();
+  assert.deepEqual(Array.from(creditGroups, group => group.name), ["A", "T"],
+    "A-Z grouping uses primary artist names and keeps structured AC/DC intact.");
+  artistCreditCatalog.configureMusicCatalog({ show: "tracks", group: "none", sort: "artist" }, "");
+  const globallySortedTracks = artistCreditCatalog.getMusicCatalogGroups()[0].entryKeys;
+  const collaborationIndexes = Array.from(globallySortedTracks).flatMap((key, index) =>
+    key.startsWith("track|lead-credit-") ? [index] : []);
+  assert.equal(collaborationIndexes.length, 2);
+  assert.equal(collaborationIndexes[1], collaborationIndexes[0] + 1,
+    "Different guests with one primary artist remain adjacent in the global artist sort.");
+  artistCreditCatalog.configureMusicCatalog({ show: "tracks", group: "artist", sort: "artist" }, "GuestBravo");
+  creditGroups = artistCreditCatalog.getMusicCatalogGroups();
+  assert.equal(creditGroups.length, 1);
+  assert.equal(creditGroups[0].name, "Track Lead", "Searching a guest keeps the result under the lead artist group.");
+  assert.deepEqual(Array.from(creditGroups[0].entryKeys), [guestTrackEntry.key],
+    "The complete raw artist credit remains searchable by guest name.");
+
+  dataModule.setMusicAlbums(creditAlbums, [], "artist");
+  const albumLeadColumn = dataModule.archiveColumns.indexOf("Album Lead");
+  assert.notEqual(albumLeadColumn, -1, "Artist shelf labels use the lead name.");
+  const albumLeadRecords = dataModule.columnFiles(albumLeadColumn).map(index => dataModule.records[index]);
+  assert.deepEqual(Array.from(albumLeadRecords, record => record.title), ["A Lead Album", "B Lead Album"]);
+  assert.deepEqual(Array.from(albumLeadRecords, record => [record.en, record.lead]), [
+    ["Album Lead / Album Guest A", "Album Lead / Album Guest A"],
+    ["Album Lead / Album Guest B", "Album Lead / Album Guest B"],
+  ], "Album compatibility records retain the complete original artist text for display.");
+  assert.deepEqual(albumLeadRecords[0].album.artists, ["Album Lead", "Album Guest A"],
+    "Grouping keeps the canonical ordered artist list on the album object.");
 
   console.log("Public TRACKS catalog, focus, navigation, shelves and shared grid markup passed with synthetic records.");
 }

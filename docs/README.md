@@ -15,6 +15,7 @@
 | --- | --- |
 | [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md) | 现行共享状态、目录、渲染与主题边界 |
 | [THEME-PAGE](THEME-PAGE.md) | 主题、日夜、浏览、盒体、控件与动作契约 |
+| [METADATA-EDITOR](METADATA-EDITOR.md) | 专辑介绍与歌曲标签编辑、保存位置、冲突处理和检查入口 |
 | [LYRICS](LYRICS.md) | 来源选择、双 bank 缓存、导入、偏移和频谱 |
 | [SIGNAL-PAGE](SIGNAL-PAGE.md) | 信号模式、真实音频数据与采样边界 |
 | [UI-LANGUAGE](UI-LANGUAGE.md) | 中英界面与两主题共同保留词 |

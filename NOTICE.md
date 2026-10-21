@@ -27,7 +27,7 @@ MATRIX 鼠标拖动、惯性和悬停适配参考上游的 [archive-drag.ts](htt
 
 代码复用者可替换这些资产；使用或再分发涉及第三方权利的内容时，需另行遵守对应许可或取得必要授权。本文件不作“全部资源已获商业授权”的保证。
 
-## 字体与直接依赖
+## 字体与运行依赖
 
 | 组件 | 权利人与许可 | 随包文本 |
 | --- | --- | --- |
@@ -39,8 +39,12 @@ MATRIX 鼠标拖动、惯性和悬停适配参考上游的 [archive-drag.ts](htt
 | music-metadata | Borewit，MIT | [music-metadata.txt](public/licenses/music-metadata.txt) |
 | OpenCC-JS | nk2028，MIT；所用 OpenCC 字典数据另受 Apache-2.0 约束 | [MIT](public/licenses/opencc-js.txt)、[第三方说明](public/licenses/opencc-js-third-party.md)、[Apache-2.0](public/licenses/apache-2.0.txt) |
 | basic-ftp | Patrick Juchli，MIT | [basic-ftp.txt](public/licenses/basic-ftp.txt) |
+| taglib-wasm 2.4.0 | Charles Wiltgen；TypeScript／JavaScript 代码采用 MIT。其 WebAssembly 二进制包含 TagLib，按该包许可说明采用 LGPL-2.1-or-later。包的许可文件将 TagLib 源码指向其仓库 `lib/taglib/`；已安装 npm 包标明 TagLib-Wasm 版本为 2.4.0，但没有标出嵌入的 TagLib 精确修订版。[TagLib-Wasm 仓库](https://github.com/CharlesWiltgen/TagLib-Wasm)；上游 TagLib 仓库：[taglib/taglib](https://github.com/taglib/taglib) | [完整包许可与附加说明](public/licenses/taglib-wasm-license.txt)、[TagLib 官方 LGPL-2.1 原文](public/licenses/taglib-lgpl-2.1.txt) |
+| @msgpack/msgpack 3.1.3（TagLib-Wasm 运行依赖） | MessagePack Community，ISC；[官方仓库](https://github.com/msgpack/msgpack-javascript) | [msgpack.txt](public/licenses/msgpack.txt) |
 
-这些文本保留依赖包原文。完整版本树见 `package-lock.json`；其他构建工具和间接依赖按安装包各自的 LICENSE / NOTICE 使用，不被本项目重新授权。
+这些文本保留依赖包原文；TagLib LGPL 文本于 2026-10-22 从官方 `taglib/taglib` 仓库 `master/COPYING.LGPL` 获取。完整版本树见 `package-lock.json`；其他构建工具和间接依赖按安装包各自的 LICENSE / NOTICE 使用，不被本项目重新授权。
+
+当前源码树尚未打包或发布包含 TagLib-Wasm 二进制的安装器。本仓库保留许可文本和来源说明，不表示未来二进制分发义务已经完成。若分发包含这些 WASM 二进制的产品，发布前须按 LGPL-2.1-or-later 提供适用的完整对应源代码、修改与构建脚本或其他许可允许的获取方式，并提供用户以修改后的 TagLib 重新链接或替换该 WASM 库的实际途径；TagLib 及其修改不由项目 MIT 重新授权。
 
 本私有增强副本按用户 2026-10-07 的明确要求保留九个 Sony 原版音频运行文件于 `vendor/sony-walkman/`，并纳入独立 EXE；这些音频库、模型、运行库和参数不改授 MIT。用户提供的 `art/DSEE_LOGO.avif`、`art/S-MASTER.webp`、`art/vinyl.png` 及描摹的 `public/audio-tech/*.svg` 保留原权利；Sony 标志不表示本项目获 Sony 认证。来源、哈希与验证边界见 [Sony 桥接说明](docs/SONY-WALKMAN.md)。本轮未公开发布这些组件。
 
@@ -62,6 +66,6 @@ Hi-Res Audio 标志由用户提供于 `art/Hi-Res_Audio_(logo).svg`，运行版�
 
 DSD 标志由用户提供于 `art/DSDlogo.svg`，运行版原字节保留在 `public/audio-tech/dsd.svg`。标志及其原有权利不改授 MIT；亮暗配色和扫光使用原 SVG 透明轮廓。
 
-Wikipedia 摘要、Wikidata 与 MusicBrainz 数据按其来源许可处理。客户端保存介绍时同时保存来源链接、取得时间和许可说明；此类用户自行查询的缓存不纳入项目 MIT 授权，也不进入发布包。MusicBrainz 将核心数据和补充数据分别授权，详见[官方数据许可](https://musicbrainz.org/doc/About/Data_License)；不能仅因为程序开源就统一将数据改授 MIT。
+Wikipedia 摘要、Wikidata、MusicBrainz、QQ 音乐和网易云音乐的内容按各自来源权利与条款处理。专辑资料编辑器只在用户选择并保存后把介绍写入本机曲库索引、把封面写入本机用户数据缓存；候选介绍来源可保留来源链接、许可和取得时间。用户的在线资料与封面缓存不纳入项目 MIT 授权，也不随项目源码或发布包分发。MusicBrainz 将核心数据和补充数据分别授权，详见[官方数据许可](https://musicbrainz.org/doc/About/Data_License)；不能仅因为程序开源就统一将数据改授 MIT。
 
 如发现署名遗漏或具体权利问题，请通过本仓库 [Issues](https://github.com/RonaldDeng/Rhine-Music-Demo/issues) 提供涉及文件、来源及说明，维护者可据此核对。

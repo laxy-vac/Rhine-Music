@@ -1,5 +1,6 @@
 import { records, type ArchiveRecord } from "./data";
 import type { MusicAlbum, MusicTrack } from "./music-types";
+import { leadMusicArtist } from "./music-order.ts";
 import { musicApplication } from "./music-application-state";
 import type { MusicViewSettings } from "./music-view-settings";
 
@@ -46,6 +47,17 @@ const compareText = (a: string, b: string) =>
 const albumOf = (entry: MusicDisplayEntry) => entry.album ?? entry.record.album;
 const artistOf = (entry: MusicDisplayEntry) =>
   entry.track?.artist?.trim() || albumOf(entry)?.artist || entry.record.en || entry.record.lead || "";
+const leadArtistOf = (entry: MusicDisplayEntry) => {
+  if (entry.track) {
+    if (entry.track.artists?.length) return leadMusicArtist(entry.track.artist, entry.track.artists);
+    if (entry.track.artist?.trim()) return leadMusicArtist(entry.track.artist);
+  }
+  const album = albumOf(entry);
+  if (album) return leadMusicArtist(album.artist, album.artists);
+  return leadMusicArtist(entry.record.en || entry.record.lead || "");
+};
+const leadArtistKeyOf = (entry: MusicDisplayEntry) => leadArtistOf(entry)
+  .normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("zh-CN");
 const titleOf = (entry: MusicDisplayEntry) => entry.track
   ? trackTitle(entry.track)
   : albumOf(entry)?.title || entry.record.title || "";
@@ -155,8 +167,8 @@ function searchableText(entry: MusicDisplayEntry) {
   const record = entry.record;
   const album = albumOf(entry);
   const trackText = entry.track
-    ? `${trackTitle(entry.track)} ${entry.track.artist || ""} ${entry.track.relativePath || ""}`
-    : album?.tracks.map(track => `${track.title} ${track.artist} ${track.relativePath}`).join(" ");
+    ? `${trackTitle(entry.track)} ${entry.track.artist || ""} ${entry.track.artists?.join(" ") || ""} ${entry.track.relativePath || ""}`
+    : album?.tracks.map(track => `${track.title} ${track.artist} ${track.artists?.join(" ") || ""} ${track.relativePath}`).join(" ");
   return [
     record.title,
     record.en,
@@ -168,6 +180,7 @@ function searchableText(entry: MusicDisplayEntry) {
     record.findings.join(" "),
     album?.title,
     album?.artist,
+    album?.artists?.join(" "),
     album?.year,
     album?.genreId,
     album?.rawGenres.join(" "),
@@ -188,7 +201,7 @@ function sortEntryIndexes(indices: number[], entries: MusicDisplayEntry[]) {
   return indices.sort((a, b) => {
     const left = entries[a];
     const right = entries[b];
-    const artistOrder = compareText(artistOf(left), artistOf(right));
+    const artistOrder = compareText(leadArtistKeyOf(left), leadArtistKeyOf(right));
     const titleOrder = compareText(titleOf(left), titleOf(right));
     const albumOrder = compareText(albumKeyOf(left), albumKeyOf(right));
     const discTrackOrder = trackOrdinal(left.track) - trackOrdinal(right.track);
@@ -212,8 +225,8 @@ function groupFor(entry: MusicDisplayEntry): { key: string; name: string } {
     return { key: `genre:${entry.album?.genreId || name.toLocaleLowerCase("zh-CN")}`, name };
   }
   if (musicApplication.view.group === "artist") {
-    const name = artistOf(entry).trim() || "UNKNOWN ARTIST";
-    return { key: `artist:${name.normalize("NFKC").toLocaleLowerCase("zh-CN")}`, name };
+    const name = leadArtistOf(entry).trim().replace(/\s+/g, " ") || "UNKNOWN ARTIST";
+    return { key: `artist:${leadArtistKeyOf(entry) || "unknown artist"}`, name };
   }
   if (musicApplication.view.group === "decade") {
     const year = yearOf(entry);
@@ -222,7 +235,7 @@ function groupFor(entry: MusicDisplayEntry): { key: string; name: string } {
     return { key: `decade:${decade}`, name: `${decade}s` };
   }
   if (musicApplication.view.group === "az") {
-    const raw = Array.from(artistOf(entry).trim().normalize("NFKC").toLocaleUpperCase("zh-CN"))[0] || "#";
+    const raw = Array.from(leadArtistOf(entry).trim().normalize("NFKC").toLocaleUpperCase("zh-CN"))[0] || "#";
     const initial = /^[A-Z]$/.test(raw) ? raw : /^\d$/.test(raw) ? "0–9" : "OTHER";
     return { key: `az:${initial}`, name: initial };
   }

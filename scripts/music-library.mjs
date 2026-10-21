@@ -4,6 +4,7 @@ import path from 'node:path'
 import { readAudioMetadata as parseFile, AUDIO_METADATA_VERSION } from './read-audio-metadata.mjs'
 import { normalizeReplayGainTags } from './replaygain-tags.mjs'
 import { AlbumIntroductionProvider } from './album-introductions.mjs'
+import { readTrackArtworkOverride } from './track-artwork-overrides.mjs'
 import { cleanRootInput, isFullyQualified, isIgnoredDirectory, isIgnoredFile, isInside, renameWithRetry, samePath } from './platform.mjs'
 
 const AUDIO_EXTENSIONS = new Set(['.flac', '.wav', '.m4a', '.mp4', '.alac', '.dsf', '.dff', '.mp3', '.aac', '.aiff', '.aif', '.ogg', '.opus'])
@@ -16,6 +17,11 @@ const normalized = (value) => text(value).normalize('NFKC').toLocaleLowerCase().
 const exists = async (file) => { try { await fs.access(file); return true } catch { return false } }
 const timestamp = () => new Date().toISOString()
 const METADATA_VERSION = AUDIO_METADATA_VERSION
+const nativeArtists = (metadata, album = false) => {
+  const pattern = album ? /^(?:ALBUMARTIST|ALBUM ARTIST|TPE2|aART)$/i : /^(?:ARTIST|TPE1|©ART)$/i
+  const raw = Object.values(metadata.native ?? {}).flat().filter(tag => pattern.test(tag.id)).flatMap(tag => Array.isArray(tag.value) ? tag.value : [tag.value]).map(text).filter(Boolean)
+  return unique(raw.length ? raw : album ? [metadata.common?.albumartist].map(text) : (metadata.common?.artists ?? [metadata.common?.artist ?? metadata.common?.albumartist]).map(text))
+}
 
 export const DEFAULT_RULES = {
   version: 1,
@@ -193,7 +199,9 @@ function albumFromTracks(root, entry, sourceTracks, previous) {
   const artist = entry.albumartist || (entry.singleFile ? first?.artist : first?._common.albumartist || first?.artist) || '未知艺术家'
   const unchangedIdentity = previous && title === previous.title && artist === previous.artist && first?._common.year === previous.year && tracks.length === previous.tracks.length && (!releaseId || releaseId === previous.online?.releaseId)
   return {
-    id, title, artist, year: first?._common.year,
+    id, title, artist, artists: first?._common.albumArtists?.length ? first._common.albumArtists : first?.artists, year: first?._common.year,
+    ...(previous?._userInfo ? { _userInfo: structuredClone(previous._userInfo) } : {}),
+    ...(previous?._defaultCover ? { _defaultCover: previous._defaultCover } : {}),
     discCount: Math.max(1, ...tracks.map((track) => track._common.discTotal ?? track.discNumber ?? 1)),
     localNote: unique(tracks.flatMap((track) => track._common.comments ?? [])).join('\n') || undefined,
     description: unchangedIdentity && previous.descriptionSource?.url ? previous.description : undefined,
@@ -301,13 +309,16 @@ export class MusicLibraryStore {
       counts.set(genreId, (counts.get(genreId) ?? 0) + 1)
       if (genreId.startsWith('source-')) generated.set(genreId, { id: genreId, name: album._onlineGenres?.[0] ?? album._localGenres?.[0] ?? album.rawGenres[0] })
       return {
-        id: album.id, title: album.title, artist: album.artist, year: album.year, discCount: album.discCount,
-        description: album.descriptionSource?.url ? album.description : undefined, descriptionSource: album.descriptionSource?.url ? album.descriptionSource : undefined,
+        id: album.id, title: album.title, artist: album.artist, artists: album.artists, year: album.year, discCount: album.discCount,
+        description: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.description : album.descriptionSource?.url ? album.description : undefined,
+        descriptionSource: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.descriptionSource : album.descriptionSource?.url ? album.descriptionSource : undefined,
         localNote: album.localNote,
         introduction: album.introduction,
         genreId, rawGenres: unique([...(album._onlineGenres ?? []), ...(album._localGenres ?? [])]),
-        folder: album.folder, coverUrl: album._cover ? `/api/artwork/${album.id}?v=${album._cover.version}` : undefined,
-        tracks: album.tracks.map(({ _path, _fingerprint, _common, _embeddedCover, _artwork, _metadataVersion, ...track }) => track),
+        folder: album.folder, coverUrl: (album._userInfo?.cover ?? album._defaultCover ?? album._cover) ? `/api/artwork/${album.id}?v=${(album._userInfo?.cover ?? album._defaultCover ?? album._cover).version}` : undefined,
+        tracks: album.tracks.map(({ _path, _fingerprint, _common, _embeddedCover, _artwork, _metadataVersion, _coverOverride, ...track }) => ({ ...track,
+          ...(_coverOverride && _coverOverride.mode !== 'inherit' ? { coverUrl: `/api/track-info/cover/${track.id}?v=${_coverOverride.version ?? _embeddedCover?.version ?? _fingerprint}` } : {}),
+        })),
         producers: album.producers ?? [], offline: !!album.offline,
         online: album.online ?? { status: 'unqueried' },
       }
@@ -322,6 +333,7 @@ export class MusicLibraryStore {
   }
 
   async scan({ roots } = {}) {
+    if (this.metadataWrites) throw new Error('正在写入歌曲标签，请保存完成后再扫描音乐库。')
     if (this.scanPromise) return this.scanPromise
     this.scanStatus = { running: true, startedAt: timestamp() }
     this.scanPromise = (async () => {
@@ -407,14 +419,19 @@ export class MusicLibraryStore {
     }
     // Each track needs its own artwork: a physical folder can contain several
     // tagged albums. Never let the first album's picture suppress later ones.
-    const skipCovers = !entry.singleFile && !!fileCover
+    const folderHasCover = !entry.singleFile && !!fileCover
     const tracks = []
     for (const file of entry.tracks) {
       const stat = await fs.stat(file)
       const fingerprint = `${stat.size}:${stat.mtimeMs}`
       const old = cachedTracks.get(file)
+      const coverOverride = await readTrackArtworkOverride(file)
+      // A directory image can replace default artwork, but must not suppress
+      // a user's per-song embedded cover when its tag cache is rebuilt.
+      const skipCovers = folderHasCover && coverOverride?.mode !== 'embedded'
       if (old?._fingerprint === fingerprint && old._metadataVersion === METADATA_VERSION && typeof old._common?.compilation === 'boolean' && (skipCovers || old._embeddedCover !== undefined)) {
-        tracks.push({ ...old, _artwork: entry.singleFile ? old._embeddedCover ?? fileCover : fileCover ?? old._embeddedCover })
+        tracks.push({ ...old, _coverOverride: coverOverride,
+          _artwork: entry.singleFile ? old._embeddedCover ?? fileCover : fileCover ?? old._embeddedCover })
         continue
       }
       let metadata
@@ -422,6 +439,7 @@ export class MusicLibraryStore {
       try { metadata = await this.parseFile(file, { duration: true, skipCovers }) }
       catch (error) { metadataError = error.message; metadata = { common: {}, format: {} } }
       const common = metadata.common ?? {}
+      const artists = nativeArtists(metadata), albumArtists = nativeArtists(metadata, true)
       let embedded = skipCovers ? undefined : null
       if (!skipCovers) {
         const picture = common.picture?.find((image) => /front/i.test(image.type ?? '')) ?? common.picture?.[0]
@@ -444,7 +462,8 @@ export class MusicLibraryStore {
       const trackNumber = numberOrUndefined(common.track?.no) ?? (discPrefix ? numberOrUndefined(Number(discPrefix[2])) : undefined)
       tracks.push({
         id: trackId, albumId: id, title: text(common.title) || path.parse(file).name,
-        artist: text(common.artist) || text(common.albumartist) || '未知艺术家',
+        artist: artists.join(' / ') || text(common.artist) || text(common.albumartist) || '未知艺术家',
+        artists,
         trackNumber, discNumber,
         duration: Number.isFinite(metadata.format?.duration) ? metadata.format.duration : 0,
         format: extension.slice(1).toUpperCase(), codec: metadata.format?.codec,
@@ -456,7 +475,7 @@ export class MusicLibraryStore {
         relativePath: path.relative(root, file),
         _path: file, _fingerprint: fingerprint, _metadataVersion: METADATA_VERSION,
         _common: {
-          album: text(common.album), albumartist: text(common.albumartist), compilation: !!common.compilation, year: numberOrUndefined(common.year),
+          album: text(common.album), albumartist: albumArtists.join(' / ') || text(common.albumartist), albumArtists, compilation: !!common.compilation, year: numberOrUndefined(common.year),
           genres: unique((common.genre ?? []).map(text)), producers: unique((common.producer ?? []).map(text)),
           releaseId: firstString(common.musicbrainz_albumid), releaseGroupId: firstString(common.musicbrainz_releasegroupid),
           discTotal: numberOrUndefined(common.disk?.of), discNumberSource: common.disk?.no ? 'tag' : discPrefix ? 'filename' : undefined,
@@ -464,6 +483,7 @@ export class MusicLibraryStore {
           ...(metadataError ? { metadataError } : {}),
         },
         _embeddedCover: embedded,
+        _coverOverride: coverOverride,
         _artwork: entry.singleFile ? embedded ?? fileCover : fileCover ?? embedded,
       })
     }
@@ -480,7 +500,47 @@ export class MusicLibraryStore {
 
   artworkFile(id) {
     const album = this.index.albums.find((entry) => entry.id === id && this.config.roots.includes(entry._root))
-    return album?._cover ? { ...album._cover, allowedRoot: album._cover.embedded ? this.dataDir : album._root } : null
+    const cover = album?._userInfo?.cover ?? album?._defaultCover ?? album?._cover
+    return cover ? { ...cover, allowedRoot: cover.embedded ? this.dataDir : album._root } : null
+  }
+
+  trackArtworkFile(id) {
+    for (const album of this.index.albums) if (this.config.roots.includes(album._root)) {
+      const track = album.tracks.find(item => item.id === id)
+      if (!track) continue
+      const override = track._coverOverride
+      const cover = override?.mode === 'sidecar' ? override : override?.mode === 'embedded' ? track._embeddedCover : undefined
+      return cover ? { ...cover, allowedRoot: cover.embedded ? this.dataDir : album._root } : this.artworkFile(album.id)
+    }
+    return null
+  }
+
+  /** Refresh and regroup cached entries after one explicit tag edit. No directory scan. */
+  async refreshEditedTrack(id, { coverOverride, freezeCover = false } = {}) {
+    const owner = this.index.albums.find(album => album.tracks.some(track => track.id === id))
+    if (!owner || !this.config.roots.includes(owner._root)) throw new Error('保存后歌曲已移出当前曲库。')
+    const old = owner.tracks.find(track => track.id === id)
+    const [fresh] = await this.readTracks(owner._root, { folder: path.dirname(old._path), singleFile: old._path, tracks: [old._path] })
+    if (fresh._common.metadataError) throw new Error(fresh._common.metadataError)
+    fresh._coverOverride = coverOverride
+    fresh._artwork = old._artwork ?? fresh._artwork
+    if (freezeCover && !owner._defaultCover && owner._cover) owner._defaultCover = owner._cover
+    const previous = this.index.albums.filter(album => album._root === owner._root)
+    const batches = previous.map(album => {
+      let key
+      try { key = JSON.parse(album._groupKey) } catch { /* Legacy indexes have no cached grouping key. */ }
+      const singleFile = key?.[0] === 'path' && key[1] !== album.folder ? key[1]
+        : !key && album.tracks.length === 1 && samePath(album.folder, album._root) ? album.tracks[0]._path : undefined
+      return { entry: { folder: album.folder, ...(singleFile ? { singleFile } : {}) }, tracks: album.tracks.map(track => track.id === id ? fresh : track) }
+    })
+    const rebuilt = groupAlbumTracks(owner._root, batches, previous).map(group => {
+      const album = albumFromTracks(owner._root, group.entry, group.tracks, group.previous)
+      album._groupKey = group.key
+      return album
+    })
+    this.index.albums = [...this.index.albums.filter(album => album._root !== owner._root), ...rebuilt]
+    await this.saveIndex()
+    this.onChange()
   }
 
   async musicBrainz(endpoint, params = {}) {
@@ -567,6 +627,7 @@ export class MusicLibraryStore {
     if (typeof force !== 'boolean') throw new Error('force 必须为布尔值')
     const selected = this.index.albums.filter((album) => {
       if (!this.config.roots.includes(album._root) || (albumIds && !albumIds.includes(album.id))) return false
+      if (Object.hasOwn(album._userInfo ?? {}, 'description')) return false
       if (force) return true
       if (album.description && album.descriptionSource?.url) return false
       const cached = album.introduction
@@ -587,7 +648,7 @@ export class MusicLibraryStore {
           const current = this.index.albums.find((entry) => entry.id === album.id)
           if (current && current.title === album.title && current.artist === album.artist && current.year === album.year) {
             current.introduction = { status: result.status, checkedAt: result.checkedAt ?? timestamp(), ...(result.error ? { error: result.error } : {}), ...(result.candidateUrl ? { candidateUrl: result.candidateUrl } : {}) }
-            if (result.status === 'matched' && result.description && result.descriptionSource?.url) {
+            if (result.status === 'matched' && result.description && result.descriptionSource?.url && !Object.hasOwn(current._userInfo ?? {}, 'description')) {
               current.description = result.description
               current.descriptionSource = result.descriptionSource
               this.introductionsStatus.updated += 1
@@ -669,7 +730,7 @@ export class MusicLibraryStore {
       current._onlineGenres = unique(genres)
       current.producers = uniqueProducers([...(current.producers ?? []).filter((person) => person.source !== 'MusicBrainz'), ...producers])
       current.online = online
-      if (introduction) Object.assign(current, introduction)
+      if (introduction && !Object.hasOwn(current._userInfo ?? {}, 'description')) Object.assign(current, introduction)
       Object.assign(album, { _onlineGenres: current._onlineGenres, producers: current.producers, online: current.online, description: current.description, descriptionSource: current.descriptionSource })
     } catch (error) {
       album.online = { ...album.online, status: 'error', checkedAt, error: error.message }

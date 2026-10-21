@@ -1,6 +1,6 @@
 import content from "../content/archives.json" with { type: "json" };
 import type { MusicAlbum, MusicGenre } from "./music-types";
-import { musicArtistKey, orderMusicAlbums, type MusicSortMode } from "./music-order.ts";
+import { leadMusicArtist, musicArtistKey, orderMusicAlbums, type MusicSortMode } from "./music-order.ts";
 export { orderMusicAlbums, type MusicSortMode } from "./music-order.ts";
 
 export interface ArchiveRecord {
@@ -48,7 +48,7 @@ export function setMusicAlbums(albums: MusicAlbum[], genres: MusicGenre[] = [], 
       const key = musicArtistKey(album);
       let group = artists.get(key);
       if (!group) {
-        group = { name: album.artist.trim().replace(/\s+/g, " ") || "未知歌手", files: [] };
+        group = { name: leadMusicArtist(album.artist, album.artists).replace(/\s+/g, " ") || "未知歌手", files: [] };
         artists.set(key, group);
       }
       group.files.push(index);

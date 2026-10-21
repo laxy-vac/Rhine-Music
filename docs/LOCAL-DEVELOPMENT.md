@@ -26,7 +26,7 @@ node scripts/build-source-preview.mjs --interface-only
 
 | 内容 | 位置 |
 | --- | --- |
-| 项目依赖 | `node_modules/` |
+| 项目依赖 | `node_modules/`；元数据写回使用 `taglib-wasm` 2.4.0，`@msgpack/msgpack` 3.1.3 为其运行依赖 |
 | Electron | `.tools/source-preview-electron` |
 | 前端、指纹、Vite cache | `.tools/source-preview-interface`、`.tools/source-preview-interface.manifest.json`、`.tools/source-preview-vite-cache` |
 | 原生主机/DLL | `.tools/source-preview-native-audio` |
@@ -56,6 +56,8 @@ node scripts/build-source-preview.mjs --interface-only
 ## 必要检查与排查
 
 `--interface-only` 包含类型检查和前端构建；其它检查按 [优化基线](OPTIMIZATION-BASELINE.md) 选择。只做与改动直接相关的有限验证，视觉效果交用户，不默认多轮自动审查或大截图矩阵。
+
+专辑资料与歌曲标签编辑的后端定向检查入口为 `npm run check:metadata`。UI 操作检查先构建源码预览并启动桌面源码：`npm run build:preview` 后运行 `npm run desktop`，也可按上文使用 `启动源码验证.cmd`。TagLib-Wasm 的 Node WASI 后端要求 Node.js 24 或更新版本；所需包已在项目依赖目录，缺少时先报告，不运行安装或升级命令。验收场景见 [METADATA-EDITOR](METADATA-EDITOR.md#检查入口)。
 
 浏览照明的有限回归为 `node --experimental-strip-types scripts/check-music-lighting.mjs`，覆盖两种布局旧版光线方向、固定光场/补光、缓存幂等、布局桥接和既有阴影设置；镜头纯检查为 `node scripts/check-music-camera.mjs`。隔离逐帧灯位、对焦点及性能对照在本机忽略目录 `.tools/performance-window-lighting-20261018/`。
 

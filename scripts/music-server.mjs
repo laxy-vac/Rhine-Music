@@ -10,6 +10,7 @@ import { FtpLibrary } from './ftp-library.mjs'
 import { NativeOutput } from './native-output.mjs'
 import { InterfaceAudio } from './interface-audio.mjs'
 import { LyricsLibrary } from './lyrics-library.mjs'
+import { MusicMetadataEditor } from './music-metadata-editor.mjs'
 
 // Canonical form so the launcher's health probe matches regardless of drive-letter case or junctions.
 const PROJECT_DIR = canonicalPath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
@@ -185,6 +186,7 @@ export async function createMusicServer({
   autoScan = true,
 } = {}) {
   const store = providedStore ?? await new MusicLibraryStore({ dataDir, defaultRoots }).init()
+  const metadataEditor = await new MusicMetadataEditor({ store, dataDir: store.dataDir ?? dataDir }).init()
   // Nothing is read or fetched until the online shelf is first used.
   const online = providedOnline ?? new OnlineLibrary({ dataDir: store.dataDir ?? dataDir })
   const ftp = providedFtp ?? await new FtpLibrary({ dataDir: store.dataDir ?? dataDir }).init()
@@ -273,6 +275,7 @@ export async function createMusicServer({
       }
       if (route === '/api/library/scan' && request.method === 'POST') {
         const value = await bodyJson(request)
+        if (store.metadataWrites) return json(response, 409, { error: '正在写入歌曲标签，请保存完成后再扫描。' })
         if (store.scanPromise) return json(response, 202, store.snapshot())
         const roots = value.roots === undefined ? undefined : safeRootList(value.roots)
         void store.scan({ roots }).catch(() => {})
@@ -288,6 +291,7 @@ export async function createMusicServer({
         if (request.method === 'POST') {
           const value = await bodyJson(request)
           if (value.roots !== undefined && store.scanPromise) return json(response, 409, { error: '正在扫描，请完成后再更改根目录' })
+          if (value.roots !== undefined && store.metadataWrites) return json(response, 409, { error: '正在写入歌曲标签，请保存完成后再更改根目录。' })
           return json(response, 200, { ...await store.updateConfig(value), musicBrainzConfigured: !!store.musicBrainzContact })
         }
       }
@@ -304,6 +308,42 @@ export async function createMusicServer({
         if (value.force !== undefined && typeof value.force !== 'boolean') return json(response, 400, { error: 'force 必须为布尔值' })
         void store.updateIntroductions({ albumIds: value.albumIds, force: value.force ?? false }).catch(() => {})
         return json(response, 202, store.snapshot())
+      }
+      if (route.startsWith('/api/album-info/')) {
+        if (route === '/api/album-info/document' && get) return json(response, 200, metadataEditor.document(url.searchParams.get('albumId')))
+        if (route === '/api/album-info/sources' && get) return json(response, 200, await metadataEditor.requireSources().settings())
+        if (route === '/api/album-info/sources' && request.method === 'POST') return json(response, 200, await metadataEditor.requireSources().saveSettings(await bodyJson(request)))
+        const cover = /^\/api\/album-info\/cover\/([a-zA-Z0-9_-]+)$/.exec(route)
+        if (cover && get) {
+          const aborter = new AbortController()
+          response.once('close', () => aborter.abort())
+          const image = await metadataEditor.requireSources().cover(cover[1], aborter.signal)
+          response.writeHead(200, { 'Content-Type': image.mime, 'Content-Length': image.data.length, 'Cache-Control': 'private, max-age=60' })
+          return response.end(request.method === 'HEAD' ? undefined : image.data)
+        }
+        if (request.method === 'POST') {
+          const value = await bodyJson(request, route === '/api/album-info/save' ? 12 * 1024 * 1024 : 128 * 1024)
+          const aborter = new AbortController()
+          response.once('close', () => aborter.abort())
+          if (route === '/api/album-info/search') return json(response, 200, await metadataEditor.search(value, aborter.signal))
+          if (route === '/api/album-info/candidate') return json(response, 200, await metadataEditor.candidate(value.candidateId, aborter.signal))
+          if (route === '/api/album-info/save') { await metadataEditor.saveAlbum(value); return json(response, 200, snapshot()) }
+        }
+        return json(response, 404, { error: '专辑资料操作不存在。' })
+      }
+      if (route.startsWith('/api/track-info/')) {
+        if (route === '/api/track-info/document' && get) return json(response, 200, await metadataEditor.trackDocument(url.searchParams.get('trackId')))
+        if (route === '/api/track-info/save' && request.method === 'POST') {
+          await metadataEditor.saveTrack(await bodyJson(request, 20 * 1024 * 1024))
+          return json(response, 200, snapshot())
+        }
+        const cover = /^\/api\/track-info\/cover\/([a-zA-Z0-9-]+)$/.exec(route)
+        if (cover && get) {
+          const file = store.trackArtworkFile(cover[1])
+          if (!file) return json(response, 404, { error: '曲目没有可用封面。' })
+          return await serveFile(request, response, file, { cache: 'private, max-age=3600' })
+        }
+        return json(response, 404, { error: '歌曲信息操作不存在。' })
       }
       if (route.startsWith('/api/lyrics/')) {
         if (route === '/api/lyrics/settings' && get) return json(response, 200, await lyrics.settings());
@@ -358,7 +398,7 @@ export async function createMusicServer({
   server.requestTimeout = 30_000
   server.once('close', () => { sony.close(); ftp.close(); void interfaceAudio.close().finally(() => native.close()).catch(() => {}) })
   if (autoScan) server.once('listening', () => { void store.scan().catch(() => {}) })
-  return { server, store, online, sony, ftp, native, interfaceAudio, lyrics }
+  return { server, store, online, sony, ftp, native, interfaceAudio, lyrics, metadataEditor }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -1,6 +1,7 @@
 import { mainEnglish } from "./i18n-main-en.ts";
 import { panelsEnglish } from "./i18n-panels-en.ts";
 import { lspEnglish } from "./i18n-lsp-en.ts";
+import { metadataEnglish } from "./i18n-metadata-en.ts";
 
 export type UiLanguage = "zh-CN" | "en";
 const preferenceKey = "rhine-ui-language";
@@ -33,6 +34,7 @@ const english: Record<string, string> = {
   ...lspEnglish,
   ...mainEnglish,
   ...panelsEnglish,
+  ...metadataEnglish,
   "唱片盒体": "Album cases",
   "请输入有效 HEX 颜色：#RGB 或 #RRGGBB": "Enter a valid HEX colour: #RGB or #RRGGBB",
   "通用部件设置": "Shared part settings",

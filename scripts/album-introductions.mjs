@@ -84,18 +84,34 @@ export class AlbumIntroductionProvider {
     this.entities = new Map()
   }
 
-  request(url) {
+  request(url, signal) {
     const task = this.requestChain.catch(() => {}).then(async () => {
       const allowed = ['zh.wikipedia.org', 'en.wikipedia.org', 'www.wikidata.org']
       if (url.protocol !== 'https:' || !allowed.includes(url.hostname)) throw new Error('不支持的专辑介绍来源')
+      if (signal?.aborted) throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
       const delay = this.lastRequest + this.intervalMs - Date.now()
-      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+      if (delay > 0) await new Promise((resolve, reject) => {
+        const finish = () => { signal?.removeEventListener('abort', abort); resolve() }
+        const timer = setTimeout(finish, delay)
+        const abort = () => {
+          clearTimeout(timer)
+          signal?.removeEventListener('abort', abort)
+          reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'))
+        }
+        signal?.addEventListener('abort', abort, { once: true })
+        if (signal?.aborted) abort()
+      })
       this.lastRequest = Date.now()
       const contact = typeof this.contact === 'function' ? this.contact() : this.contact
       const headers = { Accept: 'application/json', 'User-Agent': `RhineLocalMusic/0.2 (personal music library metadata client${contact ? `; ${contact}` : ''})` }
       let response
-      try { response = await this.fetcher(url, { headers, signal: AbortSignal.timeout(this.timeoutMs), redirect: 'error' }) }
-      catch (error) { throw new Error(`${url.hostname} 连接失败或超时：${error.message}`) }
+      const timeout = AbortSignal.timeout(this.timeoutMs)
+      const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+      try { response = await this.fetcher(url, { headers, signal: requestSignal, redirect: 'error' }) }
+      catch (error) {
+        if (signal?.aborted) throw signal.reason ?? error
+        throw new Error(`${url.hostname} 连接失败或超时：${error.message}`)
+      }
       if (!response.ok) throw new Error(`${url.hostname} HTTP ${response.status}`)
       const data = await response.json()
       if (data.error) throw new Error(`${url.hostname}: ${data.error.info ?? data.error.code ?? 'API error'}`)
@@ -105,22 +121,91 @@ export class AlbumIntroductionProvider {
     return task
   }
 
-  async wikidata(ids) {
+  async wikidata(ids, signal) {
     const missing = unique(ids).filter((id) => /^Q\d+$/.test(id) && !this.entities.has(id))
     if (missing.length) {
       const url = new URL('https://www.wikidata.org/w/api.php')
       url.search = new URLSearchParams({ action: 'wbgetentities', format: 'json', ids: missing.slice(0, 30).join('|'), props: 'labels|aliases|claims|sitelinks', languages: 'zh|zh-hans|zh-hant|zh-cn|zh-tw|en', languagefallback: '1' }).toString()
-      const result = await this.request(url)
+      const result = await this.request(url, signal)
       for (const id of missing) this.entities.set(id, result.entities?.[id] ?? null)
     }
     return Object.fromEntries(unique(ids).map((id) => [id, this.entities.get(id)]))
   }
 
-  async pages(language, params) {
+  async pages(language, params, signal) {
     const url = new URL(`https://${language}.wikipedia.org/w/api.php`)
     url.search = new URLSearchParams({ action: 'query', format: 'json', formatversion: '2', prop: 'extracts|pageprops|info', exintro: '1', explaintext: '1', exchars: '1000', inprop: 'url', redirects: '1', converttitles: '1', ...params }).toString()
-    const data = await this.request(url)
+    const data = await this.request(url, signal)
     return (data.query?.pages ?? []).filter((page) => page.pageid > 0 && !page.missing).map((page) => ({ ...page, language }))
+  }
+
+  /**
+   * Discover selectable article candidates without applying the conservative
+   * automatic-match filter used by lookup(). Search results are fetched with
+   * extracts, never snippets, so a user can inspect and choose an article.
+   */
+  async discoverCandidates(album, { signal } = {}) {
+    const title = clean(album?.title)
+    if (!title) throw new Error('请先提供专辑名称')
+    const aliases = albumAliases({ ...album, title })
+    const titles = unique(aliases.flatMap((name) => [name, simplified(name), traditional(name)])).slice(0, 12)
+    const pages = new Map()
+    const failures = []
+    const pageProperties = { prop: 'extracts|pageprops|info|pageimages', piprop: 'thumbnail', pithumbsize: '512' }
+    for (const language of ['zh', 'en']) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError')
+      try {
+        const direct = await this.pages(language, { ...pageProperties, titles: titles.join('|') }, signal)
+        for (const page of direct) pages.set(`${page.language}:${page.pageid}`, page)
+        const languageTitle = aliases.find((alias) => language === 'zh' ? /\p{Script=Han}/u.test(alias) : /^[\x00-\x7F]+$/.test(alias)) ?? aliases[0] ?? title
+        const languageArtist = artistAliases(album ?? {}).find((alias) => language === 'zh' ? /\p{Script=Han}/u.test(alias) : /^[\x00-\x7F]+$/.test(alias)) ?? clean(album?.artist)
+        const query = [`"${languageTitle.replaceAll('"', ' ')}"`, languageArtist ? `"${languageArtist.replaceAll('"', ' ')}"` : ''].filter(Boolean).join(' ')
+        const searched = await this.pages(language, {
+          ...pageProperties, generator: 'search', gsrsearch: query, gsrlimit: '8', gsrnamespace: '0',
+        }, signal)
+        for (const page of searched) pages.set(`${page.language}:${page.pageid}`, page)
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? error
+        failures.push(error.message)
+      }
+    }
+    if (!pages.size && failures.length) throw new Error(unique(failures).join('；'))
+
+    const records = [...pages.values()].slice(0, 20)
+    const entityIds = records.map((page) => page.pageprops?.wikibase_item).filter((id) => /^Q\d+$/.test(id ?? ''))
+    let entities = {}, performers = {}
+    try {
+      if (entityIds.length) {
+        entities = await this.wikidata(entityIds, signal)
+        const performerIds = values(entities).flatMap((entity) => claimValues(entity, 'P175').map((value) => value.id))
+        if (performerIds.length) performers = await this.wikidata(performerIds, signal)
+      }
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error
+      // Article candidates remain useful when Wikidata metadata is unavailable.
+    }
+
+    const entityLabel = (entity) => {
+      const labels = entity?.labels ?? {}
+      for (const language of ['zh', 'zh-hans', 'zh-cn', 'zh-hant', 'zh-tw', 'en']) {
+        if (clean(labels[language]?.value)) return clean(labels[language].value)
+      }
+      return clean(values(labels).find((label) => clean(label?.value))?.value)
+    }
+    return records.map((page) => {
+      const entity = entities[page.pageprops?.wikibase_item]
+      const performerIds = claimValues(entity, 'P175').map((value) => value.id).filter(Boolean)
+      const artist = unique(performerIds.map((id) => entityLabel(performers[id]))).join(' / ')
+      const year = claimValues(entity, 'P577').map((value) => Number(value.time?.match(/^\+(\d{4})-/)?.[1])).find(Number.isFinite)
+      const url = page.fullurl || `https://${page.language}.wikipedia.org/wiki/${encodeURIComponent(page.title.replaceAll(' ', '_'))}`
+      return {
+        title: clean(page.title), artist,
+        ...(Number.isFinite(year) ? { year } : {}),
+        ...(clean(page.extract) ? { description: clean(page.extract) } : {}),
+        ...(typeof page.thumbnail?.source === 'string' ? { coverUrl: page.thumbnail.source } : {}),
+        url, license: 'CC BY-SA（以来源页为准）',
+      }
+    })
   }
 
   async candidates(album, pages) {

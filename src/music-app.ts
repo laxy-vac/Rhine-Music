@@ -59,6 +59,7 @@ import { setupCaseEditor } from "./case-editor";
 import { normalizeCaseUserPresets, type CaseUserPreset } from "./case-user-presets";
 import { setupTerminalLighting } from "./terminal-lighting";
 import { setupAlbumPanel } from "./album-panel";
+import { setupAlbumInfoEditor } from "./album-info-editor";
 import { setupAlbumInteraction } from "./album-interaction";
 import { setupAlbumQueue } from "./album-queue";
 import { playbackMarkup, setupMusicPlayback } from "./music-playback";
@@ -506,6 +507,7 @@ let eqControls: ReturnType<typeof setupEqControls> | undefined;
 const standardEqPresetState = createStandardEqPresetState();
 let standardEqPresets: ReturnType<typeof setupStandardEqPresets> | undefined;
 let lyricsSettings: ReturnType<typeof setupLyricsSettings> | undefined;
+let cleanupAlbumInfoSources: (() => void) | undefined;
 let processingPresetElement: HTMLElement | undefined;
 let processingApplyMessage = "";
 let eqPageScrollTop = 0, eqPresetsExpanded = false;
@@ -709,6 +711,17 @@ const lyricsPage = setupLyricsPage($("#lyrics-page-content"), {
   }),
 });
 const signalPage = setupSignalPage($("#signal-page-content"), { seek: position => player.seek(position), spectrum: () => player.readSpectrum(), reduced: () => preferences.reduced || matchMedia("(prefers-reduced-motion: reduce)").matches });
+const albumInfoEditor = setupAlbumInfoEditor(stage, {
+  request: async <T>(url: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(url, init);
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) throw new Error(data?.error || `本地服务请求失败 (${response.status})`);
+    return data as T;
+  },
+  onLibrary: next => receiveLibrary(next),
+  getAlbum: id => library.albums.find(album => album.id === id),
+  notify,
+});
 const pageScan = new PageScanTransition($(".music-page-scan"));
 const terminalLighting = setupTerminalLighting(stage);
 terminalLighting.setQuality(renderQuality);
@@ -1586,7 +1599,7 @@ function trackList(a: MusicAlbum, discs: number) {
   if (!a.tracks.length)
     return ui`<div class="empty-tracks"><strong>${demo ? trUi("这是一张封面演示卡片") : trUi("这个专辑还没有可播放曲目")}</strong><p>${demo ? trUi("用于检查封面原始比例与卡片材质。扫描本地音乐库后，这里会显示真实曲目。") : trUi("请检查音乐文件是否完整，并重新扫描音乐库。")}</p><button data-action="library-settings">打开音乐库设置 ↗</button></div>`;
   let disc = -1;
-  return ui`<div class="track-list" aria-label="专辑歌曲列表">${a.tracks
+  return ui`${!demo && shelf === "local" && a.tracks.some(track => track.audioUrl.startsWith('/api/audio/')) ? '<button class="text-button" data-action="edit-track-info">' + trUi("编辑歌曲信息") + ' ↗</button>' : ''}<div class="track-list" aria-label="专辑歌曲列表">${a.tracks
     .map((t, index) => {
       const discNo = t.discNumber || 1;
       const head =
@@ -1600,8 +1613,8 @@ function trackList(a: MusicAlbum, discs: number) {
 }
 function albumAbout(a: MusicAlbum) {
   return `<section class="album-about"><small>ABOUT THIS ALBUM</small>
-    ${a.description ? `<p data-cjk="${containsCjk(a.description)}">${esc(a.description)}</p>${a.descriptionSource ? ui`<a class="text-button" href="${esc(a.descriptionSource.url)}" target="_blank" rel="noopener">来源：${esc(a.descriptionSource.name)} ↗</a>${a.descriptionSource.license ? `<small class="introduction-license">${esc(a.descriptionSource.license)}</small>` : ""}` : ""}` : shelf === "online" ? onlineNote(a) : trUi(`<h3>专辑介绍待补充</h3><p>从公开百科核对专辑与歌手后读取介绍，附上来源并保存在本机。无法确认对应专辑时保留空白。</p>`)}
-    ${!demo && shelf === "local" ? ui`<button data-action="introduction-album" class="text-button" ${introductionsStarting || library.introductions?.running ? "disabled" : ""}>${a.description ? trUi("更新") : trUi("查询")}专辑介绍 ↗</button><p class="introduction-feedback" data-introduction-feedback="${esc(a.id)}" role="status">${esc(introductionAlbumStatus(a))}</p>` : ""}
+    ${a.description ? `<p style="white-space:pre-line" data-cjk="${containsCjk(a.description)}">${esc(a.description)}</p>${a.descriptionSource?.url ? ui`<a class="text-button" href="${esc(a.descriptionSource.url)}" target="_blank" rel="noopener">来源：${esc(a.descriptionSource.name)} ↗</a>${a.descriptionSource.license ? `<small class="introduction-license">${esc(a.descriptionSource.license)}</small>` : ""}` : a.descriptionSource ? `<small>${esc(a.descriptionSource.name)}</small>` : ""}` : shelf === "online" ? onlineNote(a) : trUi(`<h3>专辑介绍待补充</h3><p>从公开百科核对专辑与歌手后读取介绍，附上来源并保存在本机。无法确认对应专辑时保留空白。</p>`)}
+    ${!demo && shelf === "local" && a.tracks.some(track => track.audioUrl.startsWith('/api/audio/')) ? ui`<button data-action="edit-album-info" class="text-button">编辑专辑信息 ↗</button><button data-action="edit-track-info" class="text-button">编辑歌曲信息 ↗</button><p class="introduction-feedback" data-introduction-feedback="${esc(a.id)}" role="status">${esc(introductionAlbumStatus(a))}</p>` : ""}
     <div class="source-note"><span>${shelf === "online" ? trUi("来源") : trUi("本地目录")}</span><code>${esc(a.folder)}</code></div><div class="genre-tags">${a.rawGenres.map((g) => `<span>${esc(g)}</span>`).join("")}</div></section>${producerBlock(a)}`;
 }
 function introductionAlbumStatus(a: MusicAlbum) {
@@ -1714,7 +1727,7 @@ let ftpMetadataTrack = "";
 let nativeBookmark = "";
 const playbackControls = setupMusicPlayback($("#music-playback"), {
   seek: position => player.seek(position),
-  cover: track => library.albums.find(album => album.id === track.albumId)?.coverUrl,
+  cover: track => track.coverUrl || library.albums.find(album => album.id === track.albumId)?.coverUrl,
   order: value => setFoobarOrder(value),
   currentLyric: () => lyricsPage.currentLine(),
   volume: volume => {
@@ -1759,9 +1772,14 @@ const audioInfoPopup = setupAudioInfoPopup(stage, {
     audioSettingsHighlight = setTimeout(() => field.classList.remove("audio-settings-target"), 1800);
   },
 });
+let playingAlbumCover: { album: MusicAlbum; cover: string; view: MusicAlbum } | undefined;
 function currentLyricsAlbum(state: MusicPlayerState) {
   const id = state.currentTrack?.albumId;
-  return library.albums.find(album => album.id === id) ?? onlineSnapshot?.albums.find(album => album.id === id) ?? albums.find(album => album.id === id);
+  const album = library.albums.find(album => album.id === id) ?? onlineSnapshot?.albums.find(album => album.id === id) ?? albums.find(album => album.id === id);
+  const cover = state.currentTrack?.coverUrl;
+  if (!album || !cover || cover === album.coverUrl) return album;
+  if (playingAlbumCover?.album !== album || playingAlbumCover.cover !== cover) playingAlbumCover = { album, cover, view: { ...album, coverUrl: cover } };
+  return playingAlbumCover.view;
 }
 const albumQueue = setupAlbumQueue(stage, {
   albumFor: id => library.albums.find(album => album.id === id) ?? onlineSnapshot?.albums.find(album => album.id === id) ?? albums.find(album => album.id === id),
@@ -1900,6 +1918,8 @@ function syncArchiveTab() {
   $(".music-topnav [data-action=library]").setAttribute("aria-pressed", String(page === "music"));
 }
 function closeManagementPage(restoreFocus = true) {
+  cleanupAlbumInfoSources?.();
+  cleanupAlbumInfoSources = undefined;
   albumQueue.close(false);
   if (page === "music") {
     musicApplication.infoScrollTop = albumPanel.scrollTarget()?.scrollTop ?? 0;
@@ -3378,6 +3398,8 @@ function entrySettingsMarkup() {
 }
 
 function renderSettingsPage() {
+  cleanupAlbumInfoSources?.();
+  cleanupAlbumInfoSources = undefined;
   const content = $("#settings-page-content");
   cleanupQualityDetection?.();
   cleanupQualityDetection = undefined;
@@ -3464,6 +3486,13 @@ function renderSettingsPage() {
   });
   settingsSelectControls = enhanceSettingsSelectControls(content);
   syncQualityUI(renderQuality, true);
+  const albumSourcesSection = content.querySelector<HTMLElement>("#introduction-settings");
+  if (albumSourcesSection) {
+    const host = document.createElement("div");
+    host.id = "album-info-sources-settings";
+    albumSourcesSection.append(host);
+    cleanupAlbumInfoSources = albumInfoEditor.mountSources(host);
+  }
   syncQualitySummary();
   syncFullscreenUI();
   selectSettingsCategory(settingsCategory);
@@ -4294,7 +4323,11 @@ document.addEventListener("click", (e) => {
       void enrich();
       break;
     case "introduction-album":
-      void queryIntroductions(true);
+    case "edit-album-info":
+      if (currentAlbum()) albumInfoEditor.open(currentAlbum()!);
+      break;
+    case "edit-track-info":
+      if (currentAlbum()) albumInfoEditor.open(currentAlbum()!, "tracks", getMusicFocusedEntry(musicApplication.selectedIndex)?.trackId);
       break;
     case "introductions-library":
       void queryIntroductions();
