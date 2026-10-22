@@ -45,8 +45,8 @@ npm run package:windows
 
 打包入口会复用 `scripts/stage-windows-payload.mjs` 检查 Electron、原生音频、Python/Sony、依赖和来源哈希，然后生成：
 
-- `.tools/releases/<版本>-<时间>/Rhine-Music-<版本>-Windows-x64-Portable.zip`
-- 与 ZIP 同名的 `.sha256` 校验文件（`Rhine-Music-<版本>-Windows-x64-Portable.zip.sha256`）
+- `.tools/releases/<版本>-<时间>/Rhine-Music-v<版本>-Windows-x64-Portable.zip`
+- 与 ZIP 同名的 `.sha256` 校验文件（`Rhine-Music-v<版本>-Windows-x64-Portable.zip.sha256`）
 - `build-report.json`（载荷、存储布局和校验摘要）
 
 **解压与启动**：把 ZIP 解压到一个新的、普通用户可写的空文件夹（例如 `D:\Apps\Rhine Music`），保持目录完整，双击 `Rhine Music.exe`。ZIP 已预建 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 和 `presets/eq/standard/` 等空存储点；首次启动直接使用，缺失时会重新创建。`presets/themes/` 与 `presets/eq/` 保存个人主题和 EQ 预设。详细说明也随 ZIP 放在根目录 `README-Portable.txt`。

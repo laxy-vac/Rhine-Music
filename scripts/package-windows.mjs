@@ -23,7 +23,7 @@ if (preparedIndex >= 0 && !process.argv[preparedIndex + 1]) {
 const payload = preparedIndex < 0
   ? path.join(run, 'payload')
   : path.resolve(process.argv[preparedIndex + 1]);
-const archiveName = `Rhine-Music-${version}-Windows-x64-Portable.zip`;
+const archiveName = `Rhine-Music-v${version}-Windows-x64-Portable.zip`;
 const archive = path.join(run, archiveName);
 
 const portableReadme = `Rhine Music ${version} - Windows x64 便携版
