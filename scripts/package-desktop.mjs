@@ -1,5 +1,7 @@
-// One self-contained Windows executable; no machine-local libraries or credentials.
-import {promises as fs,existsSync} from 'node:fs'
+// Prepares the local Electron/Python runtime staging only.
+// The Windows release is a portable ZIP built by scripts/package-windows.mjs;
+// this script no longer produces an installer or an old self-extracting EXE.
+import {promises as fs} from 'node:fs'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {prepareRuntime,runtimeRoot,run,digest} from './prepare-desktop-runtime.mjs'
@@ -7,7 +9,7 @@ import {npmInvocation} from './platform.mjs'
 const project=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),release=path.join(project,'release');
 const staging=path.join(release,'.desktop-staging'),args=process.argv.slice(2);
 const pkg=JSON.parse(await fs.readFile(path.join(project,'package.json'),'utf8'));
-if(process.platform!=='win32')throw new Error('The Windows desktop package must be built on Windows.');
+if(process.platform!=='win32')throw new Error('The Windows desktop runtime staging must be prepared on Windows.');
 const copy=async(from,to)=>{await fs.mkdir(path.dirname(to),{recursive:true});await fs.cp(from,to,{recursive:true,filter:file=>path.basename(file)!=='__pycache__'&&!file.endsWith('.pyc')&&!file.endsWith('.lib')&&path.basename(file)!=='.archive-sha256'})};
 const npm=async(values,cwd=project)=>{const invocation=npmInvocation(values);await run(invocation.command,invocation.args,{cwd})};
 async function main() {
@@ -53,17 +55,7 @@ async function main() {
  await fs.writeFile(path.join(appDir,'dist/.music-build.json'),JSON.stringify({prebuilt:true,platform:'win32-x64',version:pkg.version}));
  await fs.writeFile(path.join(appDir,'desktop/build-runtime.json'),JSON.stringify(runtime,null,2)+'\n');
  await copy(path.join(project,'docs/DEVELOPMENT.md'),path.join(staging,'DEVELOPMENT.md'));
- const payload=path.join(release,'Rhine-desktop-payload.zip');await fs.rm(payload,{force:true});
- console.log('Compressing the complete isolated desktop runtime…');
- const psLiteral=value=>"'"+value.replaceAll("'","''")+"'";
- await run(path.join(process.env.SystemRoot??'C:\\Windows','System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoProfile','-Command',`Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory(${psLiteral(staging)}, ${psLiteral(payload)}, [System.IO.Compression.CompressionLevel]::Optimal, $false)`]);
- const sha=await digest(payload),shaFile=payload+'.sha256';await fs.writeFile(shaFile,sha+'\n');
- const framework=path.join(process.env.SystemRoot??'C:\\Windows','Microsoft.NET'),compiler=[path.join(framework,'Framework64/v4.0.30319/csc.exe'),path.join(framework,'Framework/v4.0.30319/csc.exe')].find(existsSync);
- if(!compiler)throw new Error('Windows .NET Framework compiler unavailable.');
- const exe=path.join(release,'Rhine Music.exe');
- await run(compiler,['-nologo','-target:winexe','-platform:x64','-optimize+','-codepage:65001','-r:System.Windows.Forms.dll','-r:System.IO.Compression.dll','-r:System.IO.Compression.FileSystem.dll',`-win32icon:${path.join(project,'windows/app.ico')}`,`-win32manifest:${path.join(project,'windows/app.manifest')}`,`-resource:${payload},Rhine.Payload.zip`,`-resource:${shaFile},Rhine.Payload.sha256`,`-out:${exe}`,path.join(project,'windows/Standalone.cs')]);
- const outputSha=await digest(exe);await fs.writeFile(exe+'.sha256',`${outputSha}  Rhine Music.exe\n`);
- await fs.writeFile(path.join(release,'desktop-build.json'),JSON.stringify({version:pkg.version,executable:'Rhine Music.exe',sha256:outputSha,payloadSha256:sha,bytes:(await fs.stat(exe)).size,runtimes:runtime,sonyIncluded:true,externalDecoder:false},null,2)+'\n');
- console.log(`Built ${exe} (${((await fs.stat(exe)).size/1048576).toFixed(1)} MB), SHA-256 ${outputSha}`);
+ console.log(`Desktop runtime staging is ready at ${staging}.`);
+ console.log('This script only prepares the local runtime staging; run npm run package:windows for the portable ZIP.');
 }
 await main();

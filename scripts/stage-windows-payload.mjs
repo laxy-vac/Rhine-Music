@@ -1067,8 +1067,11 @@ export async function stageWindowsPayload({ projectRoot = projectFromScript, out
       warnings: inputs.warnings,
     };
   } catch (error) {
-    await fs.rm(stageRoot, { recursive: true, force: true }).catch(() => {});
-    throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      detail + '\n载荷暂存失败；未删除临时目录，供检查：' + stageRoot,
+      { cause: error },
+    );
   }
 }
 

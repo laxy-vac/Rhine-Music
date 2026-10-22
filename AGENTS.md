@@ -22,6 +22,12 @@
 - 音频与性能结论依实际测量；构建、合成检查、视觉和真实设备验收分别报告。
 - 只做与本次改动相关的必要检查，不为填补历史台账扩大回归。完成后说明修改、产物、验证及实际限制。
 
+## Windows 发布
+
+- Windows 长期只发布 Portable 便携 ZIP：解压后直接运行 `Rhine Music.exe`，默认把 `data/`、`presets/` 保留在解压目录内。不制作 NSIS 安装器或旧式自解压 EXE，不把运行时释放到 AppData。
+- 正式入口只有 `npm run package:windows`。它复用 `scripts/stage-windows-payload.mjs` 的来源与哈希校验，生成便携 ZIP、`.sha256` 和构建报告；不调用安装器编译器。
+- 打包只使用已准备的 Electron、原生音频、Python/Sony 和前端组件，不自动下载；产物与中间文件留在忽略目录，不进入 Git。`scripts/package-desktop.mjs` 仅准备本地运行时 staging，不是发布入口。
+
 ## 子 Agent
 
 大量查找、读取、整理和机械实现优先委派原生 `gpt-6-luna`，推理 `max`。未经当前问题明确授权不用其他子模型，也不通过继承或外部 API 绕过。只读任务不改文件；实现任务限定可改范围，避免并发改同文件。主 Agent 负责判断、整合和验收；简短说明分工与所选模型，无法核验实际运行元数据时如实说明。

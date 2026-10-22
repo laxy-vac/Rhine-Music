@@ -12,7 +12,7 @@ npm run build:source    # 只构建源码调试界面
 npm run desktop         # 启动已有桌面源码构建
 npm run build:native    # 构建原生音频及 LSP
 npm run build:sony      # 构建 Sony x86 桥接
-npm run package:windows # 使用已经准备好的组件生成 Windows 安装器
+npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZIP
 ```
 
 根目录保留 `构建源码验证.cmd` 和 `启动源码验证.cmd`。前者用项目内 Electron 提供的 Node 构建原生主机与界面；只改前端时可使用 `npm run build:source`。后者不构建、不安装、不扫描曲库，缺少输入时直接报错。
@@ -28,10 +28,9 @@ npm run package:windows # 使用已经准备好的组件生成 Windows 安装器
 | `.tools/walkman/compiler/` | 已准备的 Zig |
 | `.tools/audio-codecs/`、`.tools/lsp-eq/`、`.tools/lsp-plugin/` | 编解码与均衡器构建输入 |
 | `release/.desktop-staging/` | Electron/Python 等运行时准备中间目录 |
-| `.tools/installer-tools/nsis/3.13/nsis-3.13/` | Windows 安装器编译器 |
-| `.tools/releases/` | 安装器载荷、报告和成品 |
+| `.tools/releases/` | 便携 ZIP、载荷和构建报告 |
 
-新克隆不携带本机工具和依赖。`prepare-*`、`package-desktop.mjs` 等环境准备脚本可能下载文件或安装依赖，使用前先阅读脚本并取得明确授权；不能把它们当作普通启动步骤。`package-desktop.mjs` 为源码调试和安装器提供运行时 staging，日常发布入口是 `package:windows`。普通打包只检查和使用现有组件，不代为准备环境。
+新克隆不携带本机工具和依赖。`prepare-*`、`package-desktop.mjs` 等环境准备脚本可能下载文件或安装依赖，使用前先阅读脚本并取得明确授权；不能把它们当作普通启动步骤。`package-desktop.mjs` 只准备源码调试和打包所需的运行时 staging，不再产出旧自解压 EXE；日常发布入口是 `package:windows`。普通打包只检查和使用现有组件，不代为准备环境。
 
 修改前端后重新构建，当前窗口可用 Ctrl+R 刷新。修改服务、宿主或预加载层后完整退出再启动。界面/原生来源清单不匹配时重建对应目标，不清个人缓存来绕过检查。
 
@@ -86,12 +85,28 @@ npm run package:windows # 使用已经准备好的组件生成 Windows 安装器
 - `music-data/`：曲库索引、封面与资料缓存。
 - profile 旁 `presets/themes/`、`presets/eq/`：主题与 EQ 个人预设。
 
-安装版使用安装目录中的 `data/` 与 `presets/`，不自动迁移源码 profile。歌词可使用用户指定的缓存目录。移除音乐目录、清理源码或卸载默认不删除原音乐和个人数据。
+便携版使用解压目录中的 `data/` 与 `presets/`，不自动迁移源码 profile。`data/config/` 保存偏好与 EQ 库配置，`data/library/` 保存曲库索引、封面/资料缓存和默认歌词缓存，`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 分别保存会话、日志、崩溃转储、临时文件和 LSP 用户数据；`presets/themes/`、`presets/eq/` 保存个人预设。歌词可使用用户指定的缓存目录。删除便携程序目录会同时删除其中的 `data/` 与 `presets/`（设置、索引、缓存和个人预设），请先备份；外部音乐文件不受影响，移除音乐目录或清理源码也不会删除外部原音乐。
 
 ## 6. 美术、许可和交付
 
 `art/` 保留模型工程和建模脚本；运行模型在 `public/assets/`，主题图像在 `src/assets/style/`。美术修改的导出操作与来源见 `art/README.md`；字体、音频、模型与第三方组件的权利以根 `NOTICE.md` 和各自许可证为准。
 
-发布前至少完成 `npm run build` 和必要的原生构建。桌面打包校验源码、组件、许可和载荷，不捆绑曲库、凭据或用户预设。安装器使用普通用户权限，卸载只删除其清单内文件并默认保留数据。构建成功不等于实际设备、视觉或性能验收；这些按本次改动在用户环境验证。
+发布前至少完成 `npm run build` 和必要的原生构建。`npm run package:windows` 复用 `scripts/stage-windows-payload.mjs` 校验源码、依赖、Electron、原生音频、Python/Sony 运行库和许可，再生成 Windows x64 Portable ZIP；不生成 NSIS 安装器或旧式自解压 EXE。载荷不捆绑曲库、凭据或个人预设。构建成功不等于实际设备、视觉或性能验收；这些按本次改动在用户环境验证。
+
+## 7. Windows 便携 ZIP
+
+Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:windows`，打包前应已准备好 `.tools/source-preview-electron/`、`.tools/source-preview-interface/`、`.tools/source-preview-native-audio/`、`release/.desktop-staging/resources/app/runtime/python/` 以及 `vendor/` 中的原生/Sony 组件。脚本只检查和复用这些现有组件，不自动下载。
+
+打包流程：
+
+1. `stage-windows-payload.mjs` 核对 Electron、前端界面、原生音频、Sony、Python、生产依赖和许可的来源与 SHA-256，把运行载荷写入 `.tools/releases/<版本>-<时间>/payload/`。
+2. `package-windows.mjs` 校验 `desktop/app-storage.cjs` 的安装式布局仍指向 exe 所在目录，并确认 `desktop/main.cjs` 把 `userData`、`sessionData`、`temp`、`crashDumps` 和日志路径改到该目录；随后写入 `README-Portable.txt`、`data/`、`presets/themes/`、`presets/eq/` 说明文件，预建空的 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/`、`presets/eq/standard/` 等存储目录，更新 `release-manifest.json` 的完整文件清单与 SHA-256，拒绝任何 `data/`/`presets/` 下的运行数据或个人预设，再用 Windows 自带的 `System.IO.Compression.ZipArchive` 压缩（含空目录条目）。
+3. 产物为 `Rhine-Music-<版本>-Windows-x64-Portable.zip`、同名 `.sha256` 和 `build-report.json`；ZIP 根目录直接包含 `Rhine Music.exe`、`resources/app/`、`data/`、`presets/` 和说明文件。
+
+解压后 ZIP 已包含 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 和 `presets/eq/standard/` 等空存储点；首次启动直接使用，缺失的子目录会重新创建。预设保存在 `presets/themes/` 和 `presets/eq/`。默认存储不回退到 AppData，也不使用旧自解压 EXE 的 `%LocalAppData%` 运行时缓存。
+
+更新时退出播放器，把新 ZIP 解压到新文件夹，再复制旧文件夹的 `data/` 与 `presets/`；不要覆盖正在使用的程序目录。备份可复制整个文件夹，或只复制 `data/` 与 `presets/`；删除整个解压目录会一并删除其中的 `data/` 与 `presets/`，请先备份。音乐文件在外部目录，不受删除程序目录影响；删除 `data/` 会丢失索引、缓存和设置，删除 `presets/` 会丢失个人预设。
+
+打包验证只覆盖来源、哈希、载荷结构、主程序 x64 PE 头、必需运行库、空存储目录、`release-manifest.json` 文件覆盖、便携存储路径和“无个人数据”检查；实际启动、两主题显示、音频设备和真实曲库仍需在独立 Windows x64 环境人工验收。
 
 不自动上传、推送或发布。构建产物放忽略目录，不进入仓库。开发中不另建历史阶段文档；更新本指南中的现行操作和约定即可。
