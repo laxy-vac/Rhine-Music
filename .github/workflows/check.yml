@@ -15,5 +15,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-# Installer/native/hardware validation requires separately prepared local tools.
+# Portable/native/hardware validation requires separately prepared local tools.
 # This workflow does not publish artifacts, call devices or use a personal library.

@@ -2,6 +2,8 @@
 
 Windows 桌面音乐播放器，基于 TypeScript、Three.js、Electron 和原生音频主机。
 
+[GitHub 仓库](https://github.com/laxy-vac/Rhine-Music) · [版本下载](https://github.com/laxy-vac/Rhine-Music/releases) · [问题反馈](https://github.com/laxy-vac/Rhine-Music/issues)
+
 提供 **莱茵生命：映像（Rhine Lab: Reflections）** 与 **仿孤星（Lone Trail–Inspired）** 两套主题，共用音乐库、播放状态和渲染流程。
 
 ## 功能
@@ -51,6 +53,8 @@ npm run package:windows
 
 **解压与启动**：把 ZIP 解压到一个新的、普通用户可写的空文件夹（例如 `D:\Apps\Rhine Music`），保持目录完整，双击 `Rhine Music.exe`。ZIP 已预建 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 和 `presets/eq/standard/` 等空存储点；首次启动直接使用，缺失时会重新创建。`presets/themes/` 与 `presets/eq/` 保存个人主题和 EQ 预设。详细说明也随 ZIP 放在根目录 `README-Portable.txt`。
 
+开发工具的隔离工作区可能给新文件附加 Windows Low 完整性标签。便携版请从 ZIP 重新解压到工作区以外的普通目录；移动已有的带标签文件夹可能保留原标签。
+
 **更新**：退出播放器，把新版本 ZIP 解压到另一个新文件夹，再把旧文件夹中的 `data/` 和 `presets/` 复制到新文件夹，启动新版本确认后再处理旧文件夹。不要直接覆盖正在使用的程序目录，避免新旧运行库混用。
 
 **备份与迁移**：完整备份复制整个解压文件夹；轻量备份只复制 `data/` 和 `presets/`。删除整个解压目录会同时删除其中的 `data/` 与 `presets/`（设置、索引、缓存和个人预设），请先备份；音乐文件不在这个文件夹内，删除播放器目录不会删除外部音乐。删除 `data/` 会丢失索引、缓存和设置，删除 `presets/` 会丢失个人预设。迁移到另一台 Windows x64 电脑时复制整个文件夹，或重新解压程序后复制这两个目录。
@@ -73,6 +77,27 @@ npm run package:windows
 依赖、工具、构建产物、缓存和个人音乐数据不进入 Git。仓库保留当前实现；历史变更由 Git 记录。
 
 ## 署名与许可
+
+本项目基于多项开源工作，感谢原作者的代码、设计和维护。直接参考项目包括：
+
+| 项目与作者 | 本项目使用的部分 |
+| --- | --- |
+| [RhineLabUI — LBEILC](https://github.com/LBEILC/RhineLabUI) | 莱茵生命档案界面、三维场景、动效、模型生成和原始音频编配的基础 |
+| [Rhine-Music-Demo — RonaldDeng](https://github.com/RonaldDeng/Rhine-Music-Demo) | 音乐播放器适配、本地曲库、播放服务与音乐界面的基础 |
+| [Rhine-Music-AudioEnhanced — gamesding](https://github.com/gamesding/Rhine-Music-AudioEnhanced) | 直接参考的音频增强版本及其版权、署名和资源来源说明 |
+| [RhinE / Audio Archive — ericzhang12111-cell 与 Audio Archive authors](https://github.com/ericzhang12111-cell/RhinE) | 主题配色、盒体、货架及地面图像等界面参考与资源 |
+
+运行依赖、音频库、字体与构建工具的作者和许可证见 [NOTICE](NOTICE.md)、各组件随附许可及来源清单；它们不因用于本播放器而改授 MIT。相关来源与适用范围会随源码和发行版保留。
+
+同时感谢以下实际使用的项目：
+
+- 界面与应用运行：[Three.js](https://github.com/mrdoob/three.js)、[Electron](https://github.com/electron/electron)（含 Chromium / Node.js）、[Rolling Number](https://github.com/kitlangton/rolling-number)。
+- 音乐资料与标签：[music-metadata](https://github.com/Borewit/music-metadata)、[TagLib-Wasm](https://github.com/CharlesWiltgen/TagLib-Wasm) / [TagLib](https://github.com/taglib/taglib)、[OpenCC-JS](https://github.com/nk2028/opencc-js)、[basic-ftp](https://github.com/patrickjuchli/basic-ftp)、[MessagePack for JavaScript](https://github.com/msgpack/msgpack-javascript)。
+- 原生音频：[FFmpeg](https://ffmpeg.org/) / [BtbN 构建](https://github.com/BtbN/FFmpeg-Builds)、[FLAC](https://xiph.org/flac/)、[SoXR](https://sourceforge.net/projects/soxr/)、[LSP Plugins](https://github.com/lsp-plugins) / [CLAP](https://github.com/free-audio/clap)、[iir1](https://github.com/berndporr/iir1)（沿用 Vinnie Falco 的 [DSPFilters](https://github.com/vinniefalco/DSPFilters) 工作）、[r8brain-free-src](https://github.com/avaneev/r8brain-free-src)（含 Takuya Ooura 的 [FFT](https://www.kurims.kyoto-u.ac.jp/~ooura/fft.html)）、[Unicorn](https://github.com/unicorn-engine/unicorn)、[nlohmann/json](https://github.com/nlohmann/json)。
+- 字体：[MiSans — 小米](https://hyperos.mi.com/font/)、[Geist Mono — Vercel](https://github.com/vercel/geist-font)。
+- 开发与美术工具：[TypeScript](https://github.com/microsoft/TypeScript)、[Vite](https://github.com/vitejs/vite)、[Prettier](https://github.com/prettier/prettier)、[Zig](https://ziglang.org/)、[Blender](https://www.blender.org/)、[Python](https://www.python.org/)、[Sharp](https://github.com/lovell/sharp) 与 [Pillow](https://github.com/python-pillow/Pillow)。
+
+另向《明日方舟》及「莱茵生命：访问」的创作者致谢。Sony、Un4seen、Hi-Res Audio / DSD 等非 MIT 素材、组件和标志的权利归属及使用边界单独列于 NOTICE；不将它们表述为本项目原创或开源授权。
 
 音乐适配与维护：Copyright (c) 2026 RonaldDeng。原版 [RhineLabUI](https://github.com/LBEILC/RhineLabUI)：Copyright (c) 2026 LBEILC。
 
