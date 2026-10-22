@@ -474,7 +474,7 @@ public static class SetExeIconProgram
             string icon = Path.GetFullPath(args[1]);
             string sourceRuntime = Path.GetFullPath(args[2]);
             string projectRoot = Path.GetFullPath(args[3]).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            string releaseRoot = Path.GetFullPath(Path.Combine(projectRoot, ".tools", "releases"));
+            string releaseRoot = Path.GetFullPath(Path.Combine(projectRoot, ".tools", "build", "windows"));
             string releasePrefix = releaseRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             string expectedIcon = Path.GetFullPath(Path.Combine(projectRoot, "windows", "app.ico"));
             string expectedRuntime = Path.GetFullPath(Path.Combine(projectRoot, ".tools", "source-preview-electron", "electron.exe"));

@@ -40,7 +40,7 @@ try {
     if (await fs.access(path.join(runtime, 'resources', name)).then(() => true, () => false)) throw new Error('调试运行时混入旧应用，不能用于验证当前源码。请按项目说明处理，不要启动旧副本。')
   }
   await fs.mkdir(home, { recursive: true })
-  const python = path.join(project, 'release/.desktop-staging/resources/app/runtime/python/python.exe')
+  const python = path.join(project, '.tools/desktop-staging/resources/app/runtime/python/python.exe')
   const env = { ...process.env, RHINE_SOURCE_PREVIEW: '1', RHINE_APP_HOME: home, MUSIC_DATA_DIR: dataDir, MUSIC_ROOTS: '', RHINE_SOURCE_INTERFACE: interfaceDir, ELECTRON_ENABLE_STACK_DUMPING: '1' }
   delete env.ELECTRON_RUN_AS_NODE
   if (await fs.access(python).then(() => true, () => false)) env.SONY_WALKMAN_PYTHON = python

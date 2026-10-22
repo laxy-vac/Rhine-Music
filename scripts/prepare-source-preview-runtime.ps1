@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
 )
@@ -211,11 +211,11 @@ $expectedProjectRoot = ConvertTo-NormalizedAbsolutePath -Path (Split-Path -Paren
 Assert-PathEquals -ActualPath $projectRootResolved -ExpectedPath $expectedProjectRoot -Description 'ProjectRoot'
 $projectRootResolved = ConvertTo-NormalizedAbsolutePath -Path $projectRootResolved
 
-$releasePath = Join-Path $projectRootResolved 'release'
+$releasePath = Join-Path $projectRootResolved '.tools'
 $expectedReleasePath = ConvertTo-NormalizedAbsolutePath -Path $releasePath
 Assert-ExistingDirectoryAtPath -Path $releasePath -ExpectedPath $expectedReleasePath -Description 'Runtime source parent'
 
-$sourceRoot = Join-Path $releasePath '.desktop-staging'
+$sourceRoot = Join-Path $releasePath 'desktop-staging'
 $expectedSourceRoot = ConvertTo-NormalizedAbsolutePath -Path $sourceRoot
 Assert-ExistingDirectoryAtPath -Path $sourceRoot -ExpectedPath $expectedSourceRoot -Description 'Runtime source'
 $sourceRoot = (Resolve-Path -LiteralPath $sourceRoot).ProviderPath
@@ -258,7 +258,7 @@ $sourceElectronPath = Join-Path $sourceRoot 'electron.exe'
 $sourceDefaultAppPath = Join-Path $sourceRoot 'resources\default_app.asar'
 $sourceElectronSha256 = Get-FileSha256 -Path $sourceElectronPath
 $sourceDefaultAppSha256 = Get-FileSha256 -Path $sourceDefaultAppPath
-$sourceLocation = 'release/.desktop-staging'
+$sourceLocation = '.tools/desktop-staging'
 $targetLocation = '.tools/source-preview-electron'
 $manifestLeaf = 'source-preview-runtime.manifest.json'
 $manifestPath = Join-Path $targetRoot $manifestLeaf

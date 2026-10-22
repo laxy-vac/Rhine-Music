@@ -29,8 +29,10 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 | `.tools/source-preview-native-audio/` | 调试音频主机、DLL 与来源清单 |
 | `.tools/walkman/compiler/` | 已准备的 Zig |
 | `.tools/audio-codecs/`、`.tools/lsp-eq/`、`.tools/lsp-plugin/` | 编解码与均衡器构建输入 |
-| `release/.desktop-staging/` | Electron/Python 等运行时准备中间目录 |
-| `.tools/releases/` | 便携 ZIP、载荷和构建报告 |
+| `.tools/desktop-staging/` | Electron/Python 等运行时准备中间目录 |
+| `.tools/build/windows/` | 内部载荷、临时构建文件和构建报告 |
+| 工作区 `releases/v<版本>/` | 唯一正式交付目录，只放 Portable ZIP 与校验文件，在 `source/` 外 |
+| `.tools/imported-materials/` | 从外层工作区归并的原始构建材料 |
 
 新克隆不携带本机工具和依赖。`prepare-*`、`prepare-desktop-staging.mjs` 等环境准备脚本可能下载文件或安装依赖，使用前先阅读脚本并取得明确授权；不能把它们当作普通启动步骤。`prepare-desktop-staging.mjs` 只准备源码调试和打包所需的运行时 staging，不再产出旧自解压 EXE；日常发布入口是 `package:windows`。普通打包只检查和使用现有组件，不代为准备环境。
 
@@ -102,14 +104,14 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 ## 7. Windows 便携 ZIP
 
-Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:windows`，打包前应已准备好 `.tools/source-preview-electron/`、`.tools/source-preview-interface/`、`.tools/source-preview-native-audio/`、`release/.desktop-staging/resources/app/runtime/python/` 以及 `vendor/` 中的原生/Sony 组件。脚本只检查和复用这些现有组件，不自动下载。
+Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:windows`，打包前应已准备好 `.tools/source-preview-electron/`、`.tools/source-preview-interface/`、`.tools/source-preview-native-audio/`、`.tools/desktop-staging/resources/app/runtime/python/` 以及 `vendor/` 中的原生/Sony 组件。脚本只检查和复用这些现有组件，不自动下载。
 
 打包流程：
 
-1. `stage-windows-payload.mjs` 核对 Electron、前端界面、原生音频、Sony、Python、生产依赖和许可的来源与 SHA-256，把运行载荷写入 `.tools/releases/<版本>-<时间>/payload/`。
+1. `stage-windows-payload.mjs` 核对 Electron、前端界面、原生音频、Sony、Python、生产依赖和许可的来源与 SHA-256，把运行载荷写入 `.tools/build/windows/<版本>-<时间>/payload/`。
    复制后使用 Windows 已有的 .NET Framework C# 编译器构建 `windows/SetExeIcon.cs`，把多尺寸 ICO 写入便携 EXE，并读回每组资源验证。源 Electron 不变，构建辅助程序不进入 ZIP；目标机器不需要 .NET。图标资源更新完成后才生成载荷哈希。
 2. `package-windows.mjs` 校验 `desktop/app-storage.cjs` 的安装式布局仍指向 exe 所在目录，并确认 `desktop/main.cjs` 把 `userData`、`sessionData`、`temp`、`crashDumps` 和日志路径改到该目录；随后写入 `README-Portable.txt`、`data/`、`presets/themes/`、`presets/eq/` 说明文件，预建空的 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/`、`presets/eq/standard/` 等存储目录，更新 `release-manifest.json` 的完整文件清单与 SHA-256，拒绝任何 `data/`/`presets/` 下的运行数据或个人预设，再用 Windows 自带的 `System.IO.Compression.ZipArchive` 压缩（含空目录条目）。
-3. 产物为 `Rhine-Music-v<版本>-Windows-x64-Portable.zip`、同名 `.sha256` 和 `build-report.json`；ZIP 根目录直接包含 `Rhine Music.exe`、`resources/app/`、`data/`、`presets/` 和说明文件。
+3. 正式 ZIP 与同名 `.sha256` 写入工作区 `releases/v<版本>/`；`build-report.json` 留在源码 `.tools/build/windows/<版本>-<时间>/`。ZIP 根目录直接包含 `Rhine Music.exe`、`resources/app/`、`data/`、`presets/` 和说明文件。没有 `source/<仓库>` 这一层时，使用仓库根的 `releases/`。已有同版本 ZIP 或校验文件时，在构建前拒绝覆盖，需显式处理旧产物或使用新版本。
 
 解压后 ZIP 已包含 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 和 `presets/eq/standard/` 等空存储点；首次启动直接使用，缺失的子目录会重新创建。预设保存在 `presets/themes/` 和 `presets/eq/`。默认存储不回退到 AppData，也不使用旧自解压 EXE 的 `%LocalAppData%` 运行时缓存。
 

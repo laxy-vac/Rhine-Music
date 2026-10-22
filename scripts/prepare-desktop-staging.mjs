@@ -6,8 +6,8 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {prepareRuntime,runtimeRoot,run,digest} from './prepare-desktop-runtime.mjs'
 import {npmInvocation} from './platform.mjs'
-const project=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),release=path.join(project,'release');
-const staging=path.join(release,'.desktop-staging'),args=process.argv.slice(2);
+const project=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),release=path.join(project,'.tools');
+const staging=path.join(release,'desktop-staging'),args=process.argv.slice(2);
 const pkg=JSON.parse(await fs.readFile(path.join(project,'package.json'),'utf8'));
 if(process.platform!=='win32')throw new Error('The Windows desktop runtime staging must be prepared on Windows.');
 const copy=async(from,to)=>{await fs.mkdir(path.dirname(to),{recursive:true});await fs.cp(from,to,{recursive:true,filter:file=>path.basename(file)!=='__pycache__'&&!file.endsWith('.pyc')&&!file.endsWith('.lib')&&path.basename(file)!=='.archive-sha256'})};
@@ -15,7 +15,7 @@ const npm=async(values,cwd=project)=>{const invocation=npmInvocation(values);awa
 async function main() {
  if(!args.includes('--skip-build')){await npm(['ci']);await npm(['run','build'])}
  await fs.access(path.join(project,'dist/index.html'));const runtime=await prepareRuntime();
- if(path.resolve(staging)!==path.join(release,'.desktop-staging'))throw new Error('Invalid staging directory');
+ if(path.resolve(staging)!==path.join(release,'desktop-staging'))throw new Error('Invalid staging directory');
  await fs.rm(staging,{recursive:true,force:true});await fs.mkdir(staging,{recursive:true});
  await copy(path.join(runtimeRoot,'electron'),staging);
  const appDir=path.join(staging,'resources/app');await fs.mkdir(appDir,{recursive:true});

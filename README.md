@@ -45,9 +45,9 @@ npm run package:windows
 
 打包入口会复用 `scripts/stage-windows-payload.mjs` 检查 Electron、原生音频、Python/Sony、依赖和来源哈希，然后生成：
 
-- `.tools/releases/<版本>-<时间>/Rhine-Music-v<版本>-Windows-x64-Portable.zip`
+- 工作区 `releases/v<版本>/Rhine-Music-v<版本>-Windows-x64-Portable.zip`（在 `source/` 外）
 - 与 ZIP 同名的 `.sha256` 校验文件（`Rhine-Music-v<版本>-Windows-x64-Portable.zip.sha256`）
-- `build-report.json`（载荷、存储布局和校验摘要）
+- 构建报告和载荷仅留在源码 `.tools/build/windows/<版本>-<时间>/`，不作为交付入口。
 
 **解压与启动**：把 ZIP 解压到一个新的、普通用户可写的空文件夹（例如 `D:\Apps\Rhine Music`），保持目录完整，双击 `Rhine Music.exe`。ZIP 已预建 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 和 `presets/eq/standard/` 等空存储点；首次启动直接使用，缺失时会重新创建。`presets/themes/` 与 `presets/eq/` 保存个人主题和 EQ 预设。详细说明也随 ZIP 放在根目录 `README-Portable.txt`。
 
@@ -68,7 +68,7 @@ npm run package:windows
 | `art/`、`public/`、`content/` | 美术源文件、运行资源和档案内容 |
 | `docs/DEVELOPMENT.md` | 环境、代码地图、数据位置与维护约定 |
 
-发布脚本只有 `scripts/package-windows.mjs`；`stage-windows-payload.mjs` 是它使用的内部载荷步骤。`prepare-desktop-staging.mjs` 是需另行授权的环境准备脚本，不是第二个发布入口。`release/.desktop-staging/` 保留现有运行时来源；发布结果只在 `.tools/releases/`。
+发布脚本只有 `scripts/package-windows.mjs`；`stage-windows-payload.mjs` 是它使用的内部载荷步骤。`prepare-desktop-staging.mjs` 是需另行授权的环境准备脚本，不是第二个发布入口。`.tools/desktop-staging/` 保留现有运行时来源；正式交付只在工作区 `releases/v<版本>/`。若直接克隆仓库、不采用 `source/<仓库>` 布局，交付目录为仓库根的 `releases/`（已由 Git 忽略）。已有同版本交付时，脚本拒绝覆盖。
 
 依赖、工具、构建产物、缓存和个人音乐数据不进入 Git。仓库保留当前实现；历史变更由 Git 记录。
 

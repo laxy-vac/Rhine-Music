@@ -14,7 +14,12 @@ const versionMatch = semanticVersionPattern.exec(String(version));
 if (!versionMatch) throw new Error('package.json must contain a valid semantic version.');
 if (process.platform !== 'win32') throw new Error('The Windows portable ZIP must be built on Windows.');
 
-const releaseRoot = path.join(project, '.tools', 'releases');
+const projectParent = path.dirname(project);
+const workspace = path.basename(projectParent).toLowerCase() === 'source'
+  ? path.dirname(projectParent)
+  : project;
+const releaseRoot = path.join(project, '.tools', 'build', 'windows');
+const deliveryRoot = path.join(workspace, 'releases', `v${version}`);
 const run = path.join(releaseRoot, `${version}-${Date.now()}`);
 const preparedIndex = process.argv.indexOf('--prepared-payload');
 if (preparedIndex >= 0 && !process.argv[preparedIndex + 1]) {
@@ -24,7 +29,7 @@ const payload = preparedIndex < 0
   ? path.join(run, 'payload')
   : path.resolve(process.argv[preparedIndex + 1]);
 const archiveName = `Rhine-Music-v${version}-Windows-x64-Portable.zip`;
-const archive = path.join(run, archiveName);
+const archive = path.join(deliveryRoot, archiveName);
 
 const portableReadme = `Rhine Music ${version} - Windows x64 便携版
 ========================================
@@ -147,6 +152,25 @@ async function assertRealDirectory(directory, label) {
   if (info.isSymbolicLink() || !info.isDirectory()) {
     throw new Error(`${label} must be a real directory: ${directory}`);
   }
+}
+
+async function ensureRealDirectory(directory, label) {
+  try {
+    await fs.mkdir(directory);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  await assertRealDirectory(directory, label);
+}
+
+async function assertDeliveryAbsent(file) {
+  try {
+    await fs.lstat(file);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error(`Refusing to overwrite an existing release ZIP or checksum: ${file}. Move it explicitly or choose a new version before packaging.`);
 }
 
 async function assertRegularFile(file, label) {
@@ -496,7 +520,7 @@ async function runPowerShell(script, cwd) {
 }
 
 async function createPortableArchive(sourceRoot, destination, cwd) {
-  const script = `$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; $source = [System.IO.Path]::GetFullPath(${psLiteral(sourceRoot)}); $separator = [System.IO.Path]::DirectorySeparatorChar.ToString(); $prefix = $source; if (-not $prefix.EndsWith($separator)) { $prefix += $separator }; $destination = ${psLiteral(destination)}; if (Test-Path -LiteralPath $destination) { throw "Portable ZIP already exists: $destination" }; $zip = [System.IO.Compression.ZipFile]::Open($destination, [System.IO.Compression.ZipArchiveMode]::Create); try { foreach ($directory in ([System.IO.Directory]::EnumerateDirectories($source, '*', [System.IO.SearchOption]::AllDirectories) | Sort-Object)) { $relative = $directory.Substring($prefix.Length).Replace($separator, '/') + '/'; [void]$zip.CreateEntry($relative) }; foreach ($file in ([System.IO.Directory]::EnumerateFiles($source, '*', [System.IO.SearchOption]::AllDirectories) | Sort-Object)) { $relative = $file.Substring($prefix.Length).Replace($separator, '/'); [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file, $relative, [System.IO.Compression.CompressionLevel]::Optimal) } } finally { $zip.Dispose() }`;
+  const script = `$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.IO.Compression; Add-Type -AssemblyName System.IO.Compression.FileSystem; $source = [System.IO.Path]::GetFullPath(${psLiteral(sourceRoot)}); $separator = [System.IO.Path]::DirectorySeparatorChar.ToString(); $prefix = $source; if (-not $prefix.EndsWith($separator)) { $prefix += $separator }; $destination = ${psLiteral(destination)}; if (Test-Path -LiteralPath $destination) { throw "Portable ZIP already exists: $destination" }; $stream = [System.IO.File]::Open($destination, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None); try { $zip = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Create, $true); try { foreach ($directory in ([System.IO.Directory]::EnumerateDirectories($source, '*', [System.IO.SearchOption]::AllDirectories) | Sort-Object)) { $relative = $directory.Substring($prefix.Length).Replace($separator, '/') + '/'; [void]$zip.CreateEntry($relative) }; foreach ($file in ([System.IO.Directory]::EnumerateFiles($source, '*', [System.IO.SearchOption]::AllDirectories) | Sort-Object)) { $relative = $file.Substring($prefix.Length).Replace($separator, '/'); [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file, $relative, [System.IO.Compression.CompressionLevel]::Optimal) } } finally { $zip.Dispose() } } finally { $stream.Dispose() }`;
   await runPowerShell(script, cwd);
   await assertRegularFile(destination, 'Portable ZIP');
 }
@@ -529,17 +553,19 @@ async function verifyPortableArchive(archiveFile, payloadFileCount) {
   await runPowerShell(script, path.dirname(archiveFile));
 }
 
-const toolsInfo = await fs.lstat(path.join(project, '.tools')).catch(error => {
-  if (error.code === 'ENOENT') throw new Error('The project .tools directory is missing.');
-  throw error;
-});
-if (toolsInfo.isSymbolicLink() || !toolsInfo.isDirectory()) {
-  throw new Error('Project tools path must be a real directory.');
-}
-try { await fs.mkdir(releaseRoot); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-await assertRealDirectory(releaseRoot, 'Release output path');
+await assertRealDirectory(workspace, 'Workspace root');
+if (workspace !== project) await assertRealDirectory(projectParent, 'Source parent');
+await assertRealDirectory(project, 'Project root');
+await ensureRealDirectory(path.join(workspace, 'releases'), 'Release delivery parent');
+await ensureRealDirectory(deliveryRoot, 'Version delivery path');
+await assertDeliveryAbsent(archive);
+await assertDeliveryAbsent(archive + '.sha256');
+
+await assertRealDirectory(path.join(project, '.tools'), 'Project tools path');
+await ensureRealDirectory(path.join(project, '.tools', 'build'), 'Project build path');
+await ensureRealDirectory(releaseRoot, 'Windows build path');
 await fs.mkdir(run);
-await assertRealDirectory(run, 'Release run path');
+await assertRealDirectory(run, 'Windows build run path');
 
 let staged;
 let record;
@@ -549,7 +575,7 @@ if (preparedIndex < 0) {
 } else {
   const boundary = releaseRoot + path.sep;
   if (!payload.toLowerCase().startsWith(boundary.toLowerCase())) {
-    throw new Error('A prepared payload must be inside this project\'s .tools/releases directory.');
+    throw new Error('A prepared payload must be inside this project\'s .tools/build/windows directory.');
   }
   await assertRealDirectory(payload, 'Prepared payload');
   const realReleaseRoot = await fs.realpath(releaseRoot);
@@ -557,7 +583,7 @@ if (preparedIndex < 0) {
   const realRelative = path.relative(realReleaseRoot, realPayload);
   if (realRelative === '' || realRelative === '..' ||
       realRelative.startsWith('..' + path.sep) || path.isAbsolute(realRelative)) {
-    throw new Error('A prepared payload resolves outside this project\'s .tools/releases directory.');
+    throw new Error('A prepared payload resolves outside this project\'s .tools/build/windows directory.');
   }
   const inputs = await inspectWindowsPayloadInputs({ projectRoot: project, version });
   record = JSON.parse(await fs.readFile(path.join(payload, 'release-manifest.json'), 'utf8'));
@@ -606,7 +632,7 @@ await createPortableArchive(payload, archive, run);
 await verifyPortableArchive(archive, entries.files.length);
 const archiveInfo = await fs.stat(archive);
 const digest = await sha256(archive);
-await fs.writeFile(archive + '.sha256', `${digest}  ${archiveName}\n`, 'utf8');
+await fs.writeFile(archive + '.sha256', `${digest}  ${archiveName}\n`, { encoding: 'utf8', flag: 'wx' });
 await fs.writeFile(path.join(run, 'build-report.json'), JSON.stringify({
   schemaVersion: 1,
   product: 'Rhine Music',

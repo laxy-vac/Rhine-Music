@@ -11,7 +11,7 @@ const originalFs = process.versions.electron ? require('original-fs') : null;
 const fs = originalFs?.promises ?? nodeFs;
 const createReadStream = originalFs?.createReadStream ?? nodeCreateReadStream;
 const projectFromScript = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const releaseRootName = path.join('.tools', 'releases');
+const releaseRootName = path.join('.tools', 'build', 'windows');
 const executableName = 'Rhine Music.exe';
 const appRelative = path.join('resources', 'app');
 const builtins = new Set([
@@ -361,7 +361,7 @@ async function verifyElectronRuntime(projectRoot, runtimeAssets) {
     'Electron source-preview manifest',
   );
   if (runtimeManifest.schemaVersion !== 1 ||
-      runtimeManifest.sourceLocation !== 'release/.desktop-staging' ||
+      runtimeManifest.sourceLocation !== '.tools/desktop-staging' ||
       runtimeManifest.targetLocation !== '.tools/source-preview-electron') {
     fail('Prepared Electron runtime manifest has an unexpected source or target.');
   }
@@ -550,7 +550,7 @@ async function verifyProductionPackages(projectRoot, packageJson, lockfile, grap
 }
 
 async function verifyPythonRuntime(projectRoot, runtimeAssets) {
-  const appRoot = path.join(projectRoot, 'release', '.desktop-staging', 'resources', 'app');
+  const appRoot = path.join(projectRoot, '.tools', 'desktop-staging', 'resources', 'app');
   const pythonRoot = path.join(appRoot, 'runtime', 'python');
   const sitePackages = path.join(pythonRoot, 'Lib', 'site-packages');
   const unicornName = 'unicorn-' + runtimeAssets.unicorn?.version + '.dist-info';
@@ -1064,12 +1064,14 @@ async function ensureOutputParent(projectRoot, outputDir) {
   const toolsRoot = path.join(projectRoot, '.tools');
   await assertRealDirectory(toolsRoot, 'Project tools directory');
   assertWithin(releaseRoot, outputDir, 'outputDir', false);
-  await fs.mkdir(releaseRoot, { recursive: true });
-  await assertRealDirectory(releaseRoot, 'Windows release root');
+  for (const directory of [path.join(toolsRoot, 'build'), releaseRoot]) {
+    try { await fs.mkdir(directory); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    await assertRealDirectory(directory, 'Windows build directory');
+  }
   const relative = path.relative(releaseRoot, outputDir);
   const parts = relative.split(path.sep);
   if (parts.some((part) => !part || part === '.' || part === '..')) {
-    fail('outputDir must be a child of project .tools/releases.');
+    fail('outputDir must be a child of project .tools/build/windows.');
   }
   let current = releaseRoot;
   for (const part of parts.slice(0, -1)) {
