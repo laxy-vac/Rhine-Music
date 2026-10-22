@@ -1,6 +1,6 @@
 # 当前主题与唱片页规范
 
-Future / Rhine 与 Punk / Audio Archive 共用同一播放器、曲库状态、浏览交互和三维场景。本文记录主题表现与页面行为；公共状态、目录与渲染接口见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，歌词数据规则见 [LYRICS](LYRICS.md)，语言规则见 [UI-LANGUAGE](UI-LANGUAGE.md)。
+两种主题的正式名称为 **莱茵生命：映像（Rhine: Imagine）** 与 **仿孤星（Lone Trail Like）**，分别对应原 Future / Rhine 与 Punk / Audio Archive。两者共用同一播放器、曲库状态、浏览交互和三维场景。界面使用正式名称；内部 `rhine` / `archive`、盒体 `punk` 和既有偏好键保持兼容。本文后续的旧称仅用于识别内部实现。公共状态、目录与渲染接口见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，歌词数据规则见 [LYRICS](LYRICS.md)，语言规则见 [UI-LANGUAGE](UI-LANGUAGE.md)。
 
 ## 全局偏好
 

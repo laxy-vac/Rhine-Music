@@ -81,7 +81,7 @@ export type CaseEditorHandle = { refresh: () => void; destroy: () => void };
 const STRUCTURE_DETAILS: Record<CaseStructure, string> = {
   minimal: "ESSENTIAL",
   rhine: "RHINE LAB",
-  punk: "PUNK",
+  punk: "LONE TRAIL LIKE",
 };
 const SURFACE_LIMITS: Record<SurfaceNumericField, [number, number]> = {
   roughness: [0, 1],
@@ -265,7 +265,7 @@ function editorMarkup() {
           <label class="case-editor__range-row"><span>${label("磨砂度")}</span><output data-minimal-glass-value="roughness">0%</output><input type="range" data-minimal-glass="roughness" data-editable-range="false" min="0" max="1" step="0.01" aria-label="${label("磨砂度")}"></label>
         </section>
         <section class="case-editor__section" data-punk-material-section hidden aria-labelledby="case-material-heading">
-          <div class="case-editor__section-heading"><small>04 / PUNK FINISH</small><h3 id="case-material-heading">${label("颜色与材质")}</h3></div>
+          <div class="case-editor__section-heading"><small>04 / FINISH</small><h3 id="case-material-heading">${label("颜色与材质")}</h3></div>
           <p class="case-editor__help" data-material-part></p>
           <label class="case-editor__field-row"><span>${label("调整哪个部件")}</span><select data-finish-part aria-label="${label("调整哪个部件")}">${casePartsForStructure("punk").map(part => `<option value="${part}">${label(casePartLabels[part])}</option>`).join("")}</select></label>
           <div data-material-controls></div>
@@ -346,9 +346,9 @@ export function setupCaseEditor(
     if (layoutConfigured) return;
     layoutConfigured = true;
     root.querySelector("h2")!.textContent = trUi("唱片盒体");
-    root.querySelector("#case-preset-heading")!.textContent = trUi("Punk 内置预设");
-    presetSection.querySelector("small")!.textContent = "02 / PUNK PRESETS";
-    materialSection.querySelector("small")!.textContent = "03 / PUNK FINISH";
+    root.querySelector("#case-preset-heading")!.textContent = trUi("仿孤星内置预设");
+    presetSection.querySelector("small")!.textContent = "02 / PRESETS";
+    materialSection.querySelector("small")!.textContent = "03 / FINISH";
     root.querySelector<HTMLElement>("[data-builtin-help]")!.hidden = false;
     personalSection.before(materialSection);
     transformEditor.open = false;
@@ -488,10 +488,10 @@ export function setupCaseEditor(
         button.hidden = !allowed.includes(structure);
         button.disabled = button.hidden;
         button.querySelector("strong")!.textContent = trUi(
-          design === "archive" ? "Punk盒体" : caseStructureLabels[structure],
+          design === "archive" ? "仿孤星盒体" : caseStructureLabels[structure],
         );
         button.querySelector("small")!.textContent = design === "archive"
-          ? "01 / PUNK" : `0${CASE_STRUCTURES.indexOf(structure) + 1} / ${STRUCTURE_DETAILS[structure]}`;
+          ? "01 / LONE TRAIL LIKE" : `0${CASE_STRUCTURES.indexOf(structure) + 1} / ${STRUCTURE_DETAILS[structure]}`;
         button.setAttribute(
           "aria-pressed",
           String(structure === settings.structure),
@@ -632,8 +632,8 @@ export function setupCaseEditor(
     previewStage.dataset.caseStructure = settings.structure;
     root.querySelector<HTMLElement>("[data-structure-description]")!.textContent = trUi(
       options.getDesign() === "archive"
-        ? "Punk 主题仅使用自己的盒体，可调整外观和部件。"
-        : "简单粗糙款可调玻璃透光与磨砂度；精细款可调透光与透明度；Punk拓展可深度定制并保存预设。",
+        ? "仿孤星使用专属盒体，可调整外观和部件。"
+        : "简单粗糙款可调玻璃透光与磨砂度；精细款可调透光与透明度；仿孤星拓展可深度定制并保存预设。",
     );
     coverVisibility.checked = showAlbumCover;
     syncStructureButtons();

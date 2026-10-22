@@ -608,13 +608,13 @@ function updateInterfaceSoundControls() {
   const busy = playerState?.transport === 'loading' || playerState?.transport === 'playing' || playerState?.playing === true;
   const native = preferences.output.backend !== 'browser';
   const status = document.querySelector<HTMLElement>('#interface-sound-status');
-  if (status) status.textContent = !future ? trUi('Punk 界面音效尚待设计。') : interfaceAudioError ? `${trUi('界面音效输出失败：')}${interfaceAudioError}` : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : trUi('Future 界面音效跟随播放器输出设备；WASAPI 使用共享模式。');
+  if (status) status.textContent = !future ? trUi('当前主题不提供界面音效。') : interfaceAudioError ? `${trUi('界面音效输出失败：')}${interfaceAudioError}` : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : trUi('界面音效跟随播放器输出设备；WASAPI 使用共享模式。');
   for (const id of ['sound-setting','sound-volume']) {
     const control = document.querySelector<HTMLInputElement>(`#${id}`);
     if (control) control.disabled = !future;
   }
   const preview = document.querySelector<HTMLButtonElement>('[data-action="sound-preview"]');
-  if (preview) { preview.disabled = !future || busy || !preferences.sound; preview.title = !future ? trUi('Punk 界面音效尚待设计。') : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : !preferences.sound ? trUi('请先开启界面音效。') : '' }
+  if (preview) { preview.disabled = !future || busy || !preferences.sound; preview.title = !future ? trUi('当前主题不提供界面音效。') : busy ? trUi('音乐播放期间暂停界面音效；暂停或停止后恢复。') : !preferences.sound ? trUi('请先开启界面音效。') : '' }
   const bgmStatus = document.querySelector<HTMLElement>('#interface-bgm-status');
   if (bgmStatus) { bgmStatus.hidden = !native; bgmStatus.textContent = native ? trUi('氛围 BGM 目前仅支持浏览器兼容输出。') : '' }
 }
@@ -965,7 +965,7 @@ function showBrowseSurface(immediate = false) {
 function entryPlaybackUnavailable(): string {
   if (!ready || !scene) return trUi("终端正在准备，请稍后重播。");
   if (preferences.style.design !== "rhine" || !["array", "shelf"].includes(musicApplication.view.layout) ||
-    musicApplication.view.show !== "albums") return trUi("当前入场适用于 Future 的 ALBUMS / MATRIX 或 ARRAY 视图。");
+    musicApplication.view.show !== "albums") return trUi("入场动画适用于莱茵生命：映像的 ALBUMS / MATRIX 或 ARRAY 视图。");
   if (!albums.length) return trUi("添加专辑后可播放终端入场。");
   if (preferences.reduced) return trUi("关闭“减少动态效果”后可重播入场。");
   if (libraryRebuilding) return trUi("曲库正在更新，请稍后重播。");
@@ -3511,7 +3511,7 @@ function entrySettingsMarkup() {
     ["entryWelcome", "entry-welcome", trUi("欢迎文案")],
     ["entryIdentity", "entry-identity", trUi("欢迎 ID")],
   ] as const).map(([key, id, label]) => `<label class="entry-text-field" for="${id}"><span>${label}<output data-entry-count="${key}" aria-hidden="true">${preferences[key].length} / ${ENTRY_TEXT_MAX_LENGTH}</output></span><input type="text" id="${id}" data-entry-text="${key}" value="${esc(preferences[key])}" maxlength="${ENTRY_TEXT_MAX_LENGTH}" pattern="[A-Za-z]+( [A-Za-z]+)*" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="entry-text-help entry-text-status" ${disabled}></label>`).join("");
-  return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>FUTURE</small></h3>${!future ? trUi('<p class="entry-unavailable-note">Punk 入场动画后续适配，当前仅保留设置入口。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
+  return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>RHINE: IMAGINE</small></h3>${!future ? trUi('<p class="entry-unavailable-note">入场动画仅适用于莱茵生命：映像主题。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
 }
 
 function libraryBrowseOrderMarkup() {

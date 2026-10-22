@@ -6,7 +6,7 @@ html .music-app #music-theme-page .music-style-page button.design-family-card[da
 html .music-app #music-theme-page .music-style-page button.design-family-card[data-style-design][aria-pressed="true"] { border-color:color-mix(in srgb,var(--accent) 48%,var(--line));background:color-mix(in srgb,var(--accent) 4%,var(--surface)); }
 html .music-app #music-theme-page .music-style-page button.design-family-card[data-style-design]:focus-visible { outline:2px solid color-mix(in srgb,var(--accent) 65%,transparent);outline-offset:3px; }
 .music-app .music-style-page .theme-choice-copy { display:flex;flex-direction:column;gap:3px;padding:0 28px 0 2px; }
-.music-app .music-style-page .theme-choice-copy strong { font-size:16px;font-weight:600; }
+.music-app .music-style-page .theme-choice-copy strong { font-size:16px;font-weight:600;line-height:1.4;overflow-wrap:anywhere; }
 .music-app .music-style-page .theme-choice-copy small { color:var(--muted);font-size:11px; }
 .music-app .music-style-page .theme-choice-check { position:absolute;right:16px;bottom:23px;width:18px;height:18px;display:grid;place-items:center;border:0;border-radius:50%;font-size:12px;font-style:normal;color:var(--page-bg);background:var(--accent); }
 .music-app .music-style-page .design-family-card[aria-pressed="false"] .theme-choice-check { visibility:hidden; }

@@ -98,7 +98,7 @@ export function qualityMarkup(
       quality,
       "terminalLight",
       trUi("终端局部受光"),
-      trUi("Future 面板与悬浮控件之间的光照影响"),
+      trUi("面板与悬浮控件之间的光照影响"),
       [
         ["off", trUi("关闭")],
         ["local", trUi("局部")],

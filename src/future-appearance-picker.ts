@@ -12,13 +12,13 @@ export function futureAppearancePickerMarkup(palette: DayPalette, mode: 'day' | 
       <button type="button" class="future-light-trigger" data-theme="day" aria-pressed="${day}" aria-hidden="${day}" tabindex="${day ? -1 : 0}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
       <div class="future-day-options" role="group" aria-label="${t('LIGHT 日间配色','LIGHT daytime palette')}"${day ? '' : ' inert'}>
         <span class="future-day-indicator" aria-hidden="true"></span>
-        <button type="button" data-day-palette="soft" aria-pressed="${palette === 'soft'}" tabindex="${day && palette === 'soft' ? 0 : -1}" title="${t('保留播放器当前的暖白与橙色','Keep the player’s soft white and orange palette')}"><i class="theme-mode-dot soft" aria-hidden="true"></i>${t('暖白','SOFT')}</button>
-        <button type="button" data-day-palette="original" aria-pressed="${palette === 'original'}" tabindex="${day && palette === 'original' ? 0 : -1}" title="${t('使用 RhineLabUI 的原版日间颜色','Use RhineLabUI’s original daytime colours')}"><i class="theme-mode-dot original" aria-hidden="true"></i>${t('原版','ORIGINAL')}</button>
+        <button type="button" data-day-palette="soft" aria-pressed="${palette === 'soft'}" tabindex="${day && palette === 'soft' ? 0 : -1}" title="${t('暖白底色与橙色点缀','Soft white with orange accents')}"><i class="theme-mode-dot soft" aria-hidden="true"></i>${t('暖白','SOFT')}</button>
+        <button type="button" data-day-palette="original" aria-pressed="${palette === 'original'}" tabindex="${day && palette === 'original' ? 0 : -1}" title="${t('原版日间配色','Original daytime palette')}"><i class="theme-mode-dot original" aria-hidden="true"></i>${t('原版','ORIGINAL')}</button>
       </div>
     </div>
     <button type="button" class="future-dark-trigger" data-theme="night" aria-pressed="${!day}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
   </div>
-  <p class="future-day-palette-note"><span>LIGHT</span> · <b data-day-palette-label>${palette === 'original' ? t('参考原版','Original reference') : t('当前暖白','Soft white')}</b></p>`;
+  <p class="future-day-palette-note"><span>LIGHT</span> · <b data-day-palette-label>${palette === 'original' ? t('原版','Original') : t('暖白','Soft white')}</b></p>`;
 }
 
 export function syncFutureAppearancePicker(root: HTMLElement, palette: DayPalette, mode: 'day' | 'night') {
@@ -41,7 +41,7 @@ export function syncFutureAppearancePicker(root: HTMLElement, palette: DayPalett
     button.tabIndex = mode === 'day' && selected ? 0 : -1;
   });
   const note = picker.parentElement?.querySelector<HTMLElement>('[data-day-palette-label]');
-  if (note) note.textContent = palette === 'original' ? t('参考原版','Original reference') : t('当前暖白','Soft white');
+  if (note) note.textContent = palette === 'original' ? t('原版','Original') : t('暖白','Soft white');
   if (mode === 'day' && active === dayButton) picker.querySelector<HTMLButtonElement>(`[data-day-palette="${palette}"]`)?.focus({ preventScroll: true });
   else if (mode === 'night' && active && options.contains(active)) darkButton.focus({ preventScroll: true });
 }

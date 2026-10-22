@@ -509,7 +509,7 @@ export function musicAppearanceControlsMarkup(style: MusicStyle, mode: "day" | "
 function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean) {
   const choices = (["rhine", "archive"] as const).map(design => {
     const selected = style.design === design;
-    const label = design === "rhine" ? "Future" : "Punk";
+    const label = design === "rhine" ? t("莱茵生命：映像", "Rhine: Imagine") : t("仿孤星", "Lone Trail Like");
     const preview = selected ? style : design === "rhine" ? defaultMusicStyle : archiveMusicStyle;
     const palette = stylePalette(preview, mode);
     return `<button type="button" class="design-family-card${selected ? " is-selected" : ""}" data-style-design="${design}" aria-pressed="${selected}" aria-label="${label}">

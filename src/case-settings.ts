@@ -123,7 +123,7 @@ export function casePartsForStructure(structure: CaseStructure): CasePart[] {
 export const caseStructureLabels: Record<CaseStructure, string> = {
   minimal: "简单粗糙",
   rhine: "精细",
-  punk: "Punk拓展",
+  punk: "仿孤星拓展",
 };
 
 export const casePartLabels: Record<CasePart, string> = {
@@ -166,7 +166,7 @@ export const casePatternLabels: Record<CasePattern, string> = {
 };
 
 export const CASE_PUNK_RECONSTRUCTION_NOTE =
-  "依据多视角图重建，材质参数为估算。";
+  "可按部件调整颜色、材质和位置。";
 
 const surface = (
   finish: CaseFinish,
