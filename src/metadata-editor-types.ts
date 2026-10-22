@@ -9,7 +9,7 @@ export interface AlbumInfoSource {
   detailUrl?: string;
   mapping?: Record<string, string>;
 }
-export interface AlbumInfoSources { sources: AlbumInfoSource[]; defaultSourceId: string; }
+export interface AlbumInfoSources { sources: AlbumInfoSource[]; defaultSourceId: string; musicBrainzAvailable?: boolean; }
 export interface AlbumInfoCandidate {
   id: string;
   sourceId: string;

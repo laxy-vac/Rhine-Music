@@ -1,15 +1,18 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { AlbumIntroductionProvider } from './album-introductions.mjs'
+import { MusicBrainzAlbumSource } from './album-info-musicbrainz.mjs'
 import { renameWithRetry } from './platform.mjs'
 
 const BUILTIN_SOURCES = [
+  { id: 'musicbrainz', name: 'MusicBrainz', builtin: true, enabled: true },
   { id: 'wikipedia', name: 'Wikipedia', builtin: true, enabled: true },
-  { id: 'qq', name: 'QQ音乐', builtin: true, enabled: true },
   { id: 'netease', name: '网易云音乐', builtin: true, enabled: true },
+  { id: 'qq', name: 'QQ音乐', builtin: true, enabled: true },
 ]
-const DEFAULT_SOURCE_ID = 'wikipedia'
+const DEFAULT_SOURCE_ID = 'auto'
 const DEFAULT_MAPPING = {
   results: 'results', id: 'id', title: 'title', artist: 'artist', year: 'year',
   description: 'description', cover: 'cover', url: 'url',
@@ -101,9 +104,10 @@ function validateCustomSource(value) {
   return { id, name, builtin: false, enabled: value.enabled !== false, searchUrl, detailUrl, mapping }
 }
 
-function normalizeSettings(value) {
+function normalizeSettings(value, previousSources = BUILTIN_SOURCES) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.sources) || value.sources.length > MAX_CUSTOM_SOURCES + BUILTIN_SOURCES.length) throw fail('专辑资料来源设置格式无效。')
-  const builtins = new Map(BUILTIN_SOURCES.map((source) => [source.id, { ...source }]))
+  const previous = new Map(previousSources.map(source => [source.id, source]))
+  const builtins = new Map(BUILTIN_SOURCES.map((source) => [source.id, { ...source, enabled: previous.get(source.id)?.enabled ?? source.enabled }]))
   const custom = []
   const seen = new Set()
   for (const valueSource of value.sources) {
@@ -122,7 +126,7 @@ function normalizeSettings(value) {
   if (custom.length > MAX_CUSTOM_SOURCES) throw fail(`最多添加 ${MAX_CUSTOM_SOURCES} 个自定义专辑来源。`)
   const sources = [...BUILTIN_SOURCES.map((source) => builtins.get(source.id)), ...custom]
   const defaultSourceId = typeof value.defaultSourceId === 'string' ? value.defaultSourceId : DEFAULT_SOURCE_ID
-  if (!sources.some((source) => source.id === defaultSourceId && source.enabled)) throw fail('请选择已启用的默认专辑资料来源。')
+  if (defaultSourceId === 'auto' ? !sources.some(source => source.enabled) : !sources.some((source) => source.id === defaultSourceId && source.enabled)) throw fail('请选择已启用的默认专辑资料来源。')
   return { version: 1, defaultSourceId, sources }
 }
 
@@ -136,7 +140,9 @@ function externalUrl(value, sourceId, { cover = false } = {}) {
   try { url = new URL(value.trim().startsWith('//') ? `https:${value.trim()}` : value.trim()) } catch { return undefined }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return undefined
   const host = url.hostname.toLowerCase()
-  if (sourceId === 'wikipedia') {
+  if (sourceId === 'musicbrainz') {
+    if (cover || url.protocol !== 'https:' || host !== 'musicbrainz.org' || !/^\/(?:release-group|release)\/[a-f0-9-]+\/?$/i.test(url.pathname)) return undefined
+  } else if (sourceId === 'wikipedia') {
     if (cover ? host !== 'upload.wikimedia.org' : !['zh.wikipedia.org', 'en.wikipedia.org'].includes(host)) return undefined
   } else if (sourceId === 'qq') {
     if (cover ? !['y.gtimg.cn', 'imgcache.qq.com', 'p.qpic.cn'].includes(host) : host !== 'y.qq.com') return undefined
@@ -225,19 +231,25 @@ async function writeJsonAtomic(file, value) {
 }
 
 export class AlbumInfoSources {
-  constructor({ dataDir, fetcher = globalThis.fetch, contact, timeoutMs = DEFAULT_TIMEOUT_MS, now = Date.now } = {}) {
+  constructor({ dataDir, fetcher = globalThis.fetch, contact, musicBrainzEmail = contact, musicBrainzRequest, timeoutMs = DEFAULT_TIMEOUT_MS, now = Date.now } = {}) {
     if (typeof dataDir !== 'string' || !dataDir.trim()) throw new TypeError('dataDir is required')
     if (typeof fetcher !== 'function') throw new TypeError('fetcher must be a function')
     this.dataDir = path.resolve(dataDir)
     this.sourceFile = path.join(this.dataDir, 'album-info', 'sources.json')
     this.fetcher = fetcher
     this.contact = contact
+    this.musicBrainzEmail = musicBrainzEmail
+    this.musicBrainzRequest = musicBrainzRequest
+    this.musicBrainzChain = Promise.resolve()
+    this.lastMusicBrainzRequest = 0
+    this.musicBrainzIntervalMs = 1100
     this.timeoutMs = timeoutMs
     this.now = now
     this.sources = BUILTIN_SOURCES.map((source) => ({ ...source }))
     this.defaultSourceId = DEFAULT_SOURCE_ID
     this.cache = new Map()
     this.ready = null
+    this.musicbrainz = new MusicBrainzAlbumSource({ requestJson: (url, options) => this.requestMusicBrainz(url, options), contact: () => this.musicBrainzEmailValue() })
     this.wikipedia = new AlbumIntroductionProvider({
       contact,
       timeoutMs,
@@ -254,7 +266,10 @@ export class AlbumInfoSources {
         const info = await fs.stat(this.sourceFile)
         if (info.size > CONFIG_LIMIT_BYTES) throw fail('专辑来源配置过大，原文件已保留。')
         const value = JSON.parse(await fs.readFile(this.sourceFile, 'utf8'))
-        if (value.version !== 1) throw fail('专辑来源配置版本不受支持，原文件已保留。')
+        if (![1, 2].includes(value.version)) throw fail('专辑来源配置版本不受支持，原文件已保留。')
+        // Version 1 predates ordered automatic search. Keep explicit custom
+        // defaults; use the user's new source priority for old builtin defaults.
+        if (value.version === 1 && BUILTIN_SOURCES.some(source => source.id === value.defaultSourceId)) value.defaultSourceId = 'auto'
         const normalized = normalizeSettings(value)
         this.sources = normalized.sources
         this.defaultSourceId = normalized.defaultSourceId
@@ -268,13 +283,17 @@ export class AlbumInfoSources {
 
   async settings() {
     await this.init()
-    return { sources: structuredClone(this.sources), defaultSourceId: this.defaultSourceId }
+    const sources = this.availableSources()
+    const defaultSourceId = this.defaultSourceId === 'auto' || sources.some(source => source.id === this.defaultSourceId && source.enabled) ? this.defaultSourceId : 'auto'
+    return { sources: structuredClone(sources), defaultSourceId, musicBrainzAvailable: this.musicBrainzAvailable() }
   }
 
   async saveSettings(value) {
     await this.init()
-    const normalized = normalizeSettings(value)
-    const persisted = { version: 1, sources: normalized.sources, defaultSourceId: normalized.defaultSourceId }
+    const normalized = normalizeSettings(value, this.sources)
+    if (!normalized.sources.some(source => source.enabled && this.sourceAvailable(source))) throw fail('请至少启用一个可用的专辑资料来源。')
+    if (normalized.defaultSourceId === 'musicbrainz' && !this.musicBrainzAvailable()) throw fail('请先在资料库设置填写有效的 MusicBrainz 联系邮箱。')
+    const persisted = { version: 2, sources: normalized.sources, defaultSourceId: normalized.defaultSourceId }
     if (Buffer.byteLength(JSON.stringify(persisted), 'utf8') > CONFIG_LIMIT_BYTES) throw fail('专辑来源配置过大，设置未保存。')
     await writeJsonAtomic(this.sourceFile, persisted)
     this.sources = normalized.sources
@@ -318,7 +337,41 @@ export class AlbumInfoSources {
   }
 
   sourceFor(sourceId) {
-    return this.sources.find((source) => source.id === sourceId)
+    return this.availableSources().find((source) => source.id === sourceId)
+  }
+
+  musicBrainzEmailValue() {
+    return String(typeof this.musicBrainzEmail === 'function' ? this.musicBrainzEmail() ?? '' : this.musicBrainzEmail ?? '').trim()
+  }
+
+  musicBrainzAvailable() {
+    const email = this.musicBrainzEmailValue()
+    return email.length <= 320 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(email)
+  }
+
+  sourceAvailable(source) { return source.id !== 'musicbrainz' || this.musicBrainzAvailable() }
+  availableSources() { return this.sources.filter(source => this.sourceAvailable(source)) }
+
+  async requestMusicBrainz(url, { signal } = {}) {
+    if (!this.musicBrainzAvailable()) throw fail('请先在资料库设置填写有效的 MusicBrainz 联系邮箱。', 403)
+    if (url.protocol !== 'https:' || url.hostname !== 'musicbrainz.org' || !url.pathname.startsWith('/ws/2/')) throw fail('不支持的 MusicBrainz API 地址。')
+    const headers = { Accept: 'application/json', 'User-Agent': `RhineMusic/0.3.1 (${this.musicBrainzEmailValue()})` }
+    const parseResponse = async response => {
+      const bytes = await readLimited(response, MAX_JSON_BYTES, signal)
+      try { return JSON.parse(bytes.toString('utf8')) }
+      catch { throw fail('MusicBrainz 返回的不是有效 JSON。', 502) }
+    }
+    if (this.musicBrainzRequest) return this.musicBrainzRequest(url, { signal, headers, parseResponse })
+    const job = this.musicBrainzChain.catch(() => {}).then(async () => {
+      abortIfNeeded(signal)
+      const wait = Math.max(0, this.lastMusicBrainzRequest + this.musicBrainzIntervalMs - Date.now())
+      if (wait) await delay(wait, undefined, { signal })
+      abortIfNeeded(signal)
+      this.lastMusicBrainzRequest = Date.now()
+      return this.requestJson(url, { signal, headers })
+    })
+    this.musicBrainzChain = job
+    return job
   }
 
   pruneCache() {
@@ -367,7 +420,7 @@ export class AlbumInfoSources {
       const source = this.sourceFor(sourceId)
       if (!source) throw fail('专辑资料来源不存在。', 404)
       selected = source.enabled ? [source] : []
-    } else selected = this.sources.filter((source) => source.enabled)
+    } else selected = this.availableSources().filter((source) => source.enabled)
     if (sourceId && !selected.length) {
       const source = this.sourceFor(sourceId)
       return { candidates: [], sources: [{ sourceId: source.id, name: source.name, status: 'error', count: 0, message: '此来源已停用。' }] }
@@ -395,6 +448,7 @@ export class AlbumInfoSources {
 
   async searchSource(source, wanted, signal) {
     abortIfNeeded(signal)
+    if (source.id === 'musicbrainz') return this.musicbrainz.search(wanted, signal)
     if (source.id === 'wikipedia') {
       const candidates = await this.wikipedia.discoverCandidates(wanted, { signal })
       return candidates.map((candidate) => ({ ...candidate, cache: {} }))
@@ -488,6 +542,7 @@ export class AlbumInfoSources {
   }
 
   async resolveCandidate(entry, source, signal) {
+    if (source.id === 'musicbrainz') return this.musicbrainz.resolve(entry, signal)
     if (source.id === 'wikipedia' || !entry.detailsUrl) return structuredClone(entry.candidate)
     const data = await this.requestJson(entry.detailsUrl, {
       signal,

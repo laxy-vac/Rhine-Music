@@ -36,6 +36,12 @@ function fixtureFetcher() {
   const fetcher = async (input) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
     calls.push(url.href)
+    if (url.hostname === 'musicbrainz.org') {
+      const id = '3bd76d40-7f0e-36b7-9348-91a33afee20e'
+      if (url.pathname === '/ws/2/release-group/') return jsonResponse({ 'release-groups': [{ id, title: 'Same Fixture Album', 'artist-credit': [{ name: 'Fixture Artist' }], 'first-release-date': '2021' }] })
+      if (url.pathname === `/ws/2/release-group/${id}`) return jsonResponse({ id, title: 'Same Fixture Album', 'primary-type': 'Album', 'first-release-date': '2021', 'artist-credit': [{ name: 'Fixture Artist' }] })
+      if (url.pathname === '/ws/2/annotation/') return jsonResponse({ annotations: [] })
+    }
     if (url.hostname === 'music.163.com' && url.pathname === '/api/search/get/web') {
       return jsonResponse({ code: 200, result: { albums: sameTitleAlbums } })
     }
@@ -141,7 +147,7 @@ test('local HTTP editor routes expose three sources, keep same-title search read
   const sourcesResponse = await fetch(`${fixture.baseURL}/api/album-info/sources`)
   assert.equal(sourcesResponse.status, 200)
   const settings = await sourcesResponse.json()
-  assert.deepEqual(settings.sources.map(source => source.id), ['wikipedia', 'qq', 'netease'])
+  assert.deepEqual(settings.sources.map(source => source.id), ['wikipedia', 'netease', 'qq'])
 
   const qqSearch = await postJson(fixture.baseURL, '/api/album-info/search', {
     albumId: fixture.album.id, title: 'Same Fixture Album', artist: 'Fixture Artist', sourceId: 'qq',
@@ -192,6 +198,40 @@ test('local HTTP editor routes expose three sources, keep same-title search read
   } finally {
     await closeHttpServer(fixture.bundle.server)
   }
+})
+
+test('HTTP source choices update immediately when the saved contact email is added or removed', async (t) => {
+  const fixture = await createApiFixture(t)
+  try {
+    const choices = async () => (await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()).sources.map(source => source.id)
+    assert.deepEqual(await choices(), ['wikipedia', 'netease', 'qq'])
+    const configured = await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: 'tester@example.invalid' })
+    assert.equal(configured.status, 200)
+    assert.deepEqual(await choices(), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+    const removed = await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: '' })
+    assert.equal(removed.status, 200)
+    assert.deepEqual(await choices(), ['wikipedia', 'netease', 'qq'])
+    assert.equal(fixture.fetcher.calls.length, 0, 'changing visibility never submits a metadata search')
+  } finally { await closeHttpServer(fixture.bundle.server) }
+})
+
+test('HTTP MusicBrainz candidates resolve through the existing shared request queue', async (t) => {
+  const fixture = await createApiFixture(t)
+  try {
+    await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: 'tester@example.invalid' })
+    const found = await postJson(fixture.baseURL, '/api/album-info/search', { albumId: fixture.album.id, title: 'Same Fixture Album', artist: 'Fixture Artist', sourceId: 'musicbrainz' })
+    assert.equal(found.status, 200)
+    const result = await found.json()
+    assert.equal(result.candidates.length, 1)
+    const resolved = await postJson(fixture.baseURL, '/api/album-info/candidate', { candidateId: result.candidates[0].id })
+    assert.equal(resolved.status, 200)
+    const candidate = await resolved.json()
+    assert.equal(candidate.sourceName, 'MusicBrainz')
+    assert.match(candidate.description, /^发行资料：/)
+    assert.match(candidate.url, /^https:\/\/musicbrainz\.org\/release-group\//)
+    assert.equal(fixture.fetcher.calls.filter(url => url.startsWith('https://musicbrainz.org/')).length, 3)
+    assert.equal(fixture.scanCalls, 0)
+  } finally { await closeHttpServer(fixture.bundle.server) }
 })
 
 test('HTTP track save updates real tags and multi-artist cache, preserves stable IDs and isolates album/song artwork', async (t) => {
@@ -312,7 +352,7 @@ test('HTTP rejects oversized and cross-origin requests and does not evaluate cus
   assert.equal(invalidMapping.status, 400)
   assert.equal(Object.prototype.polluted, undefined)
   const unchanged = await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()
-  assert.deepEqual(unchanged.sources.map(source => source.id), ['wikipedia', 'qq', 'netease'])
+  assert.deepEqual(unchanged.sources.map(source => source.id), ['wikipedia', 'netease', 'qq'])
   } finally {
     await closeHttpServer(fixture.bundle.server)
   }

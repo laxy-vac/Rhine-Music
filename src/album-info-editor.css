@@ -376,7 +376,7 @@
 .metadata-editor-track-tabs .metadata-editor-tab { flex: 0 0 auto; }
 .metadata-editor-track-panel { padding-top: 13px; }
 .metadata-editor-field-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; align-items: start; }
-.metadata-editor-field { min-width: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); padding-bottom: 9px; }
+.metadata-editor-field { display: flex; min-width: 0; flex-direction: column; align-items: stretch; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); padding-bottom: 9px; }
 .metadata-editor-field-heading { min-height: 20px; justify-content: flex-start; gap: 7px; margin-bottom: 5px; }
 .metadata-editor-field-label { color: var(--muted); font-size: 10px; }
 .metadata-editor-tag-name { color: var(--muted); font: 9px var(--design-mono, monospace); overflow-wrap: anywhere; }
@@ -389,6 +389,11 @@
 .metadata-editor-primary-artist { align-self: center; flex: 0 0 auto; min-width: 68px; color: var(--accent); font-size: 9px; }
 .metadata-editor-artist-field .metadata-editor-add-value,
 .metadata-editor-field > .metadata-editor-add-value { margin-top: 6px; }
+.metadata-editor-field > .metadata-editor-add-value { align-self: flex-start; width: max-content; max-width: 100%; }
+.metadata-editor-existing-values { margin-top: 6px; }
+.metadata-editor-existing-values summary { color: var(--muted); font-size: 10px; cursor: pointer; }
+.metadata-editor-existing-value-count { margin-left: 6px; color: var(--accent); font: 9px var(--design-mono, monospace); }
+.metadata-editor-single-field .metadata-editor-value-row .metadata-editor-input { min-width: 0; }
 .metadata-editor-more-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metadata-editor-extra-field { grid-column: auto; }
 .metadata-editor-extra-field .metadata-editor-field-heading { justify-content: space-between; }

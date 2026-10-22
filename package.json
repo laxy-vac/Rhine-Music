@@ -31,7 +31,7 @@
     "package:preview": "node scripts/package-preview.mjs",
     "export:source": "node scripts/export-preview-source.mjs",
     "package:windows": "node scripts/package-preview.mjs",
-    "check:metadata": "node --test --test-concurrency=1 scripts/check-album-info-sources.mjs scripts/check-audio-tag-editor.mjs scripts/check-metadata-file-replace.mjs scripts/check-metadata-editor.mjs scripts/check-metadata-editor-api.mjs && node scripts/check-foobar-tracks.mjs"
+    "check:metadata": "node --test --test-concurrency=1 scripts/check-album-info-sources.mjs scripts/check-album-info-musicbrainz.mjs scripts/check-audio-tag-editor.mjs scripts/check-metadata-file-replace.mjs scripts/check-metadata-editor.mjs scripts/check-metadata-editor-api.mjs && node scripts/check-foobar-tracks.mjs"
   },
   "dependencies": {
     "@kitlangton/rolling-number": "0.4.1",

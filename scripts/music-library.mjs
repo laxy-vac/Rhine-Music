@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { readAudioMetadata as parseFile, AUDIO_METADATA_VERSION } from './read-audio-metadata.mjs'
 import { normalizeReplayGainTags } from './replaygain-tags.mjs'
 import { AlbumIntroductionProvider } from './album-introductions.mjs'
@@ -236,6 +237,7 @@ export class MusicLibraryStore {
     this.introductionsStatus = { running: false, completed: 0, total: 0, updated: 0, notFound: 0, failed: 0 }
     this.introductionProvider = introductionProvider ?? new AlbumIntroductionProvider({ fetcher, contact: () => this.musicBrainzContact })
     this.lastMusicBrainzRequest = 0
+    this.musicBrainzRequestChain = Promise.resolve()
     this.saveChain = Promise.resolve()
   }
 
@@ -549,17 +551,23 @@ export class MusicLibraryStore {
     return this.onlineJson(url)
   }
 
-  async onlineJson(url) {
-    if (!this.musicBrainzContact) throw new Error('请先配置自己的联系邮箱或项目网址，以满足 MusicBrainz User-Agent 要求')
-    const wait = Math.max(0, this.lastMusicBrainzRequest + 1100 - Date.now())
-    if (wait) await new Promise((resolve) => setTimeout(resolve, wait))
-    this.lastMusicBrainzRequest = Date.now()
-    const response = await this.fetcher(url, {
-      headers: { 'User-Agent': `RhineLocalMusic/0.1 (${this.musicBrainzContact})`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(15000), redirect: 'error',
+  async onlineJson(url, { signal, headers = {}, parseResponse } = {}) {
+    const job = this.musicBrainzRequestChain.catch(() => {}).then(async () => {
+      if (!this.musicBrainzContact) throw new Error('请先配置自己的联系邮箱或项目网址，以满足 MusicBrainz User-Agent 要求')
+      signal?.throwIfAborted()
+      const wait = Math.max(0, this.lastMusicBrainzRequest + 1100 - Date.now())
+      if (wait) await delay(wait, undefined, { signal })
+      signal?.throwIfAborted()
+      this.lastMusicBrainzRequest = Date.now()
+      const response = await this.fetcher(url, {
+        headers: { 'User-Agent': `RhineLocalMusic/0.1 (${this.musicBrainzContact})`, Accept: 'application/json', ...headers },
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error',
+      })
+      if (!response.ok) throw new Error(`${url.hostname} HTTP ${response.status}，保留本地资料，可稍后重试`)
+      return parseResponse ? parseResponse(response) : response.json()
     })
-    if (!response.ok) throw new Error(`${url.hostname} HTTP ${response.status}，保留本地资料，可稍后重试`)
-    return response.json()
+    this.musicBrainzRequestChain = job
+    return job
   }
 
   async albumIntroduction(group) {

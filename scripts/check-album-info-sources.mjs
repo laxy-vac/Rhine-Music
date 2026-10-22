@@ -38,9 +38,9 @@ function customSource(overrides = {}) {
 test('built-in sources start enabled and independent source settings survive a restart', async (t) => {
   const store = await sourceFixture(t, async () => json({}))
   const initial = await store.settings()
-  assert.equal(initial.defaultSourceId, 'wikipedia')
+  assert.equal(initial.defaultSourceId, 'auto')
   assert.deepEqual(initial.sources.map(({ id, enabled }) => [id, enabled]), [
-    ['wikipedia', true], ['qq', true], ['netease', true],
+    ['wikipedia', true], ['netease', true], ['qq', true],
   ])
 
   const saved = await store.saveSettings({
@@ -56,6 +56,61 @@ test('built-in sources start enabled and independent source settings survive a r
     sources: [...initial.sources, customSource({ mapping: { description: '__proto__.polluted' } })],
   }), /字段映射无效/)
   assert.equal({}.polluted, undefined)
+})
+
+test('MusicBrainz is hidden until a valid email is configured and remains first in automatic results', async (t) => {
+  let email = ''
+  const mbid = '3bd76d40-7f0e-36b7-9348-91a33afee20e'
+  const seen = []
+  const store = await sourceFixture(t, async (input, options) => {
+    const url = new URL(input)
+    seen.push({ url, options })
+    if (url.hostname === 'musicbrainz.org') {
+      if (url.pathname === '/ws/2/release-group/') return json({ 'release-groups': [{ id: mbid, title: 'Twin', 'first-release-date': '2001', 'artist-credit': [{ name: 'Singer' }] }] })
+      if (url.pathname === `/ws/2/release-group/${mbid}`) return json({ id: mbid, title: 'Twin', 'first-release-date': '2001', 'primary-type': 'Album' })
+      if (url.pathname === '/ws/2/annotation/') return json({ annotations: [] })
+    }
+    if (url.hostname === 'zh.wikipedia.org') return json({ query: { pages: [{ pageid: 1, title: 'Twin', extract: 'Wikipedia album summary.', fullurl: 'https://zh.wikipedia.org/wiki/Twin' }] } })
+    if (url.hostname === 'en.wikipedia.org') return json({ query: { pages: [] } })
+    if (url.hostname === 'music.163.com') return json({ code: 200, result: { albums: [{ id: 1, name: 'Twin', artist: { name: 'Singer' } }] } })
+    if (url.hostname === 'c.y.qq.com') return json({ code: 0, data: { album: { itemlist: [{ mid: 'abcdefghijklmn', name: 'Twin', singer: 'Singer' }] } } })
+    throw new Error(`Unexpected source ${url.href}`)
+  }, { musicBrainzEmail: () => email })
+  store.musicBrainzIntervalMs = 0
+  store.wikipedia.intervalMs = 0
+  assert.equal((await store.settings()).musicBrainzAvailable, false)
+  assert.deepEqual((await store.settings()).sources.map(source => source.id), ['wikipedia', 'netease', 'qq'])
+  await assert.rejects(store.search({ title: 'Twin', sourceId: 'musicbrainz' }), /不存在/)
+  email = 'https://example.test/project'
+  assert.equal((await store.settings()).musicBrainzAvailable, false, 'a project URL does not replace the requested email gate')
+  email = 'tester@example.invalid'
+  assert.deepEqual((await store.settings()).sources.map(source => source.id), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+  const result = await store.search({ title: 'Twin', artist: 'Singer' })
+  assert.deepEqual(result.sources.map(source => source.sourceId), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+  assert.deepEqual(result.candidates.map(candidate => candidate.sourceId), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+  const mb = result.candidates[0]
+  const resolved = await store.resolve(mb.id)
+  assert.match(resolved.description, /^发行资料：/)
+  assert.match(resolved.url, /musicbrainz\.org\/release-group\//)
+  assert.ok(seen.filter(request => request.url.hostname === 'musicbrainz.org').every(request => request.options.headers['User-Agent'].includes(email)))
+  email = ''
+  assert.equal((await store.settings()).musicBrainzAvailable, false)
+  await assert.rejects(store.resolve(mb.id), /过期或不存在/, 'removing the email invalidates access to cached MB candidates')
+})
+
+test('older builtin defaults migrate to automatic priority without losing disabled or custom sources', async (t) => {
+  const store = await sourceFixture(t, async () => json({}))
+  await fs.mkdir(path.dirname(store.sourceFile), { recursive: true })
+  await fs.writeFile(store.sourceFile, JSON.stringify({ version: 1, defaultSourceId: 'qq', sources: [
+    { id: 'wikipedia', enabled: true }, { id: 'qq', enabled: true }, { id: 'netease', enabled: false }, customSource(),
+  ] }))
+  const initial = await store.settings()
+  assert.equal(initial.defaultSourceId, 'auto')
+  assert.equal(initial.sources.find(source => source.id === 'netease').enabled, false)
+  assert.ok(initial.sources.some(source => source.id === 'custom-fixture'))
+  const saved = await store.saveSettings(initial)
+  assert.equal(JSON.parse(await fs.readFile(store.sourceFile)).version, 2)
+  assert.deepEqual(await new AlbumInfoSources({ dataDir: store.dataDir, fetcher: async () => json({}) }).settings(), saved)
 })
 
 test('Wikipedia exposes multiple article candidates and uses article extracts rather than search snippets', async (t) => {
@@ -178,8 +233,8 @@ test('enabled sources run concurrently and one failing source does not hide othe
   })
   const result = await store.search({ title: 'Fixture', artist: 'Artist' })
   assert.equal(result.candidates.length, 0)
-  assert.deepEqual(result.sources.map(({ sourceId, status }) => [sourceId, status]), [['qq', 'empty'], ['netease', 'error']])
-  assert.match(result.sources[1].message, /fixture offline/)
+  assert.deepEqual(result.sources.map(({ sourceId, status }) => [sourceId, status]), [['netease', 'error'], ['qq', 'empty']])
+  assert.match(result.sources[0].message, /fixture offline/)
   assert.equal(maximumActive, 2)
 })
 

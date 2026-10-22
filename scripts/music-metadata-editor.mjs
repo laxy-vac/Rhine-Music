@@ -21,7 +21,11 @@ export class MusicMetadataEditor {
   constructor({ store, dataDir = store.dataDir, sources, tagReader = readAudioTagDocument, tagWriter = writeAudioTags }) {
     this.store = store;
     this.dataDir = dataDir;
-    this.sources = sources ?? new AlbumInfoSources({ dataDir, fetcher: store.fetcher, contact: () => store.musicBrainzContact });
+    this.sources = sources ?? new AlbumInfoSources({
+      dataDir, fetcher: store.fetcher, contact: () => store.musicBrainzContact,
+      musicBrainzEmail: () => store.config?.musicBrainzContact,
+      musicBrainzRequest: typeof store.onlineJson === 'function' ? (url, options) => store.onlineJson(url, options) : undefined,
+    });
     this.tagReader = tagReader;
     this.tagWriter = tagWriter;
     this.saveChain = Promise.resolve();

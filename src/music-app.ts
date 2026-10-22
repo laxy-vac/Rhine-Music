@@ -4340,6 +4340,7 @@ document.addEventListener("click", (e) => {
               $<HTMLInputElement>("#metadata-contact").value.trim(),
             onlineEnabled: $<HTMLInputElement>("#online-enabled").checked,
           });
+          albumInfoEditor.refreshSources();
           notify(trUi("资料库设置已保存。可以开始补充专辑资料。"));
         } catch (error) {
           notify((error as Error).message);

@@ -27,7 +27,7 @@
 | 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合和实体内板保留，顶部无显示白条 |
 | 入场 | Future ALBUMS 的 MATRIX/ARRAY 共用终端前导，各有场景段，可跳过/重播；欢迎文案/ID 受字母、空格及长度限制；Punk 入场暂缓 |
 | 音频 | 本地/FTP/在线来源、统一播放栏、PCM/DSD/DoP、EQ、Sony 音效和官方 LSP 原生窗口 |
-| 元数据 | 专辑介绍与封面在本地曲库单独保存；歌曲标签使用 TagLib 写回，支持多歌手增删排序；单曲封面支持嵌入、继承或按曲关联 sidecar；资料来源默认 Wikipedia，可配置 QQ、网易和自定义 JSON 字段映射 |
+| 元数据 | 专辑介绍与封面在本地曲库单独保存；歌曲标签使用 TagLib 写回，按字段区分单值/多值、多歌手增删排序；单曲封面支持嵌入、继承或按曲关联 sidecar；来源自动按 MusicBrainz → Wikipedia → 网易 → QQ 排序，MusicBrainz 仅在保存联系邮箱后显示，支持自定义 JSON 字段映射 |
 | 歌词与信号 | Local/Cloud 双 bank、独立偏移、导入保护、跟随播放及真实频谱；Future 界面音效跟随播放器输出，音乐播放时静音，Punk 禁用 |
 
 主题与几何契约见 [THEME-PAGE](THEME-PAGE.md)，状态/目录边界见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，数据及音频规则见各专项文档。
