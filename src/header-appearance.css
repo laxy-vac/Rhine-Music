@@ -1,0 +1,44 @@
+.music-app .header-appearance {
+  --theme-mode-button-min-height: 28px;
+  --theme-mode-button-padding: 3px 5px;
+  --theme-mode-button-font-size: 10px;
+  --theme-mode-button-gap: 4px;
+  --theme-mode-buttons-gap: 4px;
+  --theme-mode-dot-size: 6px;
+  --future-mode-min-height: 36px;
+  --future-mode-padding: 2px;
+  --future-mode-gap: 3px;
+  --future-mode-indicator-inset: 2px;
+  --future-mode-indicator-width: calc((100% - 7px) / 2);
+  --future-mode-translation-gap: 3px;
+  --future-mode-inner-min-height: 30px;
+  --future-mode-inner-padding: 2px;
+  --future-mode-button-gap: 4px;
+  --future-mode-button-font-size: 10px;
+  --future-day-button-min-height: 24px;
+  --future-day-button-padding: 1px 2px;
+  --future-day-button-gap: 2px;
+  --future-day-button-font-size: 9px;
+  --future-day-dot-size: 5px;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: max-content;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.music-app .header-appearance .theme-mode-buttons:not(.future-appearance-switch) {
+  flex: 0 0 136px;
+  width: 136px;
+}
+
+.music-app .header-appearance .future-appearance-switch {
+  box-sizing: border-box;
+  flex: 0 0 210px;
+  width: 210px;
+}
+
+.music-app .header-appearance .future-day-palette-note {
+  display: none;
+}

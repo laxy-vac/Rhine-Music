@@ -6,6 +6,7 @@ import { readAudioMetadata as parseFile, AUDIO_METADATA_VERSION } from './read-a
 import { normalizeReplayGainTags } from './replaygain-tags.mjs'
 import { AlbumIntroductionProvider } from './album-introductions.mjs'
 import { readTrackArtworkOverride } from './track-artwork-overrides.mjs'
+import { splitMusicMetadataValues } from '../src/music-metadata-values.mjs'
 import { cleanRootInput, isFullyQualified, isIgnoredDirectory, isIgnoredFile, isInside, renameWithRetry, samePath } from './platform.mjs'
 
 const AUDIO_EXTENSIONS = new Set(['.flac', '.wav', '.m4a', '.mp4', '.alac', '.dsf', '.dff', '.mp3', '.aac', '.aiff', '.aif', '.ogg', '.opus'])
@@ -151,7 +152,7 @@ function groupAlbumTracks(root, batches, previous) {
   const previousByKey = new Map(previous.filter((album) => album._groupKey).map((album) => [album._groupKey, album]))
   for (const { entry, tracks } of batches) for (const track of tracks) {
     const album = text(track._common.album)
-    const artist = text(track._common.albumartist) || (track._common.compilation ? 'Various Artists' : track.artist)
+    const artist = text(track._common.albumartist) || (track._common.compilation ? 'Various Artists' : track.artists?.[0] || track.artist)
     const releaseId = MBID.test(track._common.releaseId) ? track._common.releaseId.toLowerCase() : ''
     const unknownArtistFolder = artist === '未知艺术家' && !releaseId ? entry.folder : null
     const key = album
@@ -200,7 +201,7 @@ function albumFromTracks(root, entry, sourceTracks, previous) {
   const artist = entry.albumartist || (entry.singleFile ? first?.artist : first?._common.albumartist || first?.artist) || '未知艺术家'
   const unchangedIdentity = previous && title === previous.title && artist === previous.artist && first?._common.year === previous.year && tracks.length === previous.tracks.length && (!releaseId || releaseId === previous.online?.releaseId)
   return {
-    id, title, artist, artists: first?._common.albumArtists?.length ? first._common.albumArtists : first?.artists, year: first?._common.year,
+    id, title, artist, artists: first?._common.albumArtists?.length ? first._common.albumArtists : first?._common.compilation && artist === 'Various Artists' ? ['Various Artists'] : first?.artists, year: first?._common.year,
     ...(previous?._userInfo ? { _userInfo: structuredClone(previous._userInfo) } : {}),
     ...(previous?._defaultCover ? { _defaultCover: previous._defaultCover } : {}),
     discCount: Math.max(1, ...tracks.map((track) => track._common.discTotal ?? track.discNumber ?? 1)),
@@ -432,7 +433,10 @@ export class MusicLibraryStore {
       // a user's per-song embedded cover when its tag cache is rebuilt.
       const skipCovers = folderHasCover && coverOverride?.mode !== 'embedded'
       if (old?._fingerprint === fingerprint && old._metadataVersion === METADATA_VERSION && typeof old._common?.compilation === 'boolean' && (skipCovers || old._embeddedCover !== undefined)) {
-        tracks.push({ ...old, _coverOverride: coverOverride,
+        tracks.push({ ...old, artists: splitMusicMetadataValues('ARTIST', old.artists?.length ? old.artists : [old.artist]),
+          _common: { ...old._common,
+            albumArtists: splitMusicMetadataValues('ALBUMARTIST', old._common.albumArtists?.length ? old._common.albumArtists : [old._common.albumartist]),
+            genres: splitMusicMetadataValues('GENRE', old._common.genres) }, _coverOverride: coverOverride,
           _artwork: entry.singleFile ? old._embeddedCover ?? fileCover : fileCover ?? old._embeddedCover })
         continue
       }
@@ -441,7 +445,8 @@ export class MusicLibraryStore {
       try { metadata = await this.parseFile(file, { duration: true, skipCovers }) }
       catch (error) { metadataError = error.message; metadata = { common: {}, format: {} } }
       const common = metadata.common ?? {}
-      const artists = nativeArtists(metadata), albumArtists = nativeArtists(metadata, true)
+      const rawArtists = nativeArtists(metadata), rawAlbumArtists = nativeArtists(metadata, true)
+      const artists = splitMusicMetadataValues('ARTIST', rawArtists), albumArtists = splitMusicMetadataValues('ALBUMARTIST', rawAlbumArtists)
       let embedded = skipCovers ? undefined : null
       if (!skipCovers) {
         const picture = common.picture?.find((image) => /front/i.test(image.type ?? '')) ?? common.picture?.[0]
@@ -464,7 +469,7 @@ export class MusicLibraryStore {
       const trackNumber = numberOrUndefined(common.track?.no) ?? (discPrefix ? numberOrUndefined(Number(discPrefix[2])) : undefined)
       tracks.push({
         id: trackId, albumId: id, title: text(common.title) || path.parse(file).name,
-        artist: artists.join(' / ') || text(common.artist) || text(common.albumartist) || '未知艺术家',
+        artist: rawArtists.join(' / ') || text(common.artist) || text(common.albumartist) || '未知艺术家',
         artists,
         trackNumber, discNumber,
         duration: Number.isFinite(metadata.format?.duration) ? metadata.format.duration : 0,
@@ -477,8 +482,8 @@ export class MusicLibraryStore {
         relativePath: path.relative(root, file),
         _path: file, _fingerprint: fingerprint, _metadataVersion: METADATA_VERSION,
         _common: {
-          album: text(common.album), albumartist: albumArtists.join(' / ') || text(common.albumartist), albumArtists, compilation: !!common.compilation, year: numberOrUndefined(common.year),
-          genres: unique((common.genre ?? []).map(text)), producers: unique((common.producer ?? []).map(text)),
+          album: text(common.album), albumartist: rawAlbumArtists.join(' / ') || text(common.albumartist), albumArtists, compilation: !!common.compilation, year: numberOrUndefined(common.year),
+          genres: splitMusicMetadataValues('GENRE', common.genre), producers: unique((common.producer ?? []).map(text)),
           releaseId: firstString(common.musicbrainz_albumid), releaseGroupId: firstString(common.musicbrainz_releasegroupid),
           discTotal: numberOrUndefined(common.disk?.of), discNumberSource: common.disk?.no ? 'tag' : discPrefix ? 'filename' : undefined,
           comments: (common.comment ?? []).map((comment) => typeof comment === 'string' ? comment : text(comment.text)).filter(Boolean),

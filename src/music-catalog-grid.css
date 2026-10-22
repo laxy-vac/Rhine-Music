@@ -2,6 +2,9 @@
 .music-app:not([data-page="music"]) .music-catalog-grid-host,
 .music-app[data-mode="detail"] .music-catalog-grid-host,
 .music-catalog-grid-host[hidden] { display: none !important; }
+.music-app[data-library-empty="true"] :is(.music-catalog-grid-host, .foobar-catalog-tools) { display: none !important; }
+.music-app .music-empty { z-index: 13; }
+.music-app .music-topnav > [data-action="demo-exit"][hidden] { display: none !important; }
 .music-app[data-music-layout="grid"][data-mode="archive"] #three-scene { visibility: hidden; }
 .music-app[data-music-layout="grid"][data-mode="archive"] .music-navigation { visibility: hidden; }
 .music-app[data-design="rhine"] .music-catalog-grid-host {

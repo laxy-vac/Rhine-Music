@@ -54,10 +54,10 @@ export function setupMusicCatalogGrid(root: HTMLElement, host: HTMLElement) {
     setDesign,
     rememberPosition,
     restorePosition,
-    update(layout: MusicLayout, index: number, open: boolean) {
+    update(layout: MusicLayout, index: number, open: boolean, emptyLibrary = false) {
       const wasHidden = !visible();
       rememberPosition();
-      host.hidden = open || (layout !== "grid" && getMusicCatalogRecords().length > 0);
+      host.hidden = open || emptyLibrary || (layout !== "grid" && getMusicCatalogRecords().length > 0);
       if (host.hidden) return;
       if (wasHidden) restorePosition();
       const entry = getMusicFocusedEntry(index);

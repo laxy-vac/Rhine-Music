@@ -571,7 +571,7 @@ export function defaultCaseSettings(design: "rhine" | "archive" = "rhine"): Case
     appearances: {
       minimal: casePreset("original", "minimal"),
       rhine: casePreset("original", "rhine"),
-      punk: casePreset("glass", "punk"),
+      punk: casePreset("white", "punk"),
     },
   };
 }

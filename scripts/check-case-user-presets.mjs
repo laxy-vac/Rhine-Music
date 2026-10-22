@@ -8,7 +8,7 @@ import { normalizeWindowAspect } from "../src/window-aspect-model.mjs";
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureEntry = `
 import { caseAppearancePresets, casePreset } from "./src/case-settings.ts";
-export { caseAppearancePresets, casePreset, normalizeCaseSettings } from "./src/case-settings.ts";
+export { caseAppearancePresets, casePreset, defaultCaseSettings, normalizeCaseSettings, normalizeCaseProfiles } from "./src/case-settings.ts";
 export { CASE_USER_PRESET_LIMIT, caseUserPresetAppearance, caseUserPresetMatches, normalizeCaseUserPresets } from "./src/case-user-presets.ts";
 `;
 const built = await build({
@@ -26,6 +26,8 @@ const {
   CASE_USER_PRESET_LIMIT,
   caseAppearancePresets,
   casePreset,
+  defaultCaseSettings,
+  normalizeCaseProfiles,
   caseUserPresetAppearance,
   caseUserPresetMatches,
   normalizeCaseUserPresets,
@@ -41,6 +43,71 @@ assert.equal(rhineReloaded.appearances.rhine.surfaces.cover.opacityOverride, .4)
 assert.equal(rhineReloaded.appearances.rhine.surfaces.cover.preserveSource, true, "Optical sliders must keep the original Rhine material enabled after preferences reload.");
 const archiveDefault = api.normalizeCaseSettings(undefined, "archive");
 assert.equal(archiveDefault.enabled, true, "New Archive profiles must start in editable Punk mode.");
+for (const design of ["rhine", "archive"]) {
+  const defaults = defaultCaseSettings(design);
+  assert.equal(defaults.appearances.punk.preset, "white",
+    `${design} profiles must use the Frost White Ceramic Punk default.`);
+  assert.equal(defaults.appearances.punk.surfaces.frame.color, caseAppearancePresets.white.surfaces.frame.color,
+    `${design} Punk defaults must use the white preset materials.`);
+}
+
+const savedGlass = defaultCaseSettings("rhine");
+savedGlass.structure = "rhine";
+savedGlass.appearances.punk = casePreset("glass", "punk");
+savedGlass.appearances.punk.surfaces.frame.color = "#2368A4";
+const reloadedGlass = api.normalizeCaseSettings(JSON.parse(JSON.stringify(savedGlass)), "rhine");
+assert.equal(reloadedGlass.appearances.punk.preset, "glass",
+  "A previously saved glass appearance must not be replaced by the new white default.");
+assert.equal(reloadedGlass.appearances.punk.surfaces.frame.color, "#2368A4",
+  "Customized materials on a saved glass appearance must survive normalization.");
+
+const rhineProfile = defaultCaseSettings("rhine");
+const punkSnapshot = casePreset("white", "punk");
+punkSnapshot.preset = "custom";
+punkSnapshot.presetRevision = 4;
+punkSnapshot.surfaces.frame.color = "#8956B8";
+punkSnapshot.surfaces.cover.roughness = 0.193;
+punkSnapshot.surfaces.cover.transmission = 0.917;
+punkSnapshot.transforms = {
+  frame: { visible: false, offset: [0.125, -0.25, 0.375], rotation: [12, -30, 45], scale: [1.2, 0.8, 1.1] },
+  optics: { visible: true, offset: [-0.5, 0.25, 0], rotation: [0, 45, 0], scale: [0.9, 1.1, 1.2] },
+};
+rhineProfile.appearances.punk = punkSnapshot;
+rhineProfile.structure = "rhine";
+rhineProfile.appearances.rhine.surfaces.cover.transmissionOverride = 0.37;
+rhineProfile.appearances.rhine.surfaces.cover.opacityOverride = 0.4;
+const expectedPunk = api.normalizeCaseSettings(JSON.parse(JSON.stringify(rhineProfile)), "rhine").appearances.punk;
+const expectedRhine = api.normalizeCaseSettings(JSON.parse(JSON.stringify(rhineProfile)), "rhine").appearances.rhine;
+
+const archiveProfile = defaultCaseSettings("archive");
+const archivePunk = casePreset("glass", "punk");
+archivePunk.surfaces.frame.color = "#347E67";
+archivePunk.transforms = {
+  clip: { visible: true, offset: [0.2, 0.1, -0.3], rotation: [5, 15, -25], scale: [1, 1.1, 0.9] },
+};
+archiveProfile.appearances.punk = archivePunk;
+const expectedArchivePunk = api.normalizeCaseSettings(JSON.parse(JSON.stringify(archiveProfile)), "archive").appearances.punk;
+
+const roundTrippedProfiles = normalizeCaseProfiles(JSON.parse(JSON.stringify({
+  rhine: rhineProfile,
+  archive: archiveProfile,
+})));
+assert.equal(roundTrippedProfiles.rhine.structure, "rhine",
+  "The Future profile must retain the selected structure across JSON persistence.");
+assert.deepEqual(roundTrippedProfiles.rhine.appearances.rhine, expectedRhine,
+  "Rhine optical overrides must survive normalization and persistence.");
+roundTrippedProfiles.rhine.structure = "punk";
+assert.deepEqual(roundTrippedProfiles.rhine.appearances.punk, expectedPunk,
+  "Switching back to Punk must restore the complete custom preset, materials, and transforms.");
+assert.deepEqual(roundTrippedProfiles.archive.appearances.punk, expectedArchivePunk,
+  "Archive must retain its independent Punk appearance through a Future structure round trip.");
+assert.notEqual(roundTrippedProfiles.rhine.appearances.punk.surfaces.frame.color,
+  roundTrippedProfiles.archive.appearances.punk.surfaces.frame.color,
+  "Future and Archive must keep separate Punk appearance profiles.");
+roundTrippedProfiles.rhine.appearances.punk.surfaces.frame.color = "#111111";
+assert.equal(roundTrippedProfiles.archive.appearances.punk.surfaces.frame.color, "#347E67",
+  "Editing the Future Punk profile must not mutate the Archive Punk profile.");
+
 const archiveLegacyAppearance = casePreset("glass", "punk");
 archiveLegacyAppearance.preset = "custom";
 archiveLegacyAppearance.presetRevision = 4;
@@ -190,11 +257,19 @@ const selectorStart = desktopMain.indexOf("const preferenceKeys=");
 const selectorEnd = desktopMain.indexOf("const selectAudioPresetStore=", selectorStart);
 assert.ok(selectorStart >= 0 && selectorEnd > selectorStart, "The desktop preference selector must be extractable.");
 const selectorSource = desktopMain.slice(selectorStart, selectorEnd);
+const entryPreferencesModel = {
+  defaultEntryWelcome: "Fixture welcome",
+  defaultEntryIdentity: "Fixture identity",
+  normalizeEntryText: (value, fallback) => typeof value === "string" ? value : fallback,
+};
+const gpuSelectionModel = { normalizeGpuPreference: value => value };
 const selectPreferences = new Function(
   "windowAspectModel",
+  "entryPreferencesModel",
+  "gpuSelectionModel",
   "Buffer",
   `${selectorSource};return selectPreferences;`,
-)({ normalizeWindowAspect }, Buffer);
+)({ normalizeWindowAspect }, entryPreferencesModel, gpuSelectionModel, Buffer);
 const desktopRoundTrip = selectPreferences({
   language: "en",
   windowAspect: "16:9",
@@ -211,4 +286,4 @@ assert.notStrictEqual(desktopRoundTrip.futurePunkPresets, desktopRoundTrip.archi
 assert.equal(Object.hasOwn(desktopRoundTrip, "unknownField"), false,
   "The preference selector must continue to discard unknown fields.");
 
-console.log("Case user preset checks passed: bounded Future/Archive JSON persistence, normalized deep copies, stable matching, and desktop allowlist.");
+console.log("Case preset checks passed: white defaults, saved Future/Archive Punk round trips, bounded user libraries, normalized deep copies, stable matching, and desktop allowlist.");

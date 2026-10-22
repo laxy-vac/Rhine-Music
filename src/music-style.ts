@@ -497,6 +497,15 @@ function schemeCardMarkup(scheme: ColourScheme, style: MusicStyle) {
   </button>`;
 }
 
+export function musicAppearanceControlsMarkup(style: MusicStyle, mode: "day" | "night") {
+  return style.design === "rhine"
+    ? futureAppearancePickerMarkup(style.dayPalette, mode)
+    : `<div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
+      <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
+      <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
+    </div>`;
+}
+
 function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean) {
   const choices = (["rhine", "archive"] as const).map(design => {
     const selected = style.design === design;
@@ -508,12 +517,7 @@ function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSyst
       <span class="theme-choice-copy"><strong>${label}</strong><small>${escapeHtml(design === "rhine" ? t("轻透材质与柔和层次", "TRANSLUCENT · SPATIAL") : t("仪表排版与档案细节", "INSTRUMENT · ARCHIVE"))}</small></span><i class="theme-choice-check" aria-hidden="true">${selected ? "✓" : ""}</i>
     </button>`;
   }).join("");
-  const themeControls = style.design === "rhine"
-    ? futureAppearancePickerMarkup(style.dayPalette, mode)
-    : `<div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
-      <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
-      <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
-    </div>`;
+  const themeControls = musicAppearanceControlsMarkup(style, mode);
   const modeControls = `<aside class="theme-mode-controls" aria-labelledby="theme-mode-title">
     <div class="theme-mode-heading"><small>APPEARANCE</small><h3 id="theme-mode-title">${escapeHtml(t("日夜模式", "Light and dark mode"))}</h3></div>
     ${themeControls}

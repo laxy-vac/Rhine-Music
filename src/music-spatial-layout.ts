@@ -1,8 +1,21 @@
 import type { ArchiveCell, ArchiveNavigation } from "./archive-loop";
+import { records } from "./data";
 import { musicArrayCell, musicArrayEntry, musicArraySelectionCell } from "./music-array-layout";
 import { getMusicEntryByKey, getMusicFocusedEntry, type MusicDisplayEntry } from "./music-catalog";
 import { getMusicCatalogShelves, getMusicEntryLocation } from "./music-catalog-shelves";
 import { MUSIC_ARRAY_VIEW, MUSIC_SHELF_VIEW } from "./music-display-layout";
+
+let cachedRecordSource: typeof records | undefined;
+let cachedDemoRecords = false;
+
+function hasDemoRecords() {
+  if (cachedRecordSource !== records) {
+    cachedRecordSource = records;
+    cachedDemoRecords = records.length > 0 && records.every(record =>
+      typeof record.album?.id === "string" && record.album.id.startsWith("demo-"));
+  }
+  return cachedDemoRecords;
+}
 
 /** Resolve finite shelf coordinates or delegate to the existing looping array. */
 export function musicSpatialEntry(cell: ArchiveCell, shelf: boolean): MusicDisplayEntry | undefined {
@@ -10,7 +23,10 @@ export function musicSpatialEntry(cell: ArchiveCell, shelf: boolean): MusicDispl
   const slot = cell.row - MUSIC_ARRAY_VIEW.firstRow;
   if (!Number.isInteger(cell.lane) || !Number.isInteger(slot) || slot < 0 || slot >= MUSIC_SHELF_VIEW.slots)
     return undefined;
-  const key = getMusicCatalogShelves()[cell.lane]?.entryKeys[slot];
+  const shelves = getMusicCatalogShelves();
+  if (!shelves.length) return undefined;
+  const lane = hasDemoRecords() ? ((cell.lane % shelves.length) + shelves.length) % shelves.length : cell.lane;
+  const key = shelves[lane]?.entryKeys[slot];
   return key === undefined ? undefined : getMusicEntryByKey(key);
 }
 

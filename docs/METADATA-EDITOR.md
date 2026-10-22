@@ -24,6 +24,8 @@ MusicBrainz 通过官方 release-group 搜索、详情与 annotation 接口提�
 
 ## 保存位置与写入范围
 
+首次扫描的分类读取会识别歌手、专辑歌手与流派中连写的多个值，包括分号、斜杠、顿号、中英文协作符和 feat./ft./featuring/with 等署名形式；保留原顺序，以第一位歌手分类。扫描与浏览分组共用同一套规则，保护 AC/DC、部分常见组合名、括号内文本、R&B 与复合流派；含糊的英文逗号、and／和等不强拆。没有专辑歌手标签时，同名专辑中不同嘉宾的歌曲按首位歌手合并；明确的专辑歌手和合辑标签优先。原始完整署名保留，歌曲文件及编辑器不受此规则改写。不会主动重扫个人曲库，后续扫描时使用新规则。
+
 专辑介绍和专辑封面是应用管理的本地资料，不写入音频文件的 `COMMENT` 或其他歌曲标签：介绍及来源说明保存在本地 `library-index.json`，上传或选中的封面放在同一用户数据目录的 `artwork/` 下。恢复默认封面会移除专辑自定义封面引用。来源设置保存在 `album-info/sources.json`。实际用户数据目录由启动器解析；源码预览布局中的基础目录为工作区根下的 `music-data-source-preview/music-data/`，不是仓库源码目录。
 
 歌曲标签写入歌曲本身的音频容器。TagLib-Wasm 在本机 Node WASI 后端工作，读写请求由独立 `metadata-tag-worker` 排队执行，避免将同步容器操作放在本地服务和音频事件循环中。保存先在歌曲旁的临时副本中写标签并读回核对，只有歌曲仍与读取时一致才替换原文件。Windows 使用系统 PowerShell 调用 `File.Replace` 保留原文件属性与权限，不忽略合并错误，也不修改系统执行策略或 ACL 规则；替换失败时保留必要备份并报告位置。行为依据 [Microsoft ReplaceFileW 文档](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew)。未改动的字段及 TagLib 未建模的原有内容会保留。

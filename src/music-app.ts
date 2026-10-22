@@ -15,12 +15,12 @@ import "./signal-page.css";
 import "./lyrics-settings.css";
 import "./music-navigation-motion.css";
 import "./music-navigation-ruler.css";
-import "./music-transport-title.css";
 import "./music-theme.css";
 import "./music-theme-switch.css";
 import "./music-style-page.css";
-import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, syncMusicStyleAppearance, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
-import { handleFutureAppearanceKey } from "./future-appearance-picker";
+import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, musicAppearanceControlsMarkup, syncMusicStyleAppearance, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
+import { handleFutureAppearanceKey, syncFutureAppearancePicker } from "./future-appearance-picker";
+import "./header-appearance.css";
 import { getMusicCatalogShelves, getMusicRecordLocation, navigateMusicEntry } from "./music-catalog-shelves";
 import { configureMusicCatalog, getMusicCatalogOptions, getMusicCatalogRecords, getMusicCatalogGroups, getMusicEntry, getMusicEntryByKey, getMusicFocusedEntry, focusMusicEntry } from "./music-catalog";
 import { musicBrowseControlsMarkup, syncMusicViewControls } from "./music-view-controls";
@@ -108,11 +108,10 @@ import type {
   GenreRules,
   MusicTrack,
 } from "./music-types";
-import { demoAlbums, demoGenres } from "./demo-library";
+import { createDemoCaseProfiles, demoAlbums, demoGenres, demoViewForDesign } from "./demo-library";
 import { escapeHtml as esc, containsCjk } from "./html";
 import { setupMusicTitleLayout } from "./music-title";
 import { setupMusicTextMotion } from "./music-text-motion";
-import { setupTransportTitle } from "./music-transport-title";
 import { setupMusicTicks } from "./music-ticks";
 import { setupMusicRuler } from "./music-ruler";
 import { MusicPresentation, type AlbumSelection } from "./music-presentation";
@@ -490,6 +489,27 @@ let library: MusicLibrary = {
 let albums: MusicAlbum[] = [],
   genres: MusicGenre[] = [],
   demo = false;
+let demoRestore: {
+  view: MusicViewSettings; query: string; gridPage: number;
+  spatialLayout: "shelf" | "array"; selectedIndex: number; selectedAlbumId?: string;
+} | undefined;
+let demoCaseProfiles = createDemoCaseProfiles(caseProfiles);
+let demoPresentationChanged = false;
+function activeCaseSettings() {
+  return (demo ? demoCaseProfiles : caseProfiles)[preferences.style.design];
+}
+function restoreDemoState() {
+  if (!demo) return;
+  demo = false;
+  demoPresentationChanged = true;
+  const restore = demoRestore;
+  demoRestore = undefined;
+  if (!restore) return;
+  musicApplication.configureView({ layout: restore.spatialLayout });
+  musicApplication.configureView(restore.view, restore.query);
+  musicApplication.setGridPage(restore.gridPage);
+  musicApplication.selectAlbum(restore.selectedIndex, restore.selectedAlbumId);
+}
 let panel: Panel = null;
 let page: "music" | "settings" | "eq" | "lyrics" | "signal" | "theme" = "music";
 let settingsCategory: SettingsCategory = "interface";
@@ -598,6 +618,7 @@ const stage = $("#stage");
 stage.className = "music-app";
 stage.dataset.mode = "archive";
 stage.dataset.page = "music";
+stage.dataset.libraryEmpty = "true";
 stage.dataset.theme = preferences.theme;
 applyStylePalette(stage, preferences.style, preferences.theme);
 stage.dataset.reducedMotion = String(preferences.reduced);
@@ -615,7 +636,8 @@ stage.innerHTML = ui`
       <button data-action="search" aria-label="搜索">${icons.search}<span>${musicInterfaceLabels.navigation.search}</span></button>
       <button data-action="online" aria-label="在线曲库" aria-pressed="false">${icons.globe}<span>${musicInterfaceLabels.navigation.online}</span></button>
       <button data-action="settings" class="icon-button" aria-label="设置" title="设置" aria-pressed="false" aria-controls="music-settings">${icons.settings}<span>${musicInterfaceLabels.navigation.settings}</span></button>
-      <div class="minimal-transport" role="group" aria-label="当前歌曲"><button type="button" data-action="locate-playing" id="transport-track" class="transport-track" aria-label="定位当前歌曲" aria-hidden="true" disabled><span id="transport-track-label"></span></button></div>
+      <button data-action="demo-exit" hidden><span>退出演示</span></button>
+      <div class="header-appearance" data-appearance-design="${preferences.style.design}">${musicAppearanceControlsMarkup(preferences.style, preferences.theme)}</div>
     </nav>
   </header>
   <div id="library-status" class="library-status"><i></i><span>正在读取本地音乐索引</span></div>
@@ -695,7 +717,7 @@ const lyricsPage = setupLyricsPage($("#lyrics-page-content"), {
     return index < 0 ? undefined : index + 1;
   },
   createCasePreview: host => setupAlbumCasePreview(host, {
-    getSettings: () => caseProfiles[preferences.style.design],
+    getSettings: activeCaseSettings,
     getQuality: () => renderQuality,
     getTheme: () => preferences.theme,
     getDesign: () => preferences.style.design,
@@ -997,8 +1019,8 @@ function replayFutureEntry() {
   if (startFutureEntry()) { futureEntry?.arm(); effects.play("ui-tick"); }
 }
 function savePrefs() {
-  preferences.view = musicApplication.view;
-  preferences.foobarArchive = legacyCatalogOptions(musicApplication.view);
+  preferences.view = demoRestore?.view ?? musicApplication.view;
+  preferences.foobarArchive = legacyCatalogOptions(preferences.view);
   designProfiles[preferences.style.design] = { style: { ...preferences.style }, mode: preferences.theme };
   for (const profile of Object.values(designProfiles)) profile.mode = preferences.theme;
   preferences.styleProfiles = designProfiles;
@@ -1035,7 +1057,17 @@ function setFutureDayPalette(value: string) {
   terminalLighting.refresh();
   savePrefs();
 }
+function syncHeaderAppearance() {
+  const header = stage.querySelector<HTMLElement>(".header-appearance");
+  if (!header) return;
+  if (header.dataset.appearanceDesign !== preferences.style.design) {
+    header.innerHTML = musicAppearanceControlsMarkup(preferences.style, preferences.theme);
+    header.dataset.appearanceDesign = preferences.style.design;
+  }
+  syncFutureAppearancePicker(header, preferences.style.dayPalette, preferences.theme);
+}
 function syncThemeButtons() {
+  syncHeaderAppearance();
   const theme = preferences.theme;
   document
     .querySelectorAll<HTMLButtonElement>("button[data-theme]")
@@ -1069,11 +1101,6 @@ function syncDesignIdentity() {
   if (shelfLabel?.nodeType === Node.TEXT_NODE) shelfLabel.textContent = `${archive ? "SHELF" : sortLabel.code} `;
   themeNames.day = "LIGHT";
   themeNames.night = "DARK";
-  stage.querySelectorAll<HTMLButtonElement>(".theme-switch button[data-theme]").forEach(button => {
-    const name = themeNames[button.dataset.theme as Theme];
-    button.querySelector("span")!.textContent = name;
-    button.setAttribute("aria-label", name);
-  });
   if (foobarShell) {
     detailTransition.dispose();browseTransition.dispose();
     albumPanel.setActive(true);
@@ -1093,7 +1120,7 @@ function setMusicStyle(next: MusicStyle) {
   applyWindowAspect(stage, preferences.windowAspect, stylePalette(preferences.style, preferences.theme).bg);
   scene?.setMusicStyle(preferences.style);
   lyricsPage.refreshCasePreview();
-  void scene?.setCaseSettings(caseProfiles[preferences.style.design]).catch(error => notify((error as Error).message));
+  void scene?.setCaseSettings(activeCaseSettings()).catch(error => notify((error as Error).message));
   savePrefs();
   updateSelection();
   if (page === "theme") renderThemePage();
@@ -1108,6 +1135,7 @@ async function switchDesign(design: MusicStyle["design"]) {
   designProfiles[preferences.style.design] = { style: { ...preferences.style }, mode: preferences.theme };
   const next = designProfiles[design];
   preferences.style = normalizeMusicStyle({ ...next.style, design });
+  if (demo) musicApplication.configureView(demoViewForDesign(design), "");
   syncInterfaceAudio();
   if (design === "archive") {
     await Promise.all([400, 500, 600, 700].map(weight => document.fonts.load(`${weight} 17px "Archive Mono"`)));
@@ -1117,7 +1145,7 @@ async function switchDesign(design: MusicStyle["design"]) {
   applyStylePalette(stage, preferences.style, preferences.theme);
   scene?.setTheme(preferences.theme, !preferences.reduced);
   scene?.setMusicStyle(preferences.style);
-  void scene?.setCaseSettings(caseProfiles[design]).catch(error => notify((error as Error).message));
+  await scene?.setCaseSettings(activeCaseSettings());
   viewer?.setTheme(preferences.theme);
   lyricsPage.refreshCasePreview();
   syncDesignIdentity();
@@ -1235,14 +1263,20 @@ async function applyLibrary() {
       groups.map((g) => [g.id, g.name]),
     ]);
   const oldVisual = visualKey(albums, genres);
-  if (library.albums.length) demo = false;
+  if (library.albums.length) restoreDemoState();
   albums = orderMusicAlbums(demo ? demoAlbums : library.albums, preferences.sortMode);
   player.updateTrackMetadata(albums.flatMap(album=>album.tracks));
   genres = demo ? demoGenres : library.genres;
   setMusicAlbums(albums, genres, preferences.sortMode);
+  if (scene && ready && demoPresentationChanged) {
+    scene.setMusicStyle(preferences.style);
+    await scene.setCaseSettings(activeCaseSettings());
+    demoPresentationChanged = false;
+  }
   scene?.refreshHiRes();
   musicApplication.reconcileAlbums(records.map(record => record.id),
     (albumId, trackId) => albums.some(album => album.id === albumId && album.tracks.some(track => track.id === trackId)));
+  foobarShell?.refreshCatalog();
   const focusedEntry = getMusicFocusedEntry(musicApplication.selectedIndex);
   if (focusedEntry) focusMusicEntry(focusedEntry.key);
   if (scene && ready && oldVisual !== visualKey(albums, genres)) {
@@ -1269,6 +1303,7 @@ async function applyLibrary() {
     presentation.reset();
   }
   stage.dataset.mode = musicApplication.mode;
+  stage.dataset.libraryEmpty = String(!albums.length);
   $("#music-empty").hidden = albums.length > 0;
   // Ordinary index refreshes must not reveal a page while its peer is exiting.
   if (!ready || !hadAlbums || !albums.length) {
@@ -1323,12 +1358,13 @@ let selectedProfileMarkup = "";
 function updateSelection(navigation?: ArchiveNavigation) {
   if (page === "settings") syncEntrySettings();
   const a = currentAlbum();
-  $<HTMLButtonElement>(".browse-play-album").disabled = !a?.tracks.length || !!a.offline;
+  $<HTMLButtonElement>(".browse-play-album").disabled = demo || !a?.tracks.length || !!a.offline;
   if (!a) {
     albumPanel.setVisible(false);
     selectionInitialized = false;
     textMotion.finish();
     titleMotion.finish();
+    syncMusicCatalogView();
     return;
   }
   const foobar = preferences.style.design === "archive";
@@ -1607,7 +1643,7 @@ function trackList(a: MusicAlbum, discs: number) {
           ? `<div class="disc-heading">DISC ${String(discNo).padStart(2, "0")}</div>`
           : "";
       disc = discNo;
-      return ui`${head}<button class="track-row" data-track="${esc(t.id)}" data-dsd="${isDsdTrack(t)}" ${a.offline ? "disabled" : ""} aria-label="播放 ${esc(t.title)}"><span class="track-number">${String(t.trackNumber || index + 1).padStart(2, "0")}</span><span class="track-name"><strong data-cjk="${containsCjk(t.title)}">${esc(t.title)}</strong><small data-cjk="${containsCjk(t.artist)}">${esc(t.artist)}</small></span><span class="track-format">${isHiResTrack(t) ? hiResBadgeMarkup("track") : ""}${isDsdTrack(t) ? dsdBadgeMarkup("track") : ""}<span class="track-format-name">${esc(t.format)}${!t.browserPlayable ? trUi('<i title="需要兼容的播放内核"> ↗</i>') : ""}</span></span><span class="track-duration">${time(t.duration)}</span></button>`;
+      return ui`${head}<button class="track-row" data-track="${esc(t.id)}" data-dsd="${isDsdTrack(t)}" ${demo || a.offline ? "disabled" : ""} aria-label="${demo ? trUi("无音频演示曲目") : trUi("播放")} ${esc(t.title)}"><span class="track-number">${String(t.trackNumber || index + 1).padStart(2, "0")}</span><span class="track-name"><strong data-cjk="${containsCjk(t.title)}">${esc(t.title)}</strong><small data-cjk="${containsCjk(t.artist)}">${esc(t.artist)}</small></span><span class="track-format">${isHiResTrack(t) ? hiResBadgeMarkup("track") : ""}${isDsdTrack(t) ? dsdBadgeMarkup("track") : ""}<span class="track-format-name">${esc(t.format)}${!demo && !t.browserPlayable ? trUi('<i title="需要兼容的播放内核"> ↗</i>') : ""}</span></span><span class="track-duration">${time(t.duration)}</span></button>`;
     })
     .join("")}</div>${producerBlock(a)}`;
 }
@@ -1718,11 +1754,6 @@ function updatePlayingRows() {
     });
 }
 let lastPlayerError = "";
-const transportTitleMotion = setupTransportTitle(
-  $<HTMLButtonElement>("#transport-track"),
-  $("#transport-track-label"),
-);
-transportTitleMotion.setReduced(preferences.reduced);
 let ftpMetadataTrack = "";
 let nativeBookmark = "";
 const playbackControls = setupMusicPlayback($("#music-playback"), {
@@ -1813,9 +1844,6 @@ player.subscribe((state) => {
     nativeBookmark=bookmark;
     try{sessionStorage.setItem('rhine-native-queue',JSON.stringify({session:state.nativeSessionId,queue:state.queue.map(track=>track.id)}))}catch{}
   }
-  const titleVisible = !!state.currentTrack &&
-    (state.transport === "playing" || state.transport === "paused" || state.transport === "loading");
-  transportTitleMotion.update(state.currentTrack?.title ?? "", titleVisible);
   editableRanges?.sync();
   $("#playback-toggle").title = state.currentTrack
     ? `${state.playing ? trUi("暂停") : trUi("播放")}：${state.currentTrack.title}`
@@ -2151,7 +2179,7 @@ function renderThemePage() {
   content.querySelector("#theme-quality-slot")?.before(editorHost);
   const userPresetKey = preferences.style.design === "rhine" ? "futurePunkPresets" : "archivePunkPresets";
   caseEditor = setupCaseEditor(editorHost, {
-    getSettings: () => caseProfiles[preferences.style.design], getQuality: () => renderQuality,
+    getSettings: activeCaseSettings, getQuality: () => renderQuality,
     getTheme: () => preferences.theme === "night" ? "night" : "day", getDesign: () => preferences.style.design,
     getCover: () => ({ url: albums[musicApplication.selectedIndex]?.coverUrl, title: albums[musicApplication.selectedIndex]?.title }),
     getAlbumInfo: () => ({ record: records[musicApplication.selectedIndex], index: records[musicApplication.selectedIndex] ? musicApplication.selectedIndex : undefined, reduced: preferences.reduced }),
@@ -2171,9 +2199,12 @@ function renderThemePage() {
       }
     },
     onChange: next => {
-      caseProfiles[preferences.style.design] = normalizeCaseSettings(next, preferences.style.design);
+      const design = preferences.style.design;
+      const settings = normalizeCaseSettings(next, design);
+      caseProfiles[design] = settings;
+      if (demo) demoCaseProfiles[design] = structuredClone(settings);
       lyricsPage.refreshCasePreview();
-      void scene?.setCaseSettings(caseProfiles[preferences.style.design]).catch(error => notify((error as Error).message));
+      void scene?.setCaseSettings(activeCaseSettings()).catch(error => notify((error as Error).message));
       settingsSelectControls?.sync();
       terminalLighting.refresh();
       savePrefs();
@@ -2197,7 +2228,7 @@ function mountDisplaySettings() {
   cleanupQualityDetection = mountQualityDetection(host.querySelector<HTMLElement>(".quality-settings")!, {
     getStyle: () => preferences.style,
     getTheme: () => preferences.theme === "night" ? "night" : "day",
-    getCaseSettings: () => caseProfiles[preferences.style.design],
+    getCaseSettings: activeCaseSettings,
     getSize: () => { const rect = stage.getBoundingClientRect(); return { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }; },
     apply: quality => { renderQuality = normalizeQuality({ ...quality, wave: renderQuality.wave }); updateQuality(); },
   });
@@ -2407,10 +2438,28 @@ function onlineNote(a: MusicAlbum) {
   const license = lines.find((line) => line.startsWith("授权："))?.slice(3);
   return ui`<h3>来自 ${esc(a.folder)}</h3><p>${esc(licenseLabel(license))}。具体授权以条目页面为准。</p>${link ? ui`<a class="text-button" href="${esc(link)}" target="_blank" rel="noopener noreferrer">条目页面 ↗</a>` : ""}`;
 }
+async function setDemoPreview(enabled: boolean) {
+  if (demo === enabled || (enabled && (shelf !== "local" || library.albums.length > 0))) return;
+  if (enabled) {
+    demoRestore = {
+      view: { ...musicApplication.view }, query: musicApplication.query,
+      gridPage: musicApplication.gridPage, spatialLayout: musicApplication.spatialLayout,
+      selectedIndex: musicApplication.selectedIndex, selectedAlbumId: musicApplication.selectedAlbumId,
+    };
+    demoCaseProfiles = createDemoCaseProfiles(caseProfiles);
+    demo = true;
+    demoPresentationChanged = true;
+    musicApplication.configureView(demoViewForDesign(preferences.style.design), "");
+    musicApplication.selectAlbum(0, undefined);
+  } else restoreDemoState();
+  await applyLibrary();
+}
 function updateShelfChrome() {
   stage.dataset.shelf = shelf;
+  stage.dataset.demo = String(demo);
+  $<HTMLButtonElement>('[data-action="demo-exit"]').hidden = !demo;
   const line = document.querySelector("#collection-line");
-  const text = shelf === "online" ? "ONLINE COLLECTION " : "LOCAL COLLECTION ";
+  const text = demo ? "DEMO COLLECTION " : shelf === "online" ? "ONLINE COLLECTION " : "LOCAL COLLECTION ";
   if (line?.firstChild?.nodeType === Node.TEXT_NODE && line.firstChild.textContent !== text)
     line.firstChild.textContent = text;
   document
@@ -2439,7 +2488,7 @@ async function switchShelf(next: Shelf, reveal?: { albumId: string; trackId?: st
         libraryStateVersion++;
         clearTimeout(pollTimer);
         shelf = next;
-        demo = false;
+        restoreDemoState();
         libraryReceived = false;
         if (next === "online") onlineSnapshot = snapshot;
         await receiveLibrary(snapshot, true);
@@ -3973,6 +4022,7 @@ async function queryIntroductions(one = false) {
   }
 }
 function playAlbum(id?: string) {
+  if (demo) return;
   flushArchiveVisual();
   const a = currentAlbum();
   if (!a?.tracks.length || a.offline) return;
@@ -3982,6 +4032,7 @@ function playAlbum(id?: string) {
 
 /** The album action starts its queue at the first track, independently of TRACKS focus. */
 function playSelectedAlbum() {
+  if (demo) return;
   const album = currentAlbum();
   if (!album?.tracks.length || album.offline) return;
   void player.play(album.tracks[0].id, album.tracks);
@@ -3992,7 +4043,7 @@ function setFoobarOrder(value: string) {
 }
 function refreshFoobarSceneForLayoutChange() {
   scene?.setMusicStyle(preferences.style);
-  void scene?.setCaseSettings(caseProfiles[preferences.style.design]).catch(error => notify((error as Error).message));
+  void scene?.setCaseSettings(activeCaseSettings()).catch(error => notify((error as Error).message));
 }
 function syncMusicCatalogView() {
   const view = musicApplication.view;
@@ -4014,7 +4065,7 @@ function syncMusicCatalogView() {
   ] as const) stage.querySelectorAll<HTMLButtonElement>(`[data-action="${action}"]`).forEach(button => { button.disabled = disabled; });
   stage.dataset.musicLayout = scene?.musicDisplayLayout.effective ?? view.layout;
   catalogGrid?.setDesign(preferences.style.design);
-  catalogGrid?.update(view.layout, musicApplication.selectedIndex, musicApplication.mode === "detail");
+  catalogGrid?.update(view.layout, musicApplication.selectedIndex, musicApplication.mode === "detail", !albums.length);
   syncMusicViewControls(stage, view, getMusicGridPage().total);
   settingsSelectControls?.sync();
 }
@@ -4056,6 +4107,7 @@ function setMusicGridPage(pageIndex: number) {
   syncMusicCatalogView();
 }
 function shuffleFoobarLibrary() {
+  if (demo) return;
   const tracks = records.flatMap(record => record.album && !record.album.offline ? record.album.tracks : []);
   for (let i = tracks.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [tracks[i], tracks[j]] = [tracks[j], tracks[i]]; }
   if (tracks.length) void player.play(tracks[0].id, tracks);
@@ -4068,7 +4120,9 @@ function randomFoobarAlbum() {
   const choices = getMusicCatalogRecords().filter(index => records[index].album?.tracks.length && !records[index].album!.offline);
   if (choices.length) {
     const index = choices[Math.floor(Math.random() * choices.length)]; select(index);
-    const album = records[index].album!; void player.play(album.tracks[0].id, album.tracks);
+    if (!demo) {
+      const album = records[index].album!; void player.play(album.tracks[0].id, album.tracks);
+    }
   }
 }
 
@@ -4107,7 +4161,7 @@ document.addEventListener("click", (e) => {
     if (!Number.isInteger(index) || !records[index]) return;
     if(target.dataset.foobarEntry)focusMusicEntry(target.dataset.foobarEntry);
     select(index);
-    if (target.dataset.action==='foobar-track'&&target.dataset.foobarTrack && records[index].album) void player.play(target.dataset.foobarTrack, records[index].album!.tracks);
+    if (!demo && target.dataset.action==='foobar-track'&&target.dataset.foobarTrack && records[index].album) void player.play(target.dataset.foobarTrack, records[index].album!.tracks);
     return;
   }
   if (target.dataset.theme) {
@@ -4181,6 +4235,7 @@ document.addEventListener("click", (e) => {
   if (action === "playback-queue") { albumQueue.toggle(target); return; }
   if (action === "audio-info") { albumQueue.close(false);audioInfoPopup.toggle(target); return; }
   if (action === "library") { openArchivePage(); return; }
+  if (action === "library-settings") { openLibrarySettings(); return; }
   if (action === "entry-replay") { replayFutureEntry(); return; }
   if (action === "entry-text-reset") {
     if (preferences.style.design !== "rhine") return;
@@ -4365,9 +4420,9 @@ document.addEventListener("click", (e) => {
       })();
       break;
     case "demo":
-      demo = true;
+    case "demo-exit":
       closeManagementPage(false);
-      closePanel(() => void applyLibrary());
+      closePanel(() => void setDemoPreview(action === "demo").catch(error => notify((error as Error).message)));
       break;
   }
 });
@@ -4523,7 +4578,6 @@ document.addEventListener("change", (e) => {
   if (el.id === "reduced-motion") {
     preferences.reduced = el.checked;
     stage.dataset.reducedMotion = String(preferences.reduced);
-    transportTitleMotion.setReduced(el.checked);
     if (el.checked) {
       albumPanel.finish();
       browseTransition.finish();
@@ -4803,7 +4857,7 @@ async function start() {
     scene.setTheme(preferences.theme);
     scene.setMusicStyle(preferences.style);
     scene.setQuality(renderQuality);
-    await scene.setCaseSettings(caseProfiles[preferences.style.design]);
+    await scene.setCaseSettings(activeCaseSettings());
     terminalLighting.setDirection(scene.terminalLightDirection());
     scene.setReduced(preferences.reduced);
     await scene.warmup();

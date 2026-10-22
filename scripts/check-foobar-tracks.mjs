@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
+import * as metadataValues from "../src/music-metadata-values.mjs";
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -116,6 +117,7 @@ export async function createTrackFixture(seedRecords) {
   ];
   const musicOrderSource = await readFile(path.join(project, "src/music-order.ts"), "utf8");
   const musicOrder = runModule(musicOrderSource, "music-order.js", specifier => {
+    if (specifier === "./music-metadata-values.mjs") return metadataValues;
     throw new Error(`Unexpected music order import: ${specifier}`);
   });
   const dataSource = await readFile(path.join(project, "src/data.ts"), "utf8");
@@ -226,6 +228,7 @@ export async function runChecks() {
     ["Lead with Guest", "Lead"], ["Lead x Guest", "Lead"], ["Lead + Guest", "Lead"], ["张三&李四", "张三"],
     ["AC/DC", "AC/DC"], ["Simon & Garfunkel", "Simon & Garfunkel"], ["Simon & Garfunkel feat. Guest", "Simon & Garfunkel"],
     ["Hall & Oates", "Hall & Oates"], ["Florence + the Machine", "Florence + the Machine"],
+    ["She & Him", "She & Him"], ["Dan + Shay", "Dan + Shay"], ["MAN WITH A MISSION", "MAN WITH A MISSION"],
     ["Earth, Wind & Fire", "Earth, Wind & Fire"],
     ["Lead, Guest", "Lead, Guest"], ["Dr. Dre", "Dr. Dre"], ["Smith-Jones", "Smith-Jones"],
     ["张和李", "张和李"], ["Max", "Max"], ["Within Temptation", "Within Temptation"],
