@@ -25,40 +25,13 @@ html .music-app #music-settings #settings-category-panel-library .library-settin
   justify-content: center;
   flex: 0 0 auto;
   box-sizing: border-box;
-  min-height: 42px;
   margin: 0;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  box-shadow: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease;
-}
-
-html .music-app #music-settings #settings-category-panel-library .library-settings-tab:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 .music-app #settings-category-panel-library .library-settings-tab[data-unsaved-label]:not([data-unsaved-label=""])::after {
   content: attr(data-unsaved-label); margin-left: 7px; color: var(--accent); font-size: 10px;
-}
-
-html .music-app #music-settings #settings-category-panel-library .library-settings-tab[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  color: color-mix(in srgb, var(--accent) 75%, var(--ink));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-}
-
-html .music-app #music-settings #settings-category-panel-library .library-settings-tab:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 72%, var(--ink));
-  outline-offset: 2px;
 }
 
 .music-app #settings-category-panel-library .library-settings-context {
@@ -115,19 +88,9 @@ html .music-app #music-settings #settings-category-panel-library .library-settin
   line-height: 1.65;
 }
 
-html .music-app[data-design="archive"] #music-settings #settings-category-panel-library .library-settings-tab {
-  border-radius: 0;
-}
-
 @media (max-width: 700px) {
   html .music-app #music-settings #settings-category-panel-library .library-settings-nav {
     gap: 5px;
-  }
-
-  html .music-app #music-settings #settings-category-panel-library .library-settings-tab {
-    min-height: 40px;
-    padding-inline: 10px;
-    font-size: 12px;
   }
 
   .music-app #settings-category-panel-library .library-settings-context {

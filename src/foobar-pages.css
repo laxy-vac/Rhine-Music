@@ -89,7 +89,7 @@
   padding: 0 10px 8px 0;
 }
 
-.music-app[data-design="archive"] #music-settings .settings-page-nav button {
+.music-app[data-design="archive"] #music-settings :is(.settings-page-nav, .library-settings-nav) button {
   grid-template-columns: 26px minmax(0, 1fr) 12px;
   gap: 5px;
   min-height: 30px;
@@ -112,12 +112,13 @@
   font-size: 10px;
 }
 
-.music-app[data-design="archive"] #music-settings .settings-page-nav button:hover {
+.music-app[data-design="archive"] #music-settings :is(.settings-page-nav, .library-settings-nav) button:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-.music-app[data-design="archive"] #music-settings .settings-page-nav button[aria-current="page"] {
+.music-app[data-design="archive"] #music-settings .settings-page-nav button[aria-current="page"],
+.music-app[data-design="archive"] #music-settings .library-settings-nav button[aria-selected="true"] {
   color: var(--page-bg);
   background: var(--ink);
 }
