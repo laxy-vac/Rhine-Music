@@ -22,7 +22,7 @@
   margin-bottom: 12px;
 }
 
-.library-folder-heading h2 {
+.library-folder-heading :is(h2, h4) {
   margin: 0;
   font-size: 19px;
   font-weight: 500;

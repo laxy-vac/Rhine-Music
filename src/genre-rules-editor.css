@@ -17,6 +17,14 @@
   --genre-rules-radius: 0;
 }
 
+.music-app[data-design="punk"] .genre-rules-editor {
+  --genre-rules-radius: 0;
+}
+
+.music-app[data-design="future"] .genre-rules-editor {
+  --genre-rules-radius: 12px;
+}
+
 .music-app .genre-rules-editor :is(
   fieldset,
   article,
@@ -91,7 +99,7 @@
 
 .music-app .genre-rules-editor article.genre-rule {
   min-width: 0;
-  padding: 12px;
+  padding: 0;
 }
 
 .music-app .genre-rules-editor .genre-rule-header {
@@ -99,7 +107,55 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.music-app .genre-rules-editor .genre-rule-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--genre-rules-radius);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.music-app .genre-rules-editor .genre-rule-toggle > strong {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-app .genre-rules-editor .genre-rule-toggle > .genre-rule-title {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.music-app .genre-rules-editor .genre-rule-toggle > small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.music-app .genre-rules-editor .genre-rule-toggle[aria-expanded="true"] {
+  border-radius: var(--genre-rules-radius) var(--genre-rules-radius) 0 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.music-app .genre-rules-editor .genre-rule-panel {
+  min-width: 0;
+  padding: 12px;
 }
 
 .music-app .genre-rules-editor .genre-rule-header > :is(strong, span) {
@@ -240,7 +296,7 @@
   border-radius: var(--genre-rules-radius);
 }
 
-.music-app #library-management-settings .genre-rules-editor :is(
+.music-app #settings-category-panel-library .genre-rules-editor :is(
   button,
   input[type="text"],
   select,
@@ -255,24 +311,24 @@
   background-color: var(--surface);
 }
 
-.music-app #library-management-settings .genre-rules-editor :is(input[type="text"], select) {
+.music-app #settings-category-panel-library .genre-rules-editor :is(input[type="text"], select) {
   width: 100%;
   min-height: 36px;
   padding: 7px 9px;
 }
 
-.music-app #library-management-settings .genre-rules-editor select[data-keep-native-select] {
+.music-app #settings-category-panel-library .genre-rules-editor select[data-keep-native-select] {
   appearance: auto;
 }
 
-.music-app #library-management-settings .genre-rules-editor button {
+.music-app #settings-category-panel-library .genre-rules-editor button {
   min-height: 34px;
   padding: 6px 10px;
   line-height: 1.3;
   cursor: pointer;
 }
 
-.music-app #library-management-settings .genre-rules-editor :is(
+.music-app #settings-category-panel-library .genre-rules-editor :is(
   .genre-rule-header,
   .genre-rule-alias
 ) .genre-rule-row-actions button {
@@ -282,23 +338,50 @@
   font-size: 11px;
 }
 
-.music-app #library-management-settings .genre-rules-editor button:not(:disabled):hover {
+.music-app #settings-category-panel-library .genre-rules-editor .genre-rule-toggle {
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--genre-rules-radius);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.music-app #settings-category-panel-library .genre-rules-editor .genre-rule-toggle[aria-expanded="true"] {
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--genre-rules-radius) var(--genre-rules-radius) 0 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.music-app #settings-category-panel-library .genre-rules-editor button:not(:disabled):hover {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.music-app #library-management-settings .genre-rules-editor button:disabled {
+.music-app #settings-category-panel-library .genre-rules-editor .genre-rule-toggle:not(:disabled):hover {
+  border-color: transparent;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.music-app #settings-category-panel-library .genre-rules-editor .genre-rule-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.music-app #settings-category-panel-library .genre-rules-editor button:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.music-app #library-management-settings .genre-rules-editor button.primary-button {
+.music-app #settings-category-panel-library .genre-rules-editor button.primary-button {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--page-bg);
 }
 
-.music-app #library-management-settings .genre-rules-editor .genre-rules-toolbar {
+.music-app #settings-category-panel-library .genre-rules-editor .genre-rules-toolbar {
   justify-content: flex-end;
   padding-top: 12px;
 }
@@ -340,7 +423,7 @@
   overflow-wrap: anywhere;
 }
 
-.music-app #library-management-settings .genre-rules-editor details.genre-rules-json textarea#genre-json.json-editor {
+.music-app #settings-category-panel-library .genre-rules-editor details.genre-rules-json textarea#genre-json.json-editor {
   display: block;
   box-sizing: border-box;
   width: 100%;

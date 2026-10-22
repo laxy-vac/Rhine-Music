@@ -10,6 +10,8 @@ import "./music-settings-page.css";
 import "./settings-select-controls.css";
 import "./music-library-page.css";
 import { setupGenreRulesEditor } from "./genre-rules-editor";
+import { setupLibrarySettingsNavigation, librarySettingsSections, type LibrarySettingsSection } from "./library-settings-navigation";
+import "./library-settings-navigation.css";
 import "./music-eq-page.css";
 import "./lyrics-page.css";
 import "./signal-page.css";
@@ -192,7 +194,7 @@ const settingsCategories: { id: SettingsCategory; title: string; intro: string; 
   { id: "appearance", title: trUi("显示与性能"), intro: trUi("设置窗口显示、渲染画质、优先显卡与性能检测。"), sections: ["#graphics-display-settings"] },
   { id: "lyrics", title: trUi("歌词"), intro: trUi("管理默认来源、共享服务器与本地缓存。"), sections: ["#lyrics-global-settings"] },
   { id: "audio", title: trUi("音频"), intro: trUi("调整音乐处理、歌曲音量与输出设备。"), sections: ["#current-audio-settings", "#decoder-settings", "#dsd-route-settings", "#sony-settings", "#replaygain-settings", "#sound-settings", "#transition-settings", "#resampling-settings", "#precision-settings", "#buffer-settings", "#output-settings"] },
-  { id: "library", title: trUi("音乐库"), intro: trUi("选择音乐文件夹、导入与扫描，管理专辑分类和介绍资料。"), sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
+  { id: "library", title: trUi("音乐库"), intro: uiLanguage() === "en" ? "Manage local folders, classification and album information in the sections below." : "按用途管理本地文件夹、分类和专辑资料。", sections: ["#library-management-settings", "#library-sort-settings", "#introduction-settings"] },
   { id: "sources", title: trUi("音乐来源"), intro: trUi("连接 FTP 远程音乐库。"), sections: ["#ftp-settings"] },
   { id: "about", title: trUi("关于"), intro: trUi("查看项目来源和使用许可。"), sections: ["#about-settings"] },
 ];
@@ -441,7 +443,6 @@ let sonyStatus: SonyStatus | undefined;
 let nativeStatus: NativeStatus | undefined;
 let libraryReceived = false,
   scanSubmitting = false;
-let scanRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 // ---- Online shelf: a second, separate album shelf and list (never merged with the local library) ----
 interface OnlineHit {
   ref: string;
@@ -487,6 +488,11 @@ let library: MusicLibrary = {
   scan: { running: false },
   onlineEnabled: false,
 };
+// A derived local snapshot for local-only settings; online browsing keeps its own context.
+let localSettingsLibrary = library;
+let localSettingsReady = false;
+let librarySettingsSection: LibrarySettingsSection = "folders";
+let librarySettingsNavigation: ReturnType<typeof setupLibrarySettingsNavigation> | undefined;
 let albums: MusicAlbum[] = [],
   genres: MusicGenre[] = [],
   demo = false;
@@ -742,8 +748,8 @@ const albumInfoEditor = setupAlbumInfoEditor(stage, {
     if (!response.ok || !data) throw new Error(data?.error || `本地服务请求失败 (${response.status})`);
     return data as T;
   },
-  onLibrary: next => receiveLibrary(next),
-  getAlbum: id => library.albums.find(album => album.id === id),
+  onLibrary: next => receiveLocalLibrarySettings(next, true),
+  getAlbum: id => localSettingsLibrary.albums.find(album => album.id === id) ?? library.albums.find(album => album.id === id),
   notify,
 });
 const pageScan = new PageScanTransition($(".music-page-scan"));
@@ -1205,12 +1211,14 @@ async function loadLibrary(force = false) {
   } finally {
     refreshing = false;
   }
+  if (shelf === "online" && isLibrarySettings()) await refreshLocalLibrarySettings();
   clearTimeout(pollTimer);
+  const localJob = isLibrarySettings() && (localSettingsLibrary.scan.running || localSettingsLibrary.enrich?.running || localSettingsLibrary.introductions?.running);
   pollTimer = setTimeout(
     () => void loadLibrary(),
     library.scan.running ||
       library.enrich?.running ||
-      library.introductions?.running
+      library.introductions?.running || localJob
       ? 1400
       : 12000,
   );
@@ -1226,16 +1234,13 @@ async function receiveLibrary(next: MusicLibrary, force = false) {
     JSON.stringify(next.albums) !== JSON.stringify(library.albums) ||
     JSON.stringify(next.genres) !== JSON.stringify(library.genres);
   library = next;
+  if (shelf === "local") rememberLocalLibrarySettings(next);
   if (library.introductions?.running) introductionRequestError = "";
   if (changed || force) await applyLibrary();
   updateStatus();
   if (isLibrarySettings()) {
     updateScanStatus();
-    if (!libraryDraftDirty && !scanSubmitting && !choosingLibraryFolder && !library.scan.running) {
-      libraryDraftRoots = library.roots.map((entry) => entry.path);
-      selectedLibraryRoot = Math.min(selectedLibraryRoot, libraryDraftRoots.length - 1);
-      renderLibraryPaths();
-    }
+    syncLocalLibrarySettings();
   }
   updateIntroductionStatus();
   if (
@@ -1250,9 +1255,45 @@ async function receiveLibrary(next: MusicLibrary, force = false) {
     );
   }
   if (scanFailed) notify(ui`音乐库扫描失败：${next.scan.error}`);
-  if (scanCompleted && !scanRefreshTimer) {
-    notify(trUi("音乐库扫描完成，2 秒后自动刷新页面。"));
-    scanRefreshTimer = setTimeout(() => location.reload(), 2000);
+  if (scanCompleted) notify(uiLanguage() === "en" ? "Library scan complete. Albums and folders are up to date." : "扫描完成，目录和专辑已更新。");
+}
+function rememberLocalLibrarySettings(next: MusicLibrary) {
+  localSettingsLibrary = { ...next,
+    albums: next.albums.filter(album => !album.id.startsWith("ftp-") && !album.id.startsWith("online-")),
+    genres: next.genres.filter(genre => genre.id !== "ftp-library"),
+  };
+  localSettingsReady = true;
+}
+function syncLocalLibrarySettings() {
+  if (!libraryDraftDirty && !scanSubmitting && !choosingLibraryFolder && !localSettingsLibrary.scan.running) {
+    libraryDraftRoots = localSettingsLibrary.roots.map(entry => entry.path);
+    selectedLibraryRoot = libraryDraftRoots.length ? Math.max(0, Math.min(selectedLibraryRoot, libraryDraftRoots.length - 1)) : -1;
+  }
+  renderLibraryPaths();
+  updateScanStatus();
+  updateIntroductionStatus();
+}
+async function receiveLocalLibrarySettings(next: MusicLibrary, force = false) {
+  if (shelf === "local") await receiveLibrary(next, force);
+  else {
+    const previousScan = localSettingsLibrary.scan;
+    rememberLocalLibrarySettings(next);
+    syncLocalLibrarySettings();
+    if (previousScan.running && !next.scan.running && next.scan.finishedAt)
+      notify(next.scan.error || (uiLanguage() === "en" ? "Local library scan complete." : "本地音乐库扫描完成。"));
+  }
+}
+async function refreshLocalLibrarySettings() {
+  const revision = libraryStateVersion;
+  try {
+    const next = await request<MusicLibrary>("/api/library");
+    if (revision !== libraryStateVersion) return;
+    await receiveLocalLibrarySettings(next);
+    const status = document.querySelector<HTMLElement>("#library-local-settings-status");
+    if (status) status.hidden = true;
+  } catch (error) {
+    const status = document.querySelector<HTMLElement>("#library-local-settings-status");
+    if (status) { status.hidden = false; status.querySelector("span")!.textContent = (uiLanguage() === "en" ? "Unable to read the local library: " : "无法读取本地音乐库：") + (error as Error).message; }
   }
 }
 async function applyLibrary() {
@@ -1669,6 +1710,7 @@ function introductionAlbumStatus(a: MusicAlbum) {
   return trUi("尚未查询专辑介绍。");
 }
 function updateIntroductionStatus() {
+  const library = localSettingsLibrary;
   const job = library.introductions;
   const running = introductionsStarting || !!job?.running;
   const button = document.querySelector<HTMLButtonElement>(
@@ -1678,7 +1720,7 @@ function updateIntroductionStatus() {
     button.disabled = running || !apiAvailable || !library.albums.length;
     button.textContent = running
       ? trUi("正在查询专辑介绍…")
-      : trUi("查询 / 更新专辑介绍 ↗");
+      : uiLanguage() === "en" ? "Batch update Wikipedia descriptions ↗" : "批量查询 / 更新百科介绍 ↗";
   }
   for (const control of document.querySelectorAll<HTMLButtonElement>(
     '[data-action="introduction-album"]',
@@ -1883,20 +1925,9 @@ function selectSettingsCategory(next: SettingsCategory, focus = false) {
   if (next === "appearance") mountDisplaySettings();
   if (next === "lyrics") void lyricsSettings?.refresh();
   if (next === "library") {
-    const body = $("#library-page-body");
-    if (!body.childElementCount) {
-      libraryDraftRoots = library.roots.map(entry => entry.path);
-      libraryDraftDirty = false;
-      selectedLibraryRoot = libraryDraftRoots.length ? 0 : -1;
-      renderLibraryPage();
-    } else {
-      if (!libraryDraftDirty && !choosingLibraryFolder && !scanSubmitting && !library.scan.running) {
-        libraryDraftRoots = library.roots.map(entry => entry.path);
-        selectedLibraryRoot = Math.min(selectedLibraryRoot, libraryDraftRoots.length - 1);
-      }
-      renderLibraryPaths();
-      updateScanStatus();
-    }
+    ensureLibrarySettingsSection(librarySettingsSection);
+    syncLocalLibrarySettings();
+    void refreshLocalLibrarySettings();
   }
   enhanceFutureSettings($("#music-settings"));
   if (focus) $(`#settings-category-${next}`).focus({ preventScroll: true });
@@ -1948,10 +1979,6 @@ function syncArchiveTab() {
   $(".music-topnav [data-action=library]").setAttribute("aria-pressed", String(page === "music"));
 }
 function closeManagementPage(restoreFocus = true) {
-  genreRulesEditor?.destroy();
-  genreRulesEditor = undefined;
-  cleanupAlbumInfoSources?.();
-  cleanupAlbumInfoSources = undefined;
   albumQueue.close(false);
   if (page === "music") {
     musicApplication.infoScrollTop = albumPanel.scrollTarget()?.scrollTop ?? 0;
@@ -1959,6 +1986,12 @@ function closeManagementPage(restoreFocus = true) {
     return;
   }
   if (restoreFocus && pageScan.change(() => closeManagementPage(restoreFocus), preferences.reduced)) return;
+  librarySettingsNavigation?.destroy();
+  librarySettingsNavigation = undefined;
+  genreRulesEditor?.destroy();
+  genreRulesEditor = undefined;
+  cleanupAlbumInfoSources?.();
+  cleanupAlbumInfoSources = undefined;
   if (restoreFocus) effects.play("page-close");
   if (page === "theme") themePageScrollTop = $("#theme-page-content").scrollTop;
   cleanupStylePreview?.();
@@ -2048,6 +2081,7 @@ function openLibrarySettings() {
   if (pageScan.change(openLibrarySettings, preferences.reduced)) return;
   openSettingsPage();
   selectSettingsCategory("library", true);
+  librarySettingsNavigation?.select("folders");
 }
 function openArchivePage() {
   flushArchiveVisual();
@@ -2321,17 +2355,29 @@ function openPanel(next: Panel) {
   )?.focus({ preventScroll: true });
 }
 const libraryPathKey = (value: string) => value.replace(/\//g, "\\").replace(/\\+$/, "").toLocaleLowerCase();
+function syncLibraryDraftIndicators() {
+  const dirty = { folders: libraryDraftDirty, classification: genreRulesEditor?.hasUnsavedChanges() ?? false };
+  for (const info of librarySettingsSections) {
+    const tab = document.querySelector<HTMLElement>(`[data-library-tab="${info.id}"]`);
+    if (!tab) continue;
+    const unsaved = info.id === "folders" || info.id === "classification" ? dirty[info.id] : false;
+    tab.dataset.unsavedLabel = unsaved ? (uiLanguage() === "en" ? "Unsaved" : "未保存") : "";
+    tab.setAttribute("aria-label", `${info.title}${unsaved ? (uiLanguage() === "en" ? ", unsaved changes" : "，有未保存的修改") : ""}`);
+  }
+}
 function renderLibraryPaths() {
+  syncLibraryDraftIndicators();
+  const library = localSettingsLibrary;
   const list = document.querySelector("#library-path-list");
   if (!list) return;
-  const busy = choosingLibraryFolder || scanSubmitting || library.scan.running;
+  const busy = !localSettingsReady || choosingLibraryFolder || scanSubmitting || library.scan.running;
   const selected = selectedLibraryRoot >= 0 && selectedLibraryRoot < libraryDraftRoots.length;
   list.innerHTML = libraryDraftRoots.length ? libraryDraftRoots.map((root, index) => {
     const status = library.roots.find((entry) => libraryPathKey(entry.path) === libraryPathKey(root))?.status;
     return `<button class="library-path-row" data-action="library-select-root" data-root-index="${index}" role="option" aria-selected="${index === selectedLibraryRoot}" tabindex="${index === selectedLibraryRoot ? 0 : -1}"><small>${String(index + 1).padStart(2, "0")}</small><span title="${esc(root)}">${esc(root)}</span><em>${status === "offline" ? trUi("离线") : status === "online" ? trUi("已索引") : trUi("待扫描")}</em></button>`;
-  }).join("") : trUi('<p class="library-path-empty">尚未添加音乐文件夹。点击右侧“添加文件夹”。</p>');
+  }).join("") : `<p class="library-path-empty">${uiLanguage() === "en" ? "No music folders yet. Choose Add folder to get started." : "尚未添加音乐文件夹。点击“添加文件夹”开始导入。"}</p>`;
   $("#library-path-count").textContent = ui`${libraryDraftRoots.length} 个目录`;
-  $("#library-path-draft").textContent = choosingLibraryFolder ? trUi("正在选择文件夹…") : libraryDraftDirty ? trUi("目录已调整，尚未保存。") : trUi("目录调整后点击“保存并扫描”。");
+  $("#library-path-draft").textContent = choosingLibraryFolder ? trUi("正在选择文件夹…") : libraryDraftDirty ? trUi("目录已调整，尚未保存。") : uiLanguage() === "en" ? "Apply folder changes to save and start scanning." : "目录调整后点击“应用文件夹并扫描”。";
   document.querySelectorAll<HTMLButtonElement>("#library-path-actions button").forEach((button) => {
     const action = button.dataset.action;
     button.disabled = busy || (action === "library-add-folder" ? !window.rhineDesktop?.chooseMusicFolders : !selected);
@@ -2341,6 +2387,8 @@ function renderLibraryPaths() {
   document.querySelectorAll<HTMLButtonElement>('#library-page-body [data-action="scan"], #library-page-body [data-action="rescan"]').forEach((button) => { button.disabled = busy; });
 }
 async function chooseLibraryRoots(replace = false) {
+  const library = localSettingsLibrary;
+  if (!localSettingsReady) return;
   if (choosingLibraryFolder || scanSubmitting || library.scan.running) return;
   const choose = window.rhineDesktop?.chooseMusicFolders;
   if (!choose) { notify(trUi("请使用桌面应用选择音乐文件夹。")); return; }
@@ -2370,6 +2418,7 @@ async function chooseLibraryRoots(replace = false) {
   finally { choosingLibraryFolder = false; renderLibraryPaths(); }
 }
 function adjustLibraryRoots(action: string) {
+  const library = localSettingsLibrary;
   if (choosingLibraryFolder || scanSubmitting || library.scan.running || selectedLibraryRoot < 0) return;
   if (action === "library-remove-folder") {
     libraryDraftRoots.splice(selectedLibraryRoot, 1);
@@ -2384,16 +2433,16 @@ function adjustLibraryRoots(action: string) {
   renderLibraryPaths();
 }
 function renderLibraryPage() {
-  genreRulesEditor?.destroy();
-  genreRulesEditor = undefined;
+  const library = localSettingsLibrary;
   $("#library-page-body").innerHTML =
-    ui`<p class="panel-intro">选择本地音乐文件夹，按歌曲内嵌的专辑信息整理；标签缺失时使用目录规则。</p><section class="library-folder-section" aria-label="音乐目录管理"><div class="library-folder-heading"><h2>音乐文件夹</h2><span id="library-path-count"></span></div><div class="library-path-manager"><div id="library-path-list" class="library-path-list" role="listbox" aria-label="音乐文件夹列表"></div><div id="library-path-actions" class="library-path-actions"><button data-action="library-add-folder">添加文件夹…</button><button data-action="library-replace-folder">更改选中项…</button><button data-action="library-remove-folder">移除</button><button data-action="library-root-up">上移 ↑</button><button data-action="library-root-down">下移 ↓</button></div></div><p id="library-path-draft" class="library-path-draft" role="status"></p><p class="library-folder-note">移除仅取消此目录的曲库索引，不删除音乐文件。目录调整按“保存并扫描”生效；离开设置会放弃未保存的目录调整。</p></section><div class="panel-actions"><button class="primary-button" data-action="scan">保存并扫描 ↗</button><button data-action="rescan">重新扫描已保存目录</button></div><div id="scan-status" class="scan-status"></div><div class="library-metrics"><div><b id="library-album-count">${library.albums.length}</b><span>专辑</span></div><div><b id="library-track-count">${library.albums.reduce((n, a) => n + a.tracks.length, 0)}</b><span>曲目</span></div><div><b id="library-genre-count">${library.genres.filter((g) => library.albums.some((a) => a.genreId === g.id)).length}</b><span>流派</span></div></div><section class="panel-section"><h3>在线资料与本地分类</h3><p>向 MusicBrainz 查询专辑名称与艺术家，补充流派和制作人员；音乐文件留在本机。已有资料使用缓存，人工分类优先保留。</p><button data-action="enrich-library" class="text-button">补充缺失的在线资料 ↗</button><button data-action="edit-genres" class="text-button">编辑流派归并规则 ↗</button></section><section class="panel-section"><h3>封面显示</h3><p>方形、竖版、横版封面均保持原始比例，完整放入卡片正面。没有封面时显示专辑名称占位，不使用其他专辑的图片。</p>${!library.albums.length ? trUi('<button data-action="demo" class="text-button">查看演示封面 ↗</button>') : ""}</section>`;
+    ui`<p class="panel-intro">先添加存放音乐的文件夹，再应用目录调整并扫描。专辑优先按文件中的专辑信息整理。</p><section class="library-folder-section" aria-label="音乐目录管理"><div class="library-folder-heading"><h4>${uiLanguage() === "en" ? "Selected folders" : "已选择的目录"}</h4><span id="library-path-count"></span></div><div class="library-path-manager"><div id="library-path-list" class="library-path-list" role="listbox" aria-label="音乐文件夹列表"></div><div id="library-path-actions" class="library-path-actions"><button data-action="library-add-folder">添加文件夹…</button><button data-action="library-replace-folder">更改选中项…</button><button data-action="library-remove-folder">移除</button><button data-action="library-root-up">上移 ↑</button><button data-action="library-root-down">下移 ↓</button></div></div><p id="library-path-draft" class="library-path-draft" role="status"></p><p class="library-folder-note">移除仅取消此目录的曲库索引，不删除音乐文件。切换本页的分区会保留草稿；离开设置后未应用的目录调整会被放弃。</p></section><div class="panel-actions"><button class="primary-button" data-action="scan">${uiLanguage() === "en" ? "Apply folders and scan" : "应用文件夹并扫描"} ↗</button><button data-action="rescan">重新扫描已保存目录</button></div><div id="scan-status" class="scan-status" role="status" aria-live="polite"></div><div class="library-metrics"><div><b id="library-album-count">${library.albums.length}</b><span>专辑</span></div><div><b id="library-track-count">${library.albums.reduce((n, a) => n + a.tracks.length, 0)}</b><span>曲目</span></div><div><b id="library-genre-count">${library.genres.filter((g) => library.albums.some((a) => a.genreId === g.id)).length}</b><span>流派</span></div></div><details class="library-cover-help"><summary>${uiLanguage() === "en" ? "Cover display and demo" : "封面显示与演示"}</summary><p>方形、竖版、横版封面均保持原始比例，完整放入卡片正面。没有封面时显示专辑名称占位。</p>${!library.albums.length ? trUi('<button data-action="demo" class="text-button">查看演示封面 ↗</button>') : ""}</details>`;
   renderLibraryPaths();
   updateScanStatus();
-  const configSection = document.createElement("section");
-  configSection.className = "panel-section";
-  configSection.id = "online-config";
-  $("#library-page-body").append(configSection);
+}
+function renderLibraryConnectionSettings() {
+  const configSection = document.querySelector<HTMLElement>("#online-config");
+  if (!configSection || configSection.childElementCount) return;
+  configSection.innerHTML = `<p>${uiLanguage() === "en" ? "Loading provider connection…" : "正在读取资料连接设置…"}</p>`;
   void (async () => {
     try {
       const config = await request<{
@@ -2402,14 +2451,15 @@ function renderLibraryPage() {
         onlineEnabled?: boolean;
       }>("/api/config");
       if (!configSection.isConnected) return;
-      configSection.innerHTML = ui`<h3>资料库连接</h3><label class="field-label" for="metadata-contact">MusicBrainz 联系邮箱或项目网址</label><input id="metadata-contact" type="text" value="${esc(config.musicBrainzContact || "")}" placeholder="你的联系邮箱或公开项目网址"><p>按 MusicBrainz 要求用于标识本应用的资料请求，不用于注册或订阅。</p><label class="settings-row"><span>扫描后自动补充新专辑资料<small>已有缓存不重复查询；断网仍可浏览与播放</small></span><input type="checkbox" id="online-enabled" ${config.onlineEnabled ? "checked" : ""}></label><button class="text-button" data-action="save-online">保存资料库设置 ↗</button><p>${config.musicBrainzConfigured ? trUi("资料库请求标识已配置。") : trUi("尚未配置；本地曲库和播放已可使用。")}</p>`;
+      configSection.innerHTML = ui`<h3>MusicBrainz ${uiLanguage() === "en" ? "connection" : "连接与自动补充"}</h3><label class="field-label" for="metadata-contact">MusicBrainz 联系邮箱或项目网址</label><input id="metadata-contact" type="text" value="${esc(config.musicBrainzContact || "")}" placeholder="你的联系邮箱或公开项目网址"><p>按 MusicBrainz 要求用于标识本应用的资料请求，不用于注册或订阅。</p><label class="settings-row"><span>${uiLanguage() === "en" ? "Automatically enrich MusicBrainz metadata after scanning" : "扫描后自动补充 MusicBrainz 资料"}<small>${uiLanguage() === "en" ? "Genres and production credits; cached results are reused." : "补充流派和制作人员；已有缓存不重复查询。"}</small></span><input type="checkbox" id="online-enabled" role="switch" ${config.onlineEnabled ? "checked" : ""}></label><button class="primary-button" data-action="save-online">${uiLanguage() === "en" ? "Save connection and automatic enrichment" : "保存连接与自动补充设置"}</button><p id="metadata-config-status" role="status">${config.musicBrainzConfigured ? trUi("资料库请求标识已配置。") : trUi("尚未配置；本地曲库和播放已可使用。")}</p>`;
     } catch (error) {
       if (configSection.isConnected)
-        configSection.innerHTML = `<p>${esc((error as Error).message)}</p>`;
+        configSection.innerHTML = `<p role="alert">${esc((error as Error).message)}</p><button data-action="library-providers-retry">${uiLanguage() === "en" ? "Retry" : "重新读取"}</button>`;
     }
   })();
 }
 function updateScanStatus() {
+  const library = localSettingsLibrary;
   for (const [selector, count] of [["#library-album-count", library.albums.length], ["#library-track-count", library.albums.reduce((total, album) => total + album.tracks.length, 0)], ["#library-genre-count", library.genres.filter((genre) => library.albums.some((album) => album.genreId === genre.id)).length]] as const) {
     const value = document.querySelector(selector);
     if (value) value.textContent = String(count);
@@ -2426,6 +2476,13 @@ function updateScanStatus() {
         (library.scan.finishedAt
           ? ui`上次扫描 ${new Date(library.scan.finishedAt).toLocaleString(uiLanguage())}`
           : trUi("尚未扫描音乐目录。"));
+  const enrichment = library.enrich;
+  const enrichButton = document.querySelector<HTMLButtonElement>('[data-action="enrich-library"]');
+  if (enrichButton) enrichButton.disabled = !localSettingsReady || !library.albums.length || !!enrichment?.running;
+  const enrichStatus = document.querySelector<HTMLElement>("#library-enrichment-status");
+  if (enrichStatus) enrichStatus.textContent = enrichment?.running
+    ? ui`补充在线资料 ${enrichment.completed}/${enrichment.total}`
+    : enrichment?.error || (enrichment?.total ? (uiLanguage() === "en" ? `Last run: ${enrichment.completed}/${enrichment.total}` : `上次补充：${enrichment.completed}/${enrichment.total}`) : !library.albums.length ? (uiLanguage() === "en" ? "Add local music before enriching genres and credits." : "添加本地音乐后可补充流派与制作人员。") : "");
 }
 function licenseLabel(url?: string) {
   if (!url) return trUi("未标注授权，使用前请查看条目页");
@@ -3452,7 +3509,62 @@ function entrySettingsMarkup() {
   return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>FUTURE</small></h3>${!future ? trUi('<p class="entry-unavailable-note">Punk 入场动画后续适配，当前仅保留设置入口。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
 }
 
+function libraryBrowseOrderMarkup() {
+  const en = uiLanguage() === "en";
+  const choices = {
+    group: [["genre", en ? "Genre" : "流派"], ["artist", en ? "Lead artist" : "主唱 / 主要歌手"], ["decade", en ? "Decade" : "年代"], ["az", en ? "A–Z" : "首字母 A–Z"], ["none", en ? "No grouping" : "不分组"]],
+    sort: [["artist", en ? "Artist name" : "歌手名字"], ["title", en ? "Title" : "名称"], ["year", en ? "Release year" : "发行年份"], ["added", en ? "Date added" : "加入时间"]],
+  };
+  return `<section class="panel-section" id="library-sort-settings"><div class="library-panel-heading"><h3>${en ? "Browse grouping and order" : "浏览分组与排序"}</h3><small>${en ? "Applies immediately" : "立即生效"}</small></div><p>${en ? "Grouping controls the shelves. Sorting controls the order within each group. These settings are shared with the browse toolbar." : "分组决定专辑分成哪些组，排序决定组内的先后顺序；与唱片浏览工具栏同步。"}</p>${(["group", "sort"] as const).map(field => `<label class="settings-row"><span>${field === "group" ? en ? "Group by" : "按什么分组" : en ? "Sort by" : "组内按什么排序"}</span><select data-keep-native-select data-library-browse-field="${field}" aria-label="${field === "group" ? en ? "Library grouping" : "音乐库分组" : en ? "Library sorting" : "音乐库排序"}">${choices[field].map(([value, label]) => `<option value="${value}"${musicApplication.view[field] === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>`).join("")}</section>`;
+}
+function organizeLibrarySettings(category: HTMLElement) {
+  category.id = "settings-category-panel-library";
+  const folders = category.querySelector<HTMLElement>("#library-management-settings")!;
+  const order = category.querySelector<HTMLElement>("#library-sort-settings")!;
+  const introductions = category.querySelector<HTMLElement>("#introduction-settings")!;
+  const panels = new Map<LibrarySettingsSection, HTMLElement>();
+  category.insertAdjacentHTML("beforeend", `<div id="library-local-settings-status" class="library-inline-status" role="status" hidden><span></span><button data-action="library-local-refresh">${uiLanguage() === "en" ? "Retry loading local library" : "重新读取本地音乐库"}</button></div>`);
+  for (const info of librarySettingsSections) {
+    const panel = document.createElement("div");
+    panel.className = "library-settings-panel";
+    panel.dataset.librarySection = info.id;
+    panel.hidden = true;
+    category.append(panel);
+    panels.set(info.id, panel);
+  }
+  panels.get("folders")!.append(folders);
+  panels.get("classification")!.append(order);
+  panels.get("classification")!.insertAdjacentHTML("beforeend", `<section class="panel-section" id="library-classification-settings"><div class="library-panel-heading"><h3>${uiLanguage() === "en" ? "Local classification rules" : "本地分类规则"}</h3><small>${uiLanguage() === "en" ? "Save to apply" : "保存后生效"}</small></div><div id="genre-rules-host"></div></section>`);
+  panels.get("metadata")!.append(introductions);
+  panels.get("metadata")!.insertAdjacentHTML("beforeend", `<section class="panel-section"><h3>${uiLanguage() === "en" ? "Genres and production credits" : "流派与制作人员"}</h3><p>${uiLanguage() === "en" ? "Use MusicBrainz to enrich release details, genres and production credits. Configure its contact information in Data providers first. Manual genre overrides remain in effect." : "向 MusicBrainz 补充发行信息、流派和制作人员；先在“资料来源”配置联系信息。已有人工分类优先保留。"}</p><button class="primary-button" data-action="enrich-library">${uiLanguage() === "en" ? "Enrich missing MusicBrainz metadata" : "补充缺失的 MusicBrainz 资料"}</button><p id="library-enrichment-status" class="scan-status" role="status" aria-live="polite"></p><div class="library-quicklinks"><button class="text-button" data-library-target="providers">${uiLanguage() === "en" ? "Configure data providers →" : "配置资料来源 →"}</button></div></section>`);
+  panels.get("providers")!.insertAdjacentHTML("beforeend", `<section class="panel-section" id="online-config"></section><section class="panel-section"><h3>${uiLanguage() === "en" ? "Album information providers" : "专辑信息查询来源"}</h3><p>${uiLanguage() === "en" ? "Providers for online searches in Edit album information. Enable providers, select the default, or add custom providers, then Save source settings. The bulk Wikipedia description update is a separate action in Album metadata." : "用于“编辑专辑信息”窗口的在线搜索。可选择默认来源、启用或停用来源，并添加自定义来源；完成后点击下方“保存来源设置”。批量百科补全在“专辑资料”页单独执行。"}</p><div id="album-info-sources-settings"></div></section>`);
+}
+function ensureLibrarySettingsSection(next: LibrarySettingsSection) {
+  if (!isLibrarySettings()) return;
+  if (next === "folders") {
+    const host = document.querySelector<HTMLElement>("#library-page-body");
+    if (host && !host.childElementCount) renderLibraryPage();
+    renderLibraryPaths();
+  } else if (next === "classification") {
+    const host = document.querySelector<HTMLElement>("#genre-rules-host");
+    if (host && !host.childElementCount) void editGenres();
+  } else if (next === "providers") {
+    renderLibraryConnectionSettings();
+    const host = document.querySelector<HTMLElement>("#album-info-sources-settings");
+    if (host && !cleanupAlbumInfoSources) cleanupAlbumInfoSources = albumInfoEditor.mountSources(host);
+  }
+  updateScanStatus();
+  updateIntroductionStatus();
+}
+function selectLibrarySettingsSection(next: LibrarySettingsSection) {
+  if (!librarySettingsSections.some(info => info.id === next)) return;
+  selectSettingsCategory("library");
+  librarySettingsNavigation?.select(next, true);
+  ensureLibrarySettingsSection(next);
+}
 function renderSettingsPage() {
+  librarySettingsNavigation?.destroy();
+  librarySettingsNavigation = undefined;
   genreRulesEditor?.destroy();
   genreRulesEditor = undefined;
   cleanupAlbumInfoSources?.();
@@ -3474,8 +3586,8 @@ function renderSettingsPage() {
     ui`<section class="panel-section" id="interface-settings"><h3>界面语言</h3><p>主题、配色与唱片盒外观在 STYLE 中调整。</p><button type="button" class="text-button" data-action="theme">打开 STYLE ↗</button></section>
     ${motionSettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.reduced)}
     ${displaySettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.windowAspect)}
-    <section class="panel-section" id="library-sort-settings"><h3>音乐库排列</h3><label class="settings-row"><span>排列方式<small>${uiLanguage() === "en" ? "Shared with browse toolbar" : "与浏览工具栏共享设置"}</small></span><select id="music-sort" aria-label="音乐库排列方式">${(["genre", "artist", "album"] as MusicSortMode[]).map((value) => `<option value="${value}" ${musicArrangementPreset() === value ? "selected" : ""}>${sortLabels[value].name}</option>`).join("")}<option value="custom" disabled ${musicArrangementPreset() === "custom" ? "selected" : ""}>${trUi("自定义")}</option></select></label><p>${uiLanguage() === "en" ? "More grouping and sorting options are available in the album browse toolbar." : "更多分组与排序选项可在唱片浏览页工具栏中调整。"}</p></section>
-    <section class="panel-section" id="introduction-settings"><h3>专辑介绍</h3><p>从公开百科查询并更新专辑介绍，附上资料来源。介绍保存在本机，不需要配置 MusicBrainz 联系信息；音乐文件不会上传。</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details></section>
+    ${libraryBrowseOrderMarkup()}
+    <section class="panel-section" id="introduction-settings"><h3>${uiLanguage() === "en" ? "Wikipedia descriptions · bulk update" : "百科介绍 · 批量补全"}</h3><p>${uiLanguage() === "en" ? "Use Wikipedia to verify albums and artists and update descriptions in bulk. Saved descriptions include their sources and remain available offline." : "使用维基百科核对专辑与歌手，批量补全介绍；附上来源并保存在本机，可离线阅读。"}</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details><p>${uiLanguage() === "en" ? "For individual provider candidates, manual descriptions, covers and track tags, open Album details → About → Edit album information." : "单张专辑的多来源候选、手动介绍、封面和歌曲标签，请到“专辑详情 → 专辑介绍 → 编辑专辑信息”。"}</p></section>
     <section class="panel-section" id="current-audio-settings"><h3>当前音源</h3><p id="current-audio-source"></p><p>歌曲文件的格式与音质信息。播放时的处理和输出方式可在音频链路中查看。</p><button class="text-button" data-action="audio-info">查看音频链路 ↗</button></section>
     <section class="panel-section" id="decoder-settings"><h3>解码与格式转换</h3><p id="audio-decode-summary" class="audio-live-summary"></p><p>原生播放时，FLAC 由 libFLAC 解码，其他 PCM 音源由 FFmpeg 解码。保持音源采样率进入处理链；解码样本格式与计算精度分别显示。DSD 使用下方独立播放路线。</p><p id="processing-support-status" class="processing-support-note" role="status"></p></section>
     ${dsdRouteSettingsMarkup()}
@@ -3506,7 +3618,7 @@ function renderSettingsPage() {
   content.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(control => control.setAttribute("role", "switch"));
   syncEntrySettings();
   entryTextControls.sync();
-  content.insertAdjacentHTML("beforeend", ui`<section class="panel-section" id="library-management-settings"><h3>导入与目录管理</h3><div id="library-page-body" class="library-settings-body" role="region" aria-label="音乐库导入与目录管理"></div></section>`);
+  content.insertAdjacentHTML("beforeend", ui`<section class="panel-section" id="library-management-settings"><h3>${uiLanguage() === "en" ? "Local music folders" : "本地音乐文件夹"}</h3><div id="library-page-body" class="library-settings-body" role="region" aria-label="音乐库导入与目录管理"></div></section>`);
   const categories = settingsCategories.map((category) => {
     const section = document.createElement("section");
     section.className = "settings-category";
@@ -3517,6 +3629,7 @@ function renderSettingsPage() {
       const controls = content.querySelector(selector);
       if (controls) section.append(controls);
     }
+    if (category.id === "library") organizeLibrarySettings(section);
     if (category.id === "audio") {
       for (const [index, audioSection] of audioSettingsSections.entries()) {
         const group = document.createElement("section");
@@ -3535,6 +3648,12 @@ function renderSettingsPage() {
     return section;
   });
   content.replaceChildren(...categories);
+  const libraryCategory = content.querySelector<HTMLElement>('[data-settings-category="library"]')!;
+  librarySettingsNavigation = setupLibrarySettingsNavigation(libraryCategory, librarySettingsSection, next => {
+    librarySettingsSection = next;
+    ensureLibrarySettingsSection(next);
+    content.scrollTop = 0;
+  });
   lyricsSettings = setupLyricsSettings($("#lyrics-global-settings"), {
     chooseDirectory: async () => {
       if (!window.rhineDesktop?.chooseLyricsCacheFolder) { notify(trUi("请在桌面应用中选择歌词缓存文件夹。")); return null; }
@@ -3543,13 +3662,6 @@ function renderSettingsPage() {
   });
   settingsSelectControls = enhanceSettingsSelectControls(content);
   syncQualityUI(renderQuality, true);
-  const albumSourcesSection = content.querySelector<HTMLElement>("#introduction-settings");
-  if (albumSourcesSection) {
-    const host = document.createElement("div");
-    host.id = "album-info-sources-settings";
-    albumSourcesSection.append(host);
-    cleanupAlbumInfoSources = albumInfoEditor.mountSources(host);
-  }
   syncQualitySummary();
   syncFullscreenUI();
   selectSettingsCategory(settingsCategory);
@@ -3941,9 +4053,8 @@ function syncQualitySummary() {
   }
 }
 async function editGenres() {
-  genreRulesEditor?.destroy();
-  genreRulesEditor = undefined;
-  const body = document.querySelector("#library-page-body");
+  if (genreRulesEditor) return;
+  const body = document.querySelector("#genre-rules-host");
   if (!body) return;
   const loading = document.createElement("p");
   loading.className = "panel-intro";
@@ -3954,6 +4065,8 @@ async function editGenres() {
       request<GenreRules>("/api/genre-rules"), request<MusicLibrary>("/api/library"),
     ]);
     if (!loading.isConnected || page !== "settings") return;
+    rememberLocalLibrarySettings(localLibrary);
+    syncLocalLibrarySettings();
     genreRulesEditor = setupGenreRulesEditor(body as HTMLElement, {
       rules, albums: localLibrary.albums.filter(album => !album.id.startsWith("ftp-") && !album.id.startsWith("online-")),
       save: next => request<GenreRules>("/api/genre-rules", next),
@@ -3961,20 +4074,19 @@ async function editGenres() {
       applied: async () => {
         const version = ++libraryStateVersion;
         const snapshot = await request<MusicLibrary>("/api/library");
-        if (shelf === "local" && version === libraryStateVersion) await receiveLibrary(snapshot, true);
+        if (version === libraryStateVersion) await receiveLocalLibrarySettings(snapshot, true);
       },
-      back: renderLibraryPage,
     });
   } catch (error) {
-    notify((error as Error).message);
+    if (loading.isConnected) body.innerHTML = `<p role="alert">${esc((error as Error).message)}</p><button data-action="library-rules-retry">${uiLanguage() === "en" ? "Retry loading rules" : "重新读取分类规则"}</button>`;
   }
 }
 async function scan(saveRoots = false) {
+  const library = localSettingsLibrary;
+  if (!localSettingsReady) return;
   if (scanSubmitting || library.scan.running) return;
   scanSubmitting = true;
   renderLibraryPaths();
-  clearTimeout(scanRefreshTimer);
-  scanRefreshTimer = undefined;
   ++libraryStateVersion;
   try {
     const roots = saveRoots ? [...libraryDraftRoots] : undefined;
@@ -3982,7 +4094,7 @@ async function scan(saveRoots = false) {
     if (saveRoots) libraryDraftDirty = false;
     ++libraryStateVersion; // Discard polls started before this accepted scan.
     notify(trUi("开始扫描音乐库，已有专辑可以继续浏览。"));
-    await receiveLibrary(next);
+    await receiveLocalLibrarySettings(next);
     clearTimeout(pollTimer);
     pollTimer = setTimeout(() => void loadLibrary(), 600);
   } catch (error) {
@@ -3993,21 +4105,24 @@ async function scan(saveRoots = false) {
   }
 }
 async function enrich(one = false) {
-  if (demo) return;
+  if ((one && (demo || shelf !== "local")) || (!one && !localSettingsLibrary.albums.length)) return;
   try {
     await request(
       "/api/library/enrich",
       one ? { albumIds: [currentAlbum()!.id] } : {},
     );
     notify(trUi("已开始补充流派和制作资料，结果将缓存在本机。"));
-    await loadLibrary();
+    await refreshLocalLibrarySettings();
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(() => void loadLibrary(), 800);
   } catch (error) {
     notify((error as Error).message);
   }
 }
 async function queryIntroductions(one = false) {
+  const library = localSettingsLibrary;
   const album = currentAlbum();
-  if (demo || !library.albums.length || (one && !album)) return;
+  if (demo || !library.albums.length || (one && (!album || shelf !== "local"))) return;
   if (introductionsStarting || library.introductions?.running) {
     notify(trUi("专辑介绍正在查询，进度可在设置中查看。"));
     return;
@@ -4023,7 +4138,7 @@ async function queryIntroductions(one = false) {
     // A GET started before this accepted job must not restore an older snapshot.
     libraryStateVersion++;
     apiAvailable = true;
-    await receiveLibrary(next);
+    await receiveLocalLibrarySettings(next);
     const job = next.introductions;
     notify(
       job?.running
@@ -4089,14 +4204,11 @@ function syncMusicCatalogView() {
   catalogGrid?.setDesign(preferences.style.design);
   catalogGrid?.update(view.layout, musicApplication.selectedIndex, musicApplication.mode === "detail", !albums.length);
   syncMusicViewControls(stage, view, getMusicGridPage().total);
+  for (const select of stage.querySelectorAll<HTMLSelectElement>("select[data-library-browse-field]")) {
+    const field = select.dataset.libraryBrowseField as "group" | "sort";
+    select.value = view[field];
+  }
   settingsSelectControls?.sync();
-}
-function musicArrangementPreset(): MusicSortMode | "custom" {
-  const view = musicApplication.view;
-  if (view.group === "genre" && view.sort === "artist") return "genre";
-  if (view.group === "artist" && view.sort === "title") return "artist";
-  if (view.group === "none" && view.sort === "title") return "album";
-  return "custom";
 }
 function applyMusicView(next: Partial<MusicViewSettings>, query?: string) {
   flushArchiveVisual();
@@ -4154,6 +4266,11 @@ document.addEventListener("click", (e) => {
     "button, [data-action]",
   );
   if (!target) return;
+  if (target.closest("#genre-rules-host")) queueMicrotask(syncLibraryDraftIndicators);
+  if (target.dataset.libraryTarget && librarySettingsSections.some(info => info.id === target.dataset.libraryTarget)) {
+    selectLibrarySettingsSection(target.dataset.libraryTarget as LibrarySettingsSection);
+    return;
+  }
   if (target.dataset.processingPresetAction) {
     e.preventDefault();
     void processingPresetAction(target.dataset.processingPresetAction);
@@ -4272,7 +4389,12 @@ document.addEventListener("click", (e) => {
   if (action === "lyrics") { page === "lyrics" ? closeManagementPage() : openLyricsPage(); return; }
   if (action === "signal") { page === "signal" ? closeManagementPage() : openSignalPage(); return; }
   if (action === "theme") { page === "theme" ? closeManagementPage() : openThemePage(); return; }
-  if (action === "library-home") { if (isLibrarySettings()) renderLibraryPage(); return; }
+  if (action === "library-home") { if (isLibrarySettings()) selectLibrarySettingsSection("folders"); return; }
+  if (action === "library-local-refresh") { void refreshLocalLibrarySettings(); return; }
+  if (action === "library-rules-retry") { void editGenres(); return; }
+  if (action === "library-providers-retry") {
+    $("#online-config").replaceChildren(); renderLibraryConnectionSettings(); return;
+  }
   if (action === "library-select-root") { selectedLibraryRoot = Number(target.dataset.rootIndex); renderLibraryPaths(); return; }
   if (action === "library-add-folder" || action === "library-replace-folder") { void chooseLibraryRoots(action === "library-replace-folder"); return; }
   if (action === "library-remove-folder" || action === "library-root-up" || action === "library-root-down") { adjustLibraryRoots(action); return; }
@@ -4407,21 +4529,28 @@ document.addEventListener("click", (e) => {
       void queryIntroductions();
       break;
     case "edit-genres":
-      void editGenres();
+      selectLibrarySettingsSection("classification");
       break;
     case "save-online":
       void (async () => {
+        const contact = $<HTMLInputElement>("#metadata-contact");
+        const automatic = $<HTMLInputElement>("#online-enabled");
+        const saveButton = target as HTMLButtonElement;
+        const status = document.querySelector<HTMLElement>("#metadata-config-status");
+        contact.disabled = automatic.disabled = saveButton.disabled = true;
+        if (status) status.textContent = uiLanguage() === "en" ? "Saving connection settings…" : "正在保存连接设置…";
         try {
           await request("/api/config", {
-            musicBrainzContact:
-              $<HTMLInputElement>("#metadata-contact").value.trim(),
-            onlineEnabled: $<HTMLInputElement>("#online-enabled").checked,
+            musicBrainzContact: contact.value.trim(),
+            onlineEnabled: automatic.checked,
           });
           albumInfoEditor.refreshSources();
+          if (status?.isConnected) status.textContent = uiLanguage() === "en" ? "Connection and automatic enrichment settings saved." : "连接与自动补充设置已保存。";
           notify(trUi("资料库设置已保存。可以开始补充专辑资料。"));
         } catch (error) {
-          notify((error as Error).message);
-        }
+          if (status?.isConnected) status.textContent = (error as Error).message;
+          else notify((error as Error).message);
+        } finally { contact.disabled = automatic.disabled = saveButton.disabled = false; }
       })();
       break;
     case "demo":
@@ -4433,6 +4562,11 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("input", (e) => {
   const el = e.target as HTMLInputElement;
+  if (el.closest("#genre-rules-host")) queueMicrotask(syncLibraryDraftIndicators);
+  if (el.id === "metadata-contact" || el.id === "online-enabled") {
+    const status = document.querySelector<HTMLElement>("#metadata-config-status");
+    if (status) status.textContent = uiLanguage() === "en" ? "Connection settings changed. Save this section to apply." : "连接设置已修改，保存此区域后生效。";
+  }
   if (el.dataset.processingField && el.type === "range") {
     updateProcessingField(el);
   }
@@ -4544,9 +4678,8 @@ document.addEventListener("change", (e) => {
     updateSonyUI();
     void player.setSonySettings(preferences.sony);
   }
-  if (el.id === "music-sort" && ["genre", "artist", "album"].includes(el.value)) {
-    applyMusicView(el.value === "genre" ? { group: "genre", sort: "artist" }
-      : el.value === "artist" ? { group: "artist", sort: "title" } : { group: "none", sort: "title" });
+  if ((el.dataset.libraryBrowseField === "group" || el.dataset.libraryBrowseField === "sort") && musicInterfaceLabels.browse.choices[el.dataset.libraryBrowseField].some(choice => choice.value === el.value)) {
+    applyMusicView({ [el.dataset.libraryBrowseField]: el.value } as Partial<MusicViewSettings>);
     return;
   }
   if (el.id === "quality-preset") {
