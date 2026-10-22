@@ -20,6 +20,8 @@ try{
 }catch(error){audioPresetPersistenceError=`无法恢复本机音频预设：${error.message}`}
 contextBridge.exposeInMainWorld('rhineDesktop',{
  native:true,
+ windowControlsOverlay:process.platform==='win32',
+ setWindowAppearance:palette=>ipcRenderer.invoke('rhine:window:appearance',{background:palette?.background,foreground:palette?.foreground}),
  gpuInfo:()=>ipcRenderer.invoke('rhine:gpu:info'),
  selectGpu:id=>ipcRenderer.invoke('rhine:gpu:select',id),
  fullscreen:action=>ipcRenderer.invoke('rhine:window:fullscreen',action),

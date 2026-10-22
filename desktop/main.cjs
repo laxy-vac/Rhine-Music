@@ -1,4 +1,4 @@
-const {app,BrowserWindow,ipcMain,dialog,shell}=require('electron');
+const {app,BrowserWindow,ipcMain,dialog,shell,nativeImage}=require('electron');
 const path=require('node:path');
 const fs=require('node:fs/promises');
 const {createHash}=require('node:crypto');
@@ -11,6 +11,8 @@ const {configureStartupGpu,registerGpuControls}=require('./gpu-controller.cjs');
 const root=path.resolve(__dirname,'..');
 const sourcePreview=process.env.RHINE_SOURCE_PREVIEW==='1';
 app.setName(sourcePreview?'Rhine Music Source Preview':'Rhine Music');
+const desktopAppId=sourcePreview?'RhineMusic.SourcePreview':'RhineMusic.Player';
+if(process.platform==='win32')app.setAppUserModelId(desktopAppId);
 const storage=resolveStorageLayout({projectRoot:root,execPath:process.execPath,sourcePreview});
 try{prepareStorageSync(storage)}catch(error){dialog.showErrorBox('Rhine Music 存储目录不可用',`${error.message}\n请选择普通用户可写的安装目录；程序不会改权限或回退到 AppData。`);app.exit(1);throw error}
 app.setPath('userData',storage.home);
@@ -259,7 +261,15 @@ else {
    preferences=selectPreferences(await preferencesStore.load());
    const {createMusicServer}=await import(pathToFileURL(path.join(root,'scripts/music-server.mjs')).href);
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
-   window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e6e8e3',show:false,autoHideMenuBar:true,icon:sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico'),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+   const iconFile=sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico');
+   const interfaceDir=sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?path.resolve(process.env.RHINE_SOURCE_INTERFACE):path.join(root,'dist');
+   const windowIcon=nativeImage.createFromPath(path.join(interfaceDir,'icons/icon-512.png'));
+   window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e8e5e1',show:false,autoHideMenuBar:true,icon:windowIcon.isEmpty()?iconFile:windowIcon,...(process.platform==='win32'?{titleBarStyle:'hidden',titleBarOverlay:{color:'#00000000',symbolColor:'#232722',height:32}}:{}),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+   if(process.platform==='win32')window.setAppDetails({
+    appId:desktopAppId,appIconPath:iconFile,appIconIndex:0,
+    relaunchDisplayName:sourcePreview?'Rhine Music · 源码验证':'Rhine Music',
+    relaunchCommand:sourcePreview?`"${process.env.ComSpec||path.join(process.env.SystemRoot||'C:\\Windows','System32/cmd.exe')}" /d /s /c ""${path.join(root,'启动源码验证.cmd')}""`:`"${process.execPath}"`
+   });
    windowAspectController=attachWindowAspect(window,{screen:require('electron').screen,initialAspect:preferences.windowAspect});
     attachWindowControls(window,origin);
    startupGate?.attachWindow(window,origin);

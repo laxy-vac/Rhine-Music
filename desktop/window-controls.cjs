@@ -1,6 +1,19 @@
 const FULLSCREEN_CHANNEL = 'rhine:window:fullscreen';
 const FULLSCREEN_CHANGED_CHANNEL = 'rhine:window:fullscreen-changed';
+const WINDOW_APPEARANCE_CHANNEL = 'rhine:window:appearance';
 const FULLSCREEN_TIMEOUT_MS = 5000;
+
+function isHexColor(value) {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+function isAppearancePalette(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Reflect.ownKeys(value);
+  return keys.length === 2 &&
+    keys.includes('background') && keys.includes('foreground') &&
+    isHexColor(value.background) && isHexColor(value.foreground);
+}
 
 function isDestroyed(target) {
   return !target || target.isDestroyed?.() === true;
@@ -47,6 +60,31 @@ function registerWindowControls({ ipcMain, getWindow } = {}) {
       return false;
     }
   }
+
+  ipcMain.handle(WINDOW_APPEARANCE_CHANNEL, (event, palette) => {
+    const record = attached;
+    if (!record || !isOwnedMainFrameEvent(event, record)) {
+      throw new Error('无效的播放器窗口');
+    }
+    if (!isAppearancePalette(palette)) {
+      throw new TypeError('无效的窗口外观配色');
+    }
+    if (process.platform !== 'win32') return false;
+    if (typeof record.target.setTitleBarOverlay !== 'function' ||
+        typeof record.target.setBackgroundColor !== 'function') {
+      throw new TypeError('当前播放器窗口不支持标题栏外观更新');
+    }
+    if (!isOwnedMainFrameEvent(event, record)) {
+      throw new Error('无效的播放器窗口');
+    }
+
+    record.target.setTitleBarOverlay({
+      color: '#00000000',
+      symbolColor: palette.foreground,
+    });
+    record.target.setBackgroundColor(palette.background);
+    return true;
+  });
 
   function notifyFullscreenChange(record) {
     if (!record.active || isDestroyed(record.target)) return;

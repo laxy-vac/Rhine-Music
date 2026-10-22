@@ -1,3 +1,7 @@
+import { setupDesktopWindow } from './desktop-window';
+
+setupDesktopWindow();
+
 // Preserve the original experience as a visual reference while developing music mode.
 if (new URLSearchParams(location.search).get("original") === "1") {
   void import("./archive-main");

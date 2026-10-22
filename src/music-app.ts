@@ -50,6 +50,7 @@ import "./punk-signal.css";
 import { syncPunkEqInstruments } from "./punk-eq-instruments";
 import "./album-panel.css";
 import "./window-aspect.css";
+import { setupDesktopWindow } from "./desktop-window";
 import "./future-design.css";
 import "./future-lyrics.css";
 import "./future-eq.css";
@@ -140,12 +141,13 @@ import { normalizeSony, sonyOff, type SonySettings, type SonyStatus } from "./so
 import { setupTouchRuler } from "./music-touch";
 import { sonyTechMarkup, updateSonyTechIndicators } from "./sony-tech-indicators";
 import { normalizeOutput, outputDefault, recoverNativeSession, discardNativeSession, type OutputSettings, type NativeStatus, type NativePlaybackSession } from "./native-audio";
-declare global { interface Window { rhineDesktop?: { native: boolean; frontendReady?(): void; frontendFailed?(message: string): void; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; standardEqPresets?(request: StandardEqFileRequest): Promise<StandardEqFileResult>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null>; fullscreen?(action: "get" | "toggle" | "exit"): Promise<boolean>; onFullscreenChange?(callback: (fullscreen: boolean) => void): () => void; gpuInfo?(): Promise<GpuReport>; selectGpu?(id: string): Promise<GpuReport> } } }
+declare global { interface Window { rhineDesktop?: { native: boolean; windowControlsOverlay?: boolean; setWindowAppearance?(palette: { background: string; foreground: string }): Promise<boolean>; frontendReady?(): void; frontendFailed?(message: string): void; audioPresetPersistenceError?: string; audioPresetStoreExists?: boolean; savePreferences(value: unknown): void; showKnownIssues?(language?: string): Promise<void>; saveAudioProcessingPresets?(value: unknown): Promise<{ ok: boolean; error?: string }>; standardEqPresets?(request: StandardEqFileRequest): Promise<StandardEqFileResult>; chooseMusicFolders(options?: { multiple?: boolean; language?: string }): Promise<string[]>; chooseLyricsCacheFolder?(language?: string): Promise<string | null>; fullscreen?(action: "get" | "toggle" | "exit"): Promise<boolean>; onFullscreenChange?(callback: (fullscreen: boolean) => void): () => void; gpuInfo?(): Promise<GpuReport>; selectGpu?(id: string): Promise<GpuReport> } } }
 
 let windowFullscreen = Boolean(document.fullscreenElement);
 let cleanupGpuSettings: (() => void) | undefined;
 let fullscreenPending = false;
 function syncFullscreenUI() {
+  document.documentElement.dataset.desktopFullscreen = String(windowFullscreen);
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-action="fullscreen"]')) {
     button.textContent = trUi(windowFullscreen ? "退出全屏 ↙" : "进入全屏 ↗");
     button.setAttribute("aria-pressed", String(windowFullscreen));
@@ -628,7 +630,13 @@ stage.dataset.mode = "archive";
 stage.dataset.page = "music";
 stage.dataset.libraryEmpty = "true";
 stage.dataset.theme = preferences.theme;
-applyStylePalette(stage, preferences.style, preferences.theme);
+const desktopWindow = setupDesktopWindow();
+function applyApplicationPalette() {
+  applyStylePalette(stage, preferences.style, preferences.theme);
+  const palette = stylePalette(preferences.style, preferences.theme);
+  desktopWindow.syncAppearance(palette.bg, palette.fg);
+}
+applyApplicationPalette();
 stage.dataset.reducedMotion = String(preferences.reduced);
 stage.innerHTML = ui`
   <div id="three-scene" class="three-scene"></div>
@@ -1041,7 +1049,7 @@ function setTheme(theme: Theme) {
   if (theme === preferences.theme) return;
   preferences.theme = theme;
   stage.dataset.theme = theme;
-  applyStylePalette(stage, preferences.style, theme);
+  applyApplicationPalette();
   applyWindowAspect(stage, preferences.windowAspect, stylePalette(preferences.style, preferences.theme).bg);
   scene?.setTheme(theme, !preferences.reduced);
   scene?.setMusicStyle(preferences.style, !preferences.reduced);
@@ -1059,7 +1067,7 @@ function setTheme(theme: Theme) {
 function setFutureDayPalette(value: string) {
   if (preferences.style.design !== "rhine" || (value !== "soft" && value !== "original") || value === preferences.style.dayPalette) return;
   preferences.style = normalizeMusicStyle({ ...preferences.style, dayPalette: value });
-  applyStylePalette(stage, preferences.style, preferences.theme);
+  applyApplicationPalette();
   scene?.setMusicStyle(preferences.style, !preferences.reduced);
   syncThemeButtons();
   terminalLighting.refresh();
@@ -1124,7 +1132,7 @@ function syncDesignIdentity() {
 function setMusicStyle(next: MusicStyle) {
   if (preferences.style.design !== "archive") return;
   preferences.style = normalizeMusicStyle(next);
-  applyStylePalette(stage, preferences.style, preferences.theme);
+  applyApplicationPalette();
   applyWindowAspect(stage, preferences.windowAspect, stylePalette(preferences.style, preferences.theme).bg);
   scene?.setMusicStyle(preferences.style);
   lyricsPage.refreshCasePreview();
@@ -1150,7 +1158,7 @@ async function switchDesign(design: MusicStyle["design"]) {
     if (preferences.style.design !== design) return;
   }
   stage.dataset.theme = preferences.theme;
-  applyStylePalette(stage, preferences.style, preferences.theme);
+  applyApplicationPalette();
   scene?.setTheme(preferences.theme, !preferences.reduced);
   scene?.setMusicStyle(preferences.style);
   await scene?.setCaseSettings(activeCaseSettings());

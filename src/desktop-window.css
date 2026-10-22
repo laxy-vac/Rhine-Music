@@ -1,0 +1,17 @@
+/* Outside the fitted/scaled stage: Windows caption hit areas use CSS pixels. */
+.desktop-window-drag {
+  position: fixed;
+  top: env(titlebar-area-y, 0px);
+  left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, calc(100% - 138px));
+  height: env(titlebar-area-height, 32px);
+  z-index: 2147483647;
+  background: transparent;
+  user-select: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+:root[data-desktop-fullscreen='true'] .desktop-window-drag {
+  display: none;
+}
