@@ -44,7 +44,7 @@ try {
   }
   await fs.mkdir(home, { recursive: true })
   const python = path.join(project, 'release/.desktop-staging/resources/app/runtime/python/python.exe')
-  const env = { ...process.env, RHINE_SOURCE_PREVIEW: '1', RHINE_APP_HOME: home, MUSIC_DATA_DIR: dataDir, MUSIC_ROOTS: '', RHINE_SOURCE_INTERFACE: interfaceDir }
+  const env = { ...process.env, RHINE_SOURCE_PREVIEW: '1', RHINE_APP_HOME: home, MUSIC_DATA_DIR: dataDir, MUSIC_ROOTS: '', RHINE_SOURCE_INTERFACE: interfaceDir, ELECTRON_ENABLE_STACK_DUMPING: '1' }
   delete env.ELECTRON_RUN_AS_NODE
   if (await fs.access(python).then(() => true, () => false)) env.SONY_WALKMAN_PYTHON = python
   console.log('正在打开桌面源码验证窗口…')
@@ -56,7 +56,10 @@ try {
     child.once('error', reject)
     child.once('close', resolve)
   })
-  if (code !== 0) throw new Error(`桌面应用退出码：${code}`)
+  if (code !== 0) {
+    const nativeCode = Number.isInteger(code) ? `（0x${(code >>> 0).toString(16).toUpperCase().padStart(8, '0')}）` : ''
+    throw new Error(`桌面应用退出码：${code}${nativeCode}`)
+  }
 } catch (error) {
   console.error(`源码验证启动失败：${error.message}`)
   process.exitCode = 1

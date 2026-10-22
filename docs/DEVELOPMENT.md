@@ -17,6 +17,8 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 根目录保留 `构建源码验证.cmd` 和 `启动源码验证.cmd`。前者用项目内 Electron 提供的 Node 构建原生主机与界面；只改前端时可使用 `npm run build:source`。后者不构建、不安装、不扫描曲库，缺少输入时直接报错。
 
+`启动源码验证.cmd` 将每次启动的完整输出和原生异常保存在本机 `.tools/source-launch/source-preview-*.log`，失败时在窗口显示日志内容与路径；诊断文件不进入 Git 或便携 ZIP。
+
 本机组件布局：
 
 | 路径 | 用途 |
