@@ -33,6 +33,8 @@ npm run build:source
 
 `构建源码验证.cmd` 同时构建原生音频与前端；`启动源码验证.cmd` 只启动已有构建。两者沿用本机 `.tools/source-preview-*` 路径。
 
+源码验证和 `npm run music` 默认共用工作区 `music-data-source-preview/` 中的索引及 LSP 数据；不要同时运行两者修改这份数据。`MUSIC_DATA_DIR` 可显式指定独立服务的数据目录。便携版仍使用自身目录的 `data/` 和 `presets/`。
+
 ## Windows 便携版
 
 Windows 只提供 **Portable 便携 ZIP**，不提供 NSIS 安装器或旧式自解压 EXE。运行库和播放器都直接放在解压目录中，不会释放到 AppData。
@@ -65,6 +67,8 @@ npm run package:windows
 | `native/`、`vendor/` | 原生音频实现、第三方源码和许可 |
 | `art/`、`public/`、`content/` | 美术源文件、运行资源和档案内容 |
 | `docs/DEVELOPMENT.md` | 环境、代码地图、数据位置与维护约定 |
+
+发布脚本只有 `scripts/package-windows.mjs`；`stage-windows-payload.mjs` 是它使用的内部载荷步骤。`prepare-desktop-staging.mjs` 是需另行授权的环境准备脚本，不是第二个发布入口。`release/.desktop-staging/` 保留现有运行时来源；发布结果只在 `.tools/releases/`。
 
 依赖、工具、构建产物、缓存和个人音乐数据不进入 Git。仓库保留当前实现；历史变更由 Git 记录。
 

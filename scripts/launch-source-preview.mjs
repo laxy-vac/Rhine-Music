@@ -6,17 +6,14 @@ import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { nativeSourceManifest } from './native-source-manifest.mjs'
 import { interfaceSourceManifest } from './interface-source-manifest.mjs'
+import { sourcePreviewPaths } from './source-preview-paths.mjs'
 
 // Electron's patched fs treats .asar paths as archive contents. Preflight must
 // inspect the physical runtime files, including default_app.asar itself.
 const fs = process.versions.electron ? createRequire(import.meta.url)('original-fs').promises : nodeFs
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// Recognise the documented source/ layout without relocating the user's data.
-const workspace = path.basename(path.dirname(project)).toLowerCase()==='source' ? path.resolve(project,'../..') : path.resolve(project,'..')
-const previewDir = path.join(workspace,'music-data-source-preview')
-const dataDir = path.join(previewDir, 'music-data')
-const home = path.join(previewDir, 'desktop')
+const { dataDir, home } = sourcePreviewPaths(project)
 const runtime = path.join(project, '.tools/source-preview-electron')
 
 try {

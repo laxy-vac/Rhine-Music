@@ -5,7 +5,7 @@ Run from the repository root with Blender 3.6 in factory/background mode:
     --python art/build_style_player_rail.py
 
 All authored paths are limited to this script's sibling .blend, the rail asset
-directory, and the explicitly authorized sibling PersonalMusicPlayer/.task-tmp/
+directory, and the project-local .tools/art-build/
 theme-blender directory for transient render/log files.
 """
 
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "art" / "build_style_player_rail.py"
 BLEND_PATH = ROOT / "art" / "style-player-rail.blend"
 ASSET_DIR = ROOT / "src" / "assets" / "style" / "camera-player" / "rail"
-TEMP_DIR = ROOT.parent / ".task-tmp" / "theme-blender"
+TEMP_DIR = ROOT / ".tools" / "art-build" / "theme-blender"
 LOG_PATH = TEMP_DIR / "rail-build.log"
 
 RESOLUTION = (900, 900)
@@ -339,7 +339,7 @@ def ensure_allowed_output_paths() -> None:
         (repo / "art" / "style-player-rail.blend").resolve(),
         (repo / "src" / "assets" / "style" / "camera-player" / "rail").resolve(),
     }
-    expected_temp = (repo.parent / ".task-tmp" / "theme-blender").resolve()
+    expected_temp = (repo / ".tools" / "art-build" / "theme-blender").resolve()
     if repository_outputs != expected_repository_outputs or TEMP_DIR.resolve() != expected_temp:
         raise RuntimeError("A build destination is outside the task's explicit allowlist")
 

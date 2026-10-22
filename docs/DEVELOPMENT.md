@@ -32,7 +32,7 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 | `release/.desktop-staging/` | Electron/Python 等运行时准备中间目录 |
 | `.tools/releases/` | 便携 ZIP、载荷和构建报告 |
 
-新克隆不携带本机工具和依赖。`prepare-*`、`package-desktop.mjs` 等环境准备脚本可能下载文件或安装依赖，使用前先阅读脚本并取得明确授权；不能把它们当作普通启动步骤。`package-desktop.mjs` 只准备源码调试和打包所需的运行时 staging，不再产出旧自解压 EXE；日常发布入口是 `package:windows`。普通打包只检查和使用现有组件，不代为准备环境。
+新克隆不携带本机工具和依赖。`prepare-*`、`prepare-desktop-staging.mjs` 等环境准备脚本可能下载文件或安装依赖，使用前先阅读脚本并取得明确授权；不能把它们当作普通启动步骤。`prepare-desktop-staging.mjs` 只准备源码调试和打包所需的运行时 staging，不再产出旧自解压 EXE；日常发布入口是 `package:windows`。普通打包只检查和使用现有组件，不代为准备环境。
 
 修改前端后重新构建，当前窗口可用 Ctrl+R 刷新。修改服务、宿主或预加载层后完整退出再启动。界面/原生来源清单不匹配时重建对应目标，不清个人缓存来绕过检查。
 
@@ -84,9 +84,13 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 源码调试数据位于仓库外的 `music-data-source-preview/`。在 `source/<仓库>` 布局中，它位于工作区根：
 
+路径由 `scripts/source-preview-paths.mjs` 统一计算，独立 `npm run music` 默认也使用此处的 `music-data/` 和 `lsp/`，不再自动创建 `music-data-v3/`。二者没有跨进程写入锁，开发时不要同时操作同一 profile；独立服务可通过 `MUSIC_DATA_DIR` 指定另一目录。便携桌面始终显式使用自身 `data/` 布局。
+
 - `desktop/`：桌面 profile、`preferences.json`。
 - `music-data/`：曲库索引、封面与资料缓存。
 - profile 旁 `presets/themes/`、`presets/eq/`：主题与 EQ 个人预设。
+
+美术构建的临时输出统一放项目内 `.tools/`；唱片托架使用 `.tools/art-build/theme-blender/`，音频参考摘录使用 `.tools/audio-render/`。档案内容的素材来源索引见 [LORE-SOURCES](LORE-SOURCES.md)。
 
 便携版使用解压目录中的 `data/` 与 `presets/`，不自动迁移源码 profile。`data/config/` 保存偏好与 EQ 库配置，`data/library/` 保存曲库索引、封面/资料缓存和默认歌词缓存，`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/` 分别保存会话、日志、崩溃转储、临时文件和 LSP 用户数据；`presets/themes/`、`presets/eq/` 保存个人预设。歌词可使用用户指定的缓存目录。删除便携程序目录会同时删除其中的 `data/` 与 `presets/`（设置、索引、缓存和个人预设），请先备份；外部音乐文件不受影响，移除音乐目录或清理源码也不会删除外部原音乐。
 

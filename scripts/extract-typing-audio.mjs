@@ -89,7 +89,8 @@ for (let i = 0; i < source.length; i++)
     Math.round(Math.max(-1, Math.min(1, source[i] * gain * 0.2)) * 32767),
     i * 2,
   );
-wav(referencePcm, "reference/typing-original.wav");
+fs.mkdirSync('.tools/audio-render', { recursive: true });
+wav(referencePcm, ".tools/audio-render/typing-original.wav");
 const preview = Buffer.alloc(rate * 2 * 2);
 const pulseTimes = [
   0.02, 0.064, 0.108, 0.152, 0.2, 0.244, 0.288, 0.332, 0.38, 0.424, 0.468,

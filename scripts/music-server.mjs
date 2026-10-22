@@ -11,9 +11,11 @@ import { NativeOutput } from './native-output.mjs'
 import { InterfaceAudio } from './interface-audio.mjs'
 import { LyricsLibrary } from './lyrics-library.mjs'
 import { MusicMetadataEditor } from './music-metadata-editor.mjs'
+import { sourcePreviewPaths } from './source-preview-paths.mjs'
 
 // Canonical form so the launcher's health probe matches regardless of drive-letter case or junctions.
 const PROJECT_DIR = canonicalPath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
+const SOURCE_PREVIEW = sourcePreviewPaths(PROJECT_DIR)
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ttf': 'font/ttf', '.woff': 'font/woff', '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' }
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
 const validMusicBrainzEmail = value => typeof value === 'string' && value.trim().length <= 320 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(value.trim())
@@ -174,7 +176,7 @@ async function serveGrowingSony(request,response,job) {
 }
 
 export async function createMusicServer({
-  dataDir = process.env.MUSIC_DATA_DIR ?? path.join(PROJECT_DIR, '..', 'music-data-v3'),
+  dataDir = process.env.MUSIC_DATA_DIR ?? SOURCE_PREVIEW.dataDir,
   distDir = path.join(PROJECT_DIR, 'dist'),
   defaultRoots = process.env.MUSIC_ROOTS ? process.env.MUSIC_ROOTS.split(path.delimiter).filter(Boolean) : [],
   store: providedStore,
@@ -182,8 +184,8 @@ export async function createMusicServer({
   sony: providedSony,
   ftp: providedFtp,
   native: providedNative,
-  lspUserDataDir = path.join(dataDir, 'lsp'),
-  lspStorageRoot = dataDir,
+  lspUserDataDir = path.join(dataDir === SOURCE_PREVIEW.dataDir ? SOURCE_PREVIEW.preview : dataDir, 'lsp'),
+  lspStorageRoot = dataDir === SOURCE_PREVIEW.dataDir ? SOURCE_PREVIEW.preview : dataDir,
   autoScan = true,
 } = {}) {
   const store = providedStore ?? await new MusicLibraryStore({ dataDir, defaultRoots }).init()

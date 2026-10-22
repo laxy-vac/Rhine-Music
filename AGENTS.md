@@ -26,7 +26,7 @@
 
 - Windows 长期只发布 Portable 便携 ZIP：解压后直接运行 `Rhine Music.exe`，默认把 `data/`、`presets/` 保留在解压目录内。不制作 NSIS 安装器或旧式自解压 EXE，不把运行时释放到 AppData。
 - 正式入口只有 `npm run package:windows`。它复用 `scripts/stage-windows-payload.mjs` 的来源与哈希校验，生成便携 ZIP、`.sha256` 和构建报告；不调用安装器编译器。
-- 打包只使用已准备的 Electron、原生音频、Python/Sony 和前端组件，不自动下载；产物与中间文件留在忽略目录，不进入 Git。`scripts/package-desktop.mjs` 仅准备本地运行时 staging，不是发布入口。
+- 打包只使用已准备的 Electron、原生音频、Python/Sony 和前端组件，不自动下载；产物与中间文件留在忽略目录，不进入 Git。`scripts/prepare-desktop-staging.mjs` 仅准备本地运行时 staging，不是发布入口。
 
 ## 子 Agent
 
