@@ -2,6 +2,8 @@ export const metadataEnglish: Record<string, string> = {
   "请填写专辑名称。": "Enter an album title.",
   "专辑资料 / 编辑": "ALBUM INFO / EDIT",
   "专辑资料": "Album info",
+  "编辑专辑信息": "Edit album info",
+  "编辑内容": "Editing section",
   "编辑歌曲信息": "Edit track info",
   "关闭专辑资料编辑": "Close album info editor",
   "专辑资料来源": "Album info sources",

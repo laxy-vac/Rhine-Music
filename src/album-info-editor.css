@@ -18,12 +18,10 @@
   display: none !important;
 }
 
-.track-info-editor-backdrop { z-index: 81; }
-
 .metadata-editor-dialog {
   display: flex;
   flex-direction: column;
-  width: min(960px, 94vw);
+  width: min(1100px, 94vw);
   max-height: 90vh;
   min-height: 0;
   overflow: hidden;
@@ -35,7 +33,13 @@
   box-shadow: 0 22px 64px color-mix(in srgb, #000 36%, transparent);
 }
 
-.track-info-editor-dialog { width: min(1160px, 94vw); }
+.metadata-editor-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 
 .metadata-editor-header,
 .metadata-editor-footer,
@@ -126,6 +130,21 @@
   border-bottom-color: var(--accent);
   color: var(--ink);
   font-weight: 600;
+}
+
+.metadata-editor-primary-tabs {
+  gap: 8px;
+  padding-block: 12px;
+  border-bottom: 0;
+}
+.metadata-editor-primary-tabs .metadata-editor-tab {
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.metadata-editor-primary-tabs .metadata-editor-tab[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
 }
 
 .metadata-editor-body {
@@ -353,8 +372,8 @@
 .metadata-editor-track-editor { min-width: 0; }
 .metadata-editor-track-editor-header { min-height: 30px; }
 .metadata-editor-current-track { margin: 0 0 8px; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.metadata-editor-track-tabs { gap: 5px; padding: 0; overflow-x: auto; }
-.metadata-editor-track-tabs .metadata-editor-tab { flex: 0 0 auto; min-height: 34px; padding-inline: 10px; }
+.metadata-editor-track-tabs { overflow-x: auto; }
+.metadata-editor-track-tabs .metadata-editor-tab { flex: 0 0 auto; }
 .metadata-editor-track-panel { padding-top: 13px; }
 .metadata-editor-field-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; align-items: start; }
 .metadata-editor-field { min-width: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); padding-bottom: 9px; }
@@ -459,8 +478,7 @@
 
 @media (max-width: 560px) {
   .metadata-editor-backdrop { padding: 2vh 2vw; }
-  .metadata-editor-dialog,
-  .track-info-editor-dialog { width: 96vw; max-height: 92vh; }
+  .metadata-editor-dialog { width: 96vw; max-height: 92vh; }
   .metadata-editor-header { align-items: flex-start; gap: 8px; }
   .metadata-editor-header-actions { flex-wrap: wrap; justify-content: flex-end; }
   .metadata-editor-header-actions .metadata-editor-secondary { max-width: 145px; }

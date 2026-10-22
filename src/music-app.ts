@@ -1599,7 +1599,7 @@ function trackList(a: MusicAlbum, discs: number) {
   if (!a.tracks.length)
     return ui`<div class="empty-tracks"><strong>${demo ? trUi("这是一张封面演示卡片") : trUi("这个专辑还没有可播放曲目")}</strong><p>${demo ? trUi("用于检查封面原始比例与卡片材质。扫描本地音乐库后，这里会显示真实曲目。") : trUi("请检查音乐文件是否完整，并重新扫描音乐库。")}</p><button data-action="library-settings">打开音乐库设置 ↗</button></div>`;
   let disc = -1;
-  return ui`${!demo && shelf === "local" && a.tracks.some(track => track.audioUrl.startsWith('/api/audio/')) ? '<button class="text-button" data-action="edit-track-info">' + trUi("编辑歌曲信息") + ' ↗</button>' : ''}<div class="track-list" aria-label="专辑歌曲列表">${a.tracks
+  return ui`<div class="track-list" aria-label="专辑歌曲列表">${a.tracks
     .map((t, index) => {
       const discNo = t.discNumber || 1;
       const head =
@@ -1614,7 +1614,7 @@ function trackList(a: MusicAlbum, discs: number) {
 function albumAbout(a: MusicAlbum) {
   return `<section class="album-about"><small>ABOUT THIS ALBUM</small>
     ${a.description ? `<p style="white-space:pre-line" data-cjk="${containsCjk(a.description)}">${esc(a.description)}</p>${a.descriptionSource?.url ? ui`<a class="text-button" href="${esc(a.descriptionSource.url)}" target="_blank" rel="noopener">来源：${esc(a.descriptionSource.name)} ↗</a>${a.descriptionSource.license ? `<small class="introduction-license">${esc(a.descriptionSource.license)}</small>` : ""}` : a.descriptionSource ? `<small>${esc(a.descriptionSource.name)}</small>` : ""}` : shelf === "online" ? onlineNote(a) : trUi(`<h3>专辑介绍待补充</h3><p>从公开百科核对专辑与歌手后读取介绍，附上来源并保存在本机。无法确认对应专辑时保留空白。</p>`)}
-    ${!demo && shelf === "local" && a.tracks.some(track => track.audioUrl.startsWith('/api/audio/')) ? ui`<button data-action="edit-album-info" class="text-button">编辑专辑信息 ↗</button><button data-action="edit-track-info" class="text-button">编辑歌曲信息 ↗</button><p class="introduction-feedback" data-introduction-feedback="${esc(a.id)}" role="status">${esc(introductionAlbumStatus(a))}</p>` : ""}
+    ${!demo && shelf === "local" && a.tracks.some(track => track.audioUrl.startsWith('/api/audio/')) ? ui`<button data-action="edit-album-info" class="text-button">编辑专辑信息 ↗</button><p class="introduction-feedback" data-introduction-feedback="${esc(a.id)}" role="status">${esc(introductionAlbumStatus(a))}</p>` : ""}
     <div class="source-note"><span>${shelf === "online" ? trUi("来源") : trUi("本地目录")}</span><code>${esc(a.folder)}</code></div><div class="genre-tags">${a.rawGenres.map((g) => `<span>${esc(g)}</span>`).join("")}</div></section>${producerBlock(a)}`;
 }
 function introductionAlbumStatus(a: MusicAlbum) {
@@ -4325,9 +4325,6 @@ document.addEventListener("click", (e) => {
     case "introduction-album":
     case "edit-album-info":
       if (currentAlbum()) albumInfoEditor.open(currentAlbum()!);
-      break;
-    case "edit-track-info":
-      if (currentAlbum()) albumInfoEditor.open(currentAlbum()!, "tracks", getMusicFocusedEntry(musicApplication.selectedIndex)?.trackId);
       break;
     case "introductions-library":
       void queryIntroductions();

@@ -153,7 +153,7 @@ export function setupAlbumInfoEditor(
   root: HTMLElement,
   callbacks: MetadataEditorCallbacks,
 ): {
-  open(album: MusicAlbum, mode?: EditorMode, trackId?: string): void;
+  open(album: MusicAlbum): void;
   close(): void;
   destroy(): void;
   mountSources(host: HTMLElement): () => void;
@@ -175,16 +175,36 @@ export function setupAlbumInfoEditor(
   const albumHeader = element(document, "header", "metadata-editor-header");
   const albumHeaderText = element(document, "div", "metadata-editor-heading");
   albumHeaderText.append(element(document, "small", "metadata-editor-kicker", trUi("专辑资料 / 编辑")));
-  const albumTitle = element(document, "h2", "", trUi("专辑资料"));
+  const albumTitle = element(document, "h2", "", trUi("编辑专辑信息"));
   albumTitle.id = `${prefix}-album-title`;
   const albumSubtitle = element(document, "p", "metadata-editor-subtitle", "");
   albumHeaderText.append(albumTitle, albumSubtitle);
   const albumHeaderActions = element(document, "div", "metadata-editor-header-actions");
-  const openTracksButton = button(document, "metadata-editor-secondary", trUi("编辑歌曲信息"));
   const albumCloseButton = button(document, "metadata-editor-close", "×");
   albumCloseButton.setAttribute("aria-label", trUi("关闭专辑资料编辑"));
-  albumHeaderActions.append(openTracksButton, albumCloseButton);
+  albumHeaderActions.append(albumCloseButton);
   albumHeader.append(albumHeaderText, albumHeaderActions);
+
+  const sectionTabs = element(document, "div", "metadata-editor-tabs metadata-editor-primary-tabs");
+  sectionTabs.setAttribute("role", "tablist");
+  sectionTabs.setAttribute("aria-label", trUi("编辑内容"));
+  const albumSectionButton = button(document, "metadata-editor-tab", trUi("专辑信息"));
+  const trackSectionButton = button(document, "metadata-editor-tab", trUi("歌曲信息"));
+  const albumSection = element(document, "section", "metadata-editor-section metadata-editor-album-section");
+  const trackSection = element(document, "section", "metadata-editor-section metadata-editor-track-section");
+  for (const [mode, tab, panel] of [["album", albumSectionButton, albumSection], ["tracks", trackSectionButton, trackSection]] as const) {
+    tab.id = `${prefix}-section-tab-${mode}`;
+    tab.dataset.editorSection = mode;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(mode === "album"));
+    tab.setAttribute("aria-controls", `${prefix}-section-${mode}`);
+    tab.tabIndex = mode === "album" ? 0 : -1;
+    panel.id = `${prefix}-section-${mode}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    panel.hidden = mode !== "album";
+  }
+  sectionTabs.append(albumSectionButton, trackSectionButton);
 
   const albumTabs = element(document, "div", "metadata-editor-tabs");
   albumTabs.setAttribute("role", "tablist");
@@ -226,7 +246,8 @@ export function setupAlbumInfoEditor(
   albumFooterStatus.setAttribute("role", "status");
   const albumSaveButton = button(document, "metadata-editor-primary", trUi("保存专辑资料"));
   albumFooter.append(albumDirtyPrompt, albumFooterStatus, albumSaveButton);
-  albumDialog.append(albumHeader, albumTabs, albumBody, albumFooter);
+  albumSection.append(albumTabs, albumBody, albumFooter);
+  albumDialog.append(albumHeader, sectionTabs, albumSection, trackSection);
   albumBackdrop.append(albumDialog);
 
   const searchToolbar = element(document, "div", "metadata-editor-search-toolbar");
@@ -284,32 +305,9 @@ export function setupAlbumInfoEditor(
   albumCoverControls.append(albumCoverUploadLabel, albumCoverInherit);
   albumCoverSection.append(albumCoverPreview, albumCoverControls, albumCoverNote);
   manualGrid.append(descriptionLabel, albumCoverSection);
-  const manualTrackAction = button(document, "metadata-editor-secondary", trUi("打开歌曲信息编辑器"));
-  manualPanel.append(manualGrid, manualTrackAction);
+  manualPanel.append(manualGrid);
   albumBody.append(albumStatus, onlinePanel, manualPanel);
 
-  const trackBackdrop = element(document, "div", "metadata-editor-backdrop track-info-editor-backdrop");
-  trackBackdrop.dataset.trackInfoEditorBackdrop = "true";
-  trackBackdrop.hidden = true;
-  trackBackdrop.setAttribute("aria-hidden", "true");
-  const trackDialog = element(document, "section", "metadata-editor-dialog track-info-editor-dialog");
-  trackDialog.tabIndex = -1;
-  trackDialog.setAttribute("role", "dialog");
-  trackDialog.setAttribute("aria-modal", "true");
-  trackDialog.setAttribute("aria-labelledby", `${prefix}-track-title`);
-  const trackHeader = element(document, "header", "metadata-editor-header");
-  const trackHeading = element(document, "div", "metadata-editor-heading");
-  trackHeading.append(element(document, "small", "metadata-editor-kicker", trUi("曲目标签 / 编辑")));
-  const trackTitle = element(document, "h2", "", trUi("歌曲信息"));
-  trackTitle.id = `${prefix}-track-title`;
-  const trackSubtitle = element(document, "p", "metadata-editor-subtitle", "");
-  trackHeading.append(trackTitle, trackSubtitle);
-  const trackHeaderActions = element(document, "div", "metadata-editor-header-actions");
-  const trackReturnAlbum = button(document, "metadata-editor-secondary", trUi("返回专辑资料"));
-  const trackCloseButton = button(document, "metadata-editor-close", "×");
-  trackCloseButton.setAttribute("aria-label", trUi("关闭歌曲信息编辑"));
-  trackHeaderActions.append(trackReturnAlbum, trackCloseButton);
-  trackHeader.append(trackHeading, trackHeaderActions);
   const trackBody = element(document, "div", "metadata-editor-body metadata-editor-track-body");
   const trackListPane = element(document, "aside", "metadata-editor-track-list-pane");
   const trackListHeading = element(document, "div", "metadata-editor-track-list-heading");
@@ -383,7 +381,7 @@ export function setupAlbumInfoEditor(
   trackCoverPanel.append(trackCoverPreview, trackCoverUploadLabel, trackCoverInherit, trackCoverInfo);
   const fileProperties = element(document, "dl", "metadata-editor-file-properties");
   trackPanels.get("file")!.append(fileProperties);
-  trackEditor.append(trackEditorHeader, trackTabs, trackStatus, readOnlyNotice, ...trackPanels.values());
+  trackEditor.append(trackEditorHeader, trackStatus, readOnlyNotice, ...trackPanels.values());
   trackBody.append(trackListPane, trackEditor);
   const trackFooter = element(document, "footer", "metadata-editor-footer");
   const trackDirtyPrompt = element(document, "div", "metadata-editor-discard-prompt");
@@ -397,15 +395,14 @@ export function setupAlbumInfoEditor(
   trackFooterStatus.setAttribute("role", "status");
   const trackSaveButton = button(document, "metadata-editor-primary", trUi("保存歌曲标签"));
   trackFooter.append(trackDirtyPrompt, trackFooterStatus, trackSaveButton);
-  trackDialog.append(trackHeader, trackBody, trackFooter);
-  trackBackdrop.append(trackDialog);
+  trackSection.append(trackTabs, trackBody, trackFooter);
 
-  root.append(albumBackdrop, trackBackdrop);
+  root.append(albumBackdrop);
 
   let albumOpen = false;
   let trackOpen = false;
   let albumOpener: HTMLElement | null = null;
-  let trackOpener: HTMLElement | null = null;
+  let editorMode: EditorMode = "album";
   let album: MusicAlbum | null = null;
   let albumDocument: AlbumInfoDocument | null = null;
   let albumRevision = "";
@@ -526,7 +523,8 @@ export function setupAlbumInfoEditor(
     let url: string | undefined;
     if (trackCoverDraft.mode === "upload" && trackCoverObjectUrl) url = trackCoverObjectUrl;
     else if (trackCoverDraft.mode === "keep") url = trackDocument?.artwork.url;
-    else if (trackCoverDraft.mode === "inherit" && trackDocument?.artwork.mode === "inherit") url = trackDocument.artwork.url;
+    else if (trackCoverDraft.mode === "inherit" && trackDocument?.artwork.mode === "inherit")
+      url = callbacks.getAlbum(trackDocument.albumId)?.coverUrl ?? trackDocument.artwork.url;
     setCoverPreview(trackCoverImage, trackCoverPlaceholder, url,
       trackCoverDraft.mode === "inherit" ? trUi("继承专辑封面") : trUi("暂无封面"));
     trackCoverInherit.setAttribute("aria-pressed", String(trackCoverDraft.mode === "inherit"));
@@ -541,6 +539,21 @@ export function setupAlbumInfoEditor(
     manualTabButton.tabIndex = online ? -1 : 0;
     onlinePanel.hidden = !online;
     manualPanel.hidden = online;
+  }
+
+  function setEditorMode(next: EditorMode, focus = false): void {
+    editorMode = next;
+    const tracks = next === "tracks";
+    albumSection.hidden = tracks;
+    trackSection.hidden = !tracks;
+    for (const [tab, active] of [[albumSectionButton, !tracks], [trackSectionButton, tracks]] as const) {
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      if (active && focus) tab.focus({ preventScroll: true });
+    }
+    albumDirtyPrompt.hidden = true;
+    trackDirtyPrompt.hidden = true;
+    if (tracks) updateTrackCoverPreview();
   }
 
   function setTrackTab(next: TrackTab, focus = false): void {
@@ -716,8 +729,7 @@ export function setupAlbumInfoEditor(
       albumDocument = result;
       album = callbacks.getAlbum(result.album.id) ?? result.album ?? targetAlbum;
       albumRevision = result.revision;
-      albumTitle.textContent = album.title || trUi("未命名专辑");
-      albumSubtitle.textContent = [album.artist, album.year ? String(album.year) : ""].filter(Boolean).join(" · ");
+      albumSubtitle.textContent = [album.title, album.artist, album.year ? String(album.year) : ""].filter(Boolean).join(" · ");
       albumOriginalDescription = result.album.description ?? "";
       descriptionInput.value = albumOriginalDescription;
       albumCoverInitial = result.customCover ? { mode: "keep" } : { mode: "inherit" };
@@ -744,7 +756,9 @@ export function setupAlbumInfoEditor(
     albumOpener = opener;
     albumOpen = true;
     setHidden(albumBackdrop, false);
+    setEditorMode("album");
     setAlbumTab("online");
+    albumSubtitle.textContent = [targetAlbum.title, targetAlbum.artist].filter(Boolean).join(" · ");
     searchTitle.value = targetAlbum.title;
     searchArtist.value = targetAlbum.artist;
     candidateList.replaceChildren(element(document, "p", "metadata-editor-empty", trUi("使用专辑名称与艺人搜索公开资料。")));
@@ -753,7 +767,7 @@ export function setupAlbumInfoEditor(
     const epoch = albumLoadEpoch;
     void loadAlbumDocument(targetAlbum, epoch);
     void loadAlbumSources(epoch);
-    requestAnimationFrame(() => onlineTabButton.focus({ preventScroll: true }));
+    requestAnimationFrame(() => albumSectionButton.focus({ preventScroll: true }));
   }
 
   async function searchAlbumInfo(): Promise<void> {
@@ -1107,7 +1121,6 @@ export function setupAlbumInfoEditor(
     trackDirtyPrompt.hidden = true;
     setTrackFooterStatus("");
     updateCurrentTrackLabel();
-    if (trackDocument) trackTitle.textContent = trackFields.TITLE?.[0] || trackDocument.file.name || trUi("歌曲信息");
     trackSaveButton.disabled = !trackDocument?.writable || !trackDirty();
     if (trackId) {
       const row = trackList.querySelector<HTMLButtonElement>(`[data-editor-track-id="${CSS.escape(trackId)}"]`);
@@ -1176,8 +1189,6 @@ export function setupAlbumInfoEditor(
       const canEdit = result.writable;
       readOnlyNotice.hidden = canEdit;
       readOnlyNotice.textContent = result.readOnlyReason || trUi("此文件当前为只读，标签无法保存。");
-      trackTitle.textContent = trackFields.TITLE?.[0] || result.file.name || trUi("歌曲信息");
-      trackSubtitle.textContent = [trackAlbum?.title || "", result.file.relativePath].filter(Boolean).join(" · ");
       trackCurrentLabel.textContent = "";
       updateCurrentTrackLabel();
       setTrackStatus("");
@@ -1212,19 +1223,18 @@ export function setupAlbumInfoEditor(
     trackContinueButton.focus({ preventScroll: true });
   }
 
-  function hideTrackDialog(restoreFocus = true): void {
+  function hideTrackDialog(): void {
     if (!trackOpen) return;
     trackOpen = false;
     trackLoadEpoch += 1;
     trackController?.abort();
     trackController = undefined;
     revokeTrackCoverObjectUrl();
-    setHidden(trackBackdrop, true);
     trackDirtyPrompt.hidden = true;
-    const opener = trackOpener;
-    trackOpener = null;
-    if (restoreFocus && opener?.isConnected) opener.focus({ preventScroll: true });
-    else if (restoreFocus && albumOpen) albumDialog.focus({ preventScroll: true });
+    trackDocument = null;
+    trackFields = {};
+    trackOriginalFields = {};
+    if (albumOpen) setEditorMode("album");
   }
 
   function requestCloseTrack(continuation?: () => void): void {
@@ -1233,6 +1243,7 @@ export function setupAlbumInfoEditor(
       continuation?.();
       return;
     }
+    if (trackDirty()) setEditorMode("tracks");
     requestTrackTransition(() => {
       hideTrackDialog();
       continuation?.();
@@ -1246,6 +1257,7 @@ export function setupAlbumInfoEditor(
       return;
     }
     if (albumDirty()) {
+      setEditorMode("album");
       albumDirtyPrompt.hidden = false;
       albumDiscardButton.onclick = () => {
         albumDirtyPrompt.hidden = true;
@@ -1261,6 +1273,7 @@ export function setupAlbumInfoEditor(
   }
 
   function requestCloseAll(continuation?: () => void): void {
+    if (albumSaving || trackSaving) return;
     if (trackOpen) requestCloseTrack(() => requestCloseAlbum(continuation));
     else requestCloseAlbum(continuation);
   }
@@ -1297,7 +1310,7 @@ export function setupAlbumInfoEditor(
       fields: cleanChangedFields(trackFields, trackChangedKeys),
       cover: equalCover(trackCoverDraft, trackCoverInitial) ? { mode: "keep" } : cloneCover(trackCoverDraft),
     };
-    trackDialog.inert = true;
+    albumDialog.inert = true;
     setTrackFooterStatus(trUi("正在保存歌曲标签…"));
     try {
       const library = await callbacks.request<MusicLibrary>("/api/track-info/save", {
@@ -1319,40 +1332,34 @@ export function setupAlbumInfoEditor(
     } finally {
       if (!disposed && trackOpen && trackId === savedTrackId) {
         trackSaving = false;
-        trackDialog.inert = false;
+        albumDialog.inert = false;
         trackSaveButton.disabled = !trackDocument?.writable || !trackDirty();
       }
     }
   }
 
-  function openTrackDialog(targetTrackId: string | undefined, opener: HTMLElement | null): void {
+  function openTrackSection(): void {
     if (trackOpen) {
-      if (!targetTrackId || targetTrackId === trackId) return;
-      requestTrackChange(targetTrackId);
+      setEditorMode("tracks");
       return;
     }
     trackOpen = true;
-    trackOpener = opener;
-    setHidden(trackBackdrop, false);
+    setEditorMode("tracks");
     trackTab = "basic";
     setTrackTab("basic");
     trackFields = {};
     trackDocument = null;
     trackId = "";
     trackAlbum = album;
-    trackTitle.textContent = trUi("歌曲信息");
-    trackSubtitle.textContent = album?.title ?? "";
     readOnlyNotice.hidden = true;
     renderTrackList();
-    const firstId = targetTrackId ?? trackAlbum?.tracks[0]?.id;
+    const firstId = trackAlbum?.tracks[0]?.id;
     if (firstId) void loadTrackDocument(firstId);
     else setTrackStatus(trUi("这个专辑没有歌曲。"));
-    requestAnimationFrame(() => trackDialog.focus({ preventScroll: true }));
   }
 
-  function topDialog(): { panel: HTMLElement; kind: "album" | "track" } | null {
-    if (trackOpen) return { panel: trackDialog, kind: "track" };
-    if (albumOpen) return { panel: albumDialog, kind: "album" };
+  function topDialog(): { panel: HTMLElement } | null {
+    if (albumOpen) return { panel: albumDialog };
     return null;
   }
 
@@ -1369,8 +1376,7 @@ export function setupAlbumInfoEditor(
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      if (top.kind === "track") requestCloseTrack();
-      else requestCloseAlbum();
+      requestCloseAll();
       return;
     }
     if (event.key !== "Tab") return;
@@ -1396,7 +1402,6 @@ export function setupAlbumInfoEditor(
     dialog.addEventListener("keydown", (event) => event.stopPropagation());
   }
   stopDialogBubbling(albumDialog);
-  stopDialogBubbling(trackDialog);
 
   function onAlbumTabKeyDown(event: KeyboardEvent): void {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
@@ -1417,6 +1422,16 @@ export function setupAlbumInfoEditor(
 
   onlineTabButton.addEventListener("click", () => setAlbumTab("online"));
   manualTabButton.addEventListener("click", () => setAlbumTab("manual"));
+  albumSectionButton.addEventListener("click", () => setEditorMode("album"));
+  trackSectionButton.addEventListener("click", openTrackSection);
+  sectionTabs.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next: EditorMode = event.key === "Home" ? "album" : event.key === "End" ? "tracks" : editorMode === "album" ? "tracks" : "album";
+    if (next === "tracks") openTrackSection();
+    else setEditorMode("album");
+    (next === "tracks" ? trackSectionButton : albumSectionButton).focus({ preventScroll: true });
+  });
   albumTabs.addEventListener("keydown", onAlbumTabKeyDown);
   trackTabs.addEventListener("keydown", onTrackTabKeyDown);
   searchButton.addEventListener("click", () => { void searchAlbumInfo(); });
@@ -1446,19 +1461,11 @@ export function setupAlbumInfoEditor(
   });
   albumCoverFile.addEventListener("change", () => { void chooseAlbumCover(albumCoverFile.files?.[0]); });
   albumSaveButton.addEventListener("click", () => { void saveAlbum(); });
-  openTracksButton.addEventListener("click", () => openTrackDialog(undefined, openTracksButton));
-  manualTrackAction.addEventListener("click", () => openTrackDialog(undefined, manualTrackAction));
   albumCloseButton.addEventListener("click", () => requestCloseAll());
-  albumBackdrop.addEventListener("click", (event) => { if (event.target === albumBackdrop && !trackOpen) requestCloseAlbum(); });
+  albumBackdrop.addEventListener("click", (event) => { if (event.target === albumBackdrop) requestCloseAll(); });
   albumContinueButton.addEventListener("click", () => { albumDirtyPrompt.hidden = true; });
   trackContinueButton.addEventListener("click", () => { trackDirtyPrompt.hidden = true; });
   trackDiscardButton.addEventListener("click", () => { trackDirtyPrompt.hidden = true; });
-  trackCloseButton.addEventListener("click", () => requestCloseTrack());
-  trackReturnAlbum.addEventListener("click", () => requestCloseTrack(() => {
-    if (albumOpen) onlineTabButton.focus({ preventScroll: true });
-    else hideTrackDialog();
-  }));
-  trackBackdrop.addEventListener("click", (event) => { if (event.target === trackBackdrop) requestCloseTrack(); });
   trackCoverInherit.addEventListener("click", () => {
     revokeTrackCoverObjectUrl();
     trackCoverDraft = { mode: "inherit" };
@@ -1520,19 +1527,10 @@ export function setupAlbumInfoEditor(
   trackTabButtons.forEach((tabButton, tab) => tabButton.addEventListener("click", () => setTrackTab(tab)));
   window?.addEventListener("keydown", onWindowKeyDown, true);
 
-  function open(targetAlbum: MusicAlbum, mode: EditorMode = "album", targetTrackId?: string): void {
+  function open(targetAlbum: MusicAlbum): void {
     if (disposed) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const doOpen = () => {
-      if (mode === "album") {
-        beginAlbumOpen(targetAlbum, opener);
-      } else {
-        album = targetAlbum;
-        if (!albumOpen) albumOpener = opener;
-        trackAlbum = targetAlbum;
-        openTrackDialog(targetTrackId, opener);
-      }
-    };
+    const doOpen = () => beginAlbumOpen(targetAlbum, opener);
     if (albumOpen || trackOpen) requestCloseAll(doOpen);
     else doOpen();
   }
@@ -1559,9 +1557,7 @@ export function setupAlbumInfoEditor(
     selectControls.destroy();
     window?.removeEventListener("keydown", onWindowKeyDown, true);
     albumBackdrop.remove();
-    trackBackdrop.remove();
-    if (trackOpener?.isConnected) trackOpener.focus({ preventScroll: true });
-    else if (albumOpener?.isConnected) albumOpener.focus({ preventScroll: true });
+    if (albumOpener?.isConnected) albumOpener.focus({ preventScroll: true });
     albumOpen = false;
     trackOpen = false;
   }
