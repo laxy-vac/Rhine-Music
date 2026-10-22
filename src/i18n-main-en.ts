@@ -2,7 +2,7 @@ export const mainEnglish: Record<string, string> = {
   "当前主题不提供界面音效。": "Interface sounds are unavailable for this theme.",
   "界面音效输出失败：": "Interface audio output failed: ",
   "音乐播放期间暂停界面音效；暂停或停止后恢复。": "Interface sounds are muted during music playback and resume when music is paused or stopped.",
-  "界面音效跟随播放器输出设备；WASAPI 使用共享模式。": "Rhine: Imagine interface sounds use the player's output device. WASAPI uses shared mode.",
+  "界面音效跟随播放器输出设备；WASAPI 使用共享模式。": "Rhine Lab: Reflections interface sounds use the player's output device. WASAPI uses shared mode.",
   "请先开启界面音效。": "Enable interface sounds first.",
   "氛围 BGM 目前仅支持浏览器兼容输出。": "Ambient BGM currently supports browser output only.",
   "共享模式可与其他应用一起播放；独占模式仅在音乐播放期间占用设备，暂停、停止、播放结束或出错后释放。继续播放时重新打开所选设备。": "Shared mode allows other apps to play audio. Exclusive mode reserves the device during music playback and releases it on pause, stop, end, or error. Resuming reopens the selected device.",

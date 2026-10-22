@@ -1,6 +1,6 @@
 import styleTokensJson from "./assets/style/tokens.json";
 import { uiLanguage } from "./i18n";
-import { futureAppearancePickerMarkup, syncFutureAppearancePicker } from "./future-appearance-picker";
+import { appearanceModeLabel, dayPaletteLabel, futureAppearancePickerMarkup, syncFutureAppearancePicker } from "./future-appearance-picker";
 
 export type MusicStyle = {
   design: "rhine" | "archive";
@@ -501,15 +501,15 @@ export function musicAppearanceControlsMarkup(style: MusicStyle, mode: "day" | "
   return style.design === "rhine"
     ? futureAppearancePickerMarkup(style.dayPalette, mode)
     : `<div class="theme-mode-buttons" role="group" aria-label="${escapeHtml(t("日夜模式", "Light and dark mode"))}">
-      <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>LIGHT</button>
-      <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>DARK</button>
+      <button type="button" data-theme="day" aria-pressed="${mode === "day"}"><i class="theme-mode-dot day" aria-hidden="true"></i>${appearanceModeLabel('day')}</button>
+      <button type="button" data-theme="night" aria-pressed="${mode === "night"}"><i class="theme-mode-dot night" aria-hidden="true"></i>${appearanceModeLabel('night')}</button>
     </div>`;
 }
 
 function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean) {
   const choices = (["rhine", "archive"] as const).map(design => {
     const selected = style.design === design;
-    const label = design === "rhine" ? t("莱茵生命：映像", "Rhine: Imagine") : t("仿孤星", "Lone Trail Like");
+    const label = design === "rhine" ? t("莱茵生命：映像", "Rhine Lab: Reflections") : t("仿孤星", "Lone Trail–Inspired");
     const preview = selected ? style : design === "rhine" ? defaultMusicStyle : archiveMusicStyle;
     const palette = stylePalette(preview, mode);
     return `<button type="button" class="design-family-card${selected ? " is-selected" : ""}" data-style-design="${design}" aria-pressed="${selected}" aria-label="${label}">
@@ -528,7 +528,7 @@ function designFamilyMarkup(style: MusicStyle, mode: "day" | "night", followSyst
 }
 
 function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", followSystemTheme: boolean): string {
-  const current = `${SCHEME_COPY[style.scheme].name}  ·  ${mode === "day" ? "LIGHT" : "DARK"}`;
+  const current = `${SCHEME_COPY[style.scheme].name}  ·  ${appearanceModeLabel(mode)}`;
   const textOptions = TEXT_SCALES.map((value) => [value, textScaleLabel(value)] as const);
   const arrayOptions = ARRAY_SCALES.map((value) => [value, textScaleLabel(value)] as const);
   const inspectOptions = INSPECT_SCALES.map((value) => [value, textScaleLabel(value)] as const);
@@ -574,7 +574,7 @@ function archiveMusicStyleMarkup(style: MusicStyle, mode: "day" | "night", follo
 export function musicStyleMarkup(styleValue: MusicStyle, mode: "day" | "night", followSystemTheme = false): string {
   const style = normalizeMusicStyle(styleValue);
   if (style.design === "archive") return archiveMusicStyleMarkup(style, mode, followSystemTheme);
-  const modeName = mode === "day" ? "LIGHT" : "DARK";
+  const modeName = mode === "day" ? dayPaletteLabel(style.dayPalette) : appearanceModeLabel(mode);
   const heading = `<header class="music-style-heading"><div><small>STYLE&nbsp; / &nbsp;APPEARANCE</small><h1 id="music-style-title">STYLE</h1><p>${escapeHtml(t("调整主题、配色、文字大小，以及唱片盒与场景外观。", "Adjust the theme, colour scheme and text size, and customize the appearance of the album case and scene."))}</p></div><span class="style-mode-indicator"><i></i>${modeName}</span></header>`;
   const themeSelector = designFamilyMarkup(style, mode, followSystemTheme);
   const pageStart = `<section class="music-style-page" aria-labelledby="music-style-title">${heading}${themeSelector}`;
@@ -617,7 +617,13 @@ export function syncMusicStyleAppearance(
   });
   syncFutureAppearancePicker(root, style.dayPalette, mode);
   const indicator = root.querySelector<HTMLElement>(".style-mode-indicator");
-  if (indicator?.lastChild?.nodeType === Node.TEXT_NODE) indicator.lastChild.textContent = mode === "day" ? "LIGHT" : "DARK";
+  if (indicator?.lastChild?.nodeType === Node.TEXT_NODE) indicator.lastChild.textContent = mode === "day" ? dayPaletteLabel(style.dayPalette) : appearanceModeLabel(mode);
+  const archiveIndicator = root.querySelector<HTMLElement>(".foobar-style-current");
+  if (archiveIndicator) {
+    const current = `${SCHEME_COPY[style.scheme].name}  ·  ${appearanceModeLabel(mode)}`;
+    archiveIndicator.title = current;
+    if (archiveIndicator.lastChild?.nodeType === Node.TEXT_NODE) archiveIndicator.lastChild.textContent = current;
+  }
 }
 
 type PreviewChoice = { kind: "scheme"; id: ColourScheme };

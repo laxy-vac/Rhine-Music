@@ -81,7 +81,7 @@ export type CaseEditorHandle = { refresh: () => void; destroy: () => void };
 const STRUCTURE_DETAILS: Record<CaseStructure, string> = {
   minimal: "ESSENTIAL",
   rhine: "RHINE LAB",
-  punk: "LONE TRAIL LIKE",
+  punk: "LONE TRAIL–INSPIRED",
 };
 const SURFACE_LIMITS: Record<SurfaceNumericField, [number, number]> = {
   roughness: [0, 1],
@@ -491,7 +491,7 @@ export function setupCaseEditor(
           design === "archive" ? "仿孤星盒体" : caseStructureLabels[structure],
         );
         button.querySelector("small")!.textContent = design === "archive"
-          ? "01 / LONE TRAIL LIKE" : `0${CASE_STRUCTURES.indexOf(structure) + 1} / ${STRUCTURE_DETAILS[structure]}`;
+          ? "01 / LONE TRAIL–INSPIRED" : `0${CASE_STRUCTURES.indexOf(structure) + 1} / ${STRUCTURE_DETAILS[structure]}`;
         button.setAttribute(
           "aria-pressed",
           String(structure === settings.structure),

@@ -1,6 +1,6 @@
 # 当前主题与唱片页规范
 
-两种主题的正式名称为 **莱茵生命：映像（Rhine: Imagine）** 与 **仿孤星（Lone Trail Like）**，分别对应原 Future / Rhine 与 Punk / Audio Archive。两者共用同一播放器、曲库状态、浏览交互和三维场景。界面使用正式名称；内部 `rhine` / `archive`、盒体 `punk` 和既有偏好键保持兼容。本文后续的旧称仅用于识别内部实现。公共状态、目录与渲染接口见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，歌词数据规则见 [LYRICS](LYRICS.md)，语言规则见 [UI-LANGUAGE](UI-LANGUAGE.md)。
+两种主题的正式名称为 **莱茵生命：映像（Rhine Lab: Reflections）** 与 **仿孤星（Lone Trail–Inspired）**，分别对应原 Future / Rhine 与 Punk / Audio Archive。两者共用同一播放器、曲库状态、浏览交互和三维场景。界面使用正式名称；内部 `rhine` / `archive`、盒体 `punk` 和既有偏好键保持兼容。本文后续的旧称仅用于识别内部实现。公共状态、目录与渲染接口见 [UNIFIED-ARCHITECTURE](UNIFIED-ARCHITECTURE.md)，歌词数据规则见 [LYRICS](LYRICS.md)，语言规则见 [UI-LANGUAGE](UI-LANGUAGE.md)。
 
 ## 全局偏好
 
@@ -30,9 +30,9 @@ MATRIX 浏览的景深对焦点固定在选片视窗，避免焦平面追随被�
 
 两主题的 `STYLE` 页面沿用原 Style 界面与预览，管理主题、日夜配色、主题色板、文字字号、唱片盒和场景外观。渲染画质、性能检测、窗口和显卡设置不放在 STYLE。内部页面值与导航 action 仍为 <code>theme</code>；<code>#music-theme-page</code>、<code>#theme-page-content</code> 和 <code>#music-style-title</code> 等兼容 DOM ID 保留，<code>#theme-quality-slot</code> 作为唱片盒编辑内容的插入位置。
 
-Future 的日间配色在 STYLE → LIGHT 下选择“暖白 / 原版”（英文 SOFT / ORIGINAL）；DARK 仍是独立的全局日夜模式。保留旧偏好的暖白为默认，参考原版依据 [RhineLabUI theme-ui.ts](https://github.com/LBEILC/RhineLabUI/blob/12cc5e4013acb9408f753ff71de6b8492299b7c8/src/theme-ui.ts) 的亮色值，并与播放器既有控件材质结合：
+莱茵生命：映像的日间配色在 STYLE → 日夜模式中选择“暖昼 / 晴昼”（英文 Warm Day / Clear Day）；“深夜”（Night）是独立的全局日夜模式。内部键 soft / original 和原配色效果保持不变，暖昼为默认；晴昼依据 [RhineLabUI theme-ui.ts](https://github.com/LBEILC/RhineLabUI/blob/12cc5e4013acb9408f753ff71de6b8492299b7c8/src/theme-ui.ts) 的亮色值，并与播放器既有控件材质结合：
 
-| 基础颜色 | 暖白 | 参考原版 |
+| 基础颜色 | 暖昼 | 晴昼 |
 | --- | --- | --- |
 | 页面底色 | `#e8e5e1` | `#e8e5e1` |
 | 主文字 | `#232722` | `#080a08` |
@@ -43,7 +43,7 @@ Future 的日间配色在 STYLE → LIGHT 下选择“暖白 / 原版”（英�
 
 参考输入区域使用 `#e7e3d9`。Three 背景/雾 `#eae5e1` 本已与上游一致；播放器专用唱片材质、灯光、空间布局保持其现有职责。选项保存于 Future 的 `style.dayPalette` 和主题档案中，缺失/非法值回退 `soft`；夜间和 Punk 不使用此配色字段，跨主题往返保留 Future 的选择。
 
-控件参考用户视频采用两层共用胶囊：大选中底板在 LIGHT/DARK 间移动，日间的子底板在两种配色间移动。暖白和原版均保留左侧强调色色点；整个 Appearance 卡片随可用宽度扩展，标题、跟随系统与说明一起对齐，窄窗口收成单列。切换期间保持节点、焦点和页面滚动位置，快速反向操作从当前动画位置接续。颜色沿已有 650ms 过渡，减少动态时立即到位。键盘方向键和 Home/End 可选，Night 时日间子选项 inert，不接受 Tab 或指针操作。
+控件参考用户视频采用两层共用胶囊：大选中底板在日间/深夜间移动，日间的子底板在两种配色间移动。暖昼和晴昼均保留左侧强调色色点；整个 Appearance 卡片随可用宽度扩展，标题、跟随系统与说明一起对齐，窄窗口收成单列。切换期间保持节点、焦点和页面滚动位置，快速反向操作从当前动画位置接续。颜色沿已有 650ms 过渡，减少动态时立即到位。键盘方向键和 Home/End 可选，Night 时日间子选项 inert，不接受 Tab 或指针操作。
 
 Settings 固定为七类，每个控件只在所属类别出现一次：
 

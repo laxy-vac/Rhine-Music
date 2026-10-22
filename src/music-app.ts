@@ -22,7 +22,7 @@ import "./music-theme.css";
 import "./music-theme-switch.css";
 import "./music-style-page.css";
 import { defaultMusicStyle, normalizeMusicStyle, normalizeDesignProfiles, applyStylePalette, stylePalette, musicStyleMarkup, musicAppearanceControlsMarkup, syncMusicStyleAppearance, setupStylePreview, type MusicStyle, type DesignProfiles } from "./music-style";
-import { handleFutureAppearanceKey, syncFutureAppearancePicker } from "./future-appearance-picker";
+import { appearanceModeLabel, dayPaletteLabel, handleFutureAppearanceKey, syncFutureAppearancePicker } from "./future-appearance-picker";
 import "./header-appearance.css";
 import { getMusicCatalogShelves, getMusicRecordLocation, navigateMusicEntry } from "./music-catalog-shelves";
 import { configureMusicCatalog, getMusicCatalogOptions, getMusicCatalogRecords, getMusicCatalogGroups, getMusicEntry, getMusicEntryByKey, getMusicFocusedEntry, focusMusicEntry } from "./music-catalog";
@@ -1075,6 +1075,8 @@ function syncHeaderAppearance() {
   syncFutureAppearancePicker(header, preferences.style.dayPalette, preferences.theme);
 }
 function syncThemeButtons() {
+  themeNames.day = preferences.style.design === "rhine" ? dayPaletteLabel(preferences.style.dayPalette) : appearanceModeLabel("day");
+  themeNames.night = appearanceModeLabel("night");
   syncHeaderAppearance();
   const theme = preferences.theme;
   document
@@ -1107,8 +1109,6 @@ function syncDesignIdentity() {
   $(".music-brand > span").innerHTML = archive ? ui`RHINE / LISTENING TERMINAL` : ui`MUSIC ARCHIVE <i>／</i> Terminal`;
   const shelfLabel = $("#genre-position").firstChild;
   if (shelfLabel?.nodeType === Node.TEXT_NODE) shelfLabel.textContent = `${archive ? "SHELF" : sortLabel.code} `;
-  themeNames.day = "LIGHT";
-  themeNames.night = "DARK";
   if (foobarShell) {
     detailTransition.dispose();browseTransition.dispose();
     albumPanel.setActive(true);
@@ -3511,7 +3511,7 @@ function entrySettingsMarkup() {
     ["entryWelcome", "entry-welcome", trUi("欢迎文案")],
     ["entryIdentity", "entry-identity", trUi("欢迎 ID")],
   ] as const).map(([key, id, label]) => `<label class="entry-text-field" for="${id}"><span>${label}<output data-entry-count="${key}" aria-hidden="true">${preferences[key].length} / ${ENTRY_TEXT_MAX_LENGTH}</output></span><input type="text" id="${id}" data-entry-text="${key}" value="${esc(preferences[key])}" maxlength="${ENTRY_TEXT_MAX_LENGTH}" pattern="[A-Za-z]+( [A-Za-z]+)*" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="entry-text-help entry-text-status" ${disabled}></label>`).join("");
-  return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>RHINE: IMAGINE</small></h3>${!future ? trUi('<p class="entry-unavailable-note">入场动画仅适用于莱茵生命：映像主题。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
+  return ui`<section class="panel-section" id="entry-settings"><h3>终端入场 <small>RHINE LAB: REFLECTIONS</small></h3>${!future ? trUi('<p class="entry-unavailable-note">入场动画仅适用于莱茵生命：映像主题。</p>') : ""}<label class="settings-row"><span>每次打开窗口时播放入场<small>关闭后直接进入总览，仍可手动重播。</small></span><input type="checkbox" id="entry-on-open" ${preferences.entryOnOpen ? "checked" : ""} ${disabled}></label><div class="entry-text-fields">${fields}</div><p id="entry-text-help">仅限英文字母 A–Z/a–z 和单词间空格，最多 24 个字符（含空格）。离开输入框时自动保存，留空恢复默认。</p><div class="entry-settings-actions"><button type="button" class="text-button" data-action="entry-replay" aria-describedby="entry-replay-note">重播入场 ↗</button><button type="button" class="text-button" data-action="entry-text-reset" ${disabled}>恢复默认文案与 ID ↗</button></div><p id="entry-replay-note"></p><p id="entry-text-status" role="status" aria-live="polite"></p></section>`;
 }
 
 function libraryBrowseOrderMarkup() {
