@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { createReadStream as nodeCreateReadStream, promises as nodeFs } from 'node:fs';
 import { builtinModules, createRequire } from 'node:module';
 import path from 'node:path';
@@ -634,6 +635,7 @@ export async function inspectWindowsPayloadInputs({ projectRoot = projectFromScr
     'NOTICE.md',
     'README.md',
     'docs/DEVELOPMENT.md',
+    'windows/SetExeIcon.cs',
     'public/licenses/taglib-wasm-license.txt',
     'public/licenses/taglib-lgpl-2.1.txt',
     'public/licenses/msgpack.txt',
@@ -830,6 +832,74 @@ async function copyLicenseFiles(projectRoot, appDir) {
   }
 }
 
+async function updateCopiedExecutableIcon(projectRoot, executablePath) {
+  const releaseRoot = await fs.realpath(path.join(projectRoot, releaseRootName));
+  const targetRealPath = await fs.realpath(executablePath);
+  assertWithin(releaseRoot, targetRealPath, 'Executable icon target', false);
+  const sourceRuntime = path.resolve(projectRoot, '.tools', 'source-preview-electron', 'electron.exe');
+  if (path.relative(sourceRuntime, targetRealPath) === '') {
+    fail('Refusing to update the source-preview Electron runtime.');
+  }
+
+  const helperSource = path.join(projectRoot, 'windows', 'SetExeIcon.cs');
+  const icon = path.join(projectRoot, 'windows', 'app.ico');
+  await assertRegularFile(helperSource, 'Windows executable icon helper source');
+  await assertRegularFile(icon, 'Windows application icon');
+  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+  const compilerCandidates = [
+    path.join(systemRoot, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'),
+    path.join(systemRoot, 'Microsoft.NET', 'Framework', 'v4.0.30319', 'csc.exe'),
+  ];
+  let compiler;
+  for (const candidate of compilerCandidates) {
+    if (await fs.access(candidate).then(() => true, () => false)) {
+      compiler = candidate;
+      break;
+    }
+  }
+  if (!compiler) fail('The existing .NET Framework csc.exe is unavailable; no compiler will be downloaded.');
+
+  const toolDirectory = await fs.mkdtemp(path.join(releaseRoot, '.icon-tool-'));
+  const helperExe = path.join(toolDirectory, 'SetExeIcon.exe');
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn(compiler, [
+        '/nologo', '/target:exe', `/out:${helperExe}`, helperSource,
+      ], { cwd: projectRoot, stdio: 'inherit', windowsHide: true });
+      child.once('error', reject);
+      child.once('close', code => code === 0
+        ? resolve()
+        : reject(new Error(`Executable icon helper compilation failed (${code}).`)));
+    });
+    await assertRegularFile(helperExe, 'Compiled executable icon helper');
+    await new Promise((resolve, reject) => {
+      const child = spawn(helperExe, [
+        targetRealPath,
+        icon,
+        sourceRuntime,
+        projectRoot,
+      ], { cwd: projectRoot, stdio: 'inherit', windowsHide: true });
+      child.once('error', reject);
+      child.once('close', code => code === 0
+        ? resolve()
+        : reject(new Error(`Executable icon update failed (${code}); temporary build retained at ${toolDirectory}.`)));
+    });
+  } catch (error) {
+    throw new Error(`${error.message}; temporary helper output retained at ${toolDirectory}.`, { cause: error });
+  }
+
+  try {
+    const realToolDirectory = await fs.realpath(toolDirectory);
+    assertWithin(releaseRoot, realToolDirectory, 'Temporary icon helper output', false);
+    await assertRealDirectory(realToolDirectory, 'Temporary icon helper output');
+    await assertRegularFile(helperExe, 'Temporary icon helper executable');
+    await fs.unlink(helperExe);
+    await fs.rmdir(realToolDirectory);
+  } catch (error) {
+    console.error(`Temporary icon helper output remains at ${toolDirectory}: ${error.message}`);
+  }
+}
+
 async function copyRuntimeAndSources(projectRoot, stageRoot, inputs) {
   await copyDirectory(inputs.electron.root, stageRoot, {
     label: 'Electron runtime',
@@ -847,7 +917,8 @@ async function copyRuntimeAndSources(projectRoot, stageRoot, inputs) {
   });
   const electronExe = path.join(stageRoot, 'electron.exe');
   await assertRegularFile(electronExe, 'Copied Electron executable');
-  await fs.rename(electronExe, path.join(stageRoot, executableName));
+  const appExecutable = path.join(stageRoot, executableName);
+  await fs.rename(electronExe, appExecutable);
 
   const appDir = path.join(stageRoot, appRelative);
   await fs.mkdir(appDir, { recursive: true });
@@ -1030,6 +1101,7 @@ export async function stageWindowsPayload({ projectRoot = projectFromScript, out
   const stageRoot = await fs.mkdtemp(path.join(stagingParent, '.stage-' + randomUUID() + '-'));
   try {
     const appDir = await copyRuntimeAndSources(project, stageRoot, inputs);
+    await updateCopiedExecutableIcon(project, path.join(stageRoot, executableName));
     const files = await inventoryFiles(stageRoot);
     const manifest = {
       schemaVersion: 1,

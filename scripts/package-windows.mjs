@@ -581,6 +581,9 @@ if (preparedIndex < 0) {
     ['docs/DEVELOPMENT.md', 'resources/app/docs/DEVELOPMENT.md'],
     ['LICENSE', 'resources/app/LICENSE'],
     ['NOTICE.md', 'resources/app/NOTICE.md'],
+    ['windows/app.ico', 'resources/app/desktop/app.ico'],
+    ['public/icons/icon-512.png', 'resources/app/dist/icons/icon-512.png'],
+    ['public/favicon.svg', 'resources/app/dist/favicon.svg'],
   ]) {
     const original = await fs.readFile(path.join(project, relative));
     const copy = await fs.readFile(path.join(payload, destination));

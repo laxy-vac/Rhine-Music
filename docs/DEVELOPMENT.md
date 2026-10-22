@@ -100,6 +100,7 @@ Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:wi
 打包流程：
 
 1. `stage-windows-payload.mjs` 核对 Electron、前端界面、原生音频、Sony、Python、生产依赖和许可的来源与 SHA-256，把运行载荷写入 `.tools/releases/<版本>-<时间>/payload/`。
+   复制后使用 Windows 已有的 .NET Framework C# 编译器构建 `windows/SetExeIcon.cs`，把多尺寸 ICO 写入便携 EXE，并读回每组资源验证。源 Electron 不变，构建辅助程序不进入 ZIP；目标机器不需要 .NET。图标资源更新完成后才生成载荷哈希。
 2. `package-windows.mjs` 校验 `desktop/app-storage.cjs` 的安装式布局仍指向 exe 所在目录，并确认 `desktop/main.cjs` 把 `userData`、`sessionData`、`temp`、`crashDumps` 和日志路径改到该目录；随后写入 `README-Portable.txt`、`data/`、`presets/themes/`、`presets/eq/` 说明文件，预建空的 `data/config/`、`data/library/lyrics/cache/`、`data/session/`、`data/logs/`、`data/crashes/`、`data/tmp/`、`data/lsp/`、`presets/eq/standard/` 等存储目录，更新 `release-manifest.json` 的完整文件清单与 SHA-256，拒绝任何 `data/`/`presets/` 下的运行数据或个人预设，再用 Windows 自带的 `System.IO.Compression.ZipArchive` 压缩（含空目录条目）。
 3. 产物为 `Rhine-Music-<版本>-Windows-x64-Portable.zip`、同名 `.sha256` 和 `build-report.json`；ZIP 根目录直接包含 `Rhine Music.exe`、`resources/app/`、`data/`、`presets/` 和说明文件。
 

@@ -10,6 +10,7 @@
 | art/build_punk_reference_case.py、art/punk-reference-case.blend | public/assets/punk-reference-case.glb；src/punk-case-asset.ts | 根据主题参考图重建的 Punk 盒体 |
 | art/build_style_player_rail.py、art/style-player-rail.blend | src/assets/style/camera-player/rail/ | 低视角播放器货架 |
 | art/build_audio_tech_logos.py | public/audio-tech/*.svg | 从 art/ 中的标志源图描摹透明 SVG；需要已有 Pillow 环境 |
+| art/rhine-music-icon.svg | public/icons/、public/favicon.svg、windows/app.ico | 应用图标：档案盒轮廓、莱茵双环标记和播放符号 |
 
 Blender 工程使用 Blender Python。普通 Blender 任务可从仓库根目录用已准备的 Blender 后台运行，例如：
 
@@ -22,6 +23,8 @@ blender --factory-startup --background --python-exit-code 1 --python art/build_s
 ```
 
 最后一个脚本要求 Blender 3.6 系列。运行生成器会更新相应导出资源；模型更新还需保留脚本生成的版本模块，以便应用缓存识别资源变化。生成器不会随播放器启动自动运行，也不应为此说明安装 Blender 或 Python 依赖。
+
+应用图标以 `rhine-music-icon.svg` 为源稿，通过 `node scripts/build-icons.mjs` 导出网页/PWA 图标及 16–256 像素的多尺寸 ICO。导出器使用已有 Sharp，也可用 `--sharp-module <现有模块路径>` 指定；普通播放器构建直接使用已提交资源，不要求安装 Sharp。便携版在载荷生成时将 ICO 写入复制后的 EXE 资源，随后才生成文件清单；不会改写原始 Electron。
 
 src/assets/style/case、rail、floor 与相关主题图像来自 RhinE 1.4.0 Audio Archive 资源包；配色 token 使用 [RhinE 仓库的固定提交](https://github.com/ericzhang12111-cell/RhinE/blob/cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0/theme/tokens/tokens.json)。Audio Archive MIT 原文在 public/licenses/audio-archive-style-mit.txt，Geist Mono 单独使用 SIL Open Font License。没有复制 foobar2000 组件。具体来源与第三方权利见根目录 NOTICE.md 和对应许可证。
 

@@ -1,7 +1,7 @@
-# Builds windows/app.ico (16/32/48/64/128/256 px PNG frames) from public/icons/icon-512.png.
+# Fallback: builds windows/app.ico from the existing PNG. build-icons.mjs exports directly from SVG.
 param([string]$Source = "$PSScriptRoot\..\public\icons\icon-512.png", [string]$Target = "$PSScriptRoot\app.ico")
 Add-Type -AssemblyName System.Drawing
-$sizes = 16, 32, 48, 64, 128, 256
+$sizes = 16, 24, 32, 48, 64, 128, 256
 $original = [System.Drawing.Image]::FromFile((Resolve-Path $Source))
 $frames = foreach ($size in $sizes) {
   $bitmap = New-Object System.Drawing.Bitmap $size, $size

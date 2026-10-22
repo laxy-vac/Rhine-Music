@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 
 export async function interfaceSourceManifest(project){
  const punkModel='public/assets/punk-reference-case.glb';
- const paths=['index.html','quality-benchmark.html','vite.config.ts','package.json','tsconfig.json','scripts/build-source-preview.mjs','scripts/interface-source-manifest.mjs',punkModel];
+ const paths=['index.html','quality-benchmark.html','vite.config.ts','package.json','tsconfig.json','scripts/build-source-preview.mjs','scripts/interface-source-manifest.mjs','art/rhine-music-icon.svg','public/favicon.svg','public/manifest.webmanifest','public/icons/app-icon.svg','public/icons/apple-touch-icon.png','public/icons/icon-192.png','public/icons/icon-512.png','public/icons/icon-maskable-512.png','windows/app.ico',punkModel];
  async function visit(relative){
   const entries=await fs.readdir(path.join(project,relative),{withFileTypes:true});
   for(const entry of entries){
