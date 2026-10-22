@@ -9,13 +9,8 @@ const {registerWindowControls}=require('./window-controls.cjs');
 const gpuSelectionModel=require('./gpu-selection.cjs');
 const {configureStartupGpu,registerGpuControls}=require('./gpu-controller.cjs');
 const root=path.resolve(__dirname,'..');
-const args=process.argv.slice(1),selfTest=args.includes('--self-test');
 const sourcePreview=process.env.RHINE_SOURCE_PREVIEW==='1';
-const settingsCheck=sourcePreview&&args.includes('--check-settings-page');
-const previewUICheck=args.includes('--check-preview-ui');
-if(previewUICheck)app.commandLine.appendSwitch('mute-audio');
-if(settingsCheck){app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');app.commandLine.appendSwitch('disable-renderer-backgrounding')}
-app.setName(sourcePreview?'Rhine Music Source Preview':'Rhine Music Preview');
+app.setName(sourcePreview?'Rhine Music Source Preview':'Rhine Music');
 const storage=resolveStorageLayout({projectRoot:root,execPath:process.execPath,sourcePreview});
 try{prepareStorageSync(storage)}catch(error){dialog.showErrorBox('Rhine Music 存储目录不可用',`${error.message}\n请选择普通用户可写的安装目录；程序不会改权限或回退到 AppData。`);app.exit(1);throw error}
 app.setPath('userData',storage.home);
@@ -252,35 +247,15 @@ ipcMain.handle('rhine:audio-presets:save',async(event,value)=>{
  try{await write;return{ok:true}}
  catch(error){return{ok:false,error:`音频预设文件写入失败，原文件未替换：${error.message}`}}
 });
-if(!selfTest&&!settingsCheck&&!previewUICheck&&!app.requestSingleInstanceLock()){app.quit()}
+if(!app.requestSingleInstanceLock()){app.quit()}
 else {
- const startupGate=!selfTest&&!settingsCheck&&!previewUICheck?createHiddenStartupGate({ipcMain,app,dialog,getWindow:()=>window}):null;
+ const startupGate=createHiddenStartupGate({ipcMain,app,dialog,getWindow:()=>window});
  app.whenReady().then(async()=>{
   try {
    windowAspectModel=await import(pathToFileURL(path.join(root,'src/window-aspect-model.mjs')).href);
    entryPreferencesModel=await import(pathToFileURL(path.join(root,'src/entry-preferences.mjs')).href);
    const {attachWindowAspect}=await import(pathToFileURL(path.join(__dirname,'window-aspect.mjs')).href);
    await loadAudioPresetStore();
-   if(previewUICheck){
-    // Explicit synthetic check only: the helper owns a mock service and hidden UI.
-    if(!root.toLowerCase().includes(`${path.sep}.tools${path.sep}preview-release${path.sep}`))throw new Error('打包UI检查只允许在项目内隔离的preview-release产物中运行。');
-    preferences={...selectPreferences(await preferencesStore.load()),bgm:false,sound:false,volume:0};
-    const {runPreviewUICheck}=await import(pathToFileURL(path.join(__dirname,'check-preview-ui.mjs')).href);
-    const report=await runPreviewUICheck({root,dataDir,BrowserWindow,ownWindow:value=>{window=value}});
-    await saveTail.catch(()=>{});
-    await fs.writeFile(path.join(storage.logsDir,'preview-ui-check.json'),JSON.stringify(report,null,2)+'\n');
-    console.log(JSON.stringify(report));app.exit(report.ok?0:1);return;
-   }
-   if(selfTest) {
-    const index=args.indexOf('--report');if(index<0||!args[index+1])throw new Error('Self-test requires --report <file>');
-    const {runSelfTest}=await import(pathToFileURL(path.join(__dirname,'self-test.mjs')).href);
-    const report=await runSelfTest({root,dataDir});const reportFile=path.resolve(args[index+1]);await fs.mkdir(path.dirname(reportFile),{recursive:true});await fs.writeFile(reportFile,JSON.stringify(report,null,2)+'\n');app.exit(report.ok?0:1);return;
-   }
-   if(settingsCheck){
-    const {runSettingsPageCheck}=await import(pathToFileURL(path.join(__dirname,'check-settings-page.mjs')).href);
-    const report=await runSettingsPageCheck({root,dataDir,home:app.getPath('userData'),BrowserWindow,audioCore:args.includes('--check-audio-core'),ownWindow:value=>{window=value}});
-    await fs.writeFile(path.join(app.getPath('userData'),'settings-review-report.json'),JSON.stringify(report,null,2)+'\n');console.log(`Settings page review: ${report.ok?'passed':'failed'}`);app.exit(report.ok?0:1);return;
-   }
    preferences=selectPreferences(await preferencesStore.load());
    const {createMusicServer}=await import(pathToFileURL(path.join(root,'scripts/music-server.mjs')).href);
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
@@ -303,9 +278,9 @@ else {
     // proceeds; it must not tear down the service or display a startup error.
     if(error.code!=='ERR_ABORTED'&&error.errno!==-3)throw error;
    }
-  }catch(error){if(settingsCheck){await fs.writeFile(path.join(app.getPath('userData'),'settings-review-report.json'),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{});console.error(error.stack)}else if(!selfTest&&!previewUICheck)startupGate?.reportFailure(error.message);else if(!selfTest)dialog.showErrorBox('Rhine Music 启动失败',error.message);else {const i=args.indexOf('--report');if(i>=0&&args[i+1])await fs.writeFile(path.resolve(args[i+1]),JSON.stringify({ok:false,error:error.stack},null,2)).catch(()=>{})}if(!startupGate)app.exit(1)}
+  }catch(error){startupGate.reportFailure(error.message)}
  });
- app.on('window-all-closed',()=>{if(!previewUICheck)app.quit()});
+ app.on('window-all-closed',()=>app.quit());
  app.on('before-quit',event=>{
   if(quitting)return;event.preventDefault();quitting=true;
   const shut=async()=>{if(service){await service.interfaceAudio?.close().catch(()=>{});await service.native.stopCurrent().catch(()=>{});service.sony.close();service.ftp.close();service.native.close();service.server.closeAllConnections();await new Promise(resolve=>service.server.close(resolve))}await Promise.all([saveTail.catch(()=>{}),gpuSaveTail.catch(()=>{}),audioPresetSaveTail.catch(()=>{}),standardEqPresetStore.flush()])};

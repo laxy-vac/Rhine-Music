@@ -26,7 +26,6 @@ internal static class Standalone {
     public static int Main(string[] args) {
         AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling",false);
         AppContext.SetSwitch("Switch.System.IO.BlockLongPaths",false);
-        bool test=Array.IndexOf(args,"--self-test")>=0;
         try {
             var assembly=Assembly.GetExecutingAssembly();string expected;
             using(var reader=new StreamReader(assembly.GetManifestResourceStream("Rhine.Payload.sha256")))expected=reader.ReadToEnd().Trim();
@@ -80,13 +79,7 @@ internal static class Standalone {
             foreach(string argument in args)start.Arguments+=" "+Quote(argument);
             using(var process=Process.Start(start)){process.WaitForExit();return process.ExitCode;}
         }catch(Exception error) {
-            if(test) {
-                int index=Array.IndexOf(args,"--report");
-                if(index>=0&&index+1<args.Length) {
-                    try {string report=Path.GetFullPath(args[index+1]);Directory.CreateDirectory(Path.GetDirectoryName(report));string message=error.ToString().Replace("\\","\\\\").Replace("\"","\\\"").Replace("\r","\\r").Replace("\n","\\n");File.WriteAllText(report,"{\"ok\":false,\"launcherError\":\""+message+"\"}");}catch{}
-                }
-            }
-            if(!test)MessageBox.Show(error.Message,"Rhine Music",MessageBoxButtons.OK,MessageBoxIcon.Error);
+            MessageBox.Show(error.Message,"Rhine Music",MessageBoxButtons.OK,MessageBoxIcon.Error);
             return 1;
         }
     }

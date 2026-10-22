@@ -1,47 +1,53 @@
 # Rhine Music
 
-Windows 音乐播放器，基于 RhineLabUI，提供 Future / Rhine 与 Punk / Audio Archive 两套主题、本地及在线专辑架、歌词、均衡器和原生音频输出。
+Windows 桌面音乐播放器，基于 TypeScript、Three.js、Electron 和原生音频主机。
 
-音乐适配与维护：Copyright (c) 2026 RonaldDeng。上游：Copyright (c) 2026 LBEILC。
+提供 **莱茵生命：映像（Rhine Lab: Reflections）** 与 **仿孤星（Lone Trail–Inspired）** 两套主题，共用音乐库、播放状态和渲染流程。
 
-## 当前基线
+## 功能
 
-日常开发使用本仓库的 `main`。两主题共用状态、目录、播放及三维渲染。当前功能和动效保留，下一阶段集中处理启动与运行性能；动效设计已停止，不代表视觉满意，也不自动继续设计 Punk 入场。
+- 本地、FTP 和在线专辑架；ARRAY、MATRIX、GRID 浏览、搜索、分组与排序。
+- 可调唱片盒体、材质与部件，日夜配色、画质和窗口设置。
+- 专辑介绍、封面和歌曲标签编辑；多歌手、主唱分组、分类规则图形编辑及 JSON 批量管理。
+- MusicBrainz、Wikipedia、网易云音乐、QQ 音乐及自定义资料源；全局优先级与单专辑覆盖。
+- 本地/云歌词、独立校准、同步歌词与真实音频频谱。
+- PCM、DSD、DoP、均衡器、Sony 音效和 LSP 原生均衡器窗口；具体输出能力取决于已准备的组件和设备。
 
-- [当前状态](docs/PROJECT-STATUS.md)：已完成能力与源码地图。
-- [优化基线](docs/OPTIMIZATION-BASELINE.md)：运行性能目标、测量口径、源码入口和保护点。
-- [本地开发](docs/LOCAL-DEVELOPMENT.md)：构建、启动、工具及数据位置。
-- [文档索引](docs/README.md)：当前产品与技术规范。
+## 构建与运行
 
-`package.json` 的版本仍为 `0.3.1-preview.1`；此前品尝版安装器是独立交付快照，不代表当前源码。安装、数据和卸载规则见[品尝版说明](docs/PREVIEW-RELEASE.md)。
-
-## 源码运行
-
-在已有依赖与桌面工具的项目环境中执行：
+前端要求 **Node.js 24 或更新版本**。依赖由 `package-lock.json` 锁定。
 
 ```powershell
-node scripts/build-source-preview.mjs --interface-only
+npm ci
+npm run build
+```
+
+`npm run dev` 启动前端开发服务；`npm run music` 启动音乐服务。完整桌面及原生音频需另行准备 Electron、音频组件和编译工具，详见 [开发接手指南](docs/DEVELOPMENT.md)。普通构建、源码启动和安装器打包不会自动下载这些工具。
+
+已有桌面开发环境可直接使用：
+
+```powershell
+npm run build:source
 .\启动源码验证.cmd
 ```
 
-界面输出到 `.tools/source-preview-interface`。修改宿主、预加载层、服务或原生组件后，按[本地开发](docs/LOCAL-DEVELOPMENT.md)构建并完整退出、重新启动。普通入口不会自动安装依赖、下载组件或扫描音乐库。
+`构建源码验证.cmd` 同时构建原生音频与前端；`启动源码验证.cmd` 只启动已有构建。两者沿用本机 `.tools/source-preview-*` 路径。
 
-新克隆不含 `node_modules/`、`.tools/` 或个人数据；环境准备须先获用户授权，见[贡献说明](CONTRIBUTING.md)。
+## 目录
 
-## 仓库结构
-
-| 目录 | 职责 |
+| 目录 | 内容 |
 | --- | --- |
-| `src/` | 界面、公共状态、目录、三维场景、主题与交互 |
-| `desktop/` | Electron 宿主、预加载层、窗口与隔离检查 |
-| `scripts/` | 本地服务、构建、导出与验证 |
-| `native/`、`vendor/` | 原生音频代码、第三方组件及许可 |
-| `public/`、`art/`、`content/` | 运行资源、模型、建模与内容资料 |
-| `windows/`、`.github/` | Windows 包装与仓库工作流 |
-| `docs/` | 当前规范、操作和优化基线 |
+| `src/` | 界面、主题、状态、目录、渲染和交互 |
+| `desktop/` | Electron 宿主、窗口、预加载和显卡选择 |
+| `scripts/` | 音乐服务、标签写回、构建和 Windows 安装器 |
+| `native/`、`vendor/` | 原生音频实现、第三方源码和许可 |
+| `art/`、`public/`、`content/` | 美术源文件、运行资源和档案内容 |
+| `docs/DEVELOPMENT.md` | 环境、代码地图、数据位置与维护约定 |
 
-本机依赖、工具、构建、日志和个人配置留在忽略目录，不进入源码交付。旧实现和修复报告从 Git 按需追溯，不再作为当前入口。
+依赖、工具、构建产物、缓存和个人音乐数据不进入 Git。仓库保留当前实现；历史变更由 Git 记录。
 
-## 许可
+## 署名与许可
 
-有权授权的应用代码、建模脚本和技术文档沿用 [MIT License](LICENSE)，保留上游与适配者署名。模型、字体、原作视觉、音频、Sony 及其他依赖按各自权利处理，详见 [NOTICE](NOTICE.md)；[上游原说明](README.original.md)保留原始语境。
+音乐适配与维护：Copyright (c) 2026 RonaldDeng。原版 [RhineLabUI](https://github.com/LBEILC/RhineLabUI)：Copyright (c) 2026 LBEILC。
+
+可授权的应用代码使用 [MIT License](LICENSE)。字体、模型、视觉、音频、Sony 及其他第三方组件保留各自权利，详见 [NOTICE](NOTICE.md)。

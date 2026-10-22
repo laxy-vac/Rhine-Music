@@ -18,11 +18,11 @@ async function main() {
  await copy(path.join(runtimeRoot,'electron'),staging);
  const appDir=path.join(staging,'resources/app');await fs.mkdir(appDir,{recursive:true});
  await copy(path.join(project,'dist'),path.join(appDir,'dist'));
- for(const file of ['main.cjs','preload.cjs','window-aspect.mjs','window-controls.cjs','gpu-controller.cjs','gpu-selection.cjs','gpu-adapters.ps1','self-test.mjs','runtime-assets.json'])await copy(path.join(project,'desktop',file),path.join(appDir,'desktop',file));
+ for(const file of ['main.cjs','preload.cjs','window-aspect.mjs','window-controls.cjs','gpu-controller.cjs','gpu-selection.cjs','gpu-adapters.ps1','runtime-assets.json'])await copy(path.join(project,'desktop',file),path.join(appDir,'desktop',file));
  await copy(path.join(project,'src/window-aspect-model.mjs'),path.join(appDir,'src/window-aspect-model.mjs'));
  await copy(path.join(project,'src/entry-preferences.mjs'),path.join(appDir,'src/entry-preferences.mjs'));
  await copy(path.join(project,'windows/app.ico'),path.join(appDir,'desktop/app.ico'));
- const scripts=['music-server.mjs','music-library.mjs','read-audio-metadata.mjs','album-introductions.mjs','online-sources.mjs','platform.mjs','sony-walkman.mjs','ftp-library.mjs','native-output.mjs','audio-fixtures.mjs'];
+ const scripts=['music-server.mjs','music-library.mjs','read-audio-metadata.mjs','album-introductions.mjs','online-sources.mjs','platform.mjs','sony-walkman.mjs','ftp-library.mjs','native-output.mjs'];
  for(const file of scripts)await copy(path.join(project,'scripts',file),path.join(appDir,'scripts',file));
  await copy(path.join(project,'scripts/sony-walkman'),path.join(appDir,'scripts/sony-walkman'));
  await copy(path.join(project,'vendor/sony-walkman'),path.join(appDir,'vendor/sony-walkman'));
@@ -52,7 +52,7 @@ async function main() {
  await fs.writeFile(path.join(appDir,'runtime/python/python314._pth'),'python314.zip\n.\nLib/site-packages\n../../scripts/sony-walkman\nimport site\n');
  await fs.writeFile(path.join(appDir,'dist/.music-build.json'),JSON.stringify({prebuilt:true,platform:'win32-x64',version:pkg.version}));
  await fs.writeFile(path.join(appDir,'desktop/build-runtime.json'),JSON.stringify(runtime,null,2)+'\n');
- await copy(path.join(project,'windows/README-Windows.txt'),path.join(staging,'使用说明-Windows.txt'));
+ await copy(path.join(project,'docs/DEVELOPMENT.md'),path.join(staging,'DEVELOPMENT.md'));
  const payload=path.join(release,'Rhine-desktop-payload.zip');await fs.rm(payload,{force:true});
  console.log('Compressing the complete isolated desktop runtime…');
  const psLiteral=value=>"'"+value.replaceAll("'","''")+"'";

@@ -14,13 +14,9 @@ __pycache__/
 *.obj
 *.ilk
 
-# Private workspace notes and machine-specific raw verification
+# Private workspace notes
 /Memory.md
 /reference/
-/docs/SONY-CRELU-VERIFICATION.json
-/docs/SONY-PHASE-VERIFICATION.json
-/docs/SONY-X86-VERIFICATION.json
-/docs/WINDOWS-ENHANCED-VERIFICATION.json
 
 # Local credentials and workspace configuration
 .env

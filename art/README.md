@@ -1,53 +1,28 @@
-# 当前模型与复现入口
+# 美术源文件与运行资源
 
-更新：2026-10-18。正常播放不需要安装Blender；运行时模型在public/assets，原PNG在src/assets/style。权限/构建见 [本地开发](../docs/LOCAL-DEVELOPMENT.md)，精度/差异见 [状态](../docs/PROJECT-STATUS.md)。
+播放器运行时使用已经导出的模型和图像；日常启动不需要 Blender。源工程和生成脚本集中在 art/，运行资源位于 public/assets/ 与 src/assets/style/。
 
-## 三结构
-
-| 结构 | 当前正式来源 | 说明 |
+| 源文件/脚本 | 导出位置 | 用途 |
 | --- | --- | --- |
-| minimal | music-cd.blend / build_music_cd.py → public/assets/music-cd.glb | Future「简单粗糙」选项 |
-| rhine | public/assets/archive-cassette.glb → src/rhine-case-model.ts / rhine-shell-geometry.ts | Future「精细」；原外壳适配盒内专辑，33,256三角形/13材质网格/10部件，另加纸卡与封面 |
-| punk | build_punk_reference_case.py / punk-reference-case.blend → public/assets/punk-reference-case.glb | Future「Punk拓展」及Punk主题唯一结构；源PNG多视角重建，98,080三角形/15部件 |
+| art/build_archive.py、art/rhine-archive.blend | public/assets/archive-cassette.glb | Rhine 盒体外壳与光学结构 |
+| art/build_assembly.py、art/archive-assembly.blend | public/assets/archive-assembly.glb | 盒体拆解演示结构 |
+| art/build_music_cd.py、art/music-cd.blend | public/assets/music-cd.glb；src/music-cd-asset.ts | 简约 CD 盒 |
+| art/build_punk_reference_case.py、art/punk-reference-case.blend | public/assets/punk-reference-case.glb；src/punk-case-asset.ts | 根据主题参考图重建的 Punk 盒体 |
+| art/build_style_player_rail.py、art/style-player-rail.blend | src/assets/style/camera-player/rail/ | 低视角播放器货架 |
+| art/build_audio_tech_logos.py | public/audio-tech/*.svg | 从 art/ 中的标志源图描摹透明 SVG；需要已有 Pillow 环境 |
 
-同一母模用材质/部件变换区分外观，不为十颜色复制模型。精细盒体直接载入cassette后只选取外壳与装饰，保留其比例，不与assembly组合。archive-assembly保留为原上游拆解资产，不作为更多的可选盒体。
+Blender 工程使用 Blender Python。普通 Blender 任务可从仓库根目录用已准备的 Blender 后台运行，例如：
 
-已核对RhineLabUI提交 `12cc5e4013acb9408f753ff71de6b8492299b7c8`：本地cassette的Git blob ID为 `a52bce6ddc49c8ead438f0a07def814e50e6f885`，与上游相同；原文件仍86,154三角形/17网格，未修改。运行时移除Subsurface_Optics、Optical_Film/Edge、Amber_Optical_Inlay；Internal_Ceramic仅剔除112三角的后片，保留3384三角的标签小字/底标；Optical_Edges仅剔除6个内环岛，保留3488三角的外周边/底标。两种混用材质分别映射到字标与饰条高光。low/medium继续省略细字/蚀刻与部分标记。
+```powershell
+blender --background --python art/build_archive.py
+blender --background --python art/build_assembly.py
+blender --background --python art/build_music_cd.py
+blender --background --python art/build_punk_reference_case.py
+blender --factory-startup --background --python-exit-code 1 --python art/build_style_player_rail.py
+```
 
-Rhine原生x宽/y高/z前：纸卡在左，rect x[-2.00,.52]、y[.70,3.22]、正面z=.14，厚.012；清晰窗每边外扩.02，为x[-2.02,.54]、y[.68,3.24]，避开左压边刻纹。Printed_Label/Carbon_Ink整网格与Internal_Ceramic的16个上部字形岛一起x+2.78；标签板新范围x[.925,1.915]，墨层最大约1.969，底部字/徽记留原位，右侧形成独立信息区。材质、索引和字形不变，label布局元数据同步右移。盖板z[.174,.206]，卡在其后。应用统一等比缩放；外围材质保留，窗内使用中性清晰玻璃和真实盖板厚度，透光覆盖与alpha偏好仍有效。闭合盖板用FrontSide，防止其背面进入Three透射缓存，使磨砂切换波及标签。几何复核入口为scripts/check-rhine-shell-geometry.mjs，真实GLB合成图为.tools/case-system-check/rhine-inset-album-*。
+最后一个脚本要求 Blender 3.6 系列。运行生成器会更新相应导出资源；模型更新还需保留脚本生成的版本模块，以便应用缓存识别资源变化。生成器不会随播放器启动自动运行，也不应为此说明安装 Blender 或 Python 依赖。
 
-Rhine右侧动态标签与格式徽标由src/archive-label.ts / rhine-album-info.ts运行时绘制，另加两个平面，不修改原GLB或上述壳体三角形统计。编号沿用上游Canvas版式，标签覆盖原固定001；徽标位于标签下方，独立判断全专辑DSD/Hi-Res，同时满足则并排，单项居中，使用不受环境灯光影响的自身效果。徽标平面总宽1.28/高0.60，单标区域0.60、双标间隔0.08，单位为Rhine源坐标；布局统一等比缩放，单标与双标中的每标同尺寸。阵列共用图集，选中标签独立，退场副本复制标签贴图并保留对应格式，避免切换与销毁影响当前盒体。
+src/assets/style/case、rail、floor 与相关主题图像来自 RhinE 1.4.0 Audio Archive 资源包；配色 token 使用 [RhinE 仓库的固定提交](https://github.com/ericzhang12111-cell/RhinE/blob/cead785dc40b02ee1cb0ae2c2d9a4a3034a186d0/theme/tokens/tokens.json)。Audio Archive MIT 原文在 public/licenses/audio-archive-style-mit.txt，Geist Mono 单独使用 SIL Open Font License。没有复制 foobar2000 组件。具体来源与第三方权利见根目录 NOTICE.md 和对应许可证。
 
-动态标签纸面必须depthWrite=true，防止后绘透射壳体覆盖前方纸面的INFO、标记及上下边线；无需移动源几何或改Canvas版式。检查保留原Canvas、带壳近景depthWrite开/关与无壳近景，见.tools/case-system-check/rhine-album-label-*。
-
-## Punk依据与坐标
-
-原始三维源/PBR未取得；用户接受按多视角重建并明确差异。源依据是src/assets/style/case下各皮肤hero-clear、inspect序列及case.json。正式脚本内置必要数据，不依赖忽略目录的审查JSON才能导出。
-
-Blender X水平、Z竖直、Y深度且负向在前。保持整面玻璃、盒内专辑、实体右内板和前置铭牌；上下横梁包短侧柱。前玻璃覆盖四边倒角后各余0.010，并嵌入边框0.010；玻璃厚0.028，右内板厚0.055，与玻璃后面相隔0.025。外轮廓与封面区域不变。Three由CaseLayout统一等比归一化，不再次拉宽/压薄或重复缩放。
-
-小徽记：源细线描8段Bezier，“/”支在前；optics透明软管、accent内部圆芯、emblem间断白包覆。底冠隐藏轴/开口是估算，两道接缝及底冠仍有可见差异。不能将描线误差或渲染色样称为100%网格/原PBR恢复。信号页大环是另一套资产，不随此脚本重建。
-
-脚本材质保持可被应用层独立调节；实际十套外观由src/case-settings.ts定义。小管的薄壁透光近似和纸卡间接遮挡在应用shader中，不能用Blender原生材质截图代替实际应用渲染验收。
-
-Punk右侧实体铭牌保留原GLB几何，运行时另加完整RHINE LAB/INFO/NO/标记纸面，使用与Rhine相同的archive-label.ts绘制。原铭牌源尺寸.54×.32，统一nativeCaseLayout缩放后的.51686×.30629与GLB实测一致，不能把两者差值当成需要二次缩放的误差。新画面覆盖正面96%，字体等比居中，不拉伸；标签板变换/显隐及cover拆解同步，使用无灯光材质并写入深度。主场景模型缓存的铭牌叠加在ArchiveCaseRenderer完成，源GLB/PNG和内容哈希不变。
-
-两个主题的Punk盒体均保留完整动态铭牌，不添加Hi-Res/DSD徽标；格式徽标仅保留在Future精细款。Punk主题不再展示旧CASE SKIN列表和原图预览，使用同一自制可调Punk模型。盒顶白条及其ARRAY/MATRIX显示适配已移除，不再创建运行时显示平面和标题图集；物理上框、顶夹与GLB保留，详见[主题规则](../docs/THEME-PAGE.md)。
-
-## 导出与缓存版本
-
-只有模型任务获准后才运行建模。复用已有Blender3.6.23，后台factory-startup会话，不保存用户偏好，不因本说明安装/升级工具。
-
-Punk导出生成GLB后自动更新src/punk-case-asset.ts，版本值为GLB SHA-256前12位；case-model引用该URL。当前 `v=0812ed10a1b0`，GLB 2,070,552字节。源码清单包含GLB并核对版本，随后仍需必要界面构建和重启。
-
-极简盒已有music-cd-asset.ts同类机制。不要清用户缓存或手动替换模型却保留旧版本地址。
-
-## 输出与审查
-
-正式脚本/Blend/GLB/版本模块提交；.blend1、截图、日志、QA辅助脚本/profile放忽略的.tools/punk-reference-case或case-system-check。当前源图对照在sol-emblem-audit，缓存回归在cache-refresh-check；这些产物不随Git交接。
-
-保留的其它建模脚本/场景是来源或独立结构，不借整理批量删除。将来如有发布任务，再按匹配Blender格式核查文件浏览器元数据；旧Blender5专用二进制清理脚本不能直接套在当前3.6文件。
-
-## 来源与许可
-
-保留LBEILC上游归属及Audio Archive来源。模型/原作视觉/PNG的许可不因建模脚本采用MIT而统一改变，见 [NOTICE](../NOTICE.md)、[主题来源](../docs/FOOBAR-STYLE-SOURCES.md)。
+Punk GLB 是按已有主题参考图重建的项目模型，不是原作者发布的原始三维网格；无法从二维图像恢复的内侧、截面和材质数值属于估计。art/DSDlogo.svg、DSEE_LOGO.avif、Hi-Res_Audio_(logo).svg、S-MASTER.webp、vinyl.png 等原始标志和图像保留各自权利，不因建模脚本的 MIT 许可自动改授 MIT。

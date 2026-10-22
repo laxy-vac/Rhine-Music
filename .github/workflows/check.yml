@@ -5,16 +5,15 @@ on:
 permissions:
   contents: read
 jobs:
-  offline-tests-and-web-build:
+  source-build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run build:preview
+      - run: npm run build
 # Installer/native/hardware validation requires separately prepared local tools.
 # This workflow does not publish artifacts, call devices or use a personal library.

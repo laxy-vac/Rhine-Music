@@ -1,32 +1,9 @@
-# Native audio and Sony translation research
+# Windows 原生音频
 
-Current local development adds Windows Core Audio WASAPI endpoint selection and
-explicit shared/exclusive sessions in `wasapi-output.h`. BASS remains the decoder;
-ASIO/DSD output keeps its existing route. Source-preview builds use
-`scripts/build-native-audio.mjs --source-preview` through the project's Electron
-Node runtime and local Zig. Outputs/cache stay under `.tools`; original vendor
-executables/manifests are not replaced. The normal source-preview build invokes
-this build first. Hardware, listening, UI and regression checks remain assigned
-to the user; the historical check commands below are not run automatically.
+native/audio-host.cpp 与 native/ 下的头文件实现 Windows 音频主机，提供 WASAPI 与 ASIO 输出、PCM/DSD/DoP 路由及处理链。解码和输出组件来自 vendor/audio/；原生运行文件的来源、哈希及许可见各组件清单和根目录 NOTICE.md。
 
-`audio-host.cpp` is the Windows C++ audio service. It decodes music through the
-pinned original BASS components and outputs through WASAPI or the selected ASIO
-driver. The DSF virtual view preserves the DSD samples while presenting DSDIFF
-framing to the decoder; it avoids the tested end-block loss in BASSDSD 2.4.2.
-DSF ID3 tags remain in the original file and are read by the library metadata
-parser. Native DSD and DoP bypass all PCM effects and digital volume changes.
+从仓库根目录运行 npm run build:native，可用已准备好的 Windows x64 编译器、PCM codec SDK 与 LSP 源码构建主机及其运行库。常规构建使用现有 RHINE_CXX，或项目内已准备的 Zig 工具；构建脚本不会自动下载或安装工具。生成文件及来源清单位于 vendor/audio/windows-x64/，修改原生源码后应重新生成对应二进制和清单再打包。
 
-Build with `npm run build:native`, then run `npm run check:native`. The executable
-and its source hash are recorded in `vendor/audio/windows-x64/assets.json`.
-Changing the source without rebuilding causes desktop packaging to fail.
+Sony 音效桥接的 ARM 指令转写、x86 DLL 生成方式及权利限制见 native/sony/README.md。Sony 原始文件、模型、参数和派生转写不属于项目 MIT 授权；音频源码与第三方组件的实际许可以 NOTICE.md 和随包许可原文为准。
 
-`sony-crelu-reference.cpp` is the limited ARM CReLU kernel translation proof.
-It is Sony-derived private research, subject to the Sony component restrictions
-in `NOTICE.md`; it is not used by the player or a translation of the entire
-DSEE AI system. Its recorded 36 cases / 8,912 values compare bit for bit with
-the original kernel, including special floating-point values. The complete
-evidence is in `docs/SONY-CRELU-VERIFICATION.json` and the firmware research copy.
-The complete supported Sony effect chain now runs the generated x86-64 C++
-instruction translation in `sony/`. Original model, coefficients and parameters
-remain pinned. See [Sony C++ source and validation](sony/README.md) and
-`docs/SONY-WALKMAN.md`; the CReLU file above remains an earlier isolated proof.
+完整桌面构建、已准备组件位置和源码运行入口见 docs/DEVELOPMENT.md。

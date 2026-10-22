@@ -12,10 +12,9 @@ import { interfaceSourceManifest } from './interface-source-manifest.mjs'
 const fs = process.versions.electron ? createRequire(import.meta.url)('original-fs').promises : nodeFs
 
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const settingsCheck = process.argv.includes('--check-settings-page')
 // Recognise the documented source/ layout without relocating the user's data.
 const workspace = path.basename(path.dirname(project)).toLowerCase()==='source' ? path.resolve(project,'../..') : path.resolve(project,'..')
-const previewDir = settingsCheck ? path.join(workspace,'.task-tmp/settings-page-review', String(Date.now())) : path.join(workspace,'music-data-source-preview')
+const previewDir = path.join(workspace,'music-data-source-preview')
 const dataDir = path.join(previewDir, 'music-data')
 const home = path.join(previewDir, 'desktop')
 const runtime = path.join(project, '.tools/source-preview-electron')
@@ -29,7 +28,7 @@ try {
   }
   await fs.access(path.join(interfaceDir, 'index.html'))
   const nativeDir = path.join(project, '.tools/source-preview-native-audio')
-  if (!settingsCheck && await fs.access(path.join(nativeDir, 'rhine-audio-host.exe')).then(() => true, () => false)) {
+  if (await fs.access(path.join(nativeDir, 'rhine-audio-host.exe')).then(() => true, () => false)) {
     const nativeRecord = await fs.readFile(path.join(nativeDir, 'assets.json'), 'utf8').then(JSON.parse)
     if (nativeRecord.kind !== 'rhine-source-preview-native-audio') throw new Error('原生调试构建来源不明，请先运行构建源码验证.cmd。')
     const {sourceFiles}=await nativeSourceManifest(project)

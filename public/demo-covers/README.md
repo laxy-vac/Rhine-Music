@@ -1,9 +1,5 @@
-# Empty-library demonstration artwork
+# 空曲库演示封面
 
-Three original abstract images were created with the built-in ImageGen tool on 2026-09-09, before the user added their real music library. They are only used by the explicitly selected empty-library demonstration. Actual albums always use their own local covers.
+square.png、portrait.png 与 landscape.png 是使用 OpenAI ImageGen 为 Rhine Music 生成的抽象演示图像，用于用户主动选择的空曲库示例。它们不是唱片封面，不代表真实艺人或专辑；真实曲库仍使用用户本地音乐的封面。
 
-- `square.png`: warm sand, a low orange sun, quiet minimal geometric landscape; square artwork.
-- `portrait.png`: deep midnight blue, a small crescent moon above a still sea; portrait artwork.
-- `landscape.png`: cool mist and layered mountains; wide artwork.
-
-The source images are copied without cropping or stretching. `containCover` preserves their original aspect ratio on every 3D card and in the independent viewer. No album names or artist identities were invented for the real library.
+图像按原始比例显示，不裁切或拉伸。模型和其他第三方素材的来源与权利见根目录 NOTICE.md。

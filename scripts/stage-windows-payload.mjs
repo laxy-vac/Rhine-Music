@@ -10,8 +10,8 @@ const originalFs = process.versions.electron ? require('original-fs') : null;
 const fs = originalFs?.promises ?? nodeFs;
 const createReadStream = originalFs?.createReadStream ?? nodeCreateReadStream;
 const projectFromScript = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const previewRootName = path.join('.tools', 'preview-release');
-const executableName = 'Rhine Music Preview.exe';
+const releaseRootName = path.join('.tools', 'releases');
+const executableName = 'Rhine Music.exe';
 const appRelative = path.join('resources', 'app');
 const builtins = new Set([
   ...builtinModules,
@@ -26,6 +26,8 @@ const sourcePreviewMachineFiles = new Set([
   '.archive-sha256',
   'debug.log',
 ]);
+
+const semanticVersionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 function fail(message) {
   throw new Error(message);
@@ -577,14 +579,16 @@ async function verifyPythonRuntime(projectRoot, runtimeAssets) {
   };
 }
 
-export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScript, version } = {}) {
+export async function inspectWindowsPayloadInputs({ projectRoot = projectFromScript, version } = {}) {
   const project = path.resolve(projectRoot);
   await assertRealDirectory(project, 'Project root');
   const packageJson = await readJson(path.join(project, 'package.json'), 'Project package.json');
   const lockfile = await readJson(path.join(project, 'package-lock.json'), 'Project package-lock.json');
   const resolvedVersion = String(version ?? packageJson.version ?? '');
-  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(resolvedVersion)) {
-    fail('A semantic version is required for the preview payload.');
+  const semanticVersion = semanticVersionPattern.exec(resolvedVersion);
+  if (!semanticVersion) fail('A valid semantic version is required for the Windows release payload.');
+  if (semanticVersion.slice(1, 4).some(part => Number(part) > 65535)) {
+    fail('The Windows version resource requires major, minor, and patch values no greater than 65535.');
   }
   if (lockfile.packages?.['']?.version &&
       lockfile.packages[''].version !== packageJson.version) {
@@ -603,8 +607,6 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
     'scripts/metadata-tag-worker.mjs',
     'desktop/main.cjs',
     'desktop/preload.cjs',
-    'desktop/self-test.mjs',
-    'desktop/check-preview-ui.mjs',
     'desktop/window-aspect.mjs',
     'desktop/window-controls.cjs',
     'desktop/gpu-controller.cjs',
@@ -631,10 +633,7 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
     'LICENSE',
     'NOTICE.md',
     'README.md',
-    'docs/PROJECT-STATUS.md',
-    'docs/UNIFIED-ARCHITECTURE.md',
-    'docs/METADATA-EDITOR.md',
-    'docs/PREVIEW-RELEASE.md',
+    'docs/DEVELOPMENT.md',
     'public/licenses/taglib-wasm-license.txt',
     'public/licenses/taglib-lgpl-2.1.txt',
     'public/licenses/msgpack.txt',
@@ -659,14 +658,14 @@ export async function inspectPreviewPayloadInputs({ projectRoot = projectFromScr
   ];
   for (const relative of requiredFiles) {
     const file = path.join(project, ...relative.split('/'));
-    await assertRegularFile(file, 'Required preview document/license');
+    await assertRegularFile(file, 'Required release document/license');
   }
   for (const relative of [
     'vendor/audio/windows-x64/licenses',
     'vendor/licenses/unicorn',
   ]) {
     await assertRealDirectory(path.join(project, ...relative.split('/')),
-      'Required preview license directory');
+      'Required release license directory');
   }
   return {
     projectRoot: project,
@@ -878,7 +877,7 @@ async function copyRuntimeAndSources(projectRoot, stageRoot, inputs) {
   });
 
   const appPackage = {
-    name: 'rhine-music-preview',
+    name: 'rhine-music',
     version: inputs.version,
     private: true,
     type: 'module',
@@ -951,9 +950,7 @@ async function copyRuntimeAndSources(projectRoot, stageRoot, inputs) {
 
   for (const relative of [
     'README.md',
-    'docs/PROJECT-STATUS.md',
-    'docs/UNIFIED-ARCHITECTURE.md',
-    'docs/PREVIEW-RELEASE.md',
+    'docs/DEVELOPMENT.md',
   ]) {
     await copyProjectFile(projectRoot, appDir, relative, 'docs/' + path.basename(relative));
   }
@@ -992,18 +989,18 @@ async function inventoryFiles(root) {
 }
 
 async function ensureOutputParent(projectRoot, outputDir) {
-  const previewRoot = path.join(projectRoot, previewRootName);
+  const releaseRoot = path.join(projectRoot, releaseRootName);
   const toolsRoot = path.join(projectRoot, '.tools');
   await assertRealDirectory(toolsRoot, 'Project tools directory');
-  assertWithin(previewRoot, outputDir, 'outputDir', false);
-  await fs.mkdir(previewRoot, { recursive: true });
-  await assertRealDirectory(previewRoot, 'Preview release root');
-  const relative = path.relative(previewRoot, outputDir);
+  assertWithin(releaseRoot, outputDir, 'outputDir', false);
+  await fs.mkdir(releaseRoot, { recursive: true });
+  await assertRealDirectory(releaseRoot, 'Windows release root');
+  const relative = path.relative(releaseRoot, outputDir);
   const parts = relative.split(path.sep);
   if (parts.some((part) => !part || part === '.' || part === '..')) {
-    fail('outputDir must be a child of project .tools/preview-release.');
+    fail('outputDir must be a child of project .tools/releases.');
   }
-  let current = previewRoot;
+  let current = releaseRoot;
   for (const part of parts.slice(0, -1)) {
     current = path.join(current, part);
     try {
@@ -1018,18 +1015,17 @@ async function ensureOutputParent(projectRoot, outputDir) {
   }
   try {
     await fs.lstat(outputDir);
-    fail('Refusing to overwrite an existing preview payload: ' + outputDir);
+    fail('Refusing to overwrite an existing release payload: ' + outputDir);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
-  return previewRoot;
+  return releaseRoot;
 }
 
-export async function stagePreviewPayload({ projectRoot = projectFromScript, outputDir, version } = {}) {
-  const inputs = await inspectPreviewPayloadInputs({ projectRoot, version });
+export async function stageWindowsPayload({ projectRoot = projectFromScript, outputDir, version } = {}) {
+  const inputs = await inspectWindowsPayloadInputs({ projectRoot, version });
   const project = inputs.projectRoot;
-  const previewRoot = path.join(project, previewRootName);
-  const resolvedOutput = path.resolve(project, outputDir ?? path.join(previewRootName, inputs.version));
+  const resolvedOutput = path.resolve(project, outputDir ?? path.join(releaseRootName, inputs.version));
   const stagingParent = await ensureOutputParent(project, resolvedOutput);
   const stageRoot = await fs.mkdtemp(path.join(stagingParent, '.stage-' + randomUUID() + '-'));
   try {
@@ -1037,7 +1033,7 @@ export async function stagePreviewPayload({ projectRoot = projectFromScript, out
     const files = await inventoryFiles(stageRoot);
     const manifest = {
       schemaVersion: 1,
-      product: 'Rhine Music Preview',
+      product: 'Rhine Music',
       version: inputs.version,
       appExecutable: executableName,
       appDir: toPosix(appRelative),
@@ -1095,7 +1091,7 @@ async function runCli(argv) {
       fail('Unknown argument: ' + argument);
     }
   }
-  const result = await stagePreviewPayload({ projectRoot, outputDir, version });
+  const result = await stageWindowsPayload({ projectRoot, outputDir, version });
   process.stdout.write(JSON.stringify({
     appExecutable: result.appExecutable,
     appDir: result.appDir,
