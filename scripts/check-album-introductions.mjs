@@ -83,7 +83,21 @@ test('Wikipedia search discovers a candidate but its snippet is never used as th
 
 async function storeFixture(t, introductionProvider, count = 1) {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'rhine-introduction-test-'))
-  t.after(() => fs.rm(temporary, { recursive: true, force: true }))
+  let store
+  t.after(async () => {
+    if (store) {
+      while (true) {
+        const pending = [store.scanPromise, store.introductionsPromise, store.enrichPromise].filter(Boolean)
+        if (pending.length) await Promise.allSettled(pending)
+        else {
+          const writes = store.saveChain
+          await writes.catch(() => {})
+          if (!store.scanPromise && !store.introductionsPromise && !store.enrichPromise && store.saveChain === writes) break
+        }
+      }
+    }
+    await fs.rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
+  })
   const root = path.join(temporary, 'music')
   await fs.mkdir(root)
   for (let i = 0; i < count; i += 1) {
@@ -91,7 +105,7 @@ async function storeFixture(t, introductionProvider, count = 1) {
     await fs.mkdir(folder)
     await fs.writeFile(path.join(folder, '01.flac'), 'synthetic fixture, not real music')
   }
-  const store = await new MusicLibraryStore({ dataDir: path.join(temporary, 'index'), defaultRoots: [root], introductionProvider, metadataParser: async () => ({ common: { album: album.title, artist: album.artist, year: album.year, comment: [{ text: 'local note is not an album introduction' }] }, format: {} }) }).init()
+  store = await new MusicLibraryStore({ dataDir: path.join(temporary, 'index'), defaultRoots: [root], introductionProvider, metadataParser: async file => ({ common: { album: count > 1 ? `${album.title} ${path.basename(path.dirname(file))}` : album.title, artist: album.artist, year: album.year, comment: [{ text: 'local note is not an album introduction' }] }, format: {} }) }).init()
   await store.scan()
   return store
 }
@@ -149,4 +163,120 @@ test('a simultaneous scan retains a newly returned introduction and manual genre
   assert.equal(store.snapshot().albums[0].genreId, 'jazz')
   const reloaded = await new MusicLibraryStore({ dataDir: store.dataDir }).init()
   assert.equal(reloaded.snapshot().albums[0].description, page.extract)
+})
+
+test('global introduction application protects manual text, replaces it only on a match, and preserves source IDs without URLs', async (t) => {
+  const store = await storeFixture(t, { lookup: async () => ({ status: 'not-found' }) })
+  const album = store.index.albums[0]
+  album._userInfo = {
+    revision: 'manual-revision', description: 'Manual introduction.',
+    descriptionSource: { kind: 'manual', name: '手动编辑' }, sourceOverride: 'custom-private',
+    cover: { path: 'fixture-cover', version: 'fixture' },
+  }
+  album.description = album._userInfo.description
+  album.descriptionSource = album._userInfo.descriptionSource
+  let calls = 0
+  store.albumInfoSources = { lookup: async () => { calls += 1; return { status: 'not-found', checkedAt: new Date().toISOString() } } }
+
+  await store.updateIntroductions({ force: true })
+  assert.equal(calls, 0, 'force does not bypass manual text or a per-album source override')
+  assert.equal(album.description, 'Manual introduction.')
+
+  await store.updateIntroductions({ force: true, overwriteManual: true })
+  assert.equal(album.description, 'Manual introduction.', 'a no-result lookup leaves manual data intact')
+  assert.equal(album._userInfo.sourceOverride, 'custom-private')
+  assert.ok(album._userInfo.cover, 'global overwrite keeps the user cover')
+
+  store.albumInfoSources.lookup = async () => ({
+    status: 'matched', checkedAt: new Date().toISOString(), description: 'Global catalog introduction.',
+    descriptionSource: { kind: 'online', sourceId: 'custom-catalog', name: 'Fixture catalog' },
+    automaticSelection: { sourceId: 'custom-catalog', title: album.title, artist: album.artist },
+  })
+  await store.updateIntroductions({ force: true, overwriteManual: true })
+  assert.equal(album.description, 'Global catalog introduction.')
+  assert.equal(album.descriptionSource.selection, 'auto')
+  assert.equal(album.descriptionSource.sourceId, 'custom-catalog')
+  assert.equal(album.automaticSelection.sourceId, 'custom-catalog')
+  assert.equal(Object.hasOwn(album._userInfo, 'description'), false)
+  assert.equal(Object.hasOwn(album._userInfo, 'sourceOverride'), false)
+  assert.ok(album._userInfo.cover, 'the cover survives a successful global overwrite')
+  assert.equal(store.snapshot().albums[0].description, 'Global catalog introduction.', 'automatic attribution works without a page URL')
+
+  await store.scan()
+  assert.equal(store.snapshot().albums[0].description, 'Global catalog introduction.', 'a scan retains the automatic selection without a URL')
+  const restarted = await new MusicLibraryStore({ dataDir: store.dataDir }).init()
+  assert.equal(restarted.snapshot().albums[0].description, 'Global catalog introduction.', 'the no-URL automatic description survives restart')
+})
+
+test('a manual edit made while an automatic lookup is in flight wins the race', async (t) => {
+  const store = await storeFixture(t, { lookup: async () => ({ status: 'not-found' }) })
+  const album = store.index.albums[0]
+  let beginLookup
+  let finishLookup
+  const started = new Promise(resolve => { beginLookup = resolve })
+  const result = new Promise(resolve => { finishLookup = resolve })
+  store.albumInfoSources = { lookup: async () => { beginLookup(); return result } }
+
+  const update = store.updateIntroductions({ force: true })
+  await started
+  album._userInfo = { revision: 'new-user-edit', description: 'Written during lookup.', descriptionSource: { kind: 'manual', name: '手动编辑' } }
+  album.description = album._userInfo.description
+  album.descriptionSource = album._userInfo.descriptionSource
+  finishLookup({
+    status: 'matched', checkedAt: new Date().toISOString(), description: 'Stale automatic result.',
+    descriptionSource: { kind: 'online', sourceId: 'fixture-source', name: 'Fixture catalog' },
+    automaticSelection: { sourceId: 'fixture-source', title: album.title, artist: album.artist },
+  })
+  await update
+  assert.equal(album.description, 'Written during lookup.')
+  assert.equal(store.snapshot().albums[0].description, 'Written during lookup.')
+})
+
+test('an online-enabled scan queues new albums after an active introduction job and still skips manual pins', async (t) => {
+  let oldId, newId, releaseOldLookup, markOldLookupStarted, markNewLookupStarted
+  const oldGate = new Promise(resolve => { releaseOldLookup = resolve })
+  const oldLookupStarted = new Promise(resolve => { markOldLookupStarted = resolve })
+  const newLookupStarted = new Promise(resolve => { markNewLookupStarted = resolve })
+  const calls = []
+  const store = await storeFixture(t, { lookup: async current => {
+    calls.push(current.id)
+    if (current.id === oldId) { markOldLookupStarted(); await oldGate }
+    if (current.id === newId) markNewLookupStarted()
+    return {
+      status: 'matched', checkedAt: new Date().toISOString(), description: `Automatic: ${current.title}`,
+      descriptionSource: { name: 'Fixture catalog', url: 'https://catalog.example.test/album' },
+    }
+  } }, 2)
+  const [oldAlbum, pinnedAlbum] = store.index.albums
+  oldId = oldAlbum.id
+  pinnedAlbum._userInfo = { revision: 'manual-pin', sourceOverride: 'custom-private' }
+  store.config.onlineEnabled = true
+
+  const oldJob = store.updateIntroductions()
+  await oldLookupStarted
+  const newFolder = path.join(store.config.roots[0], 'Album 2')
+  await fs.mkdir(newFolder)
+  await fs.writeFile(path.join(newFolder, '01.flac'), 'synthetic fixture, not real music')
+  await store.scan()
+  const newAlbum = store.index.albums.find(item => item.id !== oldId && item.id !== pinnedAlbum.id)
+  assert.ok(newAlbum, 'the scan discovers the synthetic new album')
+  newId = newAlbum.id
+  assert.deepEqual(calls, [oldId], 'the active job has not queried the new album or the manual pin')
+
+  releaseOldLookup()
+  await oldJob
+  let timeout
+  try {
+    await Promise.race([
+      newLookupStarted,
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('the scan did not queue the newly discovered album')), 3000) }),
+    ])
+  } finally { clearTimeout(timeout) }
+  const followup = store.introductionsPromise
+  if (followup && followup !== oldJob) await followup
+  else await store.saveChain
+  assert.ok(calls.includes(newId), 'a follow-up automatic lookup includes the album discovered by the scan')
+  assert.equal(calls.includes(pinnedAlbum.id), false, 'the follow-up still skips an album with a manual source pin')
+  assert.equal(store.index.albums.find(item => item.id === newId).description, `Automatic: ${newAlbum.title}`)
+  assert.equal(store.index.albums.find(item => item.id === pinnedAlbum.id)._userInfo.sourceOverride, 'custom-private')
 })

@@ -10,7 +10,8 @@ import { replaceMetadataFile } from './metadata-file-replace.mjs';
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const digest = value => createHash('sha256').update(value).digest('hex').slice(0, 24);
 const fileRevision = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
-const albumRevision = album => digest(JSON.stringify([album.id, album.title, album.artist, album.description, album.descriptionSource, album._cover?.version, album._userInfo]));
+const albumRevision = album => digest(JSON.stringify([album.id, album.title, album.artist, album.description, album.descriptionSource, album.automaticSelection, album._cover?.version, album._userInfo]));
+const hasManualInformation = album => Object.hasOwn(album?._userInfo ?? {}, 'description') || Object.hasOwn(album?._userInfo ?? {}, 'sourceOverride');
 const validateCover = cover => {
   if (!cover || !['keep', 'inherit', 'upload', 'candidate'].includes(cover.mode)) throw fail('请选择有效的封面操作。');
   return cover;
@@ -46,12 +47,23 @@ export class MusicMetadataEditor {
   }
   document(id) {
     const current = this.album(id);
-    return { album: this.store.snapshot().albums.find(item => item.id === id), revision: albumRevision(current), customCover: !!current._userInfo?.cover };
+    return {
+      album: this.store.snapshot().albums.find(item => item.id === id), revision: albumRevision(current), customCover: !!current._userInfo?.cover,
+      sourcePreference: current._userInfo?.sourceOverride ?? 'auto', manualInformation: hasManualInformation(current),
+      ...(current.automaticSelection ? { automaticSelection: structuredClone(current.automaticSelection) } : {}),
+    };
   }
   async search(value, signal) {
     const album = this.album(value.albumId);
-    const result = await this.requireSources().search({ title: value.title ?? album.title, artist: value.artist ?? album.artist, sourceId: value.sourceId }, signal);
-    return { ...result, candidates: result.candidates.map(item => ({ ...item, coverUrl: item.coverUrl ? `/api/album-info/cover/${encodeURIComponent(item.id)}` : undefined })) };
+    const requestedSource = value.sourceId === undefined ? album._userInfo?.sourceOverride : value.sourceId;
+    const sourceId = requestedSource === 'auto' || requestedSource === '' || requestedSource === null ? undefined : requestedSource;
+    const result = await this.requireSources().search({ title: value.title ?? album.title, artist: value.artist ?? album.artist, year: value.year ?? album.year, sourceId }, signal);
+    const present = item => ({ ...item, coverUrl: item.coverUrl ? `/api/album-info/cover/${encodeURIComponent(item.id)}` : undefined });
+    return {
+      ...result,
+      candidates: result.candidates.map(present),
+      ...(result.automaticCandidate ? { automaticCandidate: present(result.automaticCandidate) } : {}),
+    };
   }
   async candidate(id, signal) {
     const result = await this.requireSources().resolve(id, signal);
@@ -78,27 +90,94 @@ export class MusicMetadataEditor {
     const current = this.album(value.albumId), cover = validateCover(value.cover);
     if (value.revision !== albumRevision(current)) throw fail('专辑资料已更新，请重新打开后再保存，当前草稿仍可保留。', 409);
     if (typeof value.description !== 'string' || value.description.length > 100000) throw fail('专辑介绍必须是文本，最多 100000 字符。');
+    const selectionMode = value.selectionMode ?? 'manual';
+    if (!['auto', 'manual'].includes(selectionMode)) throw fail('专辑介绍选择模式无效。');
+    if (value.resetToGlobal !== undefined && typeof value.resetToGlobal !== 'boolean') throw fail('resetToGlobal 必须为布尔值。');
+    if (value.sourcePreference !== undefined && (typeof value.sourcePreference !== 'string' || (value.sourcePreference !== 'auto' && !/^[a-zA-Z0-9_-]{1,96}$/.test(value.sourcePreference)))) throw fail('专辑资料来源偏好无效。');
+    const resetToGlobal = value.resetToGlobal === true;
+    if (!resetToGlobal && value.sourcePreference && value.sourcePreference !== 'auto' && value.sourcePreference !== current._userInfo?.sourceOverride) {
+      let sourceSettings;
+      try { sourceSettings = await this.requireSources().settings(); }
+      catch (error) { throw fail(`无法验证专辑资料来源：${error.message}`, 409); }
+      const selectedSource = sourceSettings.sources.find(source => source.id === value.sourcePreference);
+      if (!selectedSource?.enabled) throw fail('所选专辑资料来源当前不可用或已关闭。', 409);
+    }
     const description = value.description.replace(/\r\n?/g, '\n');
     const originalDescription = Object.hasOwn(current._userInfo ?? {}, 'description') ? current._userInfo.description : current.description ?? '';
+    const currentPreference = current._userInfo?.sourceOverride ?? 'auto';
+    const requestedPreference = value.sourcePreference ?? currentPreference;
+    const preferenceChanged = requestedPreference !== currentPreference;
+    const hasCandidate = typeof value.sourceCandidateId === 'string' && value.sourceCandidateId.length > 0;
+    const automaticInformationUpdate = resetToGlobal || selectionMode === 'auto' && (hasCandidate || preferenceChanged || description !== originalDescription);
+    if (automaticInformationUpdate && hasManualInformation(current) && !resetToGlobal) throw fail('此专辑有手动资料，请先重置为全局来源后再自动应用。', 409);
     const next = { ...current._userInfo, revision: randomUUID() };
-    let candidate;
-    if (value.sourceCandidateId) candidate = await this.requireSources().resolve(value.sourceCandidateId);
-    if (candidate || description !== originalDescription) {
+    let candidate, automaticResult, automaticApply;
+    if (resetToGlobal) {
+      try { automaticResult = await this.requireSources().lookup(current); }
+      catch (error) { throw fail(`无法读取全局专辑资料，原资料已保留：${error.message}`, 502); }
+      if (automaticResult?.status !== 'matched' || typeof automaticResult.description !== 'string' || !automaticResult.description.trim() || !(automaticResult.descriptionSource?.url || automaticResult.automaticSelection?.sourceId))
+        throw fail(automaticResult?.status === 'error' ? `全局来源查询失败，原资料已保留：${automaticResult.error ?? '未知错误'}` : '全局来源没有可用介绍，原资料已保留。', automaticResult?.status === 'error' ? 502 : 409);
+    } else if (hasCandidate) {
+      candidate = await this.requireSources().resolve(value.sourceCandidateId);
+    } else if (automaticInformationUpdate) {
+      const requestedSource = value.sourcePreference === undefined ? current._userInfo?.sourceOverride : value.sourcePreference;
+      const sourceId = requestedSource === 'auto' ? undefined : requestedSource;
+      try { automaticResult = await this.requireSources().lookup(current, { sourceId }); }
+      catch (error) { throw fail(`自动选择专辑资料失败：${error.message}`, 502); }
+      if (automaticResult?.status !== 'matched' || typeof automaticResult.description !== 'string' || !automaticResult.description.trim() || !(automaticResult.descriptionSource?.url || automaticResult.automaticSelection?.sourceId))
+        throw fail(automaticResult?.status === 'error' ? `自动选择专辑资料失败：${automaticResult.error ?? '未知错误'}` : '没有找到可用的专辑介绍。', automaticResult?.status === 'error' ? 502 : 409);
+    }
+    const applyAutomaticInformation = resetToGlobal || selectionMode === 'auto' && automaticInformationUpdate;
+    if (applyAutomaticInformation && !automaticResult && (!candidate?.description?.trim() || !candidate.sourceId)) throw fail('所选候选没有可用的来源介绍。', 409);
+    if (applyAutomaticInformation) {
+      if (resetToGlobal || automaticResult) {
+        const selected = automaticResult;
+        automaticApply = {
+          description: selected.description,
+          descriptionSource: { ...selected.descriptionSource, kind: selected.descriptionSource?.kind ?? 'online', ...(selected.automaticSelection?.sourceId ? { sourceId: selected.automaticSelection.sourceId } : {}), selection: 'auto' },
+          automaticSelection: selected.automaticSelection ? structuredClone(selected.automaticSelection) : undefined,
+          introduction: { status: 'matched', checkedAt: selected.checkedAt ?? new Date().toISOString() },
+        };
+      } else {
+        const checkedAt = new Date().toISOString();
+        automaticApply = {
+          description: candidate.description,
+          descriptionSource: { kind: 'online', sourceId: candidate.sourceId, name: candidate.sourceName, ...(candidate.url ? { url: candidate.url } : {}), ...(candidate.license ? { license: candidate.license } : {}), checkedAt, selection: 'auto' },
+          automaticSelection: { sourceId: candidate.sourceId, title: candidate.title, artist: candidate.artist, ...(candidate.url ? { url: candidate.url } : {}) },
+          introduction: { status: 'matched', checkedAt },
+        };
+      }
+      delete next.description;
+      delete next.descriptionSource;
+      if (resetToGlobal) delete next.sourceOverride;
+    } else if (selectionMode === 'manual' && (candidate || description !== originalDescription)) {
       next.description = description;
-      next.descriptionSource = candidate?.description === description && candidate.url
-        ? { kind: 'online', name: candidate.sourceName, url: candidate.url, license: candidate.license, checkedAt: new Date().toISOString() }
+      next.descriptionSource = candidate?.description === description
+        ? { kind: 'online', sourceId: candidate.sourceId, name: candidate.sourceName, ...(candidate.url ? { url: candidate.url } : {}), ...(candidate.license ? { license: candidate.license } : {}), checkedAt: new Date().toISOString() }
         : { kind: 'manual', name: '手动编辑', checkedAt: new Date().toISOString() };
+    }
+    if (!resetToGlobal && value.sourcePreference !== undefined) {
+      if (value.sourcePreference === 'auto') delete next.sourceOverride;
+      else next.sourceOverride = value.sourcePreference;
     }
     if (cover.mode === 'upload') next.cover = await this.storeImage(imageFromDataUrl(cover.dataUrl));
     if (cover.mode === 'candidate') next.cover = await this.storeImage(await this.requireSources().cover(cover.candidateId));
     if (cover.mode === 'inherit') delete next.cover;
     // Network/image work must not commit over a newer automatic/manual edit.
     if (this.album(value.albumId) !== current || value.revision !== albumRevision(current)) throw fail('专辑资料在保存期间发生变化，请重新读取。', 409);
-    current._userInfo = next;
+    if (automaticApply) {
+      current.description = automaticApply.description;
+      current.descriptionSource = automaticApply.descriptionSource;
+      current.introduction = automaticApply.introduction;
+      if (automaticApply.automaticSelection) current.automaticSelection = automaticApply.automaticSelection;
+      else delete current.automaticSelection;
+    }
     if (Object.hasOwn(next, 'description')) {
       current.description = next.description;
       current.descriptionSource = next.descriptionSource;
+      delete current.automaticSelection;
     }
+    current._userInfo = next;
     await this.store.saveIndex();
     this.store.onChange();
     return this.store.snapshot();

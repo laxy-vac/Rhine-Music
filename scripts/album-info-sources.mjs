@@ -12,6 +12,7 @@ const BUILTIN_SOURCES = [
   { id: 'netease', name: '网易云音乐', builtin: true, enabled: true },
   { id: 'qq', name: 'QQ音乐', builtin: true, enabled: true },
 ]
+const BUILTIN_SOURCE_IDS = BUILTIN_SOURCES.map((source) => source.id)
 const DEFAULT_SOURCE_ID = 'auto'
 const DEFAULT_MAPPING = {
   results: 'results', id: 'id', title: 'title', artist: 'artist', year: 'year',
@@ -104,7 +105,39 @@ function validateCustomSource(value) {
   return { id, name, builtin: false, enabled: value.enabled !== false, searchUrl, detailUrl, mapping }
 }
 
-function normalizeSettings(value, previousSources = BUILTIN_SOURCES) {
+function completeSourceOrder(sourceIds, sourceInputOrder, requestedOrder, previousOrder = BUILTIN_SOURCE_IDS) {
+  const known = new Set(sourceIds)
+  if (requestedOrder !== undefined && !Array.isArray(requestedOrder)) throw fail('专辑资料来源顺序格式无效。')
+  const order = requestedOrder === undefined ? [...sourceInputOrder] : [...requestedOrder]
+  if (order.some((id) => typeof id !== 'string') || new Set(order).size !== order.length || order.some((id) => !known.has(id))) throw fail('专辑资料来源顺序包含无效或重复编号。')
+  if (requestedOrder !== undefined && order.length !== known.size) throw fail('专辑资料来源顺序必须包含所有来源。')
+
+  // Older clients omit temporarily hidden builtins from `sources`. Insert
+  // those missing builtins beside their previous neighbors without disturbing
+  // the order the client supplied for visible sources and custom sources.
+  for (const id of sourceIds) {
+    if (order.includes(id)) continue
+    const priorIndex = previousOrder.indexOf(id)
+    const nextKnown = previousOrder.slice(priorIndex + 1).find((candidate) => order.includes(candidate))
+    if (nextKnown) {
+      order.splice(order.indexOf(nextKnown), 0, id)
+      continue
+    }
+    const previousKnown = previousOrder.slice(0, Math.max(0, priorIndex)).reverse().find((candidate) => order.includes(candidate))
+    if (previousKnown) {
+      order.splice(order.indexOf(previousKnown) + 1, 0, id)
+      continue
+    }
+    const builtinIndex = BUILTIN_SOURCE_IDS.indexOf(id)
+    if (builtinIndex >= 0) {
+      const nextBuiltin = BUILTIN_SOURCE_IDS.slice(builtinIndex + 1).find((candidate) => order.includes(candidate))
+      order.splice(nextBuiltin ? order.indexOf(nextBuiltin) : order.length, 0, id)
+    } else order.push(id)
+  }
+  return order
+}
+
+function normalizeSettings(value, previousSources = BUILTIN_SOURCES, previousOrder = BUILTIN_SOURCE_IDS) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.sources) || value.sources.length > MAX_CUSTOM_SOURCES + BUILTIN_SOURCES.length) throw fail('专辑资料来源设置格式无效。')
   const previous = new Map(previousSources.map(source => [source.id, source]))
   const builtins = new Map(BUILTIN_SOURCES.map((source) => [source.id, { ...source, enabled: previous.get(source.id)?.enabled ?? source.enabled }]))
@@ -124,10 +157,42 @@ function normalizeSettings(value, previousSources = BUILTIN_SOURCES) {
     }
   }
   if (custom.length > MAX_CUSTOM_SOURCES) throw fail(`最多添加 ${MAX_CUSTOM_SOURCES} 个自定义专辑来源。`)
-  const sources = [...BUILTIN_SOURCES.map((source) => builtins.get(source.id)), ...custom]
-  const defaultSourceId = typeof value.defaultSourceId === 'string' ? value.defaultSourceId : DEFAULT_SOURCE_ID
-  if (defaultSourceId === 'auto' ? !sources.some(source => source.enabled) : !sources.some((source) => source.id === defaultSourceId && source.enabled)) throw fail('请选择已启用的默认专辑资料来源。')
-  return { version: 1, defaultSourceId, sources }
+  const byId = new Map([...BUILTIN_SOURCES.map((source) => [source.id, builtins.get(source.id)]), ...custom.map((source) => [source.id, source])])
+  const sourceInputOrder = value.sources.map((source) => source.id)
+  const sourceOrder = completeSourceOrder([...byId.keys()], sourceInputOrder, value.sourceOrder, previousOrder)
+  const sources = sourceOrder.map((id) => byId.get(id))
+  return { version: 3, defaultSourceId: DEFAULT_SOURCE_ID, sources, sourceOrder }
+}
+
+function normalizedName(value) {
+  return cleanText(value, 512).normalize('NFKC').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]/gu, '')
+}
+
+function nameSimilarity(left, right) {
+  const a = normalizedName(left), b = normalizedName(right)
+  if (!a || !b) return 0
+  if (a === b) return 1
+  if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length)
+  const pairs = (value) => {
+    const chars = [...value]
+    if (chars.length < 2) return new Set(chars)
+    return new Set(chars.slice(1).map((char, index) => chars[index] + char))
+  }
+  const leftPairs = pairs(a), rightPairs = pairs(b)
+  let shared = 0
+  for (const pair of leftPairs) if (rightPairs.has(pair)) shared += 1
+  return 2 * shared / (leftPairs.size + rightPairs.size)
+}
+
+function rankCandidates(candidates, wanted) {
+  const wantedYear = yearValue(wanted.year)
+  return candidates.map((candidate, index) => {
+    const title = nameSimilarity(candidate.title, wanted.title)
+    const artist = wanted.artist ? nameSimilarity(candidate.artist, wanted.artist) : 0
+    const year = wantedYear && candidate.year ? (Number(candidate.year) === wantedYear ? 1 : -1) : 0
+    const score = title * 0.7 + artist * (wanted.artist ? 0.25 : 0) + year * 0.05
+    return { candidate, index, score }
+  }).sort((a, b) => b.score - a.score || a.index - b.index).map(({ candidate }) => candidate)
 }
 
 function renderTemplate(template, values) {
@@ -247,6 +312,7 @@ export class AlbumInfoSources {
     this.now = now
     this.sources = BUILTIN_SOURCES.map((source) => ({ ...source }))
     this.defaultSourceId = DEFAULT_SOURCE_ID
+    this.sourceOrder = [...BUILTIN_SOURCE_IDS]
     this.cache = new Map()
     this.ready = null
     this.musicbrainz = new MusicBrainzAlbumSource({ requestJson: (url, options) => this.requestMusicBrainz(url, options), contact: () => this.musicBrainzEmailValue() })
@@ -266,13 +332,14 @@ export class AlbumInfoSources {
         const info = await fs.stat(this.sourceFile)
         if (info.size > CONFIG_LIMIT_BYTES) throw fail('专辑来源配置过大，原文件已保留。')
         const value = JSON.parse(await fs.readFile(this.sourceFile, 'utf8'))
-        if (![1, 2].includes(value.version)) throw fail('专辑来源配置版本不受支持，原文件已保留。')
-        // Version 1 predates ordered automatic search. Keep explicit custom
-        // defaults; use the user's new source priority for old builtin defaults.
-        if (value.version === 1 && BUILTIN_SOURCES.some(source => source.id === value.defaultSourceId)) value.defaultSourceId = 'auto'
-        const normalized = normalizeSettings(value)
+        if (![1, 2, 3].includes(value.version)) throw fail('专辑来源配置版本不受支持，原文件已保留。')
+        // Legacy defaultSourceId selected one provider. The ordered list is now
+        // the only automatic policy, so all old defaults inherit the chain.
+        if (value.version < 3) value.defaultSourceId = DEFAULT_SOURCE_ID
+        const normalized = normalizeSettings(value, BUILTIN_SOURCES, BUILTIN_SOURCE_IDS)
         this.sources = normalized.sources
         this.defaultSourceId = normalized.defaultSourceId
+        this.sourceOrder = normalized.sourceOrder
       } catch (error) {
         if (error.code !== 'ENOENT') throw error
       }
@@ -283,21 +350,21 @@ export class AlbumInfoSources {
 
   async settings() {
     await this.init()
-    const sources = this.availableSources()
-    const defaultSourceId = this.defaultSourceId === 'auto' || sources.some(source => source.id === this.defaultSourceId && source.enabled) ? this.defaultSourceId : 'auto'
-    return { sources: structuredClone(sources), defaultSourceId, musicBrainzAvailable: this.musicBrainzAvailable() }
+    const available = new Set(this.availableSources().map((source) => source.id))
+    const sources = this.sourceOrder.map((id) => this.sources.find((source) => source.id === id)).filter((source) => source && available.has(source.id))
+    return { sources: structuredClone(sources), defaultSourceId: DEFAULT_SOURCE_ID, sourceOrder: [...this.sourceOrder], musicBrainzAvailable: this.musicBrainzAvailable() }
   }
 
   async saveSettings(value) {
     await this.init()
-    const normalized = normalizeSettings(value, this.sources)
+    const normalized = normalizeSettings(value, this.sources, this.sourceOrder)
     if (!normalized.sources.some(source => source.enabled && this.sourceAvailable(source))) throw fail('请至少启用一个可用的专辑资料来源。')
-    if (normalized.defaultSourceId === 'musicbrainz' && !this.musicBrainzAvailable()) throw fail('请先在资料库设置填写有效的 MusicBrainz 联系邮箱。')
-    const persisted = { version: 2, sources: normalized.sources, defaultSourceId: normalized.defaultSourceId }
+    const persisted = { version: 3, sources: normalized.sources, sourceOrder: normalized.sourceOrder, defaultSourceId: DEFAULT_SOURCE_ID }
     if (Buffer.byteLength(JSON.stringify(persisted), 'utf8') > CONFIG_LIMIT_BYTES) throw fail('专辑来源配置过大，设置未保存。')
     await writeJsonAtomic(this.sourceFile, persisted)
     this.sources = normalized.sources
     this.defaultSourceId = normalized.defaultSourceId
+    this.sourceOrder = normalized.sourceOrder
     this.cache.clear()
     return this.settings()
   }
@@ -410,40 +477,122 @@ export class AlbumInfoSources {
     return entry
   }
 
-  async search({ title, artist = '', sourceId = '' } = {}, signal) {
+  async search({ title, artist = '', year, sourceId = '' } = {}, signal) {
     await this.init()
-    const wantedTitle = cleanText(title, 512)
-    const wantedArtist = cleanText(artist, 512)
-    if (!wantedTitle) throw fail('请输入专辑名称。')
+    if (sourceId === DEFAULT_SOURCE_ID) sourceId = ''
+    const wanted = { title: cleanText(title, 512), artist: cleanText(artist, 512), year: yearValue(year) }
+    if (!wanted.title) throw fail('请输入专辑名称。')
     let selected
     if (sourceId) {
       const source = this.sourceFor(sourceId)
       if (!source) throw fail('专辑资料来源不存在。', 404)
       selected = source.enabled ? [source] : []
-    } else selected = this.availableSources().filter((source) => source.enabled)
-    if (sourceId && !selected.length) {
-      const source = this.sourceFor(sourceId)
-      return { candidates: [], sources: [{ sourceId: source.id, name: source.name, status: 'error', count: 0, message: '此来源已停用。' }] }
+      if (!selected.length) return { candidates: [], sources: [{ sourceId: source.id, name: source.name, status: 'error', count: 0, message: '此来源已停用。' }] }
+    } else {
+      const available = new Map(this.availableSources().map((source) => [source.id, source]))
+      selected = this.sourceOrder.map((id) => available.get(id)).filter((source) => source?.enabled)
     }
-    const jobs = selected.map(async (source) => {
+
+    const candidates = []
+    const sources = []
+    let automaticCandidate
+    for (const source of selected) {
+      abortIfNeeded(signal)
       const deadline = AbortSignal.timeout(this.timeoutMs)
       const sourceSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
       try {
-        const items = await this.searchSource(source, { title: wantedTitle, artist: wantedArtist }, sourceSignal)
-        const candidates = items.slice(0, MAX_SOURCE_RESULTS).map((item) => this.cacheCandidate(source, item, item.cache)).filter(Boolean)
-        return {
-          candidates,
-          outcome: { sourceId: source.id, name: source.name, status: candidates.length ? 'ok' : 'empty', count: candidates.length },
+        const items = await this.searchSource(source, wanted, sourceSignal)
+        const sourceCandidates = rankCandidates(
+          items.slice(0, MAX_SOURCE_RESULTS).map((item) => this.cacheCandidate(source, item, item.cache)).filter(Boolean),
+          wanted,
+        )
+        const candidateStart = candidates.length
+        candidates.push(...sourceCandidates)
+        if (!sourceCandidates.length) {
+          sources.push({ sourceId: source.id, name: source.name, status: 'empty', count: 0 })
+          continue
         }
+
+        let resolvedCount = 0
+        let detailFailures = 0
+        let lastDetailError
+        for (let index = 0; index < sourceCandidates.length; index += 1) {
+          abortIfNeeded(signal)
+          if (deadline.aborted) break
+          try {
+            const resolved = await this.resolve(sourceCandidates[index].id, sourceSignal)
+            resolvedCount += 1
+            candidates[candidateStart + index] = resolved
+            if (descriptionText(resolved.description)) {
+              automaticCandidate = resolved
+              break
+            }
+          } catch (error) {
+            if (signal?.aborted) throw signal.reason ?? error
+            detailFailures += 1
+            lastDetailError = error
+            if (deadline.aborted) break
+          }
+        }
+
+        if (deadline.aborted && !automaticCandidate) {
+          sources.push({ sourceId: source.id, name: source.name, status: 'error', count: sourceCandidates.length, message: '来源搜索或详情读取超时，请稍后重试。' })
+          continue
+        }
+        if (resolvedCount === 0 && detailFailures === sourceCandidates.length) {
+          sources.push({ sourceId: source.id, name: source.name, status: 'error', count: sourceCandidates.length, message: cleanText(lastDetailError?.message, 512) || '无法读取候选详情。' })
+          continue
+        }
+        sources.push({ sourceId: source.id, name: source.name, status: 'ok', count: sourceCandidates.length, ...(!automaticCandidate ? { message: '此来源候选未提供可用专辑介绍。' } : {}) })
+        if (automaticCandidate) break
       } catch (error) {
         if (signal?.aborted) throw signal.reason ?? error
-        return { candidates: [], outcome: { sourceId: source.id, name: source.name, status: 'error', count: 0, message: deadline.aborted ? '来源搜索超时，请稍后重试。' : cleanText(error?.message ?? error, 512) || '来源暂时不可用。' } }
+        sources.push({ sourceId: source.id, name: source.name, status: 'error', count: 0, message: deadline.aborted ? '来源搜索或详情读取超时，请稍后重试。' : cleanText(error?.message ?? error, 512) || '来源暂时不可用。' })
       }
-    })
-    const results = await Promise.all(jobs)
+    }
     abortIfNeeded(signal)
     this.pruneCache()
-    return { candidates: results.flatMap((result) => result.candidates), sources: results.map((result) => result.outcome) }
+    return {
+      candidates,
+      sources,
+      ...(automaticCandidate ? { automaticCandidateId: automaticCandidate.id, automaticCandidate } : {}),
+    }
+  }
+
+  async lookup(album, { sourceId, signal } = {}) {
+    const checkedAtNow = () => new Date(this.now()).toISOString()
+    if (!album || typeof album !== 'object' || !cleanText(album.title, 512)) {
+      return { status: 'not-found', checkedAt: checkedAtNow(), error: '专辑名称缺失，无法查询资料。' }
+    }
+    let result
+    try {
+      result = await this.search({ title: album.title, artist: album.artist, year: album.year, sourceId }, signal)
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error
+      return { status: 'error', checkedAt: checkedAtNow(), error: cleanText(error?.message ?? error, 512) || '专辑资料查询失败。' }
+    }
+    const checkedAt = checkedAtNow()
+    const candidate = result.automaticCandidate
+    if (candidate && descriptionText(candidate.description)) {
+      return {
+        status: 'matched',
+        checkedAt,
+        description: descriptionText(candidate.description),
+        descriptionSource: {
+          kind: 'online', sourceId: candidate.sourceId, name: candidate.sourceName,
+          ...(candidate.url ? { url: candidate.url } : {}),
+          ...(candidate.license ? { license: candidate.license } : {}), checkedAt,
+        },
+        automaticSelection: {
+          sourceId: candidate.sourceId, title: candidate.title, artist: candidate.artist,
+          ...(candidate.url ? { url: candidate.url } : {}),
+        },
+      }
+    }
+    if (result.sources.length && result.sources.every((source) => source.status === 'error')) {
+      return { status: 'error', checkedAt, error: result.sources.map((source) => `${source.name}: ${source.message || '查询失败'}`).join('；') }
+    }
+    return { status: 'not-found', checkedAt }
   }
 
   async searchSource(source, wanted, signal) {

@@ -48,9 +48,12 @@ export interface MusicAlbum {
     name: string;
     url?: string;
     kind?: "manual" | "online";
+    sourceId?: string;
+    selection?: "auto" | "manual";
     checkedAt?: string;
     license?: string;
   };
+  automaticSelection?: { sourceId: string; title: string; artist: string; url?: string };
   localNote?: string;
   introduction?: {
     status: "unqueried" | "matched" | "not-found" | "uncertain" | "error";

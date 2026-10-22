@@ -212,7 +212,7 @@ html .music-app[data-design="rhine"] #music-settings .future-connection-grid > .
 html .music-app[data-design="rhine"] #music-settings #ftp-settings > .ftp-fields:empty { display: none; }
 html .music-app[data-design="rhine"] #music-settings .ftp-actions { flex-wrap: wrap; gap: 8px; }
 html .music-app[data-design="rhine"] #music-settings .ftp-actions button { margin: 0; }
-html .music-app[data-design="rhine"] #music-settings [data-settings-category="library"] { grid-template-columns: repeat(2,minmax(0,1fr)); }
+html .music-app[data-design="rhine"] #music-settings [data-settings-category="library"] { grid-template-columns: minmax(0,1fr); }
 html .music-app[data-design="rhine"] #music-settings #library-management-settings { grid-column: 1 / -1; }
 html .music-app[data-design="rhine"] #music-settings .library-folder-section { margin: 0; padding: 0 0 17px; border: 0; background: transparent; }
 html .music-app[data-design="rhine"] #music-settings .library-folder-heading h2 { font-size: 16px; font-weight: 500; }

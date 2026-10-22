@@ -39,16 +39,19 @@ test('built-in sources start enabled and independent source settings survive a r
   const store = await sourceFixture(t, async () => json({}))
   const initial = await store.settings()
   assert.equal(initial.defaultSourceId, 'auto')
+  assert.deepEqual(initial.sourceOrder, ['musicbrainz', 'wikipedia', 'netease', 'qq'])
   assert.deepEqual(initial.sources.map(({ id, enabled }) => [id, enabled]), [
     ['wikipedia', true], ['netease', true], ['qq', true],
   ])
 
   const saved = await store.saveSettings({
     defaultSourceId: 'custom-fixture',
-    sources: [...initial.sources, customSource()],
+    sources: [initial.sources[0], customSource(), ...initial.sources.slice(1)],
   })
-  assert.equal(saved.defaultSourceId, 'custom-fixture')
+  assert.equal(saved.defaultSourceId, 'auto', 'legacy single-source defaults no longer select a provider')
+  assert.deepEqual(saved.sourceOrder, ['musicbrainz', 'wikipedia', 'custom-fixture', 'netease', 'qq'])
   assert.equal(saved.sources.length, 4)
+  assert.equal(JSON.parse(await fs.readFile(store.sourceFile)).version, 3)
   const restarted = new AlbumInfoSources({ dataDir: store.dataDir, fetcher: async () => json({}) })
   assert.deepEqual(await restarted.settings(), saved)
   await assert.rejects(store.saveSettings({
@@ -58,7 +61,7 @@ test('built-in sources start enabled and independent source settings survive a r
   assert.equal({}.polluted, undefined)
 })
 
-test('MusicBrainz is hidden until a valid email is configured and remains first in automatic results', async (t) => {
+test('MusicBrainz is skipped without a valid email and leads automatic lookup once configured', async (t) => {
   let email = ''
   const mbid = '3bd76d40-7f0e-36b7-9348-91a33afee20e'
   const seen = []
@@ -81,13 +84,20 @@ test('MusicBrainz is hidden until a valid email is configured and remains first 
   assert.equal((await store.settings()).musicBrainzAvailable, false)
   assert.deepEqual((await store.settings()).sources.map(source => source.id), ['wikipedia', 'netease', 'qq'])
   await assert.rejects(store.search({ title: 'Twin', sourceId: 'musicbrainz' }), /不存在/)
+  const withoutMb = await store.search({ title: 'Twin', artist: 'Singer' })
+  assert.deepEqual(withoutMb.sources.map(source => source.sourceId), ['wikipedia'])
+  assert.equal(withoutMb.automaticCandidate.sourceId, 'wikipedia')
+  const explicitAuto = await store.search({ title: 'Twin', artist: 'Singer', sourceId: 'auto' })
+  assert.deepEqual(explicitAuto.sources.map(source => source.sourceId), ['wikipedia'], 'sourceId auto inherits the same global priority order')
+  assert.equal(explicitAuto.automaticCandidate.sourceId, 'wikipedia')
   email = 'https://example.test/project'
   assert.equal((await store.settings()).musicBrainzAvailable, false, 'a project URL does not replace the requested email gate')
   email = 'tester@example.invalid'
   assert.deepEqual((await store.settings()).sources.map(source => source.id), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
   const result = await store.search({ title: 'Twin', artist: 'Singer' })
-  assert.deepEqual(result.sources.map(source => source.sourceId), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
-  assert.deepEqual(result.candidates.map(candidate => candidate.sourceId), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+  assert.deepEqual(result.sources.map(source => source.sourceId), ['musicbrainz'])
+  assert.deepEqual(result.candidates.map(candidate => candidate.sourceId), ['musicbrainz'])
+  assert.equal(result.automaticCandidateId, result.candidates[0].id)
   const mb = result.candidates[0]
   const resolved = await store.resolve(mb.id)
   assert.match(resolved.description, /^发行资料：/)
@@ -106,11 +116,21 @@ test('older builtin defaults migrate to automatic priority without losing disabl
   ] }))
   const initial = await store.settings()
   assert.equal(initial.defaultSourceId, 'auto')
+  assert.deepEqual(initial.sourceOrder, ['musicbrainz', 'wikipedia', 'qq', 'netease', 'custom-fixture'], 'missing MB is restored at its previous priority while v1 source order is retained')
   assert.equal(initial.sources.find(source => source.id === 'netease').enabled, false)
   assert.ok(initial.sources.some(source => source.id === 'custom-fixture'))
   const saved = await store.saveSettings(initial)
-  assert.equal(JSON.parse(await fs.readFile(store.sourceFile)).version, 2)
+  assert.equal(JSON.parse(await fs.readFile(store.sourceFile)).version, 3)
   assert.deepEqual(await new AlbumInfoSources({ dataDir: store.dataDir, fetcher: async () => json({}) }).settings(), saved)
+
+  const versionTwo = await sourceFixture(t, async () => json({}))
+  await fs.mkdir(path.dirname(versionTwo.sourceFile), { recursive: true })
+  await fs.writeFile(versionTwo.sourceFile, JSON.stringify({ version: 2, defaultSourceId: 'custom-fixture', sources: [
+    { id: 'wikipedia', enabled: true }, { id: 'netease', enabled: true }, { id: 'qq', enabled: false }, customSource(),
+  ] }))
+  const migratedTwo = await versionTwo.settings()
+  assert.equal(migratedTwo.defaultSourceId, 'auto')
+  assert.deepEqual(migratedTwo.sourceOrder, ['musicbrainz', 'wikipedia', 'netease', 'qq', 'custom-fixture'])
 })
 
 test('Wikipedia exposes multiple article candidates and uses article extracts rather than search snippets', async (t) => {
@@ -139,6 +159,101 @@ test('Wikipedia exposes multiple article candidates and uses article extracts ra
   assert.ok(!result.candidates.some((candidate) => candidate.description?.includes('snippet')))
   assert.equal(result.candidates[0].coverUrl, 'https://upload.wikimedia.org/wikipedia/first.jpg')
   assert.ok(seen.some((url) => url.searchParams.has('generator')))
+})
+
+test('saved source order drives fallback, ranked candidates auto-select an introduction, and lookup stays local-only', async (t) => {
+  const calls = []
+  const noIntro = customSource({
+    id: 'custom-no-intro', name: 'No introduction',
+    searchUrl: 'https://catalog.example.test/no-intro/search?q={query}',
+    detailUrl: 'https://catalog.example.test/no-intro/album/{id}',
+  })
+  const ranked = customSource({
+    id: 'custom-ranked', name: 'Ranked catalog',
+    searchUrl: 'https://catalog.example.test/ranked/search?q={query}',
+    detailUrl: 'https://catalog.example.test/ranked/album/{id}',
+  })
+  const store = await sourceFixture(t, async (input) => {
+    const url = new URL(input)
+    calls.push(url.pathname)
+    if (url.pathname === '/no-intro/search') return json({ payload: { items: [
+      { key: 'no-description', name: 'Signal', performer: 'Correct Artist', year: 2001 },
+    ] } })
+    if (url.pathname === '/no-intro/album/no-description') return json({ name: 'Signal', performer: 'Correct Artist', year: 2001 })
+    if (url.pathname === '/ranked/search') return json({ payload: { items: [
+      { key: 'wrong-artist', name: 'Signal', performer: 'Other Artist', year: 2000 },
+      { key: 'right-artist', name: 'Signal', performer: 'Correct Artist', year: 2001 },
+    ] } })
+    if (url.pathname === '/ranked/album/wrong-artist') return json({ name: 'Signal', performer: 'Other Artist' })
+    if (url.pathname === '/ranked/album/right-artist') return json({ name: 'Signal', performer: 'Correct Artist', year: 2001, summary: 'The selected album introduction.', page: 'https://catalog.example.test/records/right-artist' })
+    throw new Error(`unexpected URL ${url.href}`)
+  })
+  const settings = await store.settings()
+  const sourceOrder = ['custom-no-intro', 'custom-ranked', 'musicbrainz', 'wikipedia', 'netease', 'qq']
+  await store.saveSettings({
+    sources: [...settings.sources.map((source) => ({ ...source, enabled: false })), noIntro, ranked],
+    sourceOrder,
+  })
+
+  const result = await store.search({ title: 'Signal', artist: 'Correct Artist', year: 2001 })
+  assert.deepEqual(result.sources.map(({ sourceId, status }) => [sourceId, status]), [['custom-no-intro', 'ok'], ['custom-ranked', 'ok']])
+  assert.deepEqual(result.candidates.map(({ sourceId, artist }) => [sourceId, artist]), [
+    ['custom-no-intro', 'Correct Artist'], ['custom-ranked', 'Correct Artist'], ['custom-ranked', 'Other Artist'],
+  ])
+  assert.equal(result.automaticCandidateId, result.candidates[1].id)
+  assert.equal(result.automaticCandidate.description, 'The selected album introduction.')
+  assert.deepEqual(calls, [
+    '/no-intro/search', '/no-intro/album/no-description',
+    '/ranked/search', '/ranked/album/right-artist',
+  ], 'the correct artist/year sorts before the provider’s earlier wrong-artist result')
+
+  calls.length = 0
+  const lookup = await store.lookup({ title: 'Signal', artist: 'Correct Artist', year: 2001 })
+  assert.equal(lookup.status, 'matched')
+  assert.equal(lookup.description, 'The selected album introduction.')
+  assert.deepEqual(lookup.descriptionSource, {
+    kind: 'online', sourceId: 'custom-ranked', name: 'Ranked catalog',
+    url: 'https://catalog.example.test/records/right-artist', checkedAt: lookup.checkedAt,
+  })
+  assert.deepEqual(lookup.automaticSelection, {
+    sourceId: 'custom-ranked', title: 'Signal', artist: 'Correct Artist',
+    url: 'https://catalog.example.test/records/right-artist',
+  })
+  assert.equal(Object.hasOwn(lookup.automaticSelection, 'candidateId'), false)
+  assert.deepEqual(calls, [
+    '/no-intro/search', '/no-intro/album/no-description',
+    '/ranked/search', '/ranked/album/right-artist',
+  ])
+  const saved = JSON.parse(await fs.readFile(store.sourceFile, 'utf8'))
+  assert.equal(saved.version, 3)
+  assert.deepEqual(saved.sourceOrder, sourceOrder)
+  assert.equal(saved.defaultSourceId, 'auto')
+})
+
+test('an all-error automatic lookup reports error, while empty and failed layers report not-found', async (t) => {
+  const settingsStore = await sourceFixture(t, async () => json({}))
+  const settings = await settingsStore.settings()
+  const broken = customSource({ id: 'custom-broken', searchUrl: 'https://catalog.example.test/broken?q={query}' })
+  await settingsStore.saveSettings({
+    sources: [...settings.sources.map((source) => ({ ...source, enabled: false })), broken],
+    sourceOrder: ['custom-broken', 'musicbrainz', 'wikipedia', 'netease', 'qq'],
+  })
+  const failing = await settingsStore.lookup({ title: 'Fixture' })
+  assert.equal(failing.status, 'error')
+
+  const mixed = await sourceFixture(t, async (input) => {
+    const url = new URL(input)
+    if (url.hostname === 'music.163.com') throw new Error('fixture unavailable')
+    if (url.hostname === 'c.y.qq.com') return json({ code: 0, data: { album: { count: 0, itemlist: [] } } })
+    throw new Error(`unexpected host ${url.hostname}`)
+  })
+  const mixedSettings = await mixed.settings()
+  await mixed.saveSettings({
+    sources: mixedSettings.sources.map((source) => ({ ...source, enabled: source.id === 'netease' || source.id === 'qq' })),
+    sourceOrder: ['musicbrainz', 'wikipedia', 'netease', 'qq'],
+  })
+  const noMatch = await mixed.lookup({ title: 'Fixture' })
+  assert.equal(noMatch.status, 'not-found', 'one empty layer means the overall search was not entirely unavailable')
 })
 
 test('QQ and NetEase public album search/detail contracts yield selectable complete records and verified covers', async (t) => {
@@ -206,14 +321,14 @@ test('QQ detail without a cover field falls back to the official album-mid image
     throw new Error(`unexpected URL ${url.href}`)
   })
   const result = await store.search({ title: 'Fixture QQ Album', artist: 'Fixture Artist', sourceId: 'qq' })
-  assert.equal(result.candidates[0].coverUrl, undefined)
+  assert.equal(result.candidates[0].coverUrl, coverUrl, 'automatic detail resolution adds the official album-mid image URL')
   const resolved = await store.resolve(result.candidates[0].id)
   assert.equal(resolved.coverUrl, coverUrl)
   assert.equal((await store.cover(result.candidates[0].id)).mime, 'image/jpeg')
   assert.ok(seen.some((url) => url.href === coverUrl))
 })
 
-test('enabled sources run concurrently and one failing source does not hide other results', async (t) => {
+test('automatic sources run serially in priority order and one failing source does not hide later results', async (t) => {
   let active = 0
   let maximumActive = 0
   const store = await sourceFixture(t, async (input) => {
@@ -235,7 +350,7 @@ test('enabled sources run concurrently and one failing source does not hide othe
   assert.equal(result.candidates.length, 0)
   assert.deepEqual(result.sources.map(({ sourceId, status }) => [sourceId, status]), [['netease', 'error'], ['qq', 'empty']])
   assert.match(result.sources[0].message, /fixture offline/)
-  assert.equal(maximumActive, 2)
+  assert.equal(maximumActive, 1)
 })
 
 test('candidate tokens expire, invalid tokens fail, and cover URLs come only from cached candidates', async (t) => {
@@ -277,7 +392,7 @@ test('custom mappings reject unsafe paths and never execute source text as JavaS
   assert.equal(globalThis.__albumInfoSourcePwned, undefined)
 })
 
-test('a failed detail lookup can retry; a successful resolution is coalesced and cached', async (t) => {
+test('a failed automatic detail lookup can retry; success is coalesced and cached', async (t) => {
   let detailCalls = 0
   const store = await sourceFixture(t, async (input) => {
     const url = new URL(input)
@@ -292,8 +407,9 @@ test('a failed detail lookup can retry; a successful resolution is coalesced and
   })
   const settings = await store.settings()
   await store.saveSettings({ defaultSourceId: 'custom-fixture', sources: [...settings.sources.map((source) => ({ ...source, enabled: false })), customSource()] })
-  const candidate = (await store.search({ title: 'Retry album' })).candidates[0]
-  await assert.rejects(store.resolve(candidate.id), (error) => error.status === 502)
+  const first = await store.search({ title: 'Retry album' })
+  const candidate = first.candidates[0]
+  assert.equal(first.sources[0].status, 'error', 'the automatic search reports its failed detail attempt but keeps the candidate available')
   const [left, right] = await Promise.all([store.resolve(candidate.id), store.resolve(candidate.id)])
   assert.deepEqual(left, right)
   assert.equal(left.description, 'Resolved after retry.')
@@ -345,10 +461,16 @@ test('external abort cancels a pending source request', async (t) => {
   await assert.rejects(pending, (error) => error.name === 'AbortError')
 })
 
-test('request timeout becomes a source error with an explicit timeout message', async (t) => {
-  const store = await sourceFixture(t, async (_input, options) => new Promise((_resolve, reject) => {
-    options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
-  }), { timeoutMs: 5 })
+test('one source timeout covers candidate search and detail resolution', async (t) => {
+  const store = await sourceFixture(t, async (input, options) => {
+    const url = new URL(input)
+    if (url.pathname === '/splcloud/fcgi-bin/smartbox_new.fcg') return json({ code: 0, data: { album: { count: 1, itemlist: [
+      { mid: '0029sCOz4G19oD', name: 'Fixture', singer: 'Artist' },
+    ] } } })
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
+    })
+  }, { timeoutMs: 10 })
   const result = await store.search({ title: 'Fixture', sourceId: 'qq' })
   assert.equal(result.sources[0].status, 'error')
   assert.match(result.sources[0].message, /超时/)

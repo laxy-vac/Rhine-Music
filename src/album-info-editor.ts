@@ -160,7 +160,7 @@ export function setupAlbumInfoEditor(
   open(album: MusicAlbum): void;
   close(): void;
   destroy(): void;
-  mountSources(host: HTMLElement): () => void;
+  mountSources(host: HTMLElement, options?: { connectionHost?: HTMLElement }): () => void;
   refreshSources(): void;
 } {
   const document = root.ownerDocument;
@@ -266,15 +266,18 @@ export function setupAlbumInfoEditor(
   searchArtist.type = "search";
   searchArtist.autocomplete = "off";
   searchArtistLabel.append(searchArtist);
-  const searchSourceLabel = element(document, "label", "metadata-editor-label", trUi("资料来源"));
+  const searchSourceLabel = element(document, "label", "metadata-editor-label", trUi("本专辑来源策略"));
   const searchSource = element(document, "select", "metadata-editor-select");
   searchSource.setAttribute("aria-label", trUi("选择资料来源"));
   searchSourceLabel.append(searchSource);
+  const restoreGlobalSource = button(document, "metadata-editor-secondary metadata-editor-source-reset", trUi("恢复全局自动资料（保存后生效）"));
+  restoreGlobalSource.title = trUi("保存后按全局来源顺序重新查询并清除本专辑的手工资料覆盖。");
   const searchButton = button(document, "metadata-editor-primary", trUi("搜索资料"));
-  searchToolbar.append(searchTitleLabel, searchArtistLabel, searchSourceLabel, searchButton);
+  searchToolbar.append(searchTitleLabel, searchArtistLabel, searchSourceLabel, restoreGlobalSource, searchButton);
   const sourceStatusList = element(document, "div", "metadata-editor-source-statuses");
   sourceStatusList.setAttribute("aria-live", "polite");
   const sourceHelp = element(document, "p", "metadata-editor-help", trUi("MusicBrainz 仅在设置了有效的联系邮箱后才会显示。"));
+  const sourcePreferenceStatus = element(document, "p", "metadata-editor-source-policy-status");
   const onlineResults = element(document, "div", "metadata-editor-results-layout");
   const candidateList = element(document, "div", "metadata-editor-candidate-list");
   candidateList.setAttribute("role", "listbox");
@@ -283,7 +286,7 @@ export function setupAlbumInfoEditor(
   candidateDetail.setAttribute("aria-label", trUi("候选资料预览"));
   candidateDetail.append(element(document, "p", "metadata-editor-empty", trUi("选择一条候选资料查看介绍与封面。")));
   onlineResults.append(candidateList, candidateDetail);
-  onlinePanel.append(searchToolbar, sourceHelp, sourceStatusList, onlineResults);
+  onlinePanel.append(sourcePreferenceStatus, searchToolbar, sourceHelp, sourceStatusList, onlineResults);
 
   const manualGrid = element(document, "div", "metadata-editor-manual-grid");
   const descriptionLabel = element(document, "label", "metadata-editor-label", trUi("专辑介绍"));
@@ -420,8 +423,12 @@ export function setupAlbumInfoEditor(
   let albumCoverCandidateUrl: string | undefined;
   let albumSourceCandidateText = "";
   let selectedCandidate: AlbumInfoCandidate | null = null;
+  let automaticCandidateId: string | undefined;
   let albumSources: AlbumInfoSources = { sources: [], defaultSourceId: "" };
-  let searchSourceSelectionTouched = false;
+  let sourcePreferenceDraft = "auto";
+  let selectionModeDraft: "auto" | "manual" = "auto";
+  let resetToGlobalDraft = false;
+  let descriptionUserEdited = false;
   let albumTab: AlbumTab = "online";
   let albumLoadEpoch = 0;
   let searchEpoch = 0;
@@ -479,7 +486,10 @@ export function setupAlbumInfoEditor(
   function albumDirty(): boolean {
     return !!albumDocument && (
       descriptionInput.value !== albumOriginalDescription ||
-      !equalCover(albumCoverDraft, albumCoverInitial)
+      !equalCover(albumCoverDraft, albumCoverInitial) ||
+      sourcePreferenceDraft !== (albumDocument.sourcePreference || "auto") ||
+      selectionModeDraft !== (albumDocument.manualInformation ? "manual" : "auto") ||
+      resetToGlobalDraft
     );
   }
 
@@ -576,28 +586,49 @@ export function setupAlbumInfoEditor(
   }
 
   function renderAlbumSourceChoices(): void {
-    const previous = searchSource.value;
     searchSource.replaceChildren();
-    const all = element(document, "option", "", trUi("按优先级搜索全部来源"));
-    all.value = "";
+    const all = element(document, "option", "", trUi("继承全局来源顺序"));
+    all.value = "auto";
     searchSource.append(all);
-    for (const source of albumSources.sources) {
-      const option = element(document, "option", "", source.name);
+    const orderedIds = albumSources.sourceOrder ?? albumSources.sources.map((source) => source.id);
+    const sources = [...albumSources.sources].sort((left, right) => {
+      const leftIndex = orderedIds.indexOf(left.id);
+      const rightIndex = orderedIds.indexOf(right.id);
+      return (leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex);
+    });
+    for (const source of sources) {
+      const option = element(document, "option", "", source.enabled ? source.name : `${source.name} · ${trUi("当前停用")}`);
       option.value = source.id;
       option.disabled = !source.enabled;
       searchSource.append(option);
     }
-    const enabled = albumSources.sources.filter((source) => source.enabled);
-    if (enabled.some((source) => source.id === previous) || (previous === "" && searchSourceSelectionTouched)) {
-      searchSource.value = previous;
-    } else if (albumSources.defaultSourceId === "auto") {
-      searchSource.value = "";
-    } else {
-      searchSource.value = enabled.some((source) => source.id === albumSources.defaultSourceId)
-        ? albumSources.defaultSourceId
-        : "";
+    const knownPreference = [...searchSource.options].some((option) => option.value === sourcePreferenceDraft);
+    if (!knownPreference && sourcePreferenceDraft !== "auto") {
+      const pending = element(document, "option", "", `${trUi("已指定来源（当前不可用）")} · ${sourcePreferenceDraft}`);
+      pending.value = sourcePreferenceDraft;
+      pending.disabled = true;
+      searchSource.append(pending);
     }
+    searchSource.value = sourcePreferenceDraft;
+    updateSourcePreferenceStatus();
     selectControls.sync();
+  }
+
+  function updateSourcePreferenceStatus(): void {
+    const source = albumSources.sources.find((item) => item.id === sourcePreferenceDraft);
+    const unavailable = sourcePreferenceDraft !== "auto" && (!source || !source.enabled);
+    const state = sourcePreferenceDraft === "auto"
+      ? trUi("自动继承全局来源顺序")
+      : unavailable
+        ? ui`本专辑指定：${source?.name ?? sourcePreferenceDraft} · ${trUi("当前不可用，已保存资料仍保留")}`
+        : ui`本专辑指定：${source?.name ?? sourcePreferenceDraft}`;
+    const manualState = selectionModeDraft === "manual" ? ` · ${trUi("手工资料优先")}` : "";
+    sourcePreferenceStatus.textContent = `${state}${manualState}${resetToGlobalDraft ? ` · ${trUi("恢复将在保存后生效")}` : sourcePreferenceDraft !== (albumDocument?.sourcePreference || "auto") ? ` · ${trUi("未保存")}` : ""}`;
+    restoreGlobalSource.disabled = sourcePreferenceDraft === "auto"
+      && !albumDocument?.manualInformation
+      && selectionModeDraft === "auto"
+      && !descriptionUserEdited
+      && !resetToGlobalDraft;
   }
 
   function renderCandidateStatuses(result?: AlbumInfoSearch): void {
@@ -625,12 +656,16 @@ export function setupAlbumInfoEditor(
       const title = element(document, "strong", "metadata-editor-candidate-title", candidate.title || trUi("未命名专辑"));
       const details = element(document, "span", "metadata-editor-candidate-meta", [candidate.artist, candidate.year ? String(candidate.year) : "", candidate.sourceName].filter(Boolean).join(" · "));
       item.append(title, details);
+      if (candidate.id === automaticCandidateId) {
+        item.append(element(document, "span", "metadata-editor-candidate-badge", trUi("自动采用")));
+        item.dataset.automatic = "true";
+      }
       item.addEventListener("click", () => { void loadCandidate(candidate.id); });
       candidateList.append(item);
     }
   }
 
-  function renderCandidateDetail(candidate: AlbumInfoCandidate | null): void {
+  function renderCandidateDetail(candidate: AlbumInfoCandidate | null, automatic = false): void {
     candidateDetail.replaceChildren();
     if (!candidate) {
       candidateDetail.append(element(document, "p", "metadata-editor-empty", trUi("选择一条候选资料查看介绍与封面。")));
@@ -646,8 +681,9 @@ export function setupAlbumInfoEditor(
     details.append(element(document, "h3", "", candidate.title));
     details.append(element(document, "p", "metadata-editor-candidate-meta", [candidate.artist, candidate.year ? String(candidate.year) : ""].filter(Boolean).join(" · ")));
     details.append(element(document, "p", "metadata-editor-candidate-description", candidate.description || trUi("此候选没有提供专辑介绍。")));
+    if (automatic) details.append(element(document, "p", "metadata-editor-help", trUi("这是当前来源策略自动采用的候选；你可以在此预览后手动固定候选。")));
     if (candidate.license) details.append(element(document, "small", "metadata-editor-help", ui`许可：${candidate.license}`));
-    const fill = button(document, "metadata-editor-primary", trUi("填入编辑草稿"));
+    const fill = button(document, "metadata-editor-primary", trUi("手动使用此候选"));
     fill.addEventListener("click", () => fillAlbumDraftFromCandidate(candidate));
     details.append(fill);
     card.append(cover, details);
@@ -658,6 +694,10 @@ export function setupAlbumInfoEditor(
     if (candidate.description !== undefined) descriptionInput.value = candidate.description;
     albumDescriptionSourceCandidateId = candidate.description !== undefined ? candidate.id : undefined;
     albumSourceCandidateText = candidate.description ?? "";
+    descriptionUserEdited = false;
+    selectionModeDraft = "manual";
+    sourcePreferenceDraft = candidate.sourceId || sourcePreferenceDraft;
+    resetToGlobalDraft = false;
     if (candidate.coverUrl) {
       revokeAlbumCoverObjectUrl();
       albumCoverDraft = { mode: "candidate", candidateId: candidate.id };
@@ -665,6 +705,10 @@ export function setupAlbumInfoEditor(
       selectedCandidate = candidate;
       updateAlbumCoverPreview();
     }
+    searchSource.value = sourcePreferenceDraft;
+    updateSourcePreferenceStatus();
+    selectControls.sync();
+    renderCandidateDetail(candidate, false);
     setAlbumTab("manual");
     onAlbumDraftChanged();
     setAlbumFooterStatus(trUi("候选资料已填入草稿，请检查后保存。"));
@@ -677,7 +721,7 @@ export function setupAlbumInfoEditor(
     });
   }
 
-  async function loadCandidate(id: string): Promise<void> {
+  async function loadCandidate(id: string, automatic = false): Promise<void> {
     if (disposed || !albumOpen) return;
     const epoch = ++candidateEpoch;
     candidateController?.abort();
@@ -695,12 +739,27 @@ export function setupAlbumInfoEditor(
       });
       if (disposed || !albumOpen || epoch !== candidateEpoch) return;
       selectedCandidate = candidate;
-      renderCandidateDetail(candidate);
+      renderCandidateDetail(candidate, automatic);
       selectCandidateButton(candidate.id);
+      if (automatic) prefillAutomaticCandidate(candidate);
     } catch (error) {
       if (candidateController.signal.aborted || epoch !== candidateEpoch) return;
       candidateDetail.replaceChildren(element(document, "p", "metadata-editor-error", (error as Error).message || trUi("无法读取候选资料。")));
     }
+  }
+
+  function prefillAutomaticCandidate(candidate: AlbumInfoCandidate): void {
+    const hasDescription = typeof candidate.description === "string" && candidate.description.trim().length > 0;
+    const canPrefill = resetToGlobalDraft
+      || (selectionModeDraft === "auto" && !albumDocument?.manualInformation && !descriptionUserEdited);
+    if (!hasDescription || !canPrefill) return;
+    descriptionInput.value = candidate.description!;
+    albumDescriptionSourceCandidateId = candidate.id;
+    albumSourceCandidateText = candidate.description!;
+    selectionModeDraft = "auto";
+    updateSourcePreferenceStatus();
+    onAlbumDraftChanged();
+    setAlbumFooterStatus(trUi("自动候选已填入介绍草稿；封面保持不变。"));
   }
 
   async function loadAlbumSources(epoch: number): Promise<void> {
@@ -722,6 +781,12 @@ export function setupAlbumInfoEditor(
     albumLoadController = new AbortController();
     albumDocument = null;
     albumRevision = "";
+    sourcePreferenceDraft = "auto";
+    selectionModeDraft = "auto";
+    resetToGlobalDraft = false;
+    descriptionUserEdited = false;
+    automaticCandidateId = undefined;
+    selectedCandidate = null;
     descriptionInput.value = "";
     albumOriginalDescription = "";
     albumDescriptionSourceCandidateId = undefined;
@@ -731,6 +796,7 @@ export function setupAlbumInfoEditor(
     albumSourceCandidateText = "";
     revokeAlbumCoverObjectUrl();
     updateAlbumCoverPreview();
+    renderAlbumSourceChoices();
     albumSaveButton.disabled = true;
     setAlbumStatus(trUi("正在读取专辑资料…"));
     setAlbumFooterStatus("");
@@ -741,12 +807,17 @@ export function setupAlbumInfoEditor(
       albumDocument = result;
       album = callbacks.getAlbum(result.album.id) ?? result.album ?? targetAlbum;
       albumRevision = result.revision;
+      sourcePreferenceDraft = result.sourcePreference || "auto";
+      selectionModeDraft = result.manualInformation ? "manual" : "auto";
+      resetToGlobalDraft = false;
+      descriptionUserEdited = false;
       albumSubtitle.textContent = [album.title, album.artist, album.year ? String(album.year) : ""].filter(Boolean).join(" · ");
       albumOriginalDescription = result.album.description ?? "";
       descriptionInput.value = albumOriginalDescription;
       albumCoverInitial = result.customCover ? { mode: "keep" } : { mode: "inherit" };
       albumCoverDraft = cloneCover(albumCoverInitial);
       updateAlbumCoverPreview();
+      renderAlbumSourceChoices();
       albumSaveButton.disabled = !albumDirty();
       setAlbumStatus("");
       setAlbumFooterStatus("");
@@ -773,6 +844,14 @@ export function setupAlbumInfoEditor(
     albumSubtitle.textContent = [targetAlbum.title, targetAlbum.artist].filter(Boolean).join(" · ");
     searchTitle.value = targetAlbum.title;
     searchArtist.value = targetAlbum.artist;
+    sourcePreferenceDraft = "auto";
+    selectionModeDraft = "auto";
+    resetToGlobalDraft = false;
+    descriptionUserEdited = false;
+    automaticCandidateId = undefined;
+    selectedCandidate = null;
+    searchSource.value = "auto";
+    searchButton.disabled = false;
     candidateList.replaceChildren(element(document, "p", "metadata-editor-empty", trUi("使用专辑名称与艺人搜索公开资料。")));
     sourceStatusList.replaceChildren();
     renderCandidateDetail(null);
@@ -784,20 +863,34 @@ export function setupAlbumInfoEditor(
 
   async function searchAlbumInfo(): Promise<void> {
     if (!album || !albumOpen) return;
+    if (!albumDocument) {
+      setAlbumStatus(trUi("正在读取专辑资料，请稍后搜索。"));
+      return;
+    }
     const title = searchTitle.value.trim();
     const artist = searchArtist.value.trim();
     if (!title) {
       setAlbumStatus(trUi("请填写专辑名称。"), true);
       return;
     }
+    if (sourcePreferenceDraft !== "auto") {
+      const provider = albumSources.sources.find((source) => source.id === sourcePreferenceDraft);
+      if (!provider || !provider.enabled) {
+        setAlbumStatus(trUi("本专辑指定来源当前不可用；如需继续查询，请主动恢复全局来源顺序。"), true);
+        return;
+      }
+    }
     const epoch = ++searchEpoch;
     searchController?.abort();
     searchController = new AbortController();
-    const sourceId = searchSource.value || undefined;
+    const sourceId = sourcePreferenceDraft || "auto";
     searchButton.disabled = true;
     setAlbumStatus(trUi("正在搜索公开资料…"));
     sourceStatusList.replaceChildren();
     candidateList.replaceChildren(element(document, "p", "metadata-editor-empty", trUi("正在搜索…")));
+    automaticCandidateId = undefined;
+    candidateEpoch += 1;
+    candidateController?.abort();
     selectedCandidate = null;
     renderCandidateDetail(null);
     try {
@@ -808,8 +901,19 @@ export function setupAlbumInfoEditor(
         signal: searchController.signal,
       });
       if (disposed || !albumOpen || epoch !== searchEpoch || !album || result === undefined) return;
+      automaticCandidateId = result.automaticCandidateId ?? result.automaticCandidate?.id;
       renderCandidateStatuses(result);
       renderCandidates(Array.isArray(result.candidates) ? result.candidates : []);
+      if (result.automaticCandidate) {
+        selectedCandidate = result.automaticCandidate;
+        renderCandidateDetail(result.automaticCandidate, true);
+        selectCandidateButton(result.automaticCandidate.id);
+        prefillAutomaticCandidate(result.automaticCandidate);
+      } else if (automaticCandidateId) {
+        void loadCandidate(automaticCandidateId, true);
+      } else {
+        renderCandidateDetail(null);
+      }
       setAlbumStatus(result.candidates.length ? ui`找到 ${result.candidates.length} 条候选资料。` : trUi("没有找到匹配资料。"));
     } catch (error) {
       if (searchController.signal.aborted || epoch !== searchEpoch) return;
@@ -853,6 +957,11 @@ export function setupAlbumInfoEditor(
   async function saveAlbum(): Promise<void> {
     if (albumSaving || !album || !albumDocument || !albumRevision || !albumDirty()) return;
     albumSaving = true;
+    searchEpoch += 1;
+    candidateEpoch += 1;
+    searchController?.abort();
+    candidateController?.abort();
+    searchButton.disabled = true;
     albumDialog.inert = true;
     setAlbumFooterStatus(trUi("正在保存专辑资料…"));
     const sourceCandidateId = albumDescriptionSourceCandidateId;
@@ -865,6 +974,9 @@ export function setupAlbumInfoEditor(
           revision: albumRevision,
           description: descriptionInput.value,
           ...(sourceCandidateId ? { sourceCandidateId } : {}),
+          sourcePreference: sourcePreferenceDraft,
+          selectionMode: selectionModeDraft,
+          ...(resetToGlobalDraft ? { resetToGlobal: true } : {}),
           cover: cloneCover(albumCoverDraft),
         }),
       });
@@ -883,6 +995,7 @@ export function setupAlbumInfoEditor(
     } finally {
       if (!disposed) {
         albumSaving = false;
+        searchButton.disabled = false;
         albumDialog.inert = false;
         albumSaveButton.disabled = !albumDocument || !albumDirty();
       }
@@ -1473,7 +1586,23 @@ export function setupAlbumInfoEditor(
 
   onlineTabButton.addEventListener("click", () => setAlbumTab("online"));
   manualTabButton.addEventListener("click", () => setAlbumTab("manual"));
-  searchSource.addEventListener("change", () => { searchSourceSelectionTouched = true; });
+  searchSource.addEventListener("change", () => {
+    sourcePreferenceDraft = searchSource.value || "auto";
+    resetToGlobalDraft = false;
+    if (!albumDocument?.manualInformation) selectionModeDraft = "auto";
+    updateSourcePreferenceStatus();
+    onAlbumDraftChanged();
+  });
+  restoreGlobalSource.addEventListener("click", () => {
+    sourcePreferenceDraft = "auto";
+    selectionModeDraft = "auto";
+    resetToGlobalDraft = true;
+    searchSource.value = "auto";
+    selectControls.sync();
+    updateSourcePreferenceStatus();
+    onAlbumDraftChanged();
+    void searchAlbumInfo();
+  });
   albumSectionButton.addEventListener("click", () => setEditorMode("album"));
   trackSectionButton.addEventListener("click", openTrackSection);
   sectionTabs.addEventListener("keydown", (event) => {
@@ -1502,6 +1631,10 @@ export function setupAlbumInfoEditor(
     if (albumDescriptionSourceCandidateId && descriptionInput.value !== albumSourceCandidateText) {
       albumDescriptionSourceCandidateId = undefined;
     }
+    descriptionUserEdited = true;
+    selectionModeDraft = "manual";
+    resetToGlobalDraft = false;
+    updateSourcePreferenceStatus();
     onAlbumDraftChanged();
   });
   albumCoverInherit.addEventListener("click", () => {
@@ -1619,118 +1752,260 @@ export function setupAlbumInfoEditor(
     trackOpen = false;
   }
 
-  function mountSources(host: HTMLElement): () => void {
+  function mountSources(host: HTMLElement, options?: { connectionHost?: HTMLElement }): () => void {
     sourcesMountCleanup?.();
     const section = element(document, "section", "metadata-editor-sources-settings");
     section.append(element(document, "h2", "metadata-editor-section-title", trUi("资料来源管理")));
     const status = element(document, "p", "metadata-editor-status");
     status.setAttribute("role", "status");
+    const applyStatus = element(document, "p", "metadata-editor-status metadata-editor-source-apply-status");
+    applyStatus.setAttribute("role", "status");
+    applyStatus.setAttribute("aria-live", "polite");
+    applyStatus.setAttribute("data-album-source-apply-status", "true");
     const content = element(document, "div", "metadata-editor-sources-content");
     const actions = element(document, "div", "metadata-editor-source-actions");
     const addSource = button(document, "metadata-editor-secondary", trUi("新增自定义来源"));
-    const saveSources = button(document, "metadata-editor-primary", trUi("保存来源设置"));
+    const applyKeepManual = button(document, "metadata-editor-primary", trUi("应用全局并保留手工项"));
+    const expandOverwrite = button(document, "metadata-editor-danger", trUi("完全覆盖并应用全局…"));
+    const confirmId = `${prefix}-source-overwrite-confirm`;
+    expandOverwrite.setAttribute("aria-expanded", "false");
+    expandOverwrite.setAttribute("aria-controls", confirmId);
     addSource.disabled = true;
-    saveSources.disabled = true;
-    actions.append(addSource, saveSources);
-    section.append(status, content, actions);
+    applyKeepManual.disabled = true;
+    expandOverwrite.disabled = true;
+    actions.append(applyKeepManual, expandOverwrite);
+    const overwriteConfirm = element(document, "div", "metadata-editor-source-overwrite-confirm");
+    overwriteConfirm.id = confirmId;
+    overwriteConfirm.hidden = true;
+    overwriteConfirm.setAttribute("role", "group");
+    overwriteConfirm.append(element(document, "p", "metadata-editor-help", trUi("完全覆盖会忽视专辑的来源指定和手写介绍，并按当前全局来源顺序重新查询。不会改动封面、曲目标签或本地分类；查询失败时保留已有介绍。")));
+    const confirmOverwrite = button(document, "metadata-editor-danger", trUi("确认完全覆盖并应用"));
+    const cancelOverwrite = button(document, "metadata-editor-secondary", trUi("取消"));
+    overwriteConfirm.append(confirmOverwrite, cancelOverwrite);
+    const applyNote = element(document, "p", "metadata-editor-help metadata-editor-source-apply-note", trUi("应用会先保存当前来源配置，再启动统一的全局查询任务；只有点击下方按钮时才会开始。"));
+    const heading = section.querySelector("h2")!;
+    const header = element(document, "div", "metadata-editor-sources-header");
+    header.append(heading, addSource);
+    section.append(header, status, content, applyNote, actions, overwriteConfirm, applyStatus);
     host.append(section);
-    let sourceState: AlbumInfoSources = { sources: [], defaultSourceId: "auto" };
+    let sourceState: AlbumInfoSources = { sources: [], defaultSourceId: "auto", sourceOrder: [] };
     let localDisposed = false;
     let sourceEpoch = 0;
     let sourceDraftRevision = 0;
     let sourceDraftDirty = false;
     let sourceStateLoaded = false;
+    let sourceOperationBusy = false;
+    let selectedSourceId = "";
+    let draggingSourceId = "";
     const controller = new AbortController();
-    let controls: ReturnType<typeof enhanceSettingsSelectControls> | undefined;
-    const mappingTextareas = new Map<string, HTMLTextAreaElement>();
     const mappingDraftValues = new Map<string, string>();
+    const connectionHost = options?.connectionHost;
+    const originalConnectionParent = connectionHost?.parentNode ?? null;
+    const originalConnectionNext = connectionHost?.nextSibling ?? null;
+    const connectionMarker = originalConnectionParent
+      ? document.createComment("album-info-connection-host")
+      : null;
+    if (connectionHost && originalConnectionParent && connectionMarker) {
+      originalConnectionParent.insertBefore(connectionMarker, connectionHost);
+    }
     const setStatus = (message: string, error = false) => {
       status.textContent = message;
       status.classList.toggle("is-error", error);
     };
+    const setApplyStatus = (message: string, error = false) => {
+      applyStatus.textContent = message;
+      applyStatus.classList.toggle("is-error", error);
+    };
     const markSourceDraftDirty = () => {
       sourceDraftRevision += 1;
       sourceDraftDirty = true;
+      section.dataset.dirty = "true";
+      setStatus(trUi("来源设置有未保存的更改。"));
+      setOperationBusy(sourceOperationBusy);
     };
-    const updateDefaultOptions = (defaultSelect: HTMLSelectElement) => {
-      const enabled = sourceState.sources.filter((source) => source.enabled);
-      defaultSelect.replaceChildren();
-      const automatic = element(document, "option", "", trUi("自动（按优先级）"));
-      automatic.value = "auto";
-      defaultSelect.append(automatic);
-      for (const source of enabled) {
-        const option = element(document, "option", "", source.name);
-        option.value = source.id;
-        defaultSelect.append(option);
-      }
-      if (sourceState.defaultSourceId !== "auto" && !enabled.some((source) => source.id === sourceState.defaultSourceId)) {
-        sourceState.defaultSourceId = "auto";
-      }
-      defaultSelect.value = sourceState.defaultSourceId;
-      controls?.sync();
+    const visibleSourceIds = () => {
+      const present = new Set(sourceState.sources.map((source) => source.id));
+      const inOrder = (sourceState.sourceOrder ?? []).filter((id) => present.has(id));
+      for (const source of sourceState.sources) if (!inOrder.includes(source.id)) inOrder.push(source.id);
+      return inOrder;
+    };
+    const mergeVisibleOrder = (previous: string[], nextVisible: string[], visibleIds: Set<string>) => {
+      let nextIndex = 0;
+      const merged = previous.map((id) => visibleIds.has(id) ? (nextVisible[nextIndex++] ?? id) : id);
+      while (nextIndex < nextVisible.length) merged.push(nextVisible[nextIndex++]);
+      return merged;
+    };
+    const currentSettings = () => {
+      const sources = sourceState.sources.map((source) => ({
+        ...source,
+        mapping: source.mapping ? { ...source.mapping } : undefined,
+      }));
+      const sourceOrder = mergeVisibleOrder(
+        sourceState.sourceOrder ?? [],
+        visibleSourceIds(),
+        new Set(sourceState.sources.map((source) => source.id)),
+      );
+      return { sources, sourceOrder };
+    };
+    const setOperationBusy = (busy: boolean) => {
+      sourceOperationBusy = busy;
+      addSource.disabled = busy || !sourceStateLoaded;
+      applyKeepManual.disabled = busy || !sourceStateLoaded;
+      expandOverwrite.disabled = busy || !sourceStateLoaded;
+      confirmOverwrite.disabled = busy || !sourceStateLoaded;
+      cancelOverwrite.disabled = busy;
+    };
+    const moveSource = (sourceId: string, targetId: string) => {
+      const order = visibleSourceIds();
+      const from = order.indexOf(sourceId);
+      const to = order.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return;
+      order.splice(from, 1);
+      order.splice(to, 0, sourceId);
+      sourceState.sourceOrder = mergeVisibleOrder(
+        sourceState.sourceOrder ?? [],
+        order,
+        new Set(sourceState.sources.map((source) => source.id)),
+      );
+      markSourceDraftDirty();
+      render();
     };
     const render = () => {
-      mappingTextareas.clear();
       content.replaceChildren();
-      content.append(element(document, "p", "metadata-editor-help", trUi("MusicBrainz 仅在设置了有效的联系邮箱后才会显示。")));
-      if (!sourceState.sources.length) content.append(element(document, "p", "metadata-editor-empty", trUi("没有可用资料来源。")));
-      const defaultLabel = element(document, "label", "metadata-editor-label", trUi("默认来源"));
-      const defaultSelect = element(document, "select", "metadata-editor-select");
-      defaultSelect.setAttribute("aria-label", trUi("默认资料来源"));
-      defaultLabel.append(defaultSelect);
-      defaultSelect.addEventListener("change", () => {
-        sourceState.defaultSourceId = defaultSelect.value;
-        markSourceDraftDirty();
-      });
-      content.append(defaultLabel);
-      for (const source of sourceState.sources) {
-        const card = element(document, "article", "metadata-editor-source-card");
-        const heading = element(document, "div", "metadata-editor-source-card-heading");
+      const note = element(document, "p", "metadata-editor-help metadata-editor-source-order-note", trUi("默认顺序为 MusicBrainz → Wikipedia → 网易云 → QQ。按左侧当前顺序逐项查询并回退；MusicBrainz 仅在配置有效联系邮箱时参与。同一来源有多个候选时会自动采用一个，也可在专辑编辑里逐张改选。"));
+      const board = element(document, "div", "metadata-editor-source-board");
+      const queuePanel = element(document, "section", "metadata-editor-source-queue-panel");
+      queuePanel.append(element(document, "h3", "metadata-editor-source-pane-title", trUi("全局优先顺序")));
+      const queue = element(document, "div", "metadata-editor-source-queue");
+      queue.setAttribute("role", "list");
+      const detailsPanel = element(document, "section", "metadata-editor-source-details-panel");
+      detailsPanel.append(element(document, "h3", "metadata-editor-source-pane-title", trUi("来源配置")));
+      const connectionSlot = element(document, "div", "metadata-editor-source-connection-slot");
+      if (connectionHost) connectionSlot.append(connectionHost);
+      const detailContent = element(document, "div", "metadata-editor-source-detail-content");
+      detailsPanel.append(detailContent, connectionSlot);
+      const sourceIds = visibleSourceIds();
+      if (!selectedSourceId || !sourceIds.includes(selectedSourceId)) selectedSourceId = sourceIds[0] ?? "";
+      if (!sourceIds.length) queue.append(element(document, "p", "metadata-editor-empty", trUi("没有可用资料来源。")));
+      sourceIds.forEach((sourceId, index) => {
+        const source = sourceState.sources.find((item) => item.id === sourceId);
+        if (!source) return;
+        const row = element(document, "div", "metadata-editor-source-row");
+        row.dataset.sourceId = source.id;
+        row.setAttribute("role", "listitem");
+        row.classList.toggle("is-selected", source.id === selectedSourceId);
+        const orderNumber = element(document, "span", "metadata-editor-source-order-number", String(index + 1).padStart(2, "0"));
+        const dragHandle = button(document, "metadata-editor-source-drag", "⠿");
+        dragHandle.draggable = true;
+        dragHandle.setAttribute("aria-label", ui`${trUi("拖动调整顺序")} ${source.name}`);
+        dragHandle.title = trUi("拖动调整顺序");
+        const selectSource = button(document, "metadata-editor-source-select", source.name || trUi("未命名来源"));
+        selectSource.setAttribute("aria-pressed", String(source.id === selectedSourceId));
+        selectSource.setAttribute("aria-label", ui`${trUi("编辑来源")} ${source.name}`);
         const enableLabel = element(document, "label", "metadata-editor-source-enabled");
         const enabled = element(document, "input");
         enabled.type = "checkbox";
         enabled.checked = source.enabled;
         enabled.setAttribute("aria-label", ui`${trUi("启用来源")} ${source.name}`);
+        const enabledText = element(document, "span", "", source.enabled ? trUi("已启用") : trUi("已停用"));
+        enableLabel.append(enabled, enabledText);
         enabled.addEventListener("change", () => {
           source.enabled = enabled.checked;
+          enabledText.textContent = enabled.checked ? trUi("已启用") : trUi("已停用");
           markSourceDraftDirty();
-          updateDefaultOptions(defaultSelect);
         });
-        enableLabel.append(enabled, element(document, "span", "", trUi("启用")));
-        heading.append(element(document, "strong", "", source.name), enableLabel);
-        card.append(heading);
-        if (source.builtin) {
-          const note = element(document, "p", "metadata-editor-help", trUi("内置来源的名称、ID 和地址由应用管理。"));
-          card.append(note);
-          if (source.searchUrl) card.append(element(document, "code", "metadata-editor-source-url", `${trUi("搜索")} · ${source.searchUrl}`));
-          if (source.detailUrl) card.append(element(document, "code", "metadata-editor-source-url", `${trUi("详情")} · ${source.detailUrl}`));
+        const moveControls = element(document, "div", "metadata-editor-source-move-controls");
+        const up = button(document, "metadata-editor-icon-button", "↑");
+        up.setAttribute("aria-label", ui`${trUi("上移来源")} ${source.name}`);
+        up.disabled = index === 0;
+        up.addEventListener("click", () => moveSource(source.id, sourceIds[index - 1] ?? source.id));
+        const down = button(document, "metadata-editor-icon-button", "↓");
+        down.setAttribute("aria-label", ui`${trUi("下移来源")} ${source.name}`);
+        down.disabled = index === sourceIds.length - 1;
+        down.addEventListener("click", () => moveSource(source.id, sourceIds[index + 1] ?? source.id));
+        moveControls.append(up, down);
+        row.append(orderNumber, dragHandle, selectSource, enableLabel, moveControls);
+        selectSource.addEventListener("click", () => {
+          selectedSourceId = source.id;
+          render();
+        });
+        dragHandle.addEventListener("dragstart", (event) => {
+          draggingSourceId = source.id;
+          event.dataTransfer?.setData("text/plain", source.id);
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+          row.classList.add("is-dragging");
+        });
+        dragHandle.addEventListener("dragend", () => {
+          draggingSourceId = "";
+          row.classList.remove("is-dragging");
+        });
+        row.addEventListener("dragover", (event) => {
+          if (!draggingSourceId) return;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        });
+        row.addEventListener("drop", (event) => {
+          event.preventDefault();
+          const sourceId = draggingSourceId || event.dataTransfer?.getData("text/plain") || "";
+          if (sourceId) moveSource(sourceId, source.id);
+          draggingSourceId = "";
+        });
+        queue.append(row);
+      });
+      queuePanel.append(queue);
+
+      const selectedSource = sourceState.sources.find((source) => source.id === selectedSourceId);
+      if (selectedSource) {
+        const card = element(document, "article", "metadata-editor-source-card");
+        const sourceHeading = element(document, "div", "metadata-editor-source-card-heading");
+        sourceHeading.append(element(document, "strong", "", selectedSource.name || trUi("未命名来源")));
+        card.append(sourceHeading);
+        const updateQueueName = (name: string) => {
+          sourceHeading.querySelector("strong")!.textContent = name || trUi("未命名来源");
+          for (const row of Array.from(queue.querySelectorAll<HTMLElement>(".metadata-editor-source-row"))) {
+            if (row.dataset.sourceId !== selectedSource.id) continue;
+            const selectButton = row.querySelector<HTMLButtonElement>(".metadata-editor-source-select");
+            if (selectButton) {
+              selectButton.textContent = name || trUi("未命名来源");
+              selectButton.setAttribute("aria-label", ui`${trUi("编辑来源")} ${name}`);
+            }
+            row.querySelector<HTMLButtonElement>(".metadata-editor-source-drag")?.setAttribute("aria-label", ui`${trUi("拖动调整顺序")} ${name}`);
+            row.querySelector<HTMLInputElement>(".metadata-editor-source-enabled input")?.setAttribute("aria-label", ui`${trUi("启用来源")} ${name}`);
+            row.querySelector<HTMLButtonElement>(".metadata-editor-source-move-controls button:first-child")?.setAttribute("aria-label", ui`${trUi("上移来源")} ${name}`);
+            row.querySelector<HTMLButtonElement>(".metadata-editor-source-move-controls button:last-child")?.setAttribute("aria-label", ui`${trUi("下移来源")} ${name}`);
+          }
+        };
+        if (selectedSource.builtin) {
+          card.append(element(document, "p", "metadata-editor-help", trUi("内置来源的名称、ID 和地址由应用管理。")));
+          if (selectedSource.searchUrl) card.append(element(document, "code", "metadata-editor-source-url", `${trUi("搜索")} · ${selectedSource.searchUrl}`));
+          if (selectedSource.detailUrl) card.append(element(document, "code", "metadata-editor-source-url", `${trUi("详情")} · ${selectedSource.detailUrl}`));
         } else {
           const nameLabel = element(document, "label", "metadata-editor-label", trUi("来源名称"));
           const nameInput = element(document, "input", "metadata-editor-input");
-          nameInput.value = source.name;
+          nameInput.value = selectedSource.name;
           nameInput.addEventListener("input", () => {
-            source.name = nameInput.value;
-            heading.querySelector("strong")!.textContent = nameInput.value || trUi("未命名来源");
+            selectedSource.name = nameInput.value;
+            updateQueueName(nameInput.value);
             markSourceDraftDirty();
           });
           nameLabel.append(nameInput);
           const searchLabel = element(document, "label", "metadata-editor-label", trUi("搜索地址模板"));
           const searchUrlInput = element(document, "input", "metadata-editor-input");
           searchUrlInput.type = "url";
-          searchUrlInput.value = source.searchUrl ?? "";
+          searchUrlInput.value = selectedSource.searchUrl ?? "";
           searchUrlInput.placeholder = "https://example.org/search?q={query}";
           searchUrlInput.addEventListener("input", () => {
-            source.searchUrl = searchUrlInput.value;
+            selectedSource.searchUrl = searchUrlInput.value;
             markSourceDraftDirty();
           });
           searchLabel.append(searchUrlInput);
           const detailLabel = element(document, "label", "metadata-editor-label", trUi("详情地址模板"));
           const detailUrlInput = element(document, "input", "metadata-editor-input");
           detailUrlInput.type = "url";
-          detailUrlInput.value = source.detailUrl ?? "";
+          detailUrlInput.value = selectedSource.detailUrl ?? "";
           detailUrlInput.placeholder = "https://example.org/release/{id}";
           detailUrlInput.addEventListener("input", () => {
-            source.detailUrl = detailUrlInput.value;
+            selectedSource.detailUrl = detailUrlInput.value;
             markSourceDraftDirty();
           });
           detailLabel.append(detailUrlInput);
@@ -1740,33 +2015,63 @@ export function setupAlbumInfoEditor(
           const mapping = element(document, "textarea", "metadata-editor-textarea metadata-editor-mapping-input");
           mapping.rows = 5;
           mapping.spellcheck = false;
-          mapping.value = mappingDraftValues.get(source.id) ?? JSON.stringify(source.mapping ?? {}, null, 2);
+          mapping.value = mappingDraftValues.get(selectedSource.id) ?? JSON.stringify(selectedSource.mapping ?? {}, null, 2);
           mapping.setAttribute("aria-label", trUi("来源字段映射 JSON"));
           mapping.addEventListener("input", () => {
-            mappingDraftValues.set(source.id, mapping.value);
+            mappingDraftValues.set(selectedSource.id, mapping.value);
             markSourceDraftDirty();
           });
-          mappingTextareas.set(source.id, mapping);
           mappingLabel.append(mapping);
           advanced.append(mappingLabel, element(document, "p", "metadata-editor-help", trUi("映射字段：results、id、title、artist、year、description、cover、url。")));
           const remove = button(document, "metadata-editor-danger", trUi("删除来源"));
           remove.addEventListener("click", () => {
-            sourceState.sources = sourceState.sources.filter((item) => item.id !== source.id);
-            mappingDraftValues.delete(source.id);
-            if (sourceState.defaultSourceId === source.id) sourceState.defaultSourceId = "auto";
+            sourceState.sources = sourceState.sources.filter((item) => item.id !== selectedSource.id);
+            sourceState.sourceOrder = (sourceState.sourceOrder ?? []).filter((id) => id !== selectedSource.id);
+            mappingDraftValues.delete(selectedSource.id);
+            selectedSourceId = visibleSourceIds()[0] ?? "";
             markSourceDraftDirty();
             render();
           });
           card.append(nameLabel, searchLabel, detailLabel, advanced, remove);
         }
-        content.append(card);
+        detailContent.append(card);
       }
-      const templateHint = element(document, "p", "metadata-editor-help", trUi("模板变量：{query}、{title}、{artist}、{id}。仅支持 HTTP(S) 地址模板，不运行脚本。"));
-      content.append(templateHint);
-      updateDefaultOptions(defaultSelect);
-      controls?.destroy();
-      controls = enhanceSettingsSelectControls(section);
-      controls.sync();
+      board.append(queuePanel, detailsPanel);
+      content.append(
+        note,
+        board,
+        element(document, "p", "metadata-editor-help metadata-editor-source-template-hint", trUi("模板变量：{query}、{title}、{artist}、{id}。仅支持 HTTP(S) 地址模板，不运行脚本。")),
+      );
+    };
+    const validateSourceDraft = (): boolean => {
+      if (!sourceState.sources.some((source) => source.enabled)) {
+        setStatus(trUi("请至少启用一个来源。"), true);
+        return false;
+      }
+      for (const source of sourceState.sources) {
+        if (source.builtin) continue;
+        if (!source.name.trim()) {
+          setStatus(trUi("请填写自定义来源名称。"), true);
+          return false;
+        }
+        if (!validHttpTemplate(source.searchUrl ?? "") || !validHttpTemplate(source.detailUrl ?? "")) {
+          setStatus(trUi("来源地址必须是有效的 HTTP(S) 地址模板。"), true);
+          return false;
+        }
+        const mappingText = mappingDraftValues.get(source.id) ?? JSON.stringify(source.mapping ?? {});
+        try {
+          const parsed: unknown = JSON.parse(mappingText);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || Object.values(parsed).some((value) => typeof value !== "string")) {
+            throw new TypeError("mapping must be a string map");
+          }
+          source.mapping = parsed as Record<string, string>;
+        } catch {
+          setStatus(ui`来源 ${source.name} 的字段映射必须是键和值均为字符串的 JSON 对象。`, true);
+          if (selectedSourceId === source.id) content.querySelector<HTMLTextAreaElement>(".metadata-editor-mapping-input")?.focus();
+          return false;
+        }
+      }
+      return true;
     };
     const load = async () => {
       const epoch = ++sourceEpoch;
@@ -1775,16 +2080,17 @@ export function setupAlbumInfoEditor(
         const result = await callbacks.request<AlbumInfoSources>("/api/album-info/sources", { signal: controller.signal });
         if (localDisposed || epoch !== sourceEpoch) return;
         if (sourceDraftDirty) {
-          setStatus(trUi("来源设置有未保存的更改，请先保存或重新打开设置后再刷新来源。"), true);
+          setStatus(trUi("来源设置有未应用的更改，请先应用当前设置或重新打开页面后再刷新。"), true);
           return;
         }
         sourceState = {
           sources: Array.isArray(result.sources) ? result.sources.map((source) => ({ ...source, mapping: source.mapping ? { ...source.mapping } : undefined })) : [],
-          defaultSourceId: result.defaultSourceId || "auto",
+          defaultSourceId: "auto",
+          sourceOrder: result.sourceOrder ?? result.sources.map((source) => source.id),
         };
+        if (!sourceState.sources.some((source) => source.id === selectedSourceId)) selectedSourceId = visibleSourceIds()[0] ?? "";
         sourceStateLoaded = true;
-        addSource.disabled = false;
-        saveSources.disabled = false;
+        setOperationBusy(false);
         mappingDraftValues.clear();
         render();
         setStatus("");
@@ -1797,69 +2103,69 @@ export function setupAlbumInfoEditor(
       const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       const source: AlbumInfoSource = { id, name: trUi("新来源"), builtin: false, enabled: true, searchUrl: "", detailUrl: "", mapping: {} };
       sourceState.sources.push(source);
+      sourceState.sourceOrder = mergeVisibleOrder(
+        sourceState.sourceOrder ?? [],
+        visibleSourceIds(),
+        new Set(sourceState.sources.map((item) => item.id)),
+      );
+      selectedSourceId = id;
       markSourceDraftDirty();
       render();
-      content.querySelector<HTMLInputElement>(`.metadata-editor-source-card:last-of-type input:not([type='checkbox'])`)?.focus();
+      content.querySelector<HTMLInputElement>(".metadata-editor-source-detail-content input")?.focus();
     });
-    saveSources.addEventListener("click", async () => {
+    const applyGlobal = async (overwriteManual: boolean) => {
+      if (sourceOperationBusy || !sourceStateLoaded) return;
+      if (!validateSourceDraft()) return;
       const epoch = sourceEpoch;
       const draftRevision = sourceDraftRevision;
-      const sources = sourceState.sources.map((source) => ({ ...source, mapping: source.mapping ? { ...source.mapping } : undefined }));
-      for (const source of sources) {
-        if (source.builtin) continue;
-        if (!source.name.trim()) {
-          setStatus(trUi("请填写自定义来源名称。"), true);
-          return;
-        }
-        if (!validHttpTemplate(source.searchUrl ?? "") || !validHttpTemplate(source.detailUrl ?? "")) {
-          setStatus(trUi("来源地址必须是有效的 HTTP(S) 地址模板。"), true);
-          return;
-        }
-        const mappingText = mappingTextareas.get(source.id)?.value ?? "{}";
-        try {
-          const parsed: unknown = JSON.parse(mappingText);
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || Object.values(parsed).some((value) => typeof value !== "string")) throw new TypeError("mapping must be a string map");
-          source.mapping = parsed as Record<string, string>;
-        } catch {
-          setStatus(ui`来源 ${source.name} 的字段映射必须是键和值均为字符串的 JSON 对象。`, true);
-          mappingTextareas.get(source.id)?.focus();
-          return;
-        }
-      }
-      if (!sourceState.sources.some((source) => source.enabled)
-        || (sourceState.defaultSourceId !== "auto" && !sourceState.sources.some((source) => source.id === sourceState.defaultSourceId && source.enabled))) {
-        setStatus(trUi("请至少启用一个来源，并选择有效的默认来源。"), true);
-        return;
-      }
-      saveSources.disabled = true;
-      setStatus(trUi("正在保存来源设置…"));
+      const snapshot = currentSettings();
+      setOperationBusy(true);
+      setApplyStatus(trUi("正在保存设置并启动全局查询…"));
       try {
-        const result = await callbacks.request<AlbumInfoSources>("/api/album-info/sources", {
+        const library = await callbacks.request<MusicLibrary>("/api/album-info/apply-global", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sources, defaultSourceId: sourceState.defaultSourceId }),
+          body: JSON.stringify({ settings: snapshot, overwriteManual }),
           signal: controller.signal,
         });
         if (localDisposed || epoch !== sourceEpoch) return;
-        if (draftRevision !== sourceDraftRevision) {
-          setStatus(trUi("来源设置已保存，但期间又有编辑，请再次保存。"), true);
-          return;
+        await callbacks.onLibrary(library);
+        if (localDisposed || epoch !== sourceEpoch) return;
+        if (draftRevision === sourceDraftRevision) {
+          sourceState.sourceOrder = snapshot.sourceOrder;
+          sourceState.defaultSourceId = "auto";
+          sourceDraftDirty = false;
+          delete section.dataset.dirty;
+          setStatus(trUi("全局来源顺序和配置已保存。"));
+        } else {
+          setStatus(trUi("已应用点击时的来源设置；期间的新编辑仍未应用。"), true);
         }
-        sourceState = { ...result, defaultSourceId: result.defaultSourceId || "auto" };
-        mappingDraftValues.clear();
-        sourceDraftDirty = false;
-        render();
-        setStatus(trUi("资料来源设置已保存。"));
+        setApplyStatus(trUi("全局查询任务已启动；可在专辑资料状态中查看进度。"));
+        overwriteConfirm.hidden = true;
+        expandOverwrite.setAttribute("aria-expanded", "false");
+        if (draftRevision === sourceDraftRevision) { render(); void load(); }
       } catch (error) {
-        if (controller.signal.aborted) return;
-        setStatus((error as Error).message || trUi("保存资料来源失败。"), true);
+        if (controller.signal.aborted || localDisposed || epoch !== sourceEpoch) return;
+        setApplyStatus((error as Error).message || trUi("应用全局来源失败。"), true);
       } finally {
-        if (!localDisposed) saveSources.disabled = !sourceStateLoaded;
+        if (!localDisposed) setOperationBusy(false);
       }
+    };
+    applyKeepManual.addEventListener("click", () => { void applyGlobal(false); });
+    expandOverwrite.addEventListener("click", () => {
+      overwriteConfirm.hidden = false;
+      expandOverwrite.setAttribute("aria-expanded", "true");
+      confirmOverwrite.focus({ preventScroll: true });
+    });
+    confirmOverwrite.addEventListener("click", () => { void applyGlobal(true); });
+    cancelOverwrite.addEventListener("click", () => {
+      if (sourceOperationBusy) return;
+      overwriteConfirm.hidden = true;
+      expandOverwrite.setAttribute("aria-expanded", "false");
     });
     const refresh = () => {
       if (sourceDraftDirty) {
-        setStatus(trUi("来源设置有未保存的更改，请先保存或重新打开设置后再刷新来源。"), true);
+        setStatus(trUi("来源设置有未应用的更改，请先应用当前设置或重新打开页面后再刷新。"), true);
         return;
       }
       void load();
@@ -1869,7 +2175,16 @@ export function setupAlbumInfoEditor(
       localDisposed = true;
       sourceEpoch += 1;
       controller.abort();
-      controls?.destroy();
+      if (connectionHost && connectionMarker?.parentNode?.isConnected) {
+        connectionMarker.parentNode.insertBefore(connectionHost, connectionMarker.nextSibling);
+        connectionMarker.remove();
+      } else if (connectionHost && originalConnectionParent && originalConnectionParent.isConnected) {
+        originalConnectionParent.insertBefore(
+          connectionHost,
+          originalConnectionNext?.parentNode === originalConnectionParent ? originalConnectionNext : null,
+        );
+        connectionMarker?.remove();
+      }
       section.remove();
       if (refreshMountedSources === refresh) refreshMountedSources = undefined;
       if (sourcesMountCleanup === cleanup) sourcesMountCleanup = undefined;

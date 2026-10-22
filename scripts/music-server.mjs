@@ -16,6 +16,7 @@ import { MusicMetadataEditor } from './music-metadata-editor.mjs'
 const PROJECT_DIR = canonicalPath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ttf': 'font/ttf', '.woff': 'font/woff', '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' }
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
+const validMusicBrainzEmail = value => typeof value === 'string' && value.trim().length <= 320 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(value.trim())
 const NATIVE_SETTINGS_BODY_MAX = 1024 * 1024
 
 // Online shelf API (see online-sources.mjs). Remote addresses never reach the browser: audio and covers are proxied.
@@ -187,6 +188,10 @@ export async function createMusicServer({
 } = {}) {
   const store = providedStore ?? await new MusicLibraryStore({ dataDir, defaultRoots }).init()
   const metadataEditor = await new MusicMetadataEditor({ store, dataDir: store.dataDir ?? dataDir }).init()
+  // The scan and library introduction jobs share the editor's source policy.
+  // A failed source configuration remains an error on this instance; it never
+  // falls back to the legacy Wikipedia-only provider.
+  store.albumInfoSources = metadataEditor.sources
   // Nothing is read or fetched until the online shelf is first used.
   const online = providedOnline ?? new OnlineLibrary({ dataDir: store.dataDir ?? dataDir })
   const ftp = providedFtp ?? await new FtpLibrary({ dataDir: store.dataDir ?? dataDir }).init()
@@ -297,7 +302,9 @@ export async function createMusicServer({
       }
       if (route === '/api/library/enrich' && request.method === 'POST') {
         const value = await bodyJson(request)
-        if (!store.musicBrainzContact) return json(response, 400, { error: '在线资料库尚未配置：请在资料库设置填写自己的联系邮箱或项目网址。音乐仍可本地播放。' })
+        if (!validMusicBrainzEmail(store.musicBrainzContact)) return json(response, 400, { error: 'MusicBrainz 资料读取需要有效的联系邮箱。音乐仍可本地播放。' })
+        const sourceSettings = await metadataEditor.requireSources().settings()
+        if (!sourceSettings.sources.some(source => source.id === 'musicbrainz' && source.enabled)) return json(response, 400, { error: 'MusicBrainz 来源已关闭，请在全局专辑资料来源中启用后再读取制作信息。' })
         if (value.albumIds !== undefined && (!Array.isArray(value.albumIds) || value.albumIds.some((id) => typeof id !== 'string'))) return json(response, 400, { error: 'albumIds 必须是专辑 ID 数组' })
         void store.enrich({ albumIds: value.albumIds, force: true }).catch(() => {})
         return json(response, 202, store.snapshot())
@@ -306,6 +313,7 @@ export async function createMusicServer({
         const value = await bodyJson(request)
         if (value.albumIds !== undefined && (!Array.isArray(value.albumIds) || value.albumIds.length > 10000 || value.albumIds.some((id) => typeof id !== 'string'))) return json(response, 400, { error: 'albumIds 必须是专辑 ID 数组' })
         if (value.force !== undefined && typeof value.force !== 'boolean') return json(response, 400, { error: 'force 必须为布尔值' })
+        if (store.globalApplyPreparing) return json(response, 409, { error: '正在应用全局专辑资料来源，请稍后重试。' })
         void store.updateIntroductions({ albumIds: value.albumIds, force: value.force ?? false }).catch(() => {})
         return json(response, 202, store.snapshot())
       }
@@ -313,6 +321,21 @@ export async function createMusicServer({
         if (route === '/api/album-info/document' && get) return json(response, 200, metadataEditor.document(url.searchParams.get('albumId')))
         if (route === '/api/album-info/sources' && get) return json(response, 200, await metadataEditor.requireSources().settings())
         if (route === '/api/album-info/sources' && request.method === 'POST') return json(response, 200, await metadataEditor.requireSources().saveSettings(await bodyJson(request)))
+        if (route === '/api/album-info/apply-global' && request.method === 'POST') {
+          const value = await bodyJson(request)
+          if (!value.settings || typeof value.settings !== 'object' || Array.isArray(value.settings)) return json(response, 400, { error: 'settings 必须是来源设置对象。' })
+          if (typeof value.overwriteManual !== 'boolean') return json(response, 400, { error: 'overwriteManual 必须为布尔值。' })
+          if (store.introductionsPromise || store.introductionsStatus?.running || store.globalApplyPreparing) return json(response, 409, { error: '专辑资料任务正在运行，请完成后再应用全局来源。' })
+          store.globalApplyPreparing = true
+          try {
+            await metadataEditor.requireSources().saveSettings(value.settings)
+            store.globalApplyPreparing = false
+            void store.updateIntroductions({ force: true, overwriteManual: value.overwriteManual }).catch(() => {})
+            return json(response, 202, store.snapshot())
+          } finally {
+            store.globalApplyPreparing = false
+          }
+        }
         const cover = /^\/api\/album-info\/cover\/([a-zA-Z0-9_-]+)$/.exec(route)
         if (cover && get) {
           const aborter = new AbortController()

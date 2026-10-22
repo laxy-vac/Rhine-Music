@@ -20,6 +20,14 @@ const text = (value) => typeof value === 'string' ? value.trim() : ''
 const normalized = (value) => text(value).normalize('NFKC').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]/gu, '')
 const exists = async (file) => { try { await fs.access(file); return true } catch { return false } }
 const timestamp = () => new Date().toISOString()
+const validMusicBrainzEmail = (value) => typeof value === 'string' && value.trim().length <= 320 && /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(value.trim())
+const hasAttributedDescription = (album) => !!text(album?.description) && (
+  !!album?.descriptionSource?.url ||
+  (album?.descriptionSource?.selection === 'auto' && typeof album.descriptionSource.sourceId === 'string' && !!album.descriptionSource.sourceId) ||
+  (typeof album?.automaticSelection?.sourceId === 'string' && !!album.automaticSelection.sourceId)
+)
+const hasManualInformation = (album) => Object.hasOwn(album?._userInfo ?? {}, 'description') || Object.hasOwn(album?._userInfo ?? {}, 'sourceOverride')
+const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 const METADATA_VERSION = AUDIO_METADATA_VERSION
 const nativeArtists = (metadata, album = false) => {
   const pattern = album ? /^(?:ALBUMARTIST|ALBUM ARTIST|TPE2|aART)$/i : /^(?:ARTIST|TPE1|©ART)$/i
@@ -190,8 +198,9 @@ function albumFromTracks(root, entry, sourceTracks, previous) {
     ...(previous?._defaultCover ? { _defaultCover: previous._defaultCover } : {}),
     discCount: Math.max(1, ...tracks.map((track) => track._common.discTotal ?? track.discNumber ?? 1)),
     localNote: unique(tracks.flatMap((track) => track._common.comments ?? [])).join('\n') || undefined,
-    description: unchangedIdentity && previous.descriptionSource?.url ? previous.description : undefined,
-    descriptionSource: unchangedIdentity && previous.descriptionSource?.url ? previous.descriptionSource : undefined,
+    description: unchangedIdentity && hasAttributedDescription(previous) ? previous.description : undefined,
+    descriptionSource: unchangedIdentity && hasAttributedDescription(previous) ? previous.descriptionSource : undefined,
+    automaticSelection: unchangedIdentity && previous.automaticSelection ? structuredClone(previous.automaticSelection) : undefined,
     introduction: unchangedIdentity ? previous.introduction : undefined,
     genreId: 'unclassified', rawGenres: localGenres,
     folder: entry.folder, tracks, offline: false,
@@ -297,8 +306,8 @@ export class MusicLibraryStore {
       if (genreId.startsWith('source-')) generated.set(genreId, { id: genreId, name: album._onlineGenres?.[0] ?? album._localGenres?.[0] ?? album.rawGenres[0] })
       return {
         id: album.id, title: album.title, artist: album.artist, artists: album.artists, year: album.year, discCount: album.discCount,
-        description: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.description : album.descriptionSource?.url ? album.description : undefined,
-        descriptionSource: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.descriptionSource : album.descriptionSource?.url ? album.descriptionSource : undefined,
+        description: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.description : hasAttributedDescription(album) ? album.description : undefined,
+        descriptionSource: album._userInfo && Object.hasOwn(album._userInfo, 'description') ? album._userInfo.descriptionSource : hasAttributedDescription(album) ? album.descriptionSource : undefined,
         localNote: album.localNote,
         introduction: album.introduction,
         genreId, rawGenres: unique([...(album._onlineGenres ?? []), ...(album._localGenres ?? [])]),
@@ -367,17 +376,27 @@ export class MusicLibraryStore {
         // A concurrent online request may have updated the prior objects.
         for (const album of nextAlbums) {
           const current = this.index.albums.find((entry) => entry.id === album.id)
+          if (current && current.title === album.title && current.artist === album.artist && current.year === album.year && current._userInfo) {
+            // Preserve a user edit that completed while this scan was rebuilding its snapshot.
+            album._userInfo = structuredClone(current._userInfo)
+            if (Object.hasOwn(current._userInfo, 'description')) {
+              album.description = current.description
+              album.descriptionSource = current.descriptionSource
+            }
+          }
           if (current?.online?.checkedAt && (!album.online?.checkedAt || current.online.checkedAt > album.online.checkedAt)) {
             album.online = current.online
             album._onlineGenres = current._onlineGenres
             album.description = current.description
             album.descriptionSource = current.descriptionSource
+            album.automaticSelection = current.automaticSelection
             album.producers = uniqueProducers([...(album.producers ?? []).filter((person) => person.source !== 'MusicBrainz'), ...current.producers.filter((person) => person.source === 'MusicBrainz')])
           }
           if (current?.introduction?.checkedAt && current.title === album.title && current.artist === album.artist && current.year === album.year && (!album.introduction?.checkedAt || current.introduction.checkedAt > album.introduction.checkedAt)) {
             album.introduction = current.introduction
             album.description = current.description
             album.descriptionSource = current.descriptionSource
+            album.automaticSelection = current.automaticSelection
           }
         }
         this.index = { version: 1, albums: nextAlbums, roots: nextRoots, scannedAt: timestamp() }
@@ -391,7 +410,13 @@ export class MusicLibraryStore {
         this.scanPromise = null
         this.onChange()
       }
-      if (this.config.onlineEnabled) void this.enrich().catch(() => {})
+      if (this.config.onlineEnabled) {
+        const activeIntroductions = this.introductionsPromise
+        void (async () => {
+          if (activeIntroductions) await activeIntroductions.catch(() => {})
+          if (this.config.onlineEnabled) await this.updateIntroductions()
+        })().catch(() => {})
+      }
       return this.snapshot()
     })()
     return this.scanPromise
@@ -542,14 +567,15 @@ export class MusicLibraryStore {
 
   async onlineJson(url, { signal, headers = {}, parseResponse } = {}) {
     const job = this.musicBrainzRequestChain.catch(() => {}).then(async () => {
-      if (!this.musicBrainzContact) throw new Error('请先配置自己的联系邮箱或项目网址，以满足 MusicBrainz User-Agent 要求')
+      const contact = typeof this.musicBrainzContact === 'string' ? this.musicBrainzContact.trim() : ''
+      if (!validMusicBrainzEmail(contact)) throw new Error('MusicBrainz 资料读取需要有效的联系邮箱')
       signal?.throwIfAborted()
       const wait = Math.max(0, this.lastMusicBrainzRequest + 1100 - Date.now())
       if (wait) await delay(wait, undefined, { signal })
       signal?.throwIfAborted()
       this.lastMusicBrainzRequest = Date.now()
       const response = await this.fetcher(url, {
-        headers: { 'User-Agent': `RhineLocalMusic/0.1 (${this.musicBrainzContact})`, Accept: 'application/json', ...headers },
+        headers: { 'User-Agent': `RhineLocalMusic/0.1 (${contact})`, Accept: 'application/json', ...headers },
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error',
       })
       if (!response.ok) throw new Error(`${url.hostname} HTTP ${response.status}，保留本地资料，可稍后重试`)
@@ -618,40 +644,88 @@ export class MusicLibraryStore {
     return this.enrichPromise
   }
 
-  async updateIntroductions({ albumIds, force = false } = {}) {
+  async updateIntroductions({ albumIds, force = false, overwriteManual = false } = {}) {
     if (this.introductionsPromise) return this.introductionsPromise
+    if (this.globalApplyPreparing) throw Object.assign(new Error('正在应用全局专辑资料来源，请稍后重试。'), { status: 409 })
     if (albumIds !== undefined && (!Array.isArray(albumIds) || albumIds.length > 10000 || albumIds.some((id) => typeof id !== 'string'))) throw new Error('albumIds 必须是专辑 ID 数组')
     if (typeof force !== 'boolean') throw new Error('force 必须为布尔值')
+    if (typeof overwriteManual !== 'boolean') throw new Error('overwriteManual 必须为布尔值')
     const selected = this.index.albums.filter((album) => {
       if (!this.config.roots.includes(album._root) || (albumIds && !albumIds.includes(album.id))) return false
-      if (Object.hasOwn(album._userInfo ?? {}, 'description')) return false
+      if (!overwriteManual && hasManualInformation(album)) return false
       if (force) return true
-      if (album.description && album.descriptionSource?.url) return false
+      if (hasAttributedDescription(album)) return false
       const cached = album.introduction
       return !cached || cached.status === 'error' || !cached.checkedAt || Date.now() - Date.parse(cached.checkedAt) > 7 * 86400_000
-    }).map((album) => ({ id: album.id, title: album.title, artist: album.artist, year: album.year }))
+    }).map((album) => ({
+      identity: { id: album.id, title: album.title, artist: album.artist, year: album.year },
+      revision: album._userInfo?.revision,
+      manual: {
+        hasDescription: Object.hasOwn(album._userInfo ?? {}, 'description'),
+        description: album._userInfo?.description,
+        descriptionSource: album._userInfo?.descriptionSource,
+        hasSourceOverride: Object.hasOwn(album._userInfo ?? {}, 'sourceOverride'),
+        sourceOverride: album._userInfo?.sourceOverride,
+      },
+    }))
     this.introductionsStatus = { running: true, completed: 0, total: selected.length, updated: 0, notFound: 0, failed: 0 }
     this.introductionsPromise = (async () => {
       await Promise.resolve()
       let consecutiveFailures = 0
       try {
         for (const album of selected) {
-          this.introductionsStatus.currentAlbum = album.title
+          this.introductionsStatus.currentAlbum = album.identity.title
           this.onChange()
           let result
-          try { result = await this.introductionProvider.lookup(album) }
+          try {
+            const current = this.index.albums.find((entry) => entry.id === album.identity.id)
+            if (!current || current.title !== album.identity.title || current.artist !== album.identity.artist || current.year !== album.identity.year) {
+              this.introductionsStatus.completed += 1
+              continue
+            }
+            const sources = this.albumInfoSources
+            result = sources
+              ? await sources.lookup(album.identity)
+              : await this.introductionProvider.lookup(album.identity)
+          }
           catch (error) { result = { status: 'error', checkedAt: timestamp(), error: error.message } }
           if (!['matched', 'not-found', 'uncertain', 'error'].includes(result?.status)) result = { status: 'error', checkedAt: timestamp(), error: '专辑介绍来源返回无效状态' }
-          const current = this.index.albums.find((entry) => entry.id === album.id)
-          if (current && current.title === album.title && current.artist === album.artist && current.year === album.year) {
+          const current = this.index.albums.find((entry) => entry.id === album.identity.id)
+          const currentManual = current ? {
+            hasDescription: Object.hasOwn(current._userInfo ?? {}, 'description'),
+            description: current._userInfo?.description,
+            descriptionSource: current._userInfo?.descriptionSource,
+            hasSourceOverride: Object.hasOwn(current._userInfo ?? {}, 'sourceOverride'),
+            sourceOverride: current._userInfo?.sourceOverride,
+          } : undefined
+          if (current && current.title === album.identity.title && current.artist === album.identity.artist && current.year === album.identity.year &&
+            current._userInfo?.revision === album.revision && sameJson(currentManual, album.manual) &&
+            (overwriteManual || !hasManualInformation(current))) {
             current.introduction = { status: result.status, checkedAt: result.checkedAt ?? timestamp(), ...(result.error ? { error: result.error } : {}), ...(result.candidateUrl ? { candidateUrl: result.candidateUrl } : {}) }
-            if (result.status === 'matched' && result.description && result.descriptionSource?.url && !Object.hasOwn(current._userInfo ?? {}, 'description')) {
+            const automaticSelection = result.automaticSelection && typeof result.automaticSelection.sourceId === 'string'
+              ? structuredClone(result.automaticSelection)
+              : undefined
+            if (result.status === 'matched' && text(result.description) && (result.descriptionSource?.url || automaticSelection?.sourceId)) {
+              if (overwriteManual) {
+                const userInfo = { ...current._userInfo }
+                delete userInfo.description
+                delete userInfo.descriptionSource
+                delete userInfo.sourceOverride
+                current._userInfo = Object.keys(userInfo).length ? userInfo : undefined
+              }
               current.description = result.description
-              current.descriptionSource = result.descriptionSource
+              current.descriptionSource = {
+                ...result.descriptionSource,
+                kind: result.descriptionSource?.kind ?? 'online',
+                ...(automaticSelection?.sourceId ? { sourceId: automaticSelection.sourceId } : {}),
+                selection: 'auto',
+              }
+              if (automaticSelection) current.automaticSelection = automaticSelection
+              else delete current.automaticSelection
               this.introductionsStatus.updated += 1
             } else if (result.status === 'error' || result.status === 'matched') {
               current.introduction.status = 'error'
-              current.introduction.error ||= '来源未提供可引用的专辑介绍'
+              current.introduction.error ||= '来源未提供可用的专辑介绍'
               this.introductionsStatus.failed += 1
             } else this.introductionsStatus.notFound += 1
           }
@@ -663,7 +737,7 @@ export class MusicLibraryStore {
           await this.saveIndex()
           this.onChange()
           if (consecutiveFailures >= 3 && this.introductionsStatus.completed < selected.length) {
-            this.introductionsStatus.error = `百科来源连续 3 次访问失败，已暂停剩余 ${selected.length - this.introductionsStatus.completed} 张，避免重复超时。${result.error ?? ''}`
+            this.introductionsStatus.error = `资料来源连续 3 次访问失败，已暂停剩余 ${selected.length - this.introductionsStatus.completed} 张，避免重复超时。${result.error ?? ''}`
             break
           }
         }
@@ -714,12 +788,14 @@ export class MusicLibraryStore {
       for (const medium of release.media ?? []) for (const track of medium.tracks ?? []) collect(track.recording?.relations, track.title ?? track.recording?.title)
       const online = { status: 'matched', releaseId, releaseGroupId, checkedAt, sourceUrl: `https://musicbrainz.org/release/${releaseId}` }
       let introduction
-      try {
-        introduction = await this.albumIntroduction(group)
-        online.descriptionStatus = introduction ? 'available' : 'not-found'
-      } catch (error) {
-        online.descriptionStatus = 'error'
-        online.descriptionError = error.message
+      if (!this.albumInfoSources) {
+        try {
+          introduction = await this.albumIntroduction(group)
+          online.descriptionStatus = introduction ? 'available' : 'not-found'
+        } catch (error) {
+          online.descriptionStatus = 'error'
+          online.descriptionError = error.message
+        }
       }
       // Commit after all awaited requests, to the current record after any scan.
       const current = this.index.albums.find((entry) => entry.id === album.id)
@@ -727,8 +803,8 @@ export class MusicLibraryStore {
       current._onlineGenres = unique(genres)
       current.producers = uniqueProducers([...(current.producers ?? []).filter((person) => person.source !== 'MusicBrainz'), ...producers])
       current.online = online
-      if (introduction && !Object.hasOwn(current._userInfo ?? {}, 'description')) Object.assign(current, introduction)
-      Object.assign(album, { _onlineGenres: current._onlineGenres, producers: current.producers, online: current.online, description: current.description, descriptionSource: current.descriptionSource })
+      if (introduction && !hasManualInformation(current)) Object.assign(current, introduction)
+      Object.assign(album, { _onlineGenres: current._onlineGenres, producers: current.producers, online: current.online, description: current.description, descriptionSource: current.descriptionSource, automaticSelection: current.automaticSelection })
     } catch (error) {
       album.online = { ...album.online, status: 'error', checkedAt, error: error.message }
       this.enrichStatus.error = error.message

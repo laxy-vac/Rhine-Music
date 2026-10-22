@@ -9,7 +9,7 @@ export interface AlbumInfoSource {
   detailUrl?: string;
   mapping?: Record<string, string>;
 }
-export interface AlbumInfoSources { sources: AlbumInfoSource[]; defaultSourceId: string; musicBrainzAvailable?: boolean; }
+export interface AlbumInfoSources { sources: AlbumInfoSource[]; defaultSourceId: string; sourceOrder?: string[]; musicBrainzAvailable?: boolean; }
 export interface AlbumInfoCandidate {
   id: string;
   sourceId: string;
@@ -24,15 +24,25 @@ export interface AlbumInfoCandidate {
 }
 export interface AlbumInfoSearch {
   candidates: AlbumInfoCandidate[];
+  automaticCandidateId?: string;
+  automaticCandidate?: AlbumInfoCandidate;
   sources: Array<{ sourceId: string; name: string; status: "ok" | "empty" | "error"; message?: string; count?: number }>;
 }
 export type EditorCover = { mode: "keep" | "inherit" | "upload" | "candidate"; dataUrl?: string; candidateId?: string };
-export interface AlbumInfoDocument { album: MusicAlbum; revision: string; customCover: boolean; }
+export interface AlbumInfoDocument {
+  album: MusicAlbum; revision: string; customCover: boolean;
+  sourcePreference?: string;
+  manualInformation?: boolean;
+  automaticSelection?: { sourceId: string; title: string; artist: string; url?: string };
+}
 export interface AlbumInfoSave {
   albumId: string;
   revision: string;
   description: string;
   sourceCandidateId?: string;
+  sourcePreference?: string;
+  selectionMode?: "auto" | "manual";
+  resetToGlobal?: boolean;
   cover: EditorCover;
 }
 export interface TrackInfoDocument {

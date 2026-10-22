@@ -28,12 +28,12 @@ export const librarySettingsSections: readonly LibrarySettingsSectionInfo[] = [
   {
     id: "metadata",
     title: text("专辑资料", "Album metadata"),
-    intro: text("查询专辑介绍，并补充流派与制作人员资料。", "Look up album descriptions and enrich genre and personnel details."),
+    intro: text("更新自动继承的专辑资料，查看查询进度。", "Update inherited album information and view lookup progress."),
   },
   {
     id: "providers",
     title: text("资料来源", "Data providers"),
-    intro: text("配置 MusicBrainz 请求标识、自动补充和专辑介绍来源。", "Configure the MusicBrainz request identity, automatic enrichment, and description sources."),
+    intro: text("管理全局来源优先级、自定义来源和覆盖范围。", "Manage global source priority, custom providers, and overwrite scope."),
   },
 ];
 

@@ -23,7 +23,19 @@ const HASH = value => createHash('sha256').update(value).digest('hex').slice(0, 
 async function fixture(t) {
   await fs.mkdir(fixtureParent, { recursive: true })
   const runRoot = await fs.mkdtemp(path.join(fixtureParent, 'test-editor-'))
+  let store
   t.after(async () => {
+    if (store) {
+      while (true) {
+        const pending = [store.scanPromise, store.introductionsPromise, store.enrichPromise].filter(Boolean)
+        if (pending.length) await Promise.allSettled(pending)
+        else {
+          const writes = store.saveChain
+          await writes.catch(() => {})
+          if (!store.scanPromise && !store.introductionsPromise && !store.enrichPromise && store.saveChain === writes) break
+        }
+      }
+    }
     const target = path.resolve(runRoot)
     assert.ok(target.startsWith(`${path.resolve(fixtureParent)}${path.sep}`), 'fixture cleanup stays within its owned test-editor directory')
     await fs.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
@@ -52,7 +64,7 @@ async function fixture(t) {
     parsed.common.comment = [{ text: 'Scanner-owned note' }]
     return parsed
   }
-  const store = await new MusicLibraryStore({ dataDir, defaultRoots: [musicRoot], metadataParser }).init()
+  store = await new MusicLibraryStore({ dataDir, defaultRoots: [musicRoot], metadataParser }).init()
   await store.scan()
   const album = store.index.albums[0]
   assert.ok(album, 'synthetic album is indexed')
@@ -62,16 +74,22 @@ async function fixture(t) {
 function fixtureSources() {
   const candidate = {
     id: 'fixture-candidate-1', title: 'Metadata editor fixture', artist: 'Fixture Album Artist', year: 2024,
-    description: 'A selected synthetic album introduction.', sourceName: 'Fixture catalog',
+    description: 'A selected synthetic album introduction.', sourceId: 'fixture-source', sourceName: 'Fixture catalog',
     url: 'https://catalog.example.test/album/fixture-candidate-1', license: 'CC BY fixture',
   }
   return {
     async init() {},
+    async settings() { return { sources: [{ id: 'fixture-source', name: 'Fixture catalog', enabled: true }] } },
     async search(query) { return {
       candidates: [{ ...candidate, query: { title: query.title, artist: query.artist } }],
       sources: [{ sourceId: 'fixture-source', name: 'Fixture catalog', status: 'ok', count: 1 }],
     } },
     async resolve(id) { return id === candidate.id ? { ...candidate } : undefined },
+    async lookup(album) { return {
+      status: 'matched', checkedAt: new Date().toISOString(), description: candidate.description,
+      descriptionSource: { kind: 'online', sourceId: candidate.sourceId, name: candidate.sourceName, url: candidate.url, license: candidate.license },
+      automaticSelection: { sourceId: candidate.sourceId, title: album.title, artist: album.artist, url: candidate.url },
+    } },
     async cover(id) { assert.equal(id, candidate.id); return { data: PNG, mime: 'image/png' } },
   }
 }
@@ -121,7 +139,7 @@ test('manual and explicitly selected album information survives offline restart 
   const manualEditor = await new MusicMetadataEditor({ store: restarted, dataDir, sources: fixtureSources() }).init()
   const manualDoc = manualEditor.document(album.id)
   await manualEditor.saveAlbum({
-    albumId: album.id, revision: manualDoc.revision, description: '手动离线介绍。', cover: { mode: 'keep' },
+    albumId: album.id, revision: manualDoc.revision, description: '手动离线介绍。', sourcePreference: 'fixture-source', cover: { mode: 'keep' },
   })
   assert.equal(restarted.snapshot().albums.find(item => item.id === album.id).description, '手动离线介绍。')
   assert.equal(restarted.snapshot().albums.find(item => item.id === album.id).descriptionSource?.kind, 'manual')
@@ -137,6 +155,93 @@ test('manual and explicitly selected album information survives offline restart 
   assert.equal(afterRestartAndScan.description, '手动离线介绍。')
   assert.equal(afterRestartAndScan.descriptionSource?.kind, 'manual')
   assert.equal(afterRestartAndScan.localNote, 'Scanner-owned note', 'manual prose remains separate from scanner comments')
+  const pinnedDocument = (await new MusicMetadataEditor({ store: restarted }).init()).document(album.id)
+  assert.equal(pinnedDocument.sourcePreference, 'fixture-source', 'a per-album source preference survives restart and scan')
+  assert.equal(pinnedDocument.manualInformation, true)
+})
+
+test('automatic candidate stays in the shared cache and reset clears manual data only after a match', async (t) => {
+  const { store } = await fixture(t)
+  const album = findAlbum(store), sources = fixtureSources()
+  const editor = await new MusicMetadataEditor({ store, sources }).init()
+  const initial = editor.document(album.id)
+  await editor.saveAlbum({
+    albumId: album.id, revision: initial.revision, description: '', sourceCandidateId: 'fixture-candidate-1',
+    sourcePreference: 'auto', selectionMode: 'auto', cover: { mode: 'keep' },
+  })
+  assert.equal(album.description, 'A selected synthetic album introduction.')
+  assert.equal(album.descriptionSource.selection, 'auto')
+  assert.equal(album.descriptionSource.sourceId, 'fixture-source')
+  assert.equal(album.automaticSelection.sourceId, 'fixture-source')
+  assert.equal(Object.hasOwn(album._userInfo, 'description'), false, 'automatic prose is not recorded as a manual edit')
+  assert.equal(editor.document(album.id).manualInformation, false)
+
+  album._userInfo = { ...album._userInfo, revision: 'manual-edit-1', description: 'Keep this manual text.', descriptionSource: { kind: 'manual', name: '手动编辑' }, sourceOverride: 'fixture-source' }
+  album.description = 'Keep this manual text.'
+  album.descriptionSource = album._userInfo.descriptionSource
+  sources.lookup = async () => ({ status: 'not-found', checkedAt: new Date().toISOString() })
+  const failedReset = editor.document(album.id)
+  await assert.rejects(editor.saveAlbum({ albumId: album.id, revision: failedReset.revision, description: '', resetToGlobal: true, sourcePreference: 'auto', cover: { mode: 'keep' } }), { status: 409 })
+  assert.equal(album._userInfo.description, 'Keep this manual text.')
+  assert.equal(album._userInfo.sourceOverride, 'fixture-source')
+
+  sources.lookup = async current => ({
+    status: 'matched', checkedAt: new Date().toISOString(), description: 'Replacement global introduction.',
+    descriptionSource: { kind: 'online', sourceId: 'fixture-source', name: 'Fixture catalog' },
+    automaticSelection: { sourceId: 'fixture-source', title: current.title, artist: current.artist },
+  })
+  const successfulReset = editor.document(album.id)
+  await editor.saveAlbum({ albumId: album.id, revision: successfulReset.revision, description: '', resetToGlobal: true, sourcePreference: 'auto', cover: { mode: 'keep' } })
+  assert.equal(album.description, 'Replacement global introduction.')
+  assert.equal(album.descriptionSource.selection, 'auto')
+  assert.equal(Object.hasOwn(album._userInfo, 'description'), false)
+  assert.equal(Object.hasOwn(album._userInfo, 'sourceOverride'), false)
+  assert.equal(editor.document(album.id).manualInformation, false)
+})
+
+test('an existing unavailable source pin survives unrelated saves while a new unavailable pin is rejected', async (t) => {
+  const { store } = await fixture(t)
+  const album = findAlbum(store), sources = fixtureSources()
+  album._userInfo = { revision: 'old-pin', sourceOverride: 'retired-source' }
+  const editor = await new MusicMetadataEditor({ store, sources }).init()
+  sources.settings = async () => ({ sources: [{ id: 'fixture-source', enabled: true }] })
+  let lookupCalls = 0
+  sources.lookup = async () => { lookupCalls += 1; throw new Error('a stale pin must not cause a lookup on a cover save') }
+
+  const document = editor.document(album.id)
+  await editor.saveAlbum({ albumId: album.id, revision: document.revision, description: '', sourcePreference: 'retired-source', selectionMode: 'auto', cover: { mode: 'upload', dataUrl: dataUrl() } })
+  assert.equal(lookupCalls, 0)
+  assert.equal(editor.document(album.id).sourcePreference, 'retired-source', 'saving an unrelated field preserves the old pin')
+
+  const afterSave = editor.document(album.id)
+  await assert.rejects(editor.saveAlbum({ albumId: album.id, revision: afterSave.revision, description: '', sourcePreference: 'disabled-source', cover: { mode: 'keep' } }), { status: 409 })
+  assert.equal(editor.document(album.id).sourcePreference, 'retired-source', 'a rejected new preference leaves the existing pin unchanged')
+})
+
+test('auto-mode cover-only saves skip lookup, and edited candidate text stays user-authored', async (t) => {
+  const { store } = await fixture(t)
+  const album = findAlbum(store), sources = fixtureSources()
+  let lookupCalls = 0
+  sources.lookup = async () => { lookupCalls += 1; throw new Error('fixture lookup must not run for a cover-only save') }
+  const editor = await new MusicMetadataEditor({ store, sources }).init()
+  const initial = editor.document(album.id)
+  await editor.saveAlbum({
+    albumId: album.id, revision: initial.revision, description: initial.album.description ?? '',
+    sourcePreference: initial.sourcePreference, selectionMode: 'auto', cover: { mode: 'upload', dataUrl: dataUrl() },
+  })
+  assert.equal(lookupCalls, 0)
+  assert.equal(editor.document(album.id).customCover, true)
+  assert.equal(editor.document(album.id).manualInformation, false)
+  assert.equal(Object.hasOwn(album._userInfo, 'description'), false)
+
+  const candidateDoc = editor.document(album.id)
+  await editor.saveAlbum({
+    albumId: album.id, revision: candidateDoc.revision, description: 'My rewritten candidate introduction.',
+    sourceCandidateId: 'fixture-candidate-1', cover: { mode: 'keep' },
+  })
+  assert.equal(album.description, 'My rewritten candidate introduction.')
+  assert.equal(album.descriptionSource.kind, 'manual', 'the candidate attribution is retained only when its text is unchanged')
+  assert.equal(album.descriptionSource.name, '手动编辑')
 })
 
 test('changing only an album cover preserves the existing introduction and its attribution', async (t) => {

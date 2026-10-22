@@ -1720,7 +1720,7 @@ function updateIntroductionStatus() {
     button.disabled = running || !apiAvailable || !library.albums.length;
     button.textContent = running
       ? trUi("正在查询专辑介绍…")
-      : uiLanguage() === "en" ? "Batch update Wikipedia descriptions ↗" : "批量查询 / 更新百科介绍 ↗";
+      : uiLanguage() === "en" ? "Update inherited album information ↗" : "按全局顺序更新专辑资料 ↗";
   }
   for (const control of document.querySelectorAll<HTMLButtonElement>(
     '[data-action="introduction-album"]',
@@ -1769,7 +1769,11 @@ function updateIntroductionStatus() {
                 ? ui`查询未完成：${job.error}`
                 : job && job.total > 0
                   ? ui`上次查询：处理 ${job.completed} / ${job.total} 张 · 更新 ${job.updated} 张 · 未找到可靠资料 ${job.notFound} 张 · 查询失败 ${job.failed} 张`
-                  : trUi("查询会核对专辑、歌手与年份；无法确认的结果不会覆盖已有介绍。");
+                  : uiLanguage() === "en" ? "Sources are tried in global order. The first usable result is selected; individual albums can be changed manually." : "按全局优先级逐层查询；多个候选先采用一个可用结果，之后可在对应专辑中手动更换。";
+  if (job && (job.running || job.total > 0)) {
+    for (const progressStatus of document.querySelectorAll<HTMLElement>("[data-album-source-apply-status]"))
+      progressStatus.textContent = status?.textContent ?? "";
+  }
   const details = document.querySelector<HTMLDetailsElement>(
     "#introduction-missing",
   );
@@ -2451,7 +2455,8 @@ function renderLibraryConnectionSettings() {
         onlineEnabled?: boolean;
       }>("/api/config");
       if (!configSection.isConnected) return;
-      configSection.innerHTML = ui`<h3>MusicBrainz ${uiLanguage() === "en" ? "connection" : "连接与自动补充"}</h3><label class="field-label" for="metadata-contact">MusicBrainz 联系邮箱或项目网址</label><input id="metadata-contact" type="text" value="${esc(config.musicBrainzContact || "")}" placeholder="你的联系邮箱或公开项目网址"><p>按 MusicBrainz 要求用于标识本应用的资料请求，不用于注册或订阅。</p><label class="settings-row"><span>${uiLanguage() === "en" ? "Automatically enrich MusicBrainz metadata after scanning" : "扫描后自动补充 MusicBrainz 资料"}<small>${uiLanguage() === "en" ? "Genres and production credits; cached results are reused." : "补充流派和制作人员；已有缓存不重复查询。"}</small></span><input type="checkbox" id="online-enabled" role="switch" ${config.onlineEnabled ? "checked" : ""}></label><button class="primary-button" data-action="save-online">${uiLanguage() === "en" ? "Save connection and automatic enrichment" : "保存连接与自动补充设置"}</button><p id="metadata-config-status" role="status">${config.musicBrainzConfigured ? trUi("资料库请求标识已配置。") : trUi("尚未配置；本地曲库和播放已可使用。")}</p>`;
+      const hasEmail = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(config.musicBrainzContact?.trim() || "");
+      configSection.innerHTML = `<h3>${uiLanguage() === "en" ? "Connection and automatic lookup" : "连接信息与自动查询"}</h3><label class="field-label" for="metadata-contact">${uiLanguage() === "en" ? "MusicBrainz contact email" : "MusicBrainz 联系邮箱"}</label><input id="metadata-contact" type="email" maxlength="320" value="${esc(config.musicBrainzContact || "")}" placeholder="${uiLanguage() === "en" ? "Your contact email" : "填写有效的联系邮箱"}"><p>${uiLanguage() === "en" ? "MusicBrainz requires a valid contact email. Leave it empty to skip MusicBrainz and continue with the next enabled provider." : "MusicBrainz 需要有效的联系邮箱；留空时自动跳过它，继续使用下一个已启用来源。"}</p><label class="settings-row"><span>${uiLanguage() === "en" ? "Automatically look up album information after scanning" : "扫描后自动查询专辑资料"}<small>${uiLanguage() === "en" ? "Uses the global source order and preserves manual album information." : "按全局来源顺序查询，保留单张专辑的手工修改。"}</small></span><input type="checkbox" id="online-enabled" role="switch" ${config.onlineEnabled ? "checked" : ""}></label><button class="primary-button" data-action="save-online">${uiLanguage() === "en" ? "Save connection and automatic lookup" : "保存连接与自动查询设置"}</button><p id="metadata-config-status" role="status">${hasEmail ? (uiLanguage() === "en" ? "MusicBrainz contact email is configured." : "MusicBrainz 联系邮箱已配置。") : (uiLanguage() === "en" ? "MusicBrainz is skipped until an email is configured." : "未配置邮箱，查询时将跳过 MusicBrainz。")}</p>`;
     } catch (error) {
       if (configSection.isConnected)
         configSection.innerHTML = `<p role="alert">${esc((error as Error).message)}</p><button data-action="library-providers-retry">${uiLanguage() === "en" ? "Retry" : "重新读取"}</button>`;
@@ -3537,7 +3542,7 @@ function organizeLibrarySettings(category: HTMLElement) {
   panels.get("classification")!.insertAdjacentHTML("beforeend", `<section class="panel-section" id="library-classification-settings"><div class="library-panel-heading"><h3>${uiLanguage() === "en" ? "Local classification rules" : "本地分类规则"}</h3><small>${uiLanguage() === "en" ? "Save to apply" : "保存后生效"}</small></div><div id="genre-rules-host"></div></section>`);
   panels.get("metadata")!.append(introductions);
   panels.get("metadata")!.insertAdjacentHTML("beforeend", `<section class="panel-section"><h3>${uiLanguage() === "en" ? "Genres and production credits" : "流派与制作人员"}</h3><p>${uiLanguage() === "en" ? "Use MusicBrainz to enrich release details, genres and production credits. Configure its contact information in Data providers first. Manual genre overrides remain in effect." : "向 MusicBrainz 补充发行信息、流派和制作人员；先在“资料来源”配置联系信息。已有人工分类优先保留。"}</p><button class="primary-button" data-action="enrich-library">${uiLanguage() === "en" ? "Enrich missing MusicBrainz metadata" : "补充缺失的 MusicBrainz 资料"}</button><p id="library-enrichment-status" class="scan-status" role="status" aria-live="polite"></p><div class="library-quicklinks"><button class="text-button" data-library-target="providers">${uiLanguage() === "en" ? "Configure data providers →" : "配置资料来源 →"}</button></div></section>`);
-  panels.get("providers")!.insertAdjacentHTML("beforeend", `<section class="panel-section" id="online-config"></section><section class="panel-section"><h3>${uiLanguage() === "en" ? "Album information providers" : "专辑信息查询来源"}</h3><p>${uiLanguage() === "en" ? "Providers for online searches in Edit album information. Enable providers, select the default, or add custom providers, then Save source settings. The bulk Wikipedia description update is a separate action in Album metadata." : "用于“编辑专辑信息”窗口的在线搜索。可选择默认来源、启用或停用来源，并添加自定义来源；完成后点击下方“保存来源设置”。批量百科补全在“专辑资料”页单独执行。"}</p><div id="album-info-sources-settings"></div></section>`);
+  panels.get("providers")!.insertAdjacentHTML("beforeend", `<section class="panel-section library-provider-connection" id="online-config"></section><div id="album-info-sources-settings"></div>`);
 }
 function ensureLibrarySettingsSection(next: LibrarySettingsSection) {
   if (!isLibrarySettings()) return;
@@ -3551,7 +3556,7 @@ function ensureLibrarySettingsSection(next: LibrarySettingsSection) {
   } else if (next === "providers") {
     renderLibraryConnectionSettings();
     const host = document.querySelector<HTMLElement>("#album-info-sources-settings");
-    if (host && !cleanupAlbumInfoSources) cleanupAlbumInfoSources = albumInfoEditor.mountSources(host);
+    if (host && !cleanupAlbumInfoSources) cleanupAlbumInfoSources = albumInfoEditor.mountSources(host, { connectionHost: document.querySelector<HTMLElement>("#online-config") ?? undefined });
   }
   updateScanStatus();
   updateIntroductionStatus();
@@ -3587,7 +3592,7 @@ function renderSettingsPage() {
     ${motionSettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.reduced)}
     ${displaySettingsMarkup(renderQuality, preferences.style.design, musicApplication.view.layout, preferences.windowAspect)}
     ${libraryBrowseOrderMarkup()}
-    <section class="panel-section" id="introduction-settings"><h3>${uiLanguage() === "en" ? "Wikipedia descriptions · bulk update" : "百科介绍 · 批量补全"}</h3><p>${uiLanguage() === "en" ? "Use Wikipedia to verify albums and artists and update descriptions in bulk. Saved descriptions include their sources and remain available offline." : "使用维基百科核对专辑与歌手，批量补全介绍；附上来源并保存在本机，可离线阅读。"}</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">查询 / 更新专辑介绍 ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details><p>${uiLanguage() === "en" ? "For individual provider candidates, manual descriptions, covers and track tags, open Album details → About → Edit album information." : "单张专辑的多来源候选、手动介绍、封面和歌曲标签，请到“专辑详情 → 专辑介绍 → 编辑专辑信息”。"}</p></section>
+    <section class="panel-section" id="introduction-settings"><h3>${uiLanguage() === "en" ? "Inherited album information" : "全局继承的专辑资料"}</h3><p>${uiLanguage() === "en" ? "Albums use the global source order by default. A usable result is selected automatically; manual album information is retained. Adjust the priority and overwrite scope in Data providers." : "专辑默认继承全局来源顺序，自动采用一个可用结果；这里更新自动继承项，保留手工修改。来源优先级和完全覆盖操作在“资料来源”中管理。"}</p><p id="introduction-coverage"></p><button class="primary-button" id="introduction-refresh" data-action="introductions-library">${uiLanguage() === "en" ? "Update inherited album information" : "按全局顺序更新专辑资料"} ↗</button><progress id="introduction-progress" aria-label="专辑介绍查询进度" max="1" value="0" hidden></progress><p id="introduction-status" class="scan-status" role="status" aria-live="polite"></p><details id="introduction-missing" hidden><summary></summary><ul></ul></details><p>${uiLanguage() === "en" ? "To replace the selected result or write album-specific information, open Album details → About → Edit album information. Changes there override global inheritance for that album." : "要更换默认结果或手写专辑介绍，请到“专辑详情 → 专辑介绍 → 编辑专辑信息”；明确修改后，该专辑优先使用你的设置。"}</p><button class="text-button" data-library-target="providers">${uiLanguage() === "en" ? "Manage global source priority →" : "管理全局来源优先级 →"}</button></section>
     <section class="panel-section" id="current-audio-settings"><h3>当前音源</h3><p id="current-audio-source"></p><p>歌曲文件的格式与音质信息。播放时的处理和输出方式可在音频链路中查看。</p><button class="text-button" data-action="audio-info">查看音频链路 ↗</button></section>
     <section class="panel-section" id="decoder-settings"><h3>解码与格式转换</h3><p id="audio-decode-summary" class="audio-live-summary"></p><p>原生播放时，FLAC 由 libFLAC 解码，其他 PCM 音源由 FFmpeg 解码。保持音源采样率进入处理链；解码样本格式与计算精度分别显示。DSD 使用下方独立播放路线。</p><p id="processing-support-status" class="processing-support-note" role="status"></p></section>
     ${dsdRouteSettingsMarkup()}
@@ -4537,6 +4542,10 @@ document.addEventListener("click", (e) => {
         const automatic = $<HTMLInputElement>("#online-enabled");
         const saveButton = target as HTMLButtonElement;
         const status = document.querySelector<HTMLElement>("#metadata-config-status");
+        if (contact.value.trim() && (!contact.validity.valid || !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(contact.value.trim()))) {
+          if (status) status.textContent = uiLanguage() === "en" ? "Enter a valid email, or leave it empty to skip MusicBrainz." : "请填写有效邮箱，或留空以跳过 MusicBrainz。";
+          contact.focus(); return;
+        }
         contact.disabled = automatic.disabled = saveButton.disabled = true;
         if (status) status.textContent = uiLanguage() === "en" ? "Saving connection settings…" : "正在保存连接设置…";
         try {

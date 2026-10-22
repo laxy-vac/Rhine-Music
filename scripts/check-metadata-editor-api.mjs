@@ -45,6 +45,7 @@ function fixtureFetcher() {
     if (url.hostname === 'music.163.com' && url.pathname === '/api/search/get/web') {
       return jsonResponse({ code: 200, result: { albums: sameTitleAlbums } })
     }
+    if (url.hostname === 'empty-source.example.test' && url.pathname === '/search') return jsonResponse({ results: [] })
     if (url.hostname === 'music.163.com' && /^\/api\/v1\/album\/(1001|1002)$/.test(url.pathname)) {
       const id = url.pathname.split('/').at(-1)
       return jsonResponse({ code: 200, album: {
@@ -83,7 +84,19 @@ async function closeHttpServer(server) {
 async function createApiFixture(t) {
   await fs.mkdir(fixtureParent, { recursive: true })
   const runRoot = await fs.mkdtemp(path.join(fixtureParent, 'run-'))
+  let store
   t.after(async () => {
+    if (store) {
+      while (true) {
+        const pending = [store.scanPromise, store.introductionsPromise, store.enrichPromise].filter(Boolean)
+        if (pending.length) await Promise.allSettled(pending)
+        else {
+          const writes = store.saveChain
+          await writes.catch(() => {})
+          if (!store.scanPromise && !store.introductionsPromise && !store.enrichPromise && store.saveChain === writes) break
+        }
+      }
+    }
     const target = path.resolve(runRoot)
     assert.ok(target.startsWith(`${path.resolve(fixtureParent)}${path.sep}`), 'API fixture cleanup remains in its owned run directory')
     await fs.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 80 })
@@ -109,7 +122,7 @@ async function createApiFixture(t) {
   }
   await fs.writeFile(path.join(albumDir, 'Cover.png'), albumCover)
   const fetcher = fixtureFetcher()
-  const store = await new MusicLibraryStore({ dataDir, defaultRoots: [musicRoot], fetcher }).init()
+  store = await new MusicLibraryStore({ dataDir, defaultRoots: [musicRoot], fetcher }).init()
   await store.scan()
   const album = store.snapshot().albums.find(item => item.title === 'Same Fixture Album') ?? store.snapshot().albums[0]
   assert.ok(album && album.tracks.length === 2, 'the private fixture contains exactly one two-track album')
@@ -148,6 +161,8 @@ test('local HTTP editor routes expose three sources, keep same-title search read
   assert.equal(sourcesResponse.status, 200)
   const settings = await sourcesResponse.json()
   assert.deepEqual(settings.sources.map(source => source.id), ['wikipedia', 'netease', 'qq'])
+  assert.equal(settings.defaultSourceId, 'auto')
+  assert.deepEqual(settings.sourceOrder, ['musicbrainz', 'wikipedia', 'netease', 'qq'])
 
   const qqSearch = await postJson(fixture.baseURL, '/api/album-info/search', {
     albumId: fixture.album.id, title: 'Same Fixture Album', artist: 'Fixture Artist', sourceId: 'qq',
@@ -156,6 +171,8 @@ test('local HTTP editor routes expose three sources, keep same-title search read
   const qqResults = await qqSearch.json()
   assert.equal(qqResults.candidates.length, 2)
   assert.ok(qqResults.candidates.every(candidate => candidate.title === 'Same Fixture Album'))
+  assert.match(qqResults.automaticCandidate.coverUrl, /^\/api\/album-info\/cover\//u,
+    'the automatic candidate preview uses the same local cover proxy as the candidate list')
   const neteaseSearch = await postJson(fixture.baseURL, '/api/album-info/search', {
     albumId: fixture.album.id, title: 'Same Fixture Album', artist: 'Fixture Artist', sourceId: 'netease',
   })
@@ -200,6 +217,99 @@ test('local HTTP editor routes expose three sources, keep same-title search read
   }
 })
 
+test('global apply persists source order and continues after an earlier source has no candidates', async (t) => {
+  const fixture = await createApiFixture(t)
+  try {
+    const initial = await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()
+    const album = fixture.store.index.albums.find(item => item.id === fixture.album.id)
+    album._userInfo = { revision: 'manual-before-apply', description: 'Keep this manual introduction.', sourceOverride: 'custom-previous', cover: { version: 'fixture-cover' } }
+    album.description = album._userInfo.description
+    album.descriptionSource = { kind: 'manual', name: '手动编辑' }
+    const custom = {
+      id: 'custom-empty', name: 'Empty fixture source', enabled: true,
+      searchUrl: 'https://empty-source.example.test/search?q={query}',
+      detailUrl: 'https://empty-source.example.test/album/{id}',
+    }
+    const settings = {
+      sources: [...initial.sources, custom],
+      sourceOrder: ['custom-empty', 'qq', 'netease', 'wikipedia', 'musicbrainz'],
+      defaultSourceId: 'auto',
+    }
+    const protectedApply = await postJson(fixture.baseURL, '/api/album-info/apply-global', { settings, overwriteManual: false })
+    assert.equal(protectedApply.status, 202)
+    if (fixture.store.introductionsPromise) await fixture.store.introductionsPromise
+    assert.equal(album.description, 'Keep this manual introduction.')
+    assert.equal(fixture.fetcher.calls.length, 0, 'preserving mode skips manual information entirely')
+
+    const applied = await postJson(fixture.baseURL, '/api/album-info/apply-global', { settings, overwriteManual: true })
+    assert.equal(applied.status, 202)
+    if (fixture.store.introductionsPromise) await fixture.store.introductionsPromise
+    assert.ok(fixture.fetcher.calls.some(url => url.startsWith('https://empty-source.example.test/search?')))
+    assert.ok(fixture.fetcher.calls.some(url => url.startsWith('https://c.y.qq.com/')),
+      'the next available source is queried after the first source returns no candidates')
+    const saved = fixture.store.index.albums.find(album => album.id === fixture.album.id)
+    assert.equal(saved.description, 'Selected synthetic QQ detail abcdefghijklmn.')
+    assert.equal(saved.descriptionSource.sourceId, 'qq')
+    assert.equal(saved.descriptionSource.selection, 'auto')
+    assert.equal(Object.hasOwn(saved._userInfo, 'description'), false)
+    assert.equal(Object.hasOwn(saved._userInfo, 'sourceOverride'), false)
+    assert.ok(saved._userInfo.cover, 'complete overwrite preserves the user cover')
+    assert.deepEqual((await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()).sourceOrder,
+      ['custom-empty', 'qq', 'netease', 'wikipedia', 'musicbrainz'])
+  } finally { await closeHttpServer(fixture.bundle.server) }
+})
+
+test('global apply rejects a running introduction job before saving changed settings', async (t) => {
+  const fixture = await createApiFixture(t)
+  try {
+    const sources = await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()
+    let finishLookup
+    let beginLookup
+    const started = new Promise(resolve => { beginLookup = resolve })
+    const pending = new Promise(resolve => { finishLookup = resolve })
+    const realLookup = fixture.store.albumInfoSources.lookup.bind(fixture.store.albumInfoSources)
+    fixture.store.albumInfoSources.lookup = async () => { beginLookup(); return pending }
+    const jobResponse = await postJson(fixture.baseURL, '/api/library/introductions', { force: true })
+    assert.equal(jobResponse.status, 202)
+    await started
+
+    const rejected = await postJson(fixture.baseURL, '/api/album-info/apply-global', {
+      settings: { sources: sources.sources, sourceOrder: [...sources.sourceOrder].reverse(), defaultSourceId: 'auto' },
+      overwriteManual: false,
+    })
+    assert.equal(rejected.status, 409)
+    assert.deepEqual((await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()).sourceOrder, sources.sourceOrder,
+      'the global order is not saved while another introduction job runs')
+
+    finishLookup({ status: 'not-found', checkedAt: new Date().toISOString() })
+    await fixture.store.introductionsPromise
+    fixture.store.albumInfoSources.lookup = realLookup
+  } finally { await closeHttpServer(fixture.bundle.server) }
+})
+
+test('online-enabled scans use the ordered introduction lookup and never run disabled MusicBrainz credits', async (t) => {
+  const fixture = await createApiFixture(t)
+  try {
+    const configured = await postJson(fixture.baseURL, '/api/config', { onlineEnabled: true, musicBrainzContact: 'tester@example.invalid' })
+    assert.equal(configured.status, 200)
+    const settings = await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()
+    settings.sources.find(source => source.id === 'musicbrainz').enabled = false
+    assert.equal((await postJson(fixture.baseURL, '/api/album-info/sources', settings)).status, 200)
+
+    const scanResponse = await postJson(fixture.baseURL, '/api/library/scan', {})
+    assert.equal(scanResponse.status, 202)
+    if (fixture.store.scanPromise) await fixture.store.scanPromise
+    if (fixture.store.introductionsPromise) await fixture.store.introductionsPromise
+    assert.ok(fixture.fetcher.calls.some(url => url.startsWith('https://music.163.com/api/search/get/web')),
+      'the scan automatically searches using the shared source order')
+    assert.equal(fixture.fetcher.calls.some(url => url.startsWith('https://musicbrainz.org/')), false,
+      'a disabled MusicBrainz source is not queried for credits or introductions')
+    const saved = fixture.store.index.albums.find(album => album.id === fixture.album.id)
+    assert.equal(saved.descriptionSource.sourceId, 'netease')
+    assert.equal(saved.producers.length, 0, 'the scan does not run separate MusicBrainz credit enrichment')
+  } finally { await closeHttpServer(fixture.bundle.server) }
+})
+
 test('HTTP source choices update immediately when the saved contact email is added or removed', async (t) => {
   const fixture = await createApiFixture(t)
   try {
@@ -208,9 +318,19 @@ test('HTTP source choices update immediately when the saved contact email is add
     const configured = await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: 'tester@example.invalid' })
     assert.equal(configured.status, 200)
     assert.deepEqual(await choices(), ['musicbrainz', 'wikipedia', 'netease', 'qq'])
+    const sourceSettings = await (await fetch(`${fixture.baseURL}/api/album-info/sources`)).json()
+    sourceSettings.sources.find(source => source.id === 'musicbrainz').enabled = false
+    const disabled = await postJson(fixture.baseURL, '/api/album-info/sources', sourceSettings)
+    assert.equal(disabled.status, 200)
+    const rejectedDisabled = await postJson(fixture.baseURL, '/api/library/enrich', {})
+    assert.equal(rejectedDisabled.status, 400, 'the MusicBrainz credits action respects the global source enable switch')
     const removed = await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: '' })
     assert.equal(removed.status, 200)
     assert.deepEqual(await choices(), ['wikipedia', 'netease', 'qq'])
+    const projectContact = await postJson(fixture.baseURL, '/api/config', { musicBrainzContact: 'https://example.test/project' })
+    assert.equal(projectContact.status, 200, 'a project URL remains a valid general contact setting')
+    const rejectedEnrich = await postJson(fixture.baseURL, '/api/library/enrich', {})
+    assert.equal(rejectedEnrich.status, 400, 'MusicBrainz credits require an email even when a project URL is configured')
     assert.equal(fixture.fetcher.calls.length, 0, 'changing visibility never submits a metadata search')
   } finally { await closeHttpServer(fixture.bundle.server) }
 })
