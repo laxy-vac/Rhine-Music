@@ -4,6 +4,8 @@
 
 唯一源码仓库使用当前 `main`；先查看 `git status`，保留未提交工作。环境为 Node.js 24+、npm 锁定依赖、TypeScript/Vite。Windows 桌面使用 Electron，原生主机使用已有 Zig/C++ 工具链。
 
+开发设备：CPU **AMD Ryzen 7 9800X3D**；显卡 **NVIDIA GeForce RTX 5080**；内存 **48 GB**。
+
 ```powershell
 npm run dev             # 前端开发
 npm run music           # 本地音乐服务
