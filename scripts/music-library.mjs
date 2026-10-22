@@ -7,6 +7,8 @@ import { normalizeReplayGainTags } from './replaygain-tags.mjs'
 import { AlbumIntroductionProvider } from './album-introductions.mjs'
 import { readTrackArtworkOverride } from './track-artwork-overrides.mjs'
 import { splitMusicMetadataValues } from '../src/music-metadata-values.mjs'
+import { validateGenreRules as validateRules } from '../src/music-genre-rules.mjs'
+export { validateRules }
 import { cleanRootInput, isFullyQualified, isIgnoredDirectory, isIgnoredFile, isInside, renameWithRetry, samePath } from './platform.mjs'
 
 const AUDIO_EXTENSIONS = new Set(['.flac', '.wav', '.m4a', '.mp4', '.alac', '.dsf', '.dff', '.mp3', '.aac', '.aiff', '.aif', '.ogg', '.opus'])
@@ -55,24 +57,6 @@ export async function writeJsonAtomic(file, value) {
 async function readJson(file, fallback) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')) }
   catch (error) { if (error.code === 'ENOENT') return structuredClone(fallback); throw new Error(`无法读取 ${file}: ${error.message}`) }
-}
-
-export function validateRules(value) {
-  if (!value || value.version !== 1 || !Array.isArray(value.genres) || value.genres.length > 1000 || !value.albumOverrides || typeof value.albumOverrides !== 'object' || Array.isArray(value.albumOverrides)) throw new Error('流派规则需要 version:1、genres 数组和 albumOverrides 对象')
-  const ids = new Set()
-  const genres = value.genres.map((genre) => {
-    if (!genre || typeof genre.id !== 'string' || !/^[\w-]{1,100}$/.test(genre.id) || ids.has(genre.id) || !text(genre.name) || (genre.aliases !== undefined && (!Array.isArray(genre.aliases) || genre.aliases.some((alias) => typeof alias !== 'string')))) throw new Error('流派 ID 必须唯一，名称和别名必须为文本')
-    ids.add(genre.id)
-    return { id: genre.id, name: text(genre.name), aliases: unique((genre.aliases ?? []).map(text)) }
-  })
-  if (!ids.has('unclassified')) genres.push({ id: 'unclassified', name: '未分类', aliases: [] })
-  ids.add('unclassified')
-  const albumOverrides = {}
-  for (const [id, genreId] of Object.entries(value.albumOverrides)) {
-    if (!ids.has(genreId)) throw new Error(`专辑 ${id} 的人工流派 ${genreId} 不存在`)
-    Object.defineProperty(albumOverrides, id, { value: genreId, enumerable: true, writable: true, configurable: true })
-  }
-  return { version: 1, genres, albumOverrides }
 }
 
 export function resolveGenre(album, rules) {

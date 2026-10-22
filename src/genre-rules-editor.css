@@ -1,0 +1,396 @@
+.music-app .genre-rules-editor {
+  --genre-rules-radius: 5px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.music-app .genre-rules-editor [hidden] { display: none !important; }
+.music-app .genre-rules-editor .genre-rules-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+.music-app[data-design="archive"] .genre-rules-editor {
+  --genre-rules-radius: 0;
+}
+
+.music-app .genre-rules-editor :is(
+  fieldset,
+  article,
+  .genre-rules-reload-confirm,
+  .genre-rules-feedback,
+  .genre-rules-warning
+) {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--genre-rules-radius);
+  background: var(--surface);
+}
+
+.music-app .genre-rules-editor fieldset.genre-rules-form {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 14px;
+}
+
+.music-app .genre-rules-editor .genre-rules-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.music-app .genre-rules-editor .genre-rules-heading h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.music-app .genre-rules-editor .genre-rules-heading small {
+  min-width: 0;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.music-app .genre-rules-editor .genre-rules-section {
+  min-width: 0;
+  padding-block: 12px;
+}
+
+.music-app .genre-rules-editor .genre-rules-section + .genre-rules-section {
+  border-top: 1px solid var(--line);
+}
+
+.music-app .genre-rules-editor .genre-rules-section > h4 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.music-app .genre-rules-editor .genre-rules-section > p,
+.music-app .genre-rules-editor .genre-rules-section > small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.music-app .genre-rules-editor .genre-rules-list,
+.music-app .genre-rules-editor .genre-overrides-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor article.genre-rule {
+  min-width: 0;
+  padding: 12px;
+}
+
+.music-app .genre-rules-editor .genre-rule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.music-app .genre-rules-editor .genre-rule-header > :is(strong, span) {
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.music-app .genre-rules-editor .genre-rule-header > small {
+  color: var(--muted);
+}
+
+.music-app .genre-rules-editor .genre-rule-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.music-app .genre-rules-editor .genre-rule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor label.genre-rule-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.music-app .genre-rules-editor .genre-rule-aliases {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.music-app .genre-rules-editor .genre-rule-alias {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor .genre-rule-alias > input {
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor .genre-rule-actions,
+.music-app .genre-rules-editor .genre-rules-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.music-app .genre-rules-editor .genre-rule-actions {
+  margin-top: 10px;
+}
+
+.music-app .genre-rules-editor .genre-rule-delete,
+.music-app .genre-rules-editor .genre-rules-reload-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.music-app .genre-rules-editor .genre-rule-delete > :is(span, p),
+.music-app .genre-rules-editor .genre-rules-reload-confirm > :is(span, p) {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.music-app .genre-rules-editor .genre-override {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 220px) auto;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.music-app .genre-rules-editor .genre-override-album {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor .genre-override-album > :is(select, input),
+.music-app .genre-rules-editor .genre-override > select {
+  min-width: 0;
+}
+
+.music-app .genre-rules-editor .genre-override-album details {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.music-app .genre-rules-editor .genre-override-album details > input {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}
+
+.music-app .genre-rules-editor .genre-override-album details > small {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.music-app .genre-rules-editor .genre-override-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--genre-rules-radius);
+}
+
+.music-app #library-management-settings .genre-rules-editor :is(
+  button,
+  input[type="text"],
+  select,
+  textarea
+) {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--genre-rules-radius);
+  background-color: var(--surface);
+}
+
+.music-app #library-management-settings .genre-rules-editor :is(input[type="text"], select) {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+}
+
+.music-app #library-management-settings .genre-rules-editor select[data-keep-native-select] {
+  appearance: auto;
+}
+
+.music-app #library-management-settings .genre-rules-editor button {
+  min-height: 34px;
+  padding: 6px 10px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.music-app #library-management-settings .genre-rules-editor :is(
+  .genre-rule-header,
+  .genre-rule-alias
+) .genre-rule-row-actions button {
+  min-width: 32px;
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.music-app #library-management-settings .genre-rules-editor button:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.music-app #library-management-settings .genre-rules-editor button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.music-app #library-management-settings .genre-rules-editor button.primary-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--page-bg);
+}
+
+.music-app #library-management-settings .genre-rules-editor .genre-rules-toolbar {
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.music-app .genre-rules-editor .genre-rules-feedback,
+.music-app .genre-rules-editor .genre-rules-warning {
+  min-width: 0;
+  margin: 9px 0 0;
+  padding: 9px 11px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.music-app .genre-rules-editor .genre-rules-feedback.is-error {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.music-app .genre-rules-editor .genre-rules-warning {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.music-app .genre-rules-editor details.genre-rules-json {
+  min-width: 0;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.music-app .genre-rules-editor details.genre-rules-json > summary {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--ink);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.music-app #library-management-settings .genre-rules-editor details.genre-rules-json textarea#genre-json.json-editor {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 280px;
+  margin-top: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--genre-rules-radius);
+  color: var(--ink);
+  background: var(--surface);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
+  resize: vertical;
+}
+
+.music-app .genre-rules-editor details.genre-rules-json > :is(.genre-rule-actions, .genre-rules-toolbar) {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.music-app .genre-rules-editor details.genre-rules-json > button {
+  margin-top: 8px;
+}
+
+@media (max-width: 800px) {
+  .music-app .genre-rules-editor fieldset.genre-rules-form {
+    padding: 11px;
+  }
+
+  .music-app .genre-rules-editor .genre-rule-fields,
+  .music-app .genre-rules-editor .genre-override,
+  .music-app .genre-rules-editor .genre-override-add {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-app .genre-rules-editor .genre-override > button {
+    justify-self: start;
+  }
+
+  .music-app .genre-rules-editor .genre-rules-toolbar {
+    justify-content: stretch;
+  }
+
+  .music-app .genre-rules-editor .genre-rules-toolbar > button {
+    flex: 1 1 130px;
+  }
+}

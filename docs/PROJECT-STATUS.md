@@ -23,6 +23,7 @@
 | 浏览 | ARRAY/MATRIX/GRID，SHOW/GROUP/SORT、搜索、分页、曲目身份、打开/播放/返回；MATRIX 拖动、惯性和悬停 |
 | 空间动效 | 两主题共用固定 q 的 ARRAY/MATRIX 桥接；已有可见列持续保留，货架整体离镜，额外副本错峰升沉；原 ARRAY/MATRIX 静态镜头保持独立 |
 | 主题和设置 | STYLE 管理主题、日夜配色、文字、盒体和场景外观；Settings 七类分别管理界面与交互、显示与性能、歌词、音频、音乐库、音乐来源、关于 |
+| 本地分类规则 | Settings → 音乐库提供流派名称/标识、别名、匹配顺序及专辑指定分类的图形编辑；末尾 JSON 批量入口双向同步同一草稿。规则与服务共用校验，保留暂不在库的专辑映射；保存只重新归类缓存索引，不扫描音频或写标签 |
 | 显示 | 比例、原生全屏、画质、实验性优先显卡和合成质量建议；显卡按物理 PnP 身份去重，选择后重启生效 |
 | 盒体 | Future 简单/精细/Punk 拓展与 Punk 自有盒体；简单款玻璃透光/磨砂可调，封面和金边独立；Punk 前玻璃封合和实体内板保留，顶部无显示白条 |
 | 入场 | Future ALBUMS 的 MATRIX/ARRAY 共用终端前导，各有场景段，可跳过/重播；欢迎文案/ID 受字母、空格及长度限制；Punk 入场暂缓 |
@@ -51,6 +52,7 @@
 | 模型、材质与图集 | `src/case-model.ts`、`src/case-materials.ts`、`src/rhine-album-info.ts`、`src/cover-atlas.ts` |
 | 画质与合成测量 | `src/render-quality.ts`、`src/quality-detection.ts`、`src/quality-benchmark-frame.ts`、`quality-benchmark.html` |
 | 元数据编辑 UI 与类型 | `src/album-info-editor.ts`、`src/metadata-editor-types.ts` |
+| 流派分类编辑与共享规则 | `src/genre-rules-editor.ts`、`src/genre-rules-editor.css`、`src/music-genre-rules.mjs` |
 | 桌面、启动和服务 | `desktop/main.cjs`、`desktop/preload.cjs`、`scripts/launch-source-preview.mjs`、`scripts/music-server.mjs` |
 | 元数据 API、来源和文件写回 | `scripts/music-metadata-editor.mjs`、`scripts/album-info-sources.mjs`、`scripts/metadata-tag-client.mjs`、`scripts/metadata-tag-worker.mjs`、`scripts/audio-tag-editor.mjs`、`scripts/track-artwork-overrides.mjs`、`scripts/music-library.mjs` |
 | 歌词、信号与音频 | `src/lyrics-page.ts`、`src/signal-page.ts`、`src/eq-controls.ts`、`scripts/native-output.mjs`、`native/audio-host.cpp` |

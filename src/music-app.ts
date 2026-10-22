@@ -9,6 +9,7 @@ import "./music.css";
 import "./music-settings-page.css";
 import "./settings-select-controls.css";
 import "./music-library-page.css";
+import { setupGenreRulesEditor } from "./genre-rules-editor";
 import "./music-eq-page.css";
 import "./lyrics-page.css";
 import "./signal-page.css";
@@ -528,6 +529,7 @@ const standardEqPresetState = createStandardEqPresetState();
 let standardEqPresets: ReturnType<typeof setupStandardEqPresets> | undefined;
 let lyricsSettings: ReturnType<typeof setupLyricsSettings> | undefined;
 let cleanupAlbumInfoSources: (() => void) | undefined;
+let genreRulesEditor: ReturnType<typeof setupGenreRulesEditor> | undefined;
 let processingPresetElement: HTMLElement | undefined;
 let processingApplyMessage = "";
 let eqPageScrollTop = 0, eqPresetsExpanded = false;
@@ -1946,6 +1948,8 @@ function syncArchiveTab() {
   $(".music-topnav [data-action=library]").setAttribute("aria-pressed", String(page === "music"));
 }
 function closeManagementPage(restoreFocus = true) {
+  genreRulesEditor?.destroy();
+  genreRulesEditor = undefined;
   cleanupAlbumInfoSources?.();
   cleanupAlbumInfoSources = undefined;
   albumQueue.close(false);
@@ -2380,6 +2384,8 @@ function adjustLibraryRoots(action: string) {
   renderLibraryPaths();
 }
 function renderLibraryPage() {
+  genreRulesEditor?.destroy();
+  genreRulesEditor = undefined;
   $("#library-page-body").innerHTML =
     ui`<p class="panel-intro">选择本地音乐文件夹，按歌曲内嵌的专辑信息整理；标签缺失时使用目录规则。</p><section class="library-folder-section" aria-label="音乐目录管理"><div class="library-folder-heading"><h2>音乐文件夹</h2><span id="library-path-count"></span></div><div class="library-path-manager"><div id="library-path-list" class="library-path-list" role="listbox" aria-label="音乐文件夹列表"></div><div id="library-path-actions" class="library-path-actions"><button data-action="library-add-folder">添加文件夹…</button><button data-action="library-replace-folder">更改选中项…</button><button data-action="library-remove-folder">移除</button><button data-action="library-root-up">上移 ↑</button><button data-action="library-root-down">下移 ↓</button></div></div><p id="library-path-draft" class="library-path-draft" role="status"></p><p class="library-folder-note">移除仅取消此目录的曲库索引，不删除音乐文件。目录调整按“保存并扫描”生效；离开设置会放弃未保存的目录调整。</p></section><div class="panel-actions"><button class="primary-button" data-action="scan">保存并扫描 ↗</button><button data-action="rescan">重新扫描已保存目录</button></div><div id="scan-status" class="scan-status"></div><div class="library-metrics"><div><b id="library-album-count">${library.albums.length}</b><span>专辑</span></div><div><b id="library-track-count">${library.albums.reduce((n, a) => n + a.tracks.length, 0)}</b><span>曲目</span></div><div><b id="library-genre-count">${library.genres.filter((g) => library.albums.some((a) => a.genreId === g.id)).length}</b><span>流派</span></div></div><section class="panel-section"><h3>在线资料与本地分类</h3><p>向 MusicBrainz 查询专辑名称与艺术家，补充流派和制作人员；音乐文件留在本机。已有资料使用缓存，人工分类优先保留。</p><button data-action="enrich-library" class="text-button">补充缺失的在线资料 ↗</button><button data-action="edit-genres" class="text-button">编辑流派归并规则 ↗</button></section><section class="panel-section"><h3>封面显示</h3><p>方形、竖版、横版封面均保持原始比例，完整放入卡片正面。没有封面时显示专辑名称占位，不使用其他专辑的图片。</p>${!library.albums.length ? trUi('<button data-action="demo" class="text-button">查看演示封面 ↗</button>') : ""}</section>`;
   renderLibraryPaths();
@@ -3447,6 +3453,8 @@ function entrySettingsMarkup() {
 }
 
 function renderSettingsPage() {
+  genreRulesEditor?.destroy();
+  genreRulesEditor = undefined;
   cleanupAlbumInfoSources?.();
   cleanupAlbumInfoSources = undefined;
   const content = $("#settings-page-content");
@@ -3933,6 +3941,8 @@ function syncQualitySummary() {
   }
 }
 async function editGenres() {
+  genreRulesEditor?.destroy();
+  genreRulesEditor = undefined;
   const body = document.querySelector("#library-page-body");
   if (!body) return;
   const loading = document.createElement("p");
@@ -3940,9 +3950,21 @@ async function editGenres() {
   loading.textContent = trUi("正在读取本地分类规则…");
   body.replaceChildren(loading);
   try {
-    const rules = await request<GenreRules>("/api/genre-rules");
+    const [rules, localLibrary] = await Promise.all([
+      request<GenreRules>("/api/genre-rules"), request<MusicLibrary>("/api/library"),
+    ]);
     if (!loading.isConnected || page !== "settings") return;
-    body.innerHTML = ui`<p class="panel-intro">这里编辑展示流派、别名和专辑人工分类。保存后重新归并本地索引，不修改音频标签。</p><label class="field-label" for="genre-json">本地流派规则</label><textarea id="genre-json" class="json-editor" spellcheck="false">${esc(JSON.stringify(rules, null, 2))}</textarea><div class="panel-actions"><button data-action="save-genres" class="primary-button">保存并应用</button><button data-action="library-home">返回目录管理</button></div><p id="genre-error" role="alert"></p>`;
+    genreRulesEditor = setupGenreRulesEditor(body as HTMLElement, {
+      rules, albums: localLibrary.albums.filter(album => !album.id.startsWith("ftp-") && !album.id.startsWith("online-")),
+      save: next => request<GenreRules>("/api/genre-rules", next),
+      reload: () => request<GenreRules>("/api/genre-rules"),
+      applied: async () => {
+        const version = ++libraryStateVersion;
+        const snapshot = await request<MusicLibrary>("/api/library");
+        if (shelf === "local" && version === libraryStateVersion) await receiveLibrary(snapshot, true);
+      },
+      back: renderLibraryPage,
+    });
   } catch (error) {
     notify((error as Error).message);
   }
@@ -4399,23 +4421,6 @@ document.addEventListener("click", (e) => {
           notify(trUi("资料库设置已保存。可以开始补充专辑资料。"));
         } catch (error) {
           notify((error as Error).message);
-        }
-      })();
-      break;
-    case "save-genres":
-      void (async () => {
-        const editor = $<HTMLTextAreaElement>("#genre-json");
-        try {
-          const body = JSON.parse(editor.value);
-          await request("/api/genre-rules", body);
-          await loadLibrary(true);
-          notify(trUi("分类规则已保存并应用。"));
-          if (editor.isConnected && page === "settings") renderLibraryPage();
-        } catch (error) {
-          const errorNode = document.querySelector("#genre-error");
-          if (editor.isConnected && errorNode)
-            errorNode.textContent = (error as Error).message;
-          else notify((error as Error).message);
         }
       })();
       break;
