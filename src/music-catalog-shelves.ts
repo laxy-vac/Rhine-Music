@@ -14,6 +14,7 @@ export interface MusicCatalogShelf {
   /** Stable identity derived from the group's segmented shelf positions. */
   readonly id: string;
   readonly name: string;
+  readonly names: readonly string[];
   readonly entryKeys: readonly string[];
 }
 
@@ -77,15 +78,19 @@ function rebuildShelves(source: ArchiveRecord[], catalogVersion: number) {
     });
   }
 
-  cachedShelves = building.map(({ entryKeys, segments }, index) => ({
-    id: segments.map(segment => `${segment.key}:${segment.part}`).join("+") || `empty:${index}`,
-    name: segments.length > 1
-      ? segments.map(segment => segment.name).join("  ·  ")
+  cachedShelves = building.map(({ entryKeys, segments }, index) => {
+    const names = segments.length > 1
+      ? segments.map(segment => segment.name)
       : segments[0]
-        ? segments[0].name + (segments[0].parts > 1 ? "  " + segments[0].part + " / " + segments[0].parts : "")
-        : "",
-    entryKeys,
-  }));
+        ? [segments[0].name + (segments[0].parts > 1 ? "  " + segments[0].part + " / " + segments[0].parts : "")]
+        : [];
+    return {
+      id: segments.map(segment => `${segment.key}:${segment.part}`).join("+") || `empty:${index}`,
+      name: names.join("  ·  "),
+      names,
+      entryKeys,
+    };
+  });
 
   cachedLocations = new Map<string, MusicEntryLocation>();
   const entryKeys = new Set(getMusicDisplayEntries().map(entry => entry.key));

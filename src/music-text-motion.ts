@@ -13,6 +13,7 @@ type SelectionText = {
   genresTotal: number;
   genre: string;
   genreName: string;
+  genreNames: readonly string[];
   format: string;
   artist: string;
   meta: string;
@@ -162,6 +163,7 @@ export function setupMusicTextMotion(root: HTMLElement) {
       measured = false,
       fontChanged = false,
       disposed = false;
+    let nameParts: readonly string[] | undefined;
     let styleEpoch = 0,
       fontEpoch = 0,
       widthEpoch = 0,
@@ -186,8 +188,12 @@ export function setupMusicTextMotion(root: HTMLElement) {
     const fitBoundedPlain = () => {
       if (!bounded) return;
       plain.style.removeProperty("font-size");
+      if (usingReel) return;
       const baseFontSize = Number.parseFloat(getComputedStyle(element).fontSize);
-      if (!(baseFontSize > 0) || plain.clientWidth <= 0 || plain.clientHeight <= 0) return;
+      if (!(baseFontSize > 0) || plain.clientWidth <= 0 || plain.clientHeight <= 0) {
+        plain.textContent = "";
+        return;
+      }
 
       const minimumFontSize = baseFontSize * 0.85;
       let fontSize = baseFontSize;
@@ -196,6 +202,13 @@ export function setupMusicTextMotion(root: HTMLElement) {
       while (!fits() && fontSize > minimumFontSize) {
         fontSize = Math.max(minimumFontSize, fontSize - 0.5);
         plain.style.fontSize = `${fontSize}px`;
+      }
+      // Names are supplied by the catalog, never split at punctuation inside an
+      // artist/genre name. Keep a complete prefix instead of clipping a name.
+      const names = nameParts ?? [value];
+      let count = names.length;
+      while (!fits() && count > 0) {
+        plain.textContent = names.slice(0, --count).join("  ·  ");
       }
     };
     const rememberFit = (key: string, fits: boolean) => {
@@ -315,7 +328,16 @@ export function setupMusicTextMotion(root: HTMLElement) {
     document.fonts.addEventListener("loadingdone", fontsChanged);
     void document.fonts.ready.then(fontsChanged);
     return {
-      update(options: { text?: string; animated?: boolean }) {
+      update(options: { text?: string; animated?: boolean; items?: readonly string[] }) {
+        let changedNames = false;
+        if (options.items !== undefined) {
+          changedNames = nameParts?.length !== options.items.length ||
+            options.items.some((name, index) => nameParts?.[index] !== name);
+          nameParts = options.items;
+        } else if (options.text !== undefined && nameParts !== undefined) {
+          nameParts = undefined;
+          changedNames = true;
+        }
         let changedText = false;
         if (options.text !== undefined && options.text !== value) {
           changedText = true;
@@ -326,11 +348,12 @@ export function setupMusicTextMotion(root: HTMLElement) {
           element.dataset.cjk = script;
           if (scriptChanged) cachedMetrics = undefined;
           element.title = value;
+          if (bounded) element.setAttribute("aria-label", value);
         }
         const changedMotion =
           options.animated !== undefined && options.animated !== animated;
         if (options.animated !== undefined) animated = options.animated;
-        if (changedText || !measured) schedule();
+        if (changedText || changedNames || !measured) schedule();
         // Enabling the already measured current text needs no geometry reads.
         else if (changedMotion)
           controller.update({ animated: animated && usingReel });
@@ -422,8 +445,10 @@ export function setupMusicTextMotion(root: HTMLElement) {
         value: value.genresTotal,
         direction: "auto",
       });
-      for (const key of Object.keys(texts) as (keyof typeof texts)[])
-        texts[key].update({ text: value[key] });
+      for (const key of Object.keys(texts) as (keyof typeof texts)[]) {
+        if (key === "genreName") texts.genreName.update({ text: value.genreName, items: value.genreNames });
+        else texts[key].update({ text: value[key] });
+      }
     },
     finish() {
       setEnabled(false);

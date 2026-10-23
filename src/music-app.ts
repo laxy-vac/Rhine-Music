@@ -1441,6 +1441,7 @@ function updateSelection(navigation?: ArchiveNavigation) {
       genreIndex: shelfLocation ? shelfLocation.shelf + 1 : 0,
       genre: shelfLocation ? shelves[shelfLocation.shelf].name : "NO MATCHES",
       genreName: shelfLocation ? shelves[shelfLocation.shelf].name : "NO MATCHES",
+      genreNames: shelfLocation ? shelves[shelfLocation.shelf].names : ["NO MATCHES"],
       format: formatLabel,
       artist: sourceAlbum.artist,
       meta: (track?[a.title,a.year?String(a.year):trUi("年份未提供"),time(track.duration)]:[
