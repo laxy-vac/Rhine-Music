@@ -133,9 +133,9 @@ export function setupMusicTextMotion(root: HTMLElement) {
       },
     };
   };
-  const wrappingText = (id: string) => {
-    // Auxiliary metadata keeps its native block width. Reels only own the
-    // inner single-line span; longer artist lists retain ordinary line wraps.
+  const wrappingText = (id: string, bounded = false) => {
+    // Plain labels keep their host width. Reels only own the inner single-line
+    // span; longer text can fall back to ordinary line wraps.
     const element = root.querySelector<HTMLElement>(`#${id}`)!;
     const reel = document.createElement("span");
     const plain = document.createElement("span");
@@ -182,6 +182,21 @@ export function setupMusicTextMotion(root: HTMLElement) {
     const clearFitCache = () => {
       fitCache.clear();
       cachedMetrics = undefined;
+    };
+    const fitBoundedPlain = () => {
+      if (!bounded) return;
+      plain.style.removeProperty("font-size");
+      const baseFontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+      if (!(baseFontSize > 0) || plain.clientWidth <= 0 || plain.clientHeight <= 0) return;
+
+      const minimumFontSize = baseFontSize * 0.85;
+      let fontSize = baseFontSize;
+      const fits = () => plain.scrollHeight <= plain.clientHeight && plain.scrollWidth <= plain.clientWidth;
+      plain.style.fontSize = `${fontSize}px`;
+      while (!fits() && fontSize > minimumFontSize) {
+        fontSize = Math.max(minimumFontSize, fontSize - 0.5);
+        plain.style.fontSize = `${fontSize}px`;
+      }
     };
     const rememberFit = (key: string, fits: boolean) => {
       if (fitCache.has(key)) fitCache.delete(key);
@@ -262,8 +277,9 @@ export function setupMusicTextMotion(root: HTMLElement) {
           if (!measured || fits !== previouslyUsingReel) {
             // Inline display overrides the library's .rn-root rule while hidden.
             reel.style.display = fits ? "inline-block" : "none";
-            plain.style.display = fits ? "none" : "inline";
+            plain.style.display = fits ? "none" : bounded ? "block" : "inline";
           }
+          fitBoundedPlain();
           measured = true;
           controller.update({
             text: value,
@@ -348,7 +364,7 @@ export function setupMusicTextMotion(root: HTMLElement) {
   };
   const texts = {
     genre: text("selection-genre"),
-    genreName: text("genre-name"),
+    genreName: wrappingText("genre-name", true),
     format: text("selection-format", true),
     artist: wrappingText("selection-artist"),
     meta: wrappingText("selection-meta"),

@@ -567,7 +567,7 @@ export function defaultCaseSettings(design: "rhine" | "archive" = "rhine"): Case
   return {
     version: 1,
     enabled: true,
-    structure: design === "archive" ? "punk" : "minimal",
+    structure: design === "archive" ? "punk" : "rhine",
     appearances: {
       minimal: casePreset("original", "minimal"),
       rhine: casePreset("original", "rhine"),

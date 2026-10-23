@@ -14,8 +14,12 @@ import "./future-entry.css";
 export const futureEntryStart = 1.76;
 export const futureEntryEnd = 27.12;
 export type FutureEntryLayout = "shelf" | "array";
+export type FutureEntryMode = "full" | "setup" | "collection";
+export const futureCollectionEntryStart = 22;
+export const futureSetupEntryEnd = 22.4;
 export const futureShelfEntryEnd = 27;
-export const futureEntryEndFor = (layout: FutureEntryLayout) => layout === "shelf" ? futureShelfEntryEnd : futureEntryEnd;
+export const futureEntryEndFor = (layout: FutureEntryLayout, mode: FutureEntryMode = "full") =>
+  mode === "setup" ? futureSetupEntryEnd : layout === "shelf" ? futureShelfEntryEnd : futureEntryEnd;
 export function futureEntryShot(time: number, entryLayout: FutureEntryLayout = "array") {
   return { reveal: smooth(progress(time, 22, 22.4)), lift: 0, zoom: 0,
     time: Math.min(time, futureEntryEndFor(entryLayout)), musicIntro: true, entryLayout };
@@ -31,15 +35,20 @@ export class FutureEntry {
   private events = new AbortController();
   private armed = false;
   private lastTime: number | undefined;
-  private time = futureEntryStart;
+  private time: number;
+  readonly layout: FutureEntryLayout;
+  readonly mode: FutureEntryMode;
   active = true;
 
   constructor(
     private stage: HTMLElement,
     private finish: (skipped: boolean, ms: number) => void,
     copy: EntryTextCopy = {},
-    readonly layout: FutureEntryLayout = "array",
+    options: { layout?: FutureEntryLayout; mode?: FutureEntryMode } = {},
   ) {
+    this.layout = options.layout ?? "array";
+    this.mode = options.mode ?? "full";
+    this.time = this.mode === "collection" ? futureCollectionEntryStart : futureEntryStart;
     const welcome = normalizeEntryText(copy.welcome, defaultEntryWelcome);
     const identity = normalizeEntryText(copy.identity, defaultEntryIdentity);
     this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -51,7 +60,8 @@ export class FutureEntry {
     this.film = this.overlay.querySelector<HTMLElement>(".future-entry-film")!;
     this.sequence = new BootSequence(this.film, { identity });
     stage.dataset.futureEntry = "access";
-    stage.dataset.futureEntryLayout = layout;
+    stage.dataset.futureEntryLayout = this.layout;
+    stage.dataset.futureEntryMode = this.mode;
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(stage);
     this.resize();
@@ -105,7 +115,7 @@ export class FutureEntry {
       if (this.lastTime !== undefined) this.time += Math.max(0, ms - this.lastTime) / 1000;
       this.lastTime = ms;
     }
-    if (this.time >= futureEntryEndFor(this.layout)) {
+    if (this.time >= futureEntryEndFor(this.layout, this.mode)) {
       this.end(false, ms);
       return undefined;
     }
@@ -114,7 +124,8 @@ export class FutureEntry {
   }
 
   get state() {
-    return { active: this.active, time: this.time, layout: this.layout, phase: this.stage.dataset.futureEntry ?? "archive" };
+    return { active: this.active, time: this.time, layout: this.layout, mode: this.mode,
+      phase: this.stage.dataset.futureEntry ?? "archive" };
   }
 
   private resize() {
@@ -152,15 +163,17 @@ export class FutureEntry {
 
   private render() {
     const motion = this.sequence.update(this.time);
-    this.overlay.style.setProperty("--future-entry-backdrop-opacity", String(motion.backgroundOpacity));
+    const setup = this.mode === "setup";
+    this.overlay.style.setProperty("--future-entry-backdrop-opacity", String(setup
+      ? 1 - smooth(progress(this.time, 22, futureSetupEntryEnd)) : motion.backgroundOpacity));
     const shelf = this.layout === "shelf";
-    const settleAt = shelf ? 25.5 : 25.3;
+    const settleAt = setup ? 22 : shelf ? 25.5 : 25.3;
     const phase = this.time >= settleAt ? "settle" : this.time >= 22
       ? shelf ? this.time < 25 ? "shelf-assembly" : "shelf-ready" : "array" : motion.step;
     if (this.stage.dataset.futureEntry !== phase) this.stage.dataset.futureEntry = phase;
     this.overlay.style.setProperty("--future-entry-brand-opacity", String(1 - smooth(progress(this.time, settleAt - .4, settleAt))));
-    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, settleAt, shelf ? 26.35 : 26.72))));
-    this.overlay.style.setProperty("--future-entry-caption-opacity", String(shelf
+    this.stage.style.setProperty("--future-entry-ui-opacity", String(smooth(progress(this.time, settleAt, setup ? futureSetupEntryEnd : shelf ? 26.35 : 26.72))));
+    this.overlay.style.setProperty("--future-entry-caption-opacity", String(shelf && !setup
       ? smooth(progress(this.time, 22, 22.25)) * (1 - smooth(progress(this.time, 25, 25.5))) : 0));
     this.overlay.style.setProperty("--future-entry-caption-progress", String(progress(this.time, 22, 25)));
   }
@@ -174,6 +187,7 @@ export class FutureEntry {
     this.overlay.remove();
     delete this.stage.dataset.futureEntry;
     delete this.stage.dataset.futureEntryLayout;
+    delete this.stage.dataset.futureEntryMode;
     this.stage.style.removeProperty("--future-entry-ui-opacity");
     for (const { node, inert } of this.siblings) node.inert = inert;
     this.finish(skipped, ms);

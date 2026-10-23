@@ -128,6 +128,10 @@
   transition: none !important;
 }
 
+.music-app[data-future-entry-mode="setup"] > .three-scene {
+  visibility: hidden;
+}
+
 .music-app[data-future-entry][data-theme="night"] > .future-entry {
   color: #f0eee8;
 }

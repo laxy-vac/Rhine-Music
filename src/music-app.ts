@@ -974,7 +974,6 @@ function entryPlaybackUnavailable(): string {
   if (!ready || !scene) return trUi("终端正在准备，请稍后重播。");
   if (preferences.style.design !== "rhine" || !["array", "shelf"].includes(musicApplication.view.layout) ||
     musicApplication.view.show !== "albums") return trUi("入场动画适用于莱茵生命：映像的 ALBUMS / MATRIX 或 ARRAY 视图。");
-  if (!albums.length) return trUi("添加专辑后可播放终端入场。");
   if (preferences.reduced) return trUi("关闭“减少动态效果”后可重播入场。");
   if (libraryRebuilding) return trUi("曲库正在更新，请稍后重播。");
   return "";
@@ -990,9 +989,10 @@ function syncEntrySettings() {
   document.querySelectorAll<HTMLInputElement | HTMLButtonElement>('#entry-settings [data-entry-text], #entry-on-open, [data-action="entry-text-reset"]').forEach(control => { control.disabled = !future; });
 }
 
-function startFutureEntry() {
+function startFutureEntry(collectionOnly = false) {
   if (futureEntry?.active || entryPlaybackUnavailable()) return false;
   const entryLayout = musicApplication.view.layout === "shelf" ? "shelf" : "array";
+  const entryMode = !albums.length ? "setup" : collectionOnly ? "collection" : "full";
   if (entryLayout === "shelf") scene?.showMusicArchiveImmediately(performance.now() / 1000);
   effects.setScene("boot");
   effects.restartBoot();
@@ -1003,20 +1003,20 @@ function startFutureEntry() {
     effects.setScene("archive");
     if (skipped) effects.play("confirm");
     const now = ms / 1000;
-    if (skipped) scene?.showMusicArchiveImmediately(now);
+    if (skipped || entryMode === "setup") scene?.showMusicArchiveImmediately(now);
     else {
       scene?.update(now, futureEntryShot(futureEntryEndFor(entryLayout), entryLayout));
       scene?.finishMusicIntro(now);
     }
     syncSelectionMotion();
-  }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity }, entryLayout);
+  }, { welcome: preferences.entryWelcome, identity: preferences.entryIdentity }, { layout: entryLayout, mode: entryMode });
   // Prepare the real rack/material variants beneath the opaque shared prelude.
   // Compilation must not consume the first visible seconds of the new act.
   if (entryLayout === "shelf") scene?.update(performance.now() / 1000, futureEntryShot(27, entryLayout));
   return true;
 }
 
-function replayFutureEntry() {
+function replayFutureEntry(collectionOnly = false) {
   flushArchiveVisual();
   if (futureEntry?.active) return;
   const reason = entryPlaybackUnavailable();
@@ -1032,7 +1032,7 @@ function replayFutureEntry() {
   scene?.showMusicArchiveImmediately(performance.now() / 1000);
   showBrowseSurface(true);
   effects.setScene("archive");
-  if (startFutureEntry()) { futureEntry?.arm(); effects.play("ui-tick"); }
+  if (startFutureEntry(collectionOnly)) { futureEntry?.arm(); effects.play("ui-tick"); }
 }
 function savePrefs() {
   preferences.view = demoRestore?.view ?? musicApplication.view;
@@ -2529,6 +2529,7 @@ async function setDemoPreview(enabled: boolean) {
     musicApplication.selectAlbum(0, undefined);
   } else restoreDemoState();
   await applyLibrary();
+  if (enabled && !entryPlaybackUnavailable()) replayFutureEntry(true);
 }
 function updateShelfChrome() {
   stage.dataset.shelf = shelf;
@@ -4912,7 +4913,7 @@ function frame(ms: number) {
     if (entryShot) effects.updateBoot(entryShot.time, false, 26.92, preferences.entryIdentity);
     // The prepared WebGL frame stays beneath the opaque terminal film. Start
     // rendering its cinematic path when the welcome screen actually releases it.
-    if (!viewer?.isOpen && (!entryShot || entryShot.time >= 21.9) &&
+    if (!viewer?.isOpen && (!entryShot || (futureEntry?.mode !== "setup" && entryShot.time >= 21.9)) &&
       !(entryWasActive && !futureEntry?.active)) scene.update(ms / 1000, entryShot);
     viewer?.update(ms / 1000);
     if (!viewer?.isOpen && !futureEntry?.active) presentation.update();
@@ -5044,8 +5045,8 @@ async function start() {
     }
     if (restoreTheme) openThemePage();
     // Future album MATRIX and ARRAY each have their own scene choreography.
-    // Saved layouts, the Punk theme, empty libraries and reduced motion retain
-    // the existing immediate archive path; settings returns keep their page.
+    // Empty libraries play the shared prelude and finish on setup. Other themes,
+    // unsupported views, reduced motion and settings returns keep their path.
     if (preferences.entryOnOpen && !restoreSettings && !restoreTheme) startFutureEntry();
     requestAnimationFrame((ms) => {
       stage.classList.add("theme-motion-ready");
