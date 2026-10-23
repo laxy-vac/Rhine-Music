@@ -21,6 +21,14 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 `启动源码验证.cmd` 将每次启动的完整输出和原生异常保存在本机 `.tools/source-launch/source-preview-*.log`，失败时在窗口显示日志内容与路径；诊断文件不进入 Git 或便携 ZIP。
 
+### 源码测试窗口的环境限制
+
+源码测试窗口依赖本机已准备的 Electron、原生组件、运行时路径及 Windows 权限状态，**不保证克隆或复制仓库后，能够原样复用源码直接打开测试窗口**。依赖安装或前端构建成功，也不代表桌面窗口一定能够初始化。
+
+Windows 完整性标签、Codex 等开发工具的执行沙盒，以及 Electron 自身的渲染进程沙箱是不同的限制层，都可能影响窗口启动。当前源码验证专用启动器传入 `--no-sandbox`，并记录主进程、前端加载和窗口显示阶段；该参数仅供本机源码验证，正式桌面入口和发行包仍保留 `sandbox:true`。迁移开发环境时应重新核对既有运行时、来源清单及日志，不通过清缓存、安装额外依赖或修改权限来自动绕过问题；环境和权限变更须另行授权。
+
+源码测试窗口与便携版分别验收：源码窗口在某台开发机上可用，不代表它可以直接迁移到其他机器，也不代替便携 ZIP 的实际启动验收。
+
 本机组件布局：
 
 | 路径 | 用途 |
@@ -108,7 +116,7 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:windows`，打包前应已准备好 `.tools/source-preview-electron/`、`.tools/source-preview-interface/`、`.tools/source-preview-native-audio/`、`.tools/desktop-staging/resources/app/runtime/python/` 以及 `vendor/` 中的原生/Sony 组件。脚本只检查和复用这些现有组件，不自动下载。
 
-便携版实际启动验证应从 ZIP 重新解压到开发工具隔离工作区以外的普通目录。Windows 文件的 Low 完整性标签会让 Electron 主进程也以 Low 启动，导致其默认沙箱的窗口站初始化失败；`icacls` 可只读检查标签。源码验证入口 `启动源码验证.cmd` / `npm run desktop` 通过专用启动器传入 `--no-sandbox`，用于本机源码验证，并在启动日志中明确标记；正式桌面入口及发行包仍保留 `sandbox:true`，不经过这个启动器。文件完整性标签和其他访问权限的变更仍需单独授权。
+便携版实际启动验证应从 ZIP 重新解压到开发工具隔离工作区以外的普通目录。Windows 文件的 Low 完整性标签会让 Electron 主进程也以 Low 启动，导致其默认沙箱的窗口站初始化失败；`icacls` 可只读检查标签。源码验证的环境限制见第 1 节，文件完整性标签和其他访问权限的变更仍需单独授权。
 
 打包流程：
 
