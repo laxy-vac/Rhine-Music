@@ -47,9 +47,10 @@ try {
   console.log('正在打开桌面源码验证窗口…')
   console.log(`音乐库索引：${dataDir}`)
   console.log(`调试界面：${interfaceDir}`)
+  console.log('源码验证模式：Electron --no-sandbox（仅此本地验证入口）。')
   console.log('关闭应用窗口即可停止它拥有的服务和音频进程；改完代码后重新启动。')
   const code = await new Promise((resolve, reject) => {
-    const child = spawn(path.join(runtime, 'electron.exe'), [path.join(project, 'desktop'), ...process.argv.slice(2)], { cwd: project, env, stdio: 'inherit', windowsHide: false })
+    const child = spawn(path.join(runtime, 'electron.exe'), ['--no-sandbox', path.join(project, 'desktop'), ...process.argv.slice(2)], { cwd: project, env, stdio: 'inherit', windowsHide: false })
     child.once('error', reject)
     child.once('close', resolve)
   })

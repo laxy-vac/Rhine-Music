@@ -10,6 +10,9 @@ const gpuSelectionModel=require('./gpu-selection.cjs');
 const {configureStartupGpu,registerGpuControls}=require('./gpu-controller.cjs');
 const root=path.resolve(__dirname,'..');
 const sourcePreview=process.env.RHINE_SOURCE_PREVIEW==='1';
+const logSourceStartup=message=>{if(sourcePreview)console.log(`[source-preview:${process.pid}] ${message}`)};
+logSourceStartup('desktop main loaded');
+if(sourcePreview)process.on('uncaughtException',error=>{console.error(`[source-preview:${process.pid}] uncaught exception`,error.stack||error);app.exit(1)});
 app.setName(sourcePreview?'Rhine Music Source Preview':'Rhine Music');
 const desktopAppId=sourcePreview?'RhineMusic.SourcePreview':'RhineMusic.Player';
 if(process.platform==='win32')app.setAppUserModelId(desktopAppId);
@@ -25,6 +28,7 @@ process.env.TEMP=storage.tempDir;process.env.TMP=storage.tempDir;
 const dataDir=storage.dataDir;
 const preferencesStore=createPreferencesStore(storage);
 const startupGpu=configureStartupGpu(app,storage.preferenceFile);
+logSourceStartup('storage and startup GPU configured');
 process.env.SONY_WALKMAN_ASSETS=path.join(root,'vendor/sony-walkman');
 if(!sourcePreview||!process.env.SONY_WALKMAN_PYTHON)process.env.SONY_WALKMAN_PYTHON=path.join(root,'runtime/python/python.exe');
 process.env.SONY_WALKMAN_X86_DLL=path.join(root,'vendor/sony-walkman-x86/sony-dsp-x86.dll');
@@ -129,6 +133,7 @@ function createHiddenStartupGate({ipcMain,app,dialog,getWindow}){
   if(failureGeneration===generation)return false;
   failureGeneration=generation;
   const detail=String(message||'Rhine Music 前端初始化失败').slice(0,2000);
+  logSourceStartup(`startup failed: ${detail}`);
   try{dialog.showErrorBox('Rhine Music 启动失败',detail)}finally{app.quit()}
   return true;
  };
@@ -249,30 +254,40 @@ ipcMain.handle('rhine:audio-presets:save',async(event,value)=>{
  try{await write;return{ok:true}}
  catch(error){return{ok:false,error:`音频预设文件写入失败，原文件未替换：${error.message}`}}
 });
-if(!app.requestSingleInstanceLock()){app.quit()}
+if(!app.requestSingleInstanceLock()){logSourceStartup('another source preview owns the instance lock');app.quit()}
 else {
+ logSourceStartup('instance lock acquired');
  const startupGate=createHiddenStartupGate({ipcMain,app,dialog,getWindow:()=>window});
  app.whenReady().then(async()=>{
+  logSourceStartup('Electron ready');
   try {
    windowAspectModel=await import(pathToFileURL(path.join(root,'src/window-aspect-model.mjs')).href);
    entryPreferencesModel=await import(pathToFileURL(path.join(root,'src/entry-preferences.mjs')).href);
    const {attachWindowAspect}=await import(pathToFileURL(path.join(__dirname,'window-aspect.mjs')).href);
    await loadAudioPresetStore();
    preferences=selectPreferences(await preferencesStore.load());
+   logSourceStartup('preferences loaded');
    const {createMusicServer}=await import(pathToFileURL(path.join(root,'scripts/music-server.mjs')).href);
+   logSourceStartup('music server module loaded');
    service=await createMusicServer({dataDir,lspUserDataDir:storage.lspUserDataDir,lspStorageRoot:storage.storageRoot,defaultRoots:[],autoScan:false,...(sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?{distDir:path.resolve(process.env.RHINE_SOURCE_INTERFACE)}:{})});const origin=await listen();
+   logSourceStartup(`music server listening at ${origin}`);
    const iconFile=sourcePreview?path.join(root,'windows/app.ico'):path.join(__dirname,'app.ico');
    const interfaceDir=sourcePreview&&process.env.RHINE_SOURCE_INTERFACE?path.resolve(process.env.RHINE_SOURCE_INTERFACE):path.join(root,'dist');
    const windowIcon=nativeImage.createFromPath(path.join(interfaceDir,'icons/icon-512.png'));
    window=new BrowserWindow({width:1920,height:1080,useContentSize:true,title:'Rhine Music',backgroundColor:'#e8e5e1',show:false,autoHideMenuBar:true,icon:windowIcon.isEmpty()?iconFile:windowIcon,...(process.platform==='win32'?{titleBarStyle:'hidden',titleBarOverlay:{color:'#00000000',symbolColor:'#232722',height:32}}:{}),webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+   logSourceStartup('main window created; waiting for frontend');
+   if(sourcePreview){window.webContents.on('did-finish-load',()=>logSourceStartup('frontend document loaded'));window.once('show',()=>logSourceStartup('main window shown'))}
    if(process.platform==='win32')window.setAppDetails({
     appId:desktopAppId,appIconPath:iconFile,appIconIndex:0,
     relaunchDisplayName:sourcePreview?'Rhine Music · 源码验证':'Rhine Music',
     relaunchCommand:sourcePreview?`"${process.env.ComSpec||path.join(process.env.SystemRoot||'C:\\Windows','System32/cmd.exe')}" /d /s /c ""${path.join(root,'启动源码验证.cmd')}""`:`"${process.execPath}"`
    });
+   logSourceStartup('window app details configured');
    windowAspectController=attachWindowAspect(window,{screen:require('electron').screen,initialAspect:preferences.windowAspect});
+   logSourceStartup('window aspect configured');
     attachWindowControls(window,origin);
    startupGate?.attachWindow(window,origin);
+   logSourceStartup('window startup gate attached');
    {const title=sourcePreview?'Rhine Music · 源码验证':`Rhine Music · ${app.getVersion()}`;window.setTitle(title);window.webContents.on('page-title-updated',event=>{event.preventDefault();window.setTitle(title)})}
    // Restore the intended CSS proportions on startup/reload, including profiles
    // with an older saved page zoom. Windows DPI scaling remains under the OS.
@@ -282,6 +297,7 @@ else {
    window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
    if(sourcePreview)window.once('show',()=>{void fs.writeFile(path.join(app.getPath('userData'),'desktop-preview.json'),JSON.stringify({mode:'desktop',pid:process.pid,projectDir:root,interfaceDir:process.env.RHINE_SOURCE_INTERFACE||path.join(root,'dist'),origin,dataDir,title:window.getTitle(),visible:window.isVisible()},null,2)+'\n').catch(error=>console.error(error.message))});
    window.on('closed',()=>{windowAspectController?.destroy();windowAspectController=undefined;window=undefined});
+   logSourceStartup('loading frontend URL');
    try{await window.loadURL(origin)}catch(error){
     // Reloading or closing the owned window cancels this navigation. Electron
     // reports ERR_ABORTED for that normal cancellation while the next load

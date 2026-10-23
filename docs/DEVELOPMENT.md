@@ -108,7 +108,7 @@ npm run package:windows # 用已准备好的组件生成 Windows x64 Portable ZI
 
 Windows 长期只发布 Portable 便携版。发布入口是 `npm run package:windows`，打包前应已准备好 `.tools/source-preview-electron/`、`.tools/source-preview-interface/`、`.tools/source-preview-native-audio/`、`.tools/desktop-staging/resources/app/runtime/python/` 以及 `vendor/` 中的原生/Sony 组件。脚本只检查和复用这些现有组件，不自动下载。
 
-实际启动验证应从 ZIP 重新解压到开发工具隔离工作区以外的普通目录。Windows 文件的 Low 完整性标签会让 Electron 主进程也以 Low 启动，导致其默认沙箱的窗口站初始化失败；`icacls` 可只读检查标签，测试时不应修改工作区 ACL 或关闭沙箱来掩盖此问题。
+便携版实际启动验证应从 ZIP 重新解压到开发工具隔离工作区以外的普通目录。Windows 文件的 Low 完整性标签会让 Electron 主进程也以 Low 启动，导致其默认沙箱的窗口站初始化失败；`icacls` 可只读检查标签。源码验证入口 `启动源码验证.cmd` / `npm run desktop` 通过专用启动器传入 `--no-sandbox`，用于本机源码验证，并在启动日志中明确标记；正式桌面入口及发行包仍保留 `sandbox:true`，不经过这个启动器。文件完整性标签和其他访问权限的变更仍需单独授权。
 
 打包流程：
 
